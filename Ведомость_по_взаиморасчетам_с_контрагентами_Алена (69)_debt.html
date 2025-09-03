@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ОТЧЁТ ПО ДЕБИТОРСКОЙ ЗАДОЛЖЕННОСТИ</title>
+  <style>
+    :root {
+      --bg: #f7f9ff;
+      --grid: #c5d4ff;
+      --th: #dbe5ff;
+      --alt: #eef2ff;
+      --ink: #111;
+      --accent: #2563eb;
+      --bad: #e11d48;
+      --good: #16a34a;
+      --warning: #f59e0b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, Segoe UI, Arial, sans-serif;
+      font-size: 14px;
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.5;
+    }
+    .wrap {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    h1, h2, h3 {
+      margin: 0 0 12px;
+      color: var(--accent);
+    }
+    h1 { font-size: 24px; }
+    h2 { font-size: 20px; border-bottom: 2px solid var(--grid); padding-bottom: 8px; }
+    h3 { font-size: 18px; }
+    .header-info {
+      background: white;
+      border-radius: 10px;
+      padding: 15px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin: 15px 0;
+    }
+    .stat-card {
+      background: white;
+      border-radius: 10px;
+      padding: 15px;
+      text-align: center;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+    .stat-value {
+      font-size: 24px;
+      font-weight: bold;
+      margin: 5px 0;
+      color: var(--accent);
+    }
+    .stat-label {
+      font-size: 12px;
+      color: #666;
+      text-transform: uppercase;
+    }
+    .positive { color: var(--good); }
+    .negative { color: var(--bad); }
+    .warning { color: var(--warning); }
+    
+    .tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin: 20px 0 15px;
+      border-bottom: 2px solid var(--grid);
+      padding-bottom: 5px;
+    }
+    .tab {
+      padding: 8px 15px;
+      background: #fff;
+      border: 1px solid var(--grid);
+      border-radius: 6px 6px 0 0;
+      cursor: pointer;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+    .tab:hover {
+      background: var(--th);
+    }
+    .tab.active {
+      background: var(--accent);
+      color: white;
+      border-color: var(--accent);
+    }
+    .panel {
+      display: none;
+      animation: fadeIn 0.3s ease;
+    }
+    .panel.active {
+      display: block;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    
+    .table-container {
+      overflow: auto;
+      margin: 15px 0;
+      border: 1px solid var(--grid);
+      border-radius: 10px;
+      background: white;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 700px;
+    }
+    th, td {
+      padding: 10px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--grid);
+    }
+    th {
+      background: var(--th);
+      font-weight: 600;
+      position: sticky;
+      top: 0;
+    }
+    tr:nth-child(even) {
+      background: var(--alt);
+    }
+    tr:hover {
+      background: #e6eeff;
+    }
+    .num {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      font-family: 'SF Mono', Monaco, monospace;
+    }
+    
+    .summary-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 15px;
+      margin: 20px 0;
+    }
+    .summary-card {
+      background: white;
+      border-radius: 10px;
+      padding: 15px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+    
+    .tech-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 10px;
+      margin: 15px 0;
+    }
+    .tech-item {
+      background: white;
+      border-radius: 8px;
+      padding: 10px;
+      box-shadow: 0 1px 5px rgba(0,0,0,0.05);
+    }
+    .tech-key {
+      font-weight: 600;
+      color: #666;
+    }
+    
+    .footer {
+      margin-top: 30px;
+      padding-top: 15px;
+      border-top: 1px solid var(--grid);
+      color: #666;
+      font-size: 12px;
+      text-align: center;
+    }
+    
+    @media (max-width: 768px) {
+      .wrap { padding: 15px; }
+      h1 { font-size: 20px; }
+      .stats-grid { grid-template-columns: 1fr 1fr; }
+      .tab { padding: 6px 10px; font-size: 12px; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header-info">
+    <h1>ОТЧЁТ ПО ДЕБИТОРСКОЙ ЗАДОЛЖЕННОСТИ</h1>
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Период</div>
+        <div class="stat-value">29 августа 2025 г.</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Менеджер</div>
+        <div class="stat-value">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Клиентов</div>
+        <div class="stat-value">55</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Общий долг</div>
+        <div class="stat-value">16 645 818,10 ₸</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tabs" id="tabs">
+    <button class="tab active" data-tab="t_top">ТОП должников</button>
+<button class="tab" data-tab="t_over">Переплата</button>    <button class="tab" data-tab="t_all">Все клиенты</button>
+    <button class="tab" data-tab="t_tech">Техданные</button>
+  </div>
+
+  <!-- ТОП должников -->
+  <div class="panel active" id="t_top">
+    <h2>🚨 ТОП-10 должников</h2>
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Клиент</th>
+            <th class="num">Долг, ₸</th>
+<th class="num">Дней</th>          </tr>
+        </thead>
+        <tbody>
+          <tr id="client-87761287668">
+            <td><a href="#client-87761287668">А Евгений Атбасар  87761287668</a></td>
+            <td class="num">1 376 100,00</td>
+<td class="num">—</td>          </tr>
+          <tr id="client-52">
+            <td><a href="#client-52">А ТД Шапагат (52 место) Асема</a></td>
+            <td class="num">1 323 606,71</td>
+<td class="num">—</td>          </tr>
+          <tr id="client-4">
+            <td><a href="#client-4">А ТД Асем (холодильник № 4)</a></td>
+            <td class="num">1 250 897,94</td>
+<td class="num">—</td>          </tr>
+          <tr id="client-row">
+            <td><a href="#client-row">А ТД Евразия Арман (ИП Балабатырова Зауре Ашкеновн</a></td>
+            <td class="num">1 211 999,07</td>
+<td class="num">—</td>          </tr>
+          <tr id="client-1_12">
+            <td><a href="#client-1_12">А ТД Сарыарка 1 ряд 12 место Жулдызбек</a></td>
+            <td class="num">1 144 779,87</td>
+<td class="num">—</td>          </tr>
+          <tr id="client--">
+            <td><a href="#client--">А ТОО Кулатаев Столовая трасса Астана-Караганда зд</a></td>
+            <td class="num">1 143 000,00</td>
+<td class="num">—</td>          </tr>
+          <tr id="client-row">
+            <td><a href="#client-row">А Рынок Шарын Жулдыз Рахманбердиева</a></td>
+            <td class="num">1 077 456,30</td>
+<td class="num">—</td>          </tr>
+          <tr id="client-7">
+            <td><a href="#client-7">А ТД Шапагат (7 павильон) ИП Зарина</a></td>
+            <td class="num">820 077,78</td>
+<td class="num">—</td>          </tr>
+          <tr id="client-1_6">
+            <td><a href="#client-1_6">А ТД Сарыарка (1 ряд 6 бутик)</a></td>
+            <td class="num">771 150,66</td>
+<td class="num">—</td>          </tr>
+          <tr id="client-6">
+            <td><a href="#client-6">А ТД Алем (холодильник № 6)</a></td>
+            <td class="num">713 343,32</td>
+<td class="num">—</td>          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Молчуны -->
+
+  <!-- Закрывшие долг -->
+
+  <!-- Переплата -->
+  <div class="panel" id="t_over">
+    <h2>💸 Переплата</h2>
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Клиент</th>
+            <th class="num">Переплата, ₸</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr id="client-5_2">
+            <td><a href="#client-5_2">А Маг Мясной союз ул Аблайхан 5/2</a></td>
+            <td class="num negative">-0,70</td>
+          </tr>
+          <tr id="client-108">
+            <td><a href="#client-108">А Оптомаркет Мкр Уркер, ул. Коргальджинское 108</a></td>
+            <td class="num negative">-0,10</td>
+          </tr>
+          <tr id="client-row">
+            <td><a href="#client-row">А Рынок Биг шанхай Татьяна Ярмарка ИП ЛИ А.В</a></td>
+            <td class="num negative">-1,60</td>
+          </tr>
+          <tr id="client-sauran_3_2">
+            <td><a href="#client-sauran_3_2">А Т.Ц. Sauran ул.Алмата 3 Латифа 2 место</a></td>
+            <td class="num negative">-566,04</td>
+          </tr>
+          <tr id="client-63_1">
+            <td><a href="#client-63_1">А ТД Асем ИП Амир (бутик 63/1)</a></td>
+            <td class="num negative">-70,75</td>
+          </tr>
+          <tr id="client-row">
+            <td><a href="#client-row">А Частное Лицо</a></td>
+            <td class="num negative">-416,90</td>
+          </tr>
+          <tr id="client-row">
+            <td><a href="#client-row">А Денис (Александровка)</a></td>
+            <td class="num negative">-696,39</td>
+          </tr>
+          <tr id="client-6_2">
+            <td><a href="#client-6_2">А Зеленский ИП Мечковская (ул.Таха хусейна 6/2).</a></td>
+            <td class="num negative">-5 725,47</td>
+          </tr>
+          <tr id="client-row">
+            <td><a href="#client-row">А ИП Балабекова Бразис Ерейментау</a></td>
+            <td class="num negative">-0,06</td>
+          </tr>
+          <tr id="client-row">
+            <td><a href="#client-row">А ИП Далаков (Кокшетау)</a></td>
+            <td class="num negative">-0,16</td>
+          </tr>
+          <tr id="client-row">
+            <td><a href="#client-row">А ИП Мурзабеков Ж.А.  (Михаил Сарыарка)</a></td>
+            <td class="num negative">-0,45</td>
+          </tr>
+          <tr id="client-pasta_la_vista_plv">
+            <td><a href="#client-pasta_la_vista_plv">А Ресторан Pasta la vista ИП PLV</a></td>
+            <td class="num negative">-0,10</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Все клиенты -->
+  <div class="panel" id="t_all">
+    <h2>📋 Все клиенты</h2>
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Клиент</th>
+            <th class="num">Долг, ₸</th>
+            <th class="num">Дней</th>
+            <th class="num">Отгрузка, ₸</th>
+            <th class="num">Оплата, ₸</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr id="client-87761287668">
+            <td><a href="#client-87761287668">А Евгений Атбасар  87761287668</a></td>
+            <td class="num negative">
+1 376 100,00
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-52">
+            <td><a href="#client-52">А ТД Шапагат (52 место) Асема</a></td>
+            <td class="num negative">
+1 323 606,71
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-4">
+            <td><a href="#client-4">А ТД Асем (холодильник № 4)</a></td>
+            <td class="num negative">
+1 250 897,94
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-row">
+            <td><a href="#client-row">А ТД Евразия Арман (ИП Балабатырова Зауре Ашкеновн</a></td>
+            <td class="num negative">
+1 211 999,07
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-1_12">
+            <td><a href="#client-1_12">А ТД Сарыарка 1 ряд 12 место Жулдызбек</a></td>
+            <td class="num negative">
+1 144 779,87
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client--">
+            <td><a href="#client--">А ТОО Кулатаев Столовая трасса Астана-Караганда зд</a></td>
+            <td class="num negative">
+1 143 000,00
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-row">
+            <td><a href="#client-row">А Рынок Шарын Жулдыз Рахманбердиева</a></td>
+            <td class="num negative">
+1 077 456,30
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-7">
+            <td><a href="#client-7">А ТД Шапагат (7 павильон) ИП Зарина</a></td>
+            <td class="num negative">
+820 077,78
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-1_6">
+            <td><a href="#client-1_6">А ТД Сарыарка (1 ряд 6 бутик)</a></td>
+            <td class="num negative">
+771 150,66
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-6">
+            <td><a href="#client-6">А ТД Алем (холодильник № 6)</a></td>
+            <td class="num negative">
+713 343,32
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-tangirs_23_1">
+            <td><a href="#client-tangirs_23_1">А Ресторан Tangirs ТОО Сиар 23  Ак мешет 1</a></td>
+            <td class="num negative">
+703 828,30
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-danis">
+            <td><a href="#client-danis">А Денис (Александровка) ИП DANIS</a></td>
+            <td class="num negative">
+534 577,87
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-row">
+            <td><a href="#client-row">А Хлубный Дмитрий</a></td>
+            <td class="num negative">
+528 804,55
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-1_8">
+            <td><a href="#client-1_8">А ТД Сарыарка Валентин (1 р 8 место)</a></td>
+            <td class="num negative">
+405 646,84
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-77">
+            <td><a href="#client-77">А ТД Шапагат (77 павильон)</a></td>
+            <td class="num negative">
+375 800,00
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-1_2">
+            <td><a href="#client-1_2">А ТД Сарыарка ИП Гарден (1 р 2 м)</a></td>
+            <td class="num negative">
+349 999,14
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-20">
+            <td><a href="#client-20">А Фурманова Евгений (склад № 20)</a></td>
+            <td class="num negative">
+312 471,20
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-row">
+            <td><a href="#client-row">А ТД Евразия Айгуль (ИП Нуралина Айгуль)</a></td>
+            <td class="num negative">
+282 500,82
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-2_1">
+            <td><a href="#client-2_1">А ТД Сарыарка 2 ряд 1 место Ляззат</a></td>
+            <td class="num negative">
+280 234,40
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-1_11">
+            <td><a href="#client-1_11">А ТД Сарыарка ИП Жаннур (1 ряд, 11 м )</a></td>
+            <td class="num negative">
+263 731,02
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-51">
+            <td><a href="#client-51">А ТД Шапагат (51 место) Гаухар</a></td>
+            <td class="num negative">
+215 588,05
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-13">
+            <td><a href="#client-13">А ТД Асем бутик 13 ( ИП Ким С.Ю.)</a></td>
+            <td class="num negative">
+192 000,00
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-12">
+            <td><a href="#client-12">А ТД Сарыарка Венера 12 бутик малый зал</a></td>
+            <td class="num negative">
+188 372,00
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-row">
+            <td><a href="#client-row">А ТД Евразия Мунарбек</a></td>
+            <td class="num negative">
+179 894,82
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-sauran_3_2">
+            <td><a href="#client-sauran_3_2">А Т.Ц. Sauran ул.Алмата 3  место 2 Айнура</a></td>
+            <td class="num negative">
+166 825,41
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-row">
+            <td><a href="#client-row">А Назгуль</a></td>
+            <td class="num negative">
+160 000,00
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-5">
+            <td><a href="#client-5">А ТД Шапагат 5 павильон Дюсембина</a></td>
+            <td class="num negative">
+160 000,00
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-row">
+            <td><a href="#client-row">А Салават (Александровка)</a></td>
+            <td class="num negative">
+147 728,91
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-12_7">
+            <td><a href="#client-12_7">А Т.Ц. Коктал ул Тлендиева 12 а ( место 7)</a></td>
+            <td class="num negative">
+66 229,63
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-1_10">
+            <td><a href="#client-1_10">А ТД Сарыарка  1р 10 бутик Адал</a></td>
+            <td class="num negative">
+56 349,70
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-row">
+            <td><a href="#client-row">А Кафе Пекин (Шанхай)</a></td>
+            <td class="num negative">
+55 009,10
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-2">
+            <td><a href="#client-2">А Шиш Лаваш ул Асфандиарова 2 блок А</a></td>
+            <td class="num negative">
+49 101,30
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-mei_mei_4_2">
+            <td><a href="#client-mei_mei_4_2">А Ресторан Mei Mei ул Мухамедханова 4/2</a></td>
+            <td class="num negative">
+48 999,65
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-row">
+            <td><a href="#client-row">А Шакир ИП Дыров А.Д.</a></td>
+            <td class="num negative">
+34 290,00
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-33_2">
+            <td><a href="#client-33_2">А ИП Умит рынок Чарын пр Алаш 33/2</a></td>
+            <td class="num negative">
+31 998,62
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-12_5">
+            <td><a href="#client-12_5">А Т.Ц. Коктал ул Тлендиева 12а  место 5 Нургуль</a></td>
+            <td class="num negative">
+23 179,80
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-row">
+            <td><a href="#client-row">А  Айс Ленд ТОО</a></td>
+            <td class="num negative">
+225,29
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-12_9">
+            <td><a href="#client-12_9">А Т.Ц. Коктал ул Тлендиева 12 а ( место 9)</a></td>
+            <td class="num negative">
+10,39
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-row">
+            <td><a href="#client-row">А ИП Барменова Ф.А.(Бразис Акколь)</a></td>
+            <td class="num negative">
+3,81
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-row">
+            <td><a href="#client-row">А ИП Кихтенко</a></td>
+            <td class="num negative">
+3,65
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-lugano_38">
+            <td><a href="#client-lugano_38">А Ресторан Lugano ул Досмухамедулы 38</a></td>
+            <td class="num negative">
+1,13
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-masterchef_35">
+            <td><a href="#client-masterchef_35">А Цех ТОО MASTERCHEF ул Жайык 35</a></td>
+            <td class="num negative">
+0,95
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-row">
+            <td><a href="#client-row">А Саша (г. Темиртау) ТОО  Ясные Зори</a></td>
+            <td class="num negative">
+0,10
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-row">
+            <td><a href="#client-row">А ИП Балабекова Бразис Ерейментау</a></td>
+            <td class="num positive">
+-0,06
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-pasta_la_vista_plv">
+            <td><a href="#client-pasta_la_vista_plv">А Ресторан Pasta la vista ИП PLV</a></td>
+            <td class="num positive">
+-0,10
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-108">
+            <td><a href="#client-108">А Оптомаркет Мкр Уркер, ул. Коргальджинское 108</a></td>
+            <td class="num positive">
+-0,10
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-row">
+            <td><a href="#client-row">А ИП Далаков (Кокшетау)</a></td>
+            <td class="num positive">
+-0,16
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-row">
+            <td><a href="#client-row">А ИП Мурзабеков Ж.А.  (Михаил Сарыарка)</a></td>
+            <td class="num positive">
+-0,45
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-5_2">
+            <td><a href="#client-5_2">А Маг Мясной союз ул Аблайхан 5/2</a></td>
+            <td class="num positive">
+-0,70
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-row">
+            <td><a href="#client-row">А Рынок Биг шанхай Татьяна Ярмарка ИП ЛИ А.В</a></td>
+            <td class="num positive">
+-1,60
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-63_1">
+            <td><a href="#client-63_1">А ТД Асем ИП Амир (бутик 63/1)</a></td>
+            <td class="num positive">
+-70,75
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-row">
+            <td><a href="#client-row">А Частное Лицо</a></td>
+            <td class="num positive">
+-416,90
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-sauran_3_2">
+            <td><a href="#client-sauran_3_2">А Т.Ц. Sauran ул.Алмата 3 Латифа 2 место</a></td>
+            <td class="num positive">
+-566,04
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-row">
+            <td><a href="#client-row">А Денис (Александровка)</a></td>
+            <td class="num positive">
+-696,39
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+          <tr id="client-6_2">
+            <td><a href="#client-6_2">А Зеленский ИП Мечковская (ул.Таха хусейна 6/2).</a></td>
+            <td class="num positive">
+-5 725,47
+            </td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Движения (только для расширенного отчета) -->
+
+  <!-- Техданные -->
+  <div class="panel" id="t_tech">
+    <h2>🛠 Техническая информация</h2>
+    <div class="tech-grid">
+      <div class="tech-item">
+        <div class="tech-key">Источник:</div>
+        <div>Ведомость_по_взаиморасчетам_с_контрагентами_Алена (69).xlsx</div>
+      </div>
+      <div class="tech-item">
+        <div class="tech-key">Clean:</div>
+        <div>Ведомость_по_взаиморасчетам_с_контрагентами_Алена (69).xlsx.__clean.xlsx</div>
+      </div>
+      <div class="tech-item">
+        <div class="tech-key">Строк (после фильтра):</div>
+        <div>55</div>
+      </div>
+      <div class="tech-item">
+        <div class="tech-key">Сброшено (менеджеры):</div>
+        <div>2</div>
+      </div>
+      <div class="tech-item">
+        <div class="tech-key">Ошибки математики:</div>
+        <div>0</div>
+      </div>
+      <div class="tech-item">
+        <div class="tech-key">Модуль:</div>
+        <div>debt_auto=v2.1</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    Сформировано: 03.09.2025 10:12 (Asia/Almaty) | Версия: debt_auto=v2.1
+  </div>
+</div>
+
+<script>
+(function(){
+  const tabs = document.querySelectorAll('.tab');
+  const panels = document.querySelectorAll('.panel');
+  
+  tabs.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.tab;
+      
+      // Активируем выбранную вкладку
+      tabs.forEach(b => b.classList.remove('active'));
+      panels.forEach(p => p.classList.remove('active'));
+      
+      btn.classList.add('active');
+      document.getElementById(id).classList.add('active');
+      
+      // Сохраняем состояние вкладки в URL
+      history.replaceState(null, null, `#${id}`);
+    });
+  });
+  
+  // Восстановление состояния из URL
+  const hash = window.location.hash.substring(1);
+  if (hash) {
+    const tab = document.querySelector(`.tab[data-tab="${hash}"]`);
+    if (tab) tab.click();
+  }
+  
+  // Плавная прокрутка к якорям
+  document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function(e) {
+      e.preventDefault();
+      const target = document.querySelector(this.getAttribute('href'));
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth' });
+      }
+    });
+  });
+})();
+</script>
+</body>
+</html>
