@@ -1,0 +1,29 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>{{ title }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: 'Segoe UI', Arial, sans-serif; margin:0; background: #f4f8fd; color:#262a3b; }
+    h1 { color: #184d90; font-size:1.6em; margin:1em 0 0.7em 0;}
+    .section { margin-top:1.4em; color:#3a6596; font-weight:700; font-size:1.15em;}
+    table { width:100%; border-collapse: collapse; margin:1em 0; font-size:1em; }
+    th, td { border:1px solid #d0e0f0; padding: 7px 5px; text-align:left;}
+    th { background: #e2edfa; color:#113355;}
+    tr:nth-child(even) { background: #f8fbff; }
+    .abctable td:last-child, .abctable th:last-child { font-weight: bold; }
+    .A { background:#d1f3d1 !important;}
+    .B { background:#fff5cc !important;}
+    .C { background:#ffd2d2 !important;}
+    .summary { margin:1em 0; color:#147a00; font-weight:600;}
+    .note { color:#888; font-size:0.93em; margin-bottom:2em;}
+    .recs { margin: 1.2em 0; background: #fff2c6; border-left: 4px solid #ffd500; padding: 0.8em; }
+  </style>
+</head>
+<body>
+  <h1>{{ title }}</h1>
+  {% block content %}{% endblock %}
+  <div class="note">{{ note }}</div>
+</body>
+</html>

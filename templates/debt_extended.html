@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>{{ title or "Расширенный отчёт по дебиторской задолженности" }}</title>
+<style>
+:root{ --bg:#f7f9ff; --grid:#c5d4ff; --th:#dbe5ff; --alt:#eef2ff; --ink:#111; --warn:#b10; }
+*{box-sizing:border-box}
+body{font-family:system-ui,Segoe UI,Arial,sans-serif;font-size:13px;margin:0;background:var(--bg);color:var(--ink)}
+.wrap{max-width:1200px;margin:0 auto;padding:16px}
+h1{margin:0 0 6px;font-size:20px}
+small{color:#555;line-height:1.5}
+.key{font-weight:600}
+.table-wrap{overflow:auto;border:1px solid var(--grid);border-radius:10px;background:#fff;margin:12px 0}
+table{width:100%;border-collapse:collapse;table-layout:fixed;min-width:800px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--grid)}
+th{background:var(--th);text-align:center}
+td.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin:8px 0}
+.card{background:#fff;border:1px solid var(--grid);border-radius:10px;padding:8px}
+@media (max-width:760px){ h1{font-size:18px} .wrap{padding:12px} }
+a{color:#2b59c3;text-decoration:none}
+a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>{{ title or "Расширенный отчёт по дебиторской задолженности" }}</h1>
+  <small>
+    <span class="key">Период:</span> {{ period or "—" }}<br>
+    <span class="key">Менеджер:</span> {{ manager or "—" }}<br>
+    <span class="key">Клиентов:</span> {{ client_count or 0 }}<br>
+    <span class="key">Итого (расч.):</span> {{ total_debt|money }} тг
+  </small>
+
+  <div class="table-wrap">
+    <table>
+      <tr>
+        <th>Контрагент</th>
+        <th>Долг, тг</th>
+        <th>Дни молчания</th>
+        <th>Отгрузка, тг</th>
+        <th>Оплата, тг</th>
+      </tr>
+      {% for r in all_rows %}
+        <tr id="client-{{ r.client_slug }}">
+          <td>{{ r.client }}</td>
+          <td class="num">{{ r.debt|money }}</td>
+          <td class="num">{{ r.days if r.days is not none else "—" }}</td>
+          <td class="num">{{ r.ship|money }}</td>
+          <td class="num">{{ r.pay|money }}</td>
+        </tr>
+      {% endfor %}
+    </table>
+  </div>
+
+  {% if overpay_rows %}
+  <h3>Переплата</h3>
+  <div class="table-wrap">
+    <table>
+      <tr><th>Контрагент</th><th>Переплата, тг</th></tr>
+      {% for r in overpay_rows %}
+        <tr>
+          <td>{{ r.client }}</td>
+          <td class="num">-{{ (0 - (r.overpay or 0))|money }}</td>
+        </tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+
+  {% if silent_rows %}
+  <h3>Молчуны</h3>
+  <div class="table-wrap">
+    <table>
+      <tr><th>Контрагент</th><th>Долг, тг</th><th>Дни молчания</th></tr>
+      {% for r in silent_rows %}
+        <tr>
+          <td>{{ r.client }}</td>
+          <td class="num">{{ r.debt|money }}</td>
+          <td class="num">{{ r.days }}</td>
+        </tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+
+  <div class="grid">
+    {% for k,v in tech_info.items() %}
+      <div class="card"><span class="key">{{ k }}:</span> {{ v }}</div>
+    {% endfor %}
+  </div>
+
+  <small style="display:block;margin-top:12px;color:#555">{{ generated }}</small>
+</div>
+</body>
+</html>

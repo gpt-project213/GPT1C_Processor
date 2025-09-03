@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>{{ title or "Отчёт по дебиторской задолженности" }}</title>
+<style>
+:root{ --bg:#f7f9ff; --grid:#c5d4ff; --th:#dbe5ff; --alt:#eef2ff; --ink:#111; --warn:#b10; }
+*{box-sizing:border-box}
+body{font-family:system-ui,Segoe UI,Arial,sans-serif;font-size:13px;margin:0;background:var(--bg);color:var(--ink)}
+.wrap{max-width:1200px;margin:0 auto;padding:16px}
+h1{margin:0 0 6px;font-size:20px}
+small{color:#555;line-height:1.5}
+.key{font-weight:600}
+.tabs{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}
+.tab{padding:6px 10px;border:1px solid var(--grid);border-bottom:none;border-radius:6px 6px 0 0;background:#fff;cursor:pointer}
+.tab.active{background:var(--th)}
+.pane{display:none;border:1px solid var(--grid);border-radius:0 10px 10px 10px;background:#fff;padding:8px}
+.pane.active{display:block}
+.table-wrap{overflow:auto;border:1px solid var(--grid);border-radius:10px;background:#fff;margin:12px 0}
+table{width:100%;border-collapse:collapse;table-layout:fixed;min-width:700px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--grid)}
+th{background:var(--th);text-align:center}
+td.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.bad{background:#ffe7e7;border-left:4px solid #ff4d4d;color:#7b0000;padding:6px 10px;margin:10px 0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin:8px 0}
+.card{background:#fff;border:1px solid var(--grid);border-radius:10px;padding:8px}
+@media (max-width:760px){ h1{font-size:18px} .wrap{padding:12px} }
+a{color:#2b59c3;text-decoration:none}
+a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>{{ title or "Отчёт по дебиторской задолженности" }}</h1>
+  <small>
+    <span class="key">Период:</span> {{ period or "—" }}<br>
+    <span class="key">Менеджер:</span> {{ manager or "—" }}<br>
+    <span class="key">Клиентов:</span> {{ client_count or 0 }}<br>
+    <span class="key">Итого (расч.):</span> {{ total_debt|money }} тг
+  </small>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="top">ТОП-15</div>
+    <div class="tab" data-tab="abc">ABC</div>
+    <div class="tab" data-tab="over">Переплата</div>
+    <div class="tab" data-tab="all">Все клиенты</div>
+    <div class="tab" data-tab="tech">Техданные</div>
+  </div>
+
+  <div id="top" class="pane active">
+    <div class="table-wrap">
+      <table>
+        <tr><th>Контрагент</th><th>Долг, тг</th><th>Доля, %</th><th>ABC</th></tr>
+        {% for r in top_debtors %}
+          <tr>
+            <td><a href="#client-{{ r.client_slug }}">{{ r.client }}</a></td>
+            <td class="num">{{ r.debt|money }}</td>
+            <td class="num">{{ "%.2f"|format(r.share_pct or 0) }}</td>
+            <td class="num">{{ r.abc or "C" }}</td>
+          </tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+
+  <div id="abc" class="pane">
+    <div class="table-wrap">
+      <table>
+        <tr><th>Категория</th><th>Сумма, тг</th><th>Доля, %</th></tr>
+        {% set A = (abc_summary.A or 0.0) %}{% set B = (abc_summary.B or 0.0) %}{% set C = (abc_summary.C or 0.0) %}
+        {% set T = (total_debt or 1.0) %}
+        {% for cat,val in [("A",A),("B",B),("C",C)] %}
+          <tr>
+            <td>{{ cat }}</td>
+            <td class="num">{{ val|money }}</td>
+            <td class="num">{{ "%.2f"|format((val/T)*100) }}</td>
+          </tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+
+  <div id="over" class="pane">
+    <div class="table-wrap">
+      <table>
+        <tr><th>Контрагент</th><th>Переплата, тг</th></tr>
+        {% for r in overpay_rows %}
+          <tr>
+            <td><a href="#client-{{ r.client_slug }}">{{ r.client }}</a></td>
+            <td class="num">-{{ (0 - (r.overpay or 0))|money }}</td>
+          </tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+
+  <div id="all" class="pane">
+    <div class="table-wrap">
+      <table>
+        <tr><th>Контрагент</th><th>Долг, тг</th></tr>
+        {% for r in all_rows %}
+          <tr id="client-{{ r.client_slug }}">
+            <td>{{ r.client }}</td>
+            <td class="num">{{ r.debt|money }}</td>
+          </tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+
+  <div id="tech" class="pane">
+    <div class="grid">
+      {% for k,v in tech_info.items() %}
+        <div class="card"><span class="key">{{ k }}:</span> {{ v }}</div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <small style="display:block;margin-top:12px;color:#555">{{ generated }}</small>
+</div>
+<script>
+  const tabs = document.querySelectorAll('.tab');
+  const panes = document.querySelectorAll('.pane');
+  tabs.forEach(t=>{
+    t.onclick = ()=>{
+      tabs.forEach(x=>x.classList.remove('active'));
+      panes.forEach(x=>x.classList.remove('active'));
+      t.classList.add('active');
+      document.getElementById(t.dataset.tab).classList.add('active');
+    };
+  });
+</script>
+</body>
+</html>

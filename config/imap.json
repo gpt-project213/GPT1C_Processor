@@ -1,0 +1,8 @@
+{
+  "host": "",
+  "port": 993,
+  "ssl": true,
+  "user": "",
+  "white_list": ["saida111278@mail.ru", "kz.holod@yandex.ru"],
+  "poll_times": ["12:05", "19:05", "23:55"]
+}
