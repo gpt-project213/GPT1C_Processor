@@ -1,0 +1,585 @@
+﻿{
+    "generated_at":  "2026-03-06 10:43:15",
+    "timezone":  "Asia/Almaty",
+    "repo":  {
+                 "owner":  "gpt-project213",
+                 "name":  "GPT1C_Processor",
+                 "branch":  "master",
+                 "github_url":  "https://github.com/gpt-project213/GPT1C_Processor",
+                 "raw_base":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master"
+             },
+    "summary":  {
+                    "total_files":  60,
+                    "top_levels":  5
+                },
+    "sections":  [
+                     {
+                         "section":  ".",
+                         "count":  40,
+                         "files":  [
+                                       {
+                                           "path":  ".gitignore",
+                                           "name":  ".gitignore",
+                                           "extension":  ".gitignore",
+                                           "type":  "gitignore",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/.gitignore",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/.gitignore"
+                                       },
+                                       {
+                                           "path":  "╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Т╨Р╨Ы╨Ю╨Т╨Ю╨Щ.txt",
+                                           "name":  "╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Т╨Р╨Ы╨Ю╨Т╨Ю╨Щ.txt",
+                                           "extension":  ".txt",
+                                           "type":  "txt",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Т╨Р╨Ы╨Ю╨Т╨Ю╨Щ.txt",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Т╨Р╨Ы╨Ю╨Т╨Ю╨Щ.txt"
+                                       },
+                                       {
+                                           "path":  "╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Ф╨Х╨С╨Ш╨в╨Ю╨а╨Ъ╨Ш.txt",
+                                           "name":  "╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Ф╨Х╨С╨Ш╨в╨Ю╨а╨Ъ╨Ш.txt",
+                                           "extension":  ".txt",
+                                           "type":  "txt",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Ф╨Х╨С╨Ш╨в╨Ю╨а╨Ъ╨Ш.txt",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Ф╨Х╨С╨Ш╨в╨Ю╨а╨Ъ╨Ш.txt"
+                                       },
+                                       {
+                                           "path":  "╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Ч╨Р╨в╨а╨Р╨в.txt",
+                                           "name":  "╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Ч╨Р╨в╨а╨Р╨в.txt",
+                                           "extension":  ".txt",
+                                           "type":  "txt",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Ч╨Р╨в╨а╨Р╨в.txt",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Ч╨Р╨в╨а╨Р╨в.txt"
+                                       },
+                                       {
+                                           "path":  "╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Ю╨б╨в╨Р╨в╨Ъ╨Ю╨Т.txt",
+                                           "name":  "╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Ю╨б╨в╨Р╨в╨Ъ╨Ю╨Т.txt",
+                                           "extension":  ".txt",
+                                           "type":  "txt",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Ю╨б╨в╨Р╨в╨Ъ╨Ю╨Т.txt",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Ю╨б╨в╨Р╨в╨Ъ╨Ю╨Т.txt"
+                                       },
+                                       {
+                                           "path":  "╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Я╨а╨Ю╨Ф╨Р╨Ц.txt",
+                                           "name":  "╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Я╨а╨Ю╨Ф╨Р╨Ц.txt",
+                                           "extension":  ".txt",
+                                           "type":  "txt",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Я╨а╨Ю╨Ф╨Р╨Ц.txt",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Я╨а╨Ю╨Ф╨Р╨Ц.txt"
+                                       },
+                                       {
+                                           "path":  "ai_analyzer.py",
+                                           "name":  "ai_analyzer.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/ai_analyzer.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/ai_analyzer.py"
+                                       },
+                                       {
+                                           "path":  "analyze_debt_excel.py",
+                                           "name":  "analyze_debt_excel.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/analyze_debt_excel.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/analyze_debt_excel.py"
+                                       },
+                                       {
+                                           "path":  "cleanup_cache.py",
+                                           "name":  "cleanup_cache.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/cleanup_cache.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/cleanup_cache.py"
+                                       },
+                                       {
+                                           "path":  "CODE_INDEX.md",
+                                           "name":  "CODE_INDEX.md",
+                                           "extension":  ".md",
+                                           "type":  "md",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/CODE_INDEX.md",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/CODE_INDEX.md"
+                                       },
+                                       {
+                                           "path":  "config.py",
+                                           "name":  "config.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/config.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/config.py"
+                                       },
+                                       {
+                                           "path":  "debt_auto_report.py",
+                                           "name":  "debt_auto_report.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/debt_auto_report.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/debt_auto_report.py"
+                                       },
+                                       {
+                                           "path":  "dso_aging_report.py",
+                                           "name":  "dso_aging_report.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/dso_aging_report.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/dso_aging_report.py"
+                                       },
+                                       {
+                                           "path":  "expenses_parser.py",
+                                           "name":  "expenses_parser.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/expenses_parser.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/expenses_parser.py"
+                                       },
+                                       {
+                                           "path":  "expenses_report.py",
+                                           "name":  "expenses_report.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/expenses_report.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/expenses_report.py"
+                                       },
+                                       {
+                                           "path":  "gen_raw_links.ps1",
+                                           "name":  "gen_raw_links.ps1",
+                                           "extension":  ".ps1",
+                                           "type":  "ps1",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/gen_raw_links.ps1",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/gen_raw_links.ps1"
+                                       },
+                                       {
+                                           "path":  "gross_parser.py",
+                                           "name":  "gross_parser.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/gross_parser.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/gross_parser.py"
+                                       },
+                                       {
+                                           "path":  "gross_report.py",
+                                           "name":  "gross_report.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/gross_report.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/gross_report.py"
+                                       },
+                                       {
+                                           "path":  "gross_report_pct.py",
+                                           "name":  "gross_report_pct.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/gross_report_pct.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/gross_report_pct.py"
+                                       },
+                                       {
+                                           "path":  "imap_fetcher.py",
+                                           "name":  "imap_fetcher.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/imap_fetcher.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/imap_fetcher.py"
+                                       },
+                                       {
+                                           "path":  "inventory.py",
+                                           "name":  "inventory.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/inventory.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/inventory.py"
+                                       },
+                                       {
+                                           "path":  "inventory_cost_parser.py",
+                                           "name":  "inventory_cost_parser.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/inventory_cost_parser.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/inventory_cost_parser.py"
+                                       },
+                                       {
+                                           "path":  "inventory_turnover_report.py",
+                                           "name":  "inventory_turnover_report.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/inventory_turnover_report.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/inventory_turnover_report.py"
+                                       },
+                                       {
+                                           "path":  "net_profit_report.py",
+                                           "name":  "net_profit_report.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/net_profit_report.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/net_profit_report.py"
+                                       },
+                                       {
+                                           "path":  "PROJECT_CONTEXT.md",
+                                           "name":  "PROJECT_CONTEXT.md",
+                                           "extension":  ".md",
+                                           "type":  "md",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/PROJECT_CONTEXT.md",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/PROJECT_CONTEXT.md"
+                                       },
+                                       {
+                                           "path":  "raw_links.txt",
+                                           "name":  "raw_links.txt",
+                                           "extension":  ".txt",
+                                           "type":  "txt",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/raw_links.txt",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/raw_links.txt"
+                                       },
+                                       {
+                                           "path":  "requirements.txt",
+                                           "name":  "requirements.txt",
+                                           "extension":  ".txt",
+                                           "type":  "txt",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/requirements.txt",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/requirements.txt"
+                                       },
+                                       {
+                                           "path":  "revenue_concentration_report.py",
+                                           "name":  "revenue_concentration_report.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/revenue_concentration_report.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/revenue_concentration_report.py"
+                                       },
+                                       {
+                                           "path":  "rfm_clients_report.py",
+                                           "name":  "rfm_clients_report.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/rfm_clients_report.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/rfm_clients_report.py"
+                                       },
+                                       {
+                                           "path":  "run_new_reports_now.py",
+                                           "name":  "run_new_reports_now.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/run_new_reports_now.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/run_new_reports_now.py"
+                                       },
+                                       {
+                                           "path":  "run_pipeline.py",
+                                           "name":  "run_pipeline.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/run_pipeline.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/run_pipeline.py"
+                                       },
+                                       {
+                                           "path":  "run_pipeline_all_mp.py",
+                                           "name":  "run_pipeline_all_mp.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/run_pipeline_all_mp.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/run_pipeline_all_mp.py"
+                                       },
+                                       {
+                                           "path":  "sales_parser.py",
+                                           "name":  "sales_parser.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/sales_parser.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/sales_parser.py"
+                                       },
+                                       {
+                                           "path":  "sales_profitability_report.py",
+                                           "name":  "sales_profitability_report.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/sales_profitability_report.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/sales_profitability_report.py"
+                                       },
+                                       {
+                                           "path":  "sales_report.py",
+                                           "name":  "sales_report.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/sales_report.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/sales_report.py"
+                                       },
+                                       {
+                                           "path":  "send_tg.py",
+                                           "name":  "send_tg.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/send_tg.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/send_tg.py"
+                                       },
+                                       {
+                                           "path":  "start_bot_watchdog.bat",
+                                           "name":  "start_bot_watchdog.bat",
+                                           "extension":  ".bat",
+                                           "type":  "bat",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/start_bot_watchdog.bat",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/start_bot_watchdog.bat"
+                                       },
+                                       {
+                                           "path":  "utils.py",
+                                           "name":  "utils.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/utils.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/utils.py"
+                                       },
+                                       {
+                                           "path":  "utils_common.py",
+                                           "name":  "utils_common.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/utils_common.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/utils_common.py"
+                                       },
+                                       {
+                                           "path":  "utils_excel.py",
+                                           "name":  "utils_excel.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/utils_excel.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/utils_excel.py"
+                                       }
+                                   ]
+                     },
+                     {
+                         "section":  "bot",
+                         "count":  8,
+                         "files":  [
+                                       {
+                                           "path":  "bot/gross_summary.py",
+                                           "name":  "gross_summary.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  "bot",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/bot/gross_summary.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/bot/gross_summary.py"
+                                       },
+                                       {
+                                           "path":  "bot/inject_local.py",
+                                           "name":  "inject_local.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  "bot",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/bot/inject_local.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/bot/inject_local.py"
+                                       },
+                                       {
+                                           "path":  "bot/inventory_summary.py",
+                                           "name":  "inventory_summary.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  "bot",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/bot/inventory_summary.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/bot/inventory_summary.py"
+                                       },
+                                       {
+                                           "path":  "bot/opportunity_loss.py",
+                                           "name":  "opportunity_loss.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  "bot",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/bot/opportunity_loss.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/bot/opportunity_loss.py"
+                                       },
+                                       {
+                                           "path":  "bot/sales_summary.py",
+                                           "name":  "sales_summary.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  "bot",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/bot/sales_summary.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/bot/sales_summary.py"
+                                       },
+                                       {
+                                           "path":  "bot/send_reports.py",
+                                           "name":  "send_reports.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  "bot",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/bot/send_reports.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/bot/send_reports.py"
+                                       },
+                                       {
+                                           "path":  "bot/silence_alerts.py",
+                                           "name":  "silence_alerts.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  "bot",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/bot/silence_alerts.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/bot/silence_alerts.py"
+                                       },
+                                       {
+                                           "path":  "bot/user_tracker.py",
+                                           "name":  "user_tracker.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  "bot",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/bot/user_tracker.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/bot/user_tracker.py"
+                                       }
+                                   ]
+                     },
+                     {
+                         "section":  "config",
+                         "count":  1,
+                         "files":  {
+                                       "path":  "config/pattern_config.yaml",
+                                       "name":  "pattern_config.yaml",
+                                       "extension":  ".yaml",
+                                       "type":  "yaml",
+                                       "top_level":  "config",
+                                       "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/config/pattern_config.yaml",
+                                       "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/config/pattern_config.yaml"
+                                   }
+                     },
+                     {
+                         "section":  "templates",
+                         "count":  7,
+                         "files":  [
+                                       {
+                                           "path":  "templates/base.html",
+                                           "name":  "base.html",
+                                           "extension":  ".html",
+                                           "type":  "html",
+                                           "top_level":  "templates",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/templates/base.html",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/templates/base.html"
+                                       },
+                                       {
+                                           "path":  "templates/debt_auto.html",
+                                           "name":  "debt_auto.html",
+                                           "extension":  ".html",
+                                           "type":  "html",
+                                           "top_level":  "templates",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/templates/debt_auto.html",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/templates/debt_auto.html"
+                                       },
+                                       {
+                                           "path":  "templates/gross.html",
+                                           "name":  "gross.html",
+                                           "extension":  ".html",
+                                           "type":  "html",
+                                           "top_level":  "templates",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/templates/gross.html",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/templates/gross.html"
+                                       },
+                                       {
+                                           "path":  "templates/gross_percent.html",
+                                           "name":  "gross_percent.html",
+                                           "extension":  ".html",
+                                           "type":  "html",
+                                           "top_level":  "templates",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/templates/gross_percent.html",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/templates/gross_percent.html"
+                                       },
+                                       {
+                                           "path":  "templates/inventory_simple.html",
+                                           "name":  "inventory_simple.html",
+                                           "extension":  ".html",
+                                           "type":  "html",
+                                           "top_level":  "templates",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/templates/inventory_simple.html",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/templates/inventory_simple.html"
+                                       },
+                                       {
+                                           "path":  "templates/sales_by_product.html",
+                                           "name":  "sales_by_product.html",
+                                           "extension":  ".html",
+                                           "type":  "html",
+                                           "top_level":  "templates",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/templates/sales_by_product.html",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/templates/sales_by_product.html"
+                                       },
+                                       {
+                                           "path":  "templates/sales_report_grouped.html",
+                                           "name":  "sales_report_grouped.html",
+                                           "extension":  ".html",
+                                           "type":  "html",
+                                           "top_level":  "templates",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/templates/sales_report_grouped.html",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/templates/sales_report_grouped.html"
+                                       }
+                                   ]
+                     },
+                     {
+                         "section":  "tools",
+                         "count":  4,
+                         "files":  [
+                                       {
+                                           "path":  "tools/__init__.py",
+                                           "name":  "__init__.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  "tools",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/tools/__init__.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/tools/__init__.py"
+                                       },
+                                       {
+                                           "path":  "tools/patch_mobile_click.py",
+                                           "name":  "patch_mobile_click.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  "tools",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/tools/patch_mobile_click.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/tools/patch_mobile_click.py"
+                                       },
+                                       {
+                                           "path":  "tools/sync_project_to_github.ps1",
+                                           "name":  "sync_project_to_github.ps1",
+                                           "extension":  ".ps1",
+                                           "type":  "ps1",
+                                           "top_level":  "tools",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/tools/sync_project_to_github.ps1",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/tools/sync_project_to_github.ps1"
+                                       },
+                                       {
+                                           "path":  "tools/txt_to_html.py",
+                                           "name":  "txt_to_html.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  "tools",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/tools/txt_to_html.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/tools/txt_to_html.py"
+                                       }
+                                   ]
+                     }
+                 ]
+}
