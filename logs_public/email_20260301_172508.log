@@ -1,0 +1,24 @@
+﻿2026-03-01 17:25:08, INFO === imap_fetcher vv4.4.3 ===
+2026-03-01 17:25:08, INFO IMAP cfg: host=mail.minbarakat.kz port=993 ssl=True user=[EMAIL] pass_set=True tz=Asia/Almaty env=[WINDOWS_PATH]
+2026-03-01 17:25:09, INFO IMAP LOGIN OK (attempt 1/5)
+2026-03-01 17:25:09, INFO SEARCH found 1 msgs
+2026-03-01 17:25:09, INFO SUMMARY REPORT detected: РџСЂРѕРґР°Р¶Рё РњР°РіРёСЂР° (256).xlsx (keyword: РїСЂРѕРґР°Р¶Рё)
+2026-03-01 17:25:09, INFO SAVED: reports\queue\РџСЂРѕРґР°Р¶Рё РњР°РіРёСЂР° (256).xlsx (from [EMAIL])
+2026-03-01 17:25:09, INFO Clean copy: reports\excel\clean\РџСЂРѕРґР°Р¶Рё РњР°РіРёСЂР° (256).xlsx.__clean.xlsx
+2026-03-01 17:25:09, INFO SUMMARY REPORT detected: РџСЂРѕРґР°Р¶Рё РћРєСЃР°РЅР° (246).xlsx (keyword: РїСЂРѕРґР°Р¶Рё)
+2026-03-01 17:25:09, INFO SAVED: reports\queue\РџСЂРѕРґР°Р¶Рё РћРєСЃР°РЅР° (246).xlsx (from [EMAIL])
+2026-03-01 17:25:09, INFO Clean copy: reports\excel\clean\РџСЂРѕРґР°Р¶Рё РћРєСЃР°РЅР° (246).xlsx.__clean.xlsx
+2026-03-01 17:25:09, INFO SUMMARY REPORT detected: РџСЂРѕРґР°Р¶Рё РђР»РµРЅР° (238).xlsx (keyword: РїСЂРѕРґР°Р¶Рё)
+2026-03-01 17:25:09, INFO SAVED: reports\queue\РџСЂРѕРґР°Р¶Рё РђР»РµРЅР° (238).xlsx (from [EMAIL])
+2026-03-01 17:25:09, INFO Clean copy: reports\excel\clean\РџСЂРѕРґР°Р¶Рё РђР»РµРЅР° (238).xlsx.__clean.xlsx
+2026-03-01 17:25:09, INFO SUMMARY REPORT detected: РџСЂРѕРґР°Р¶Рё Р•СЂРіР°Р»Рё (218).xlsx (keyword: РїСЂРѕРґР°Р¶Рё)
+2026-03-01 17:25:09, INFO SAVED: reports\queue\РџСЂРѕРґР°Р¶Рё Р•СЂРіР°Р»Рё (218).xlsx (from [EMAIL])
+2026-03-01 17:25:09, INFO Clean copy: reports\excel\clean\РџСЂРѕРґР°Р¶Рё Р•СЂРіР°Р»Рё (218).xlsx.__clean.xlsx
+2026-03-01 17:25:09, INFO MAIL flagged \Deleted, msg #b'1'
+2026-03-01 17:25:09, INFO INBOX EXPUNGE OK
+2026-03-01 17:25:09, INFO TRASH skip Trash: cannot SELECT
+2026-03-01 17:25:09, INFO TRASH skip РљРѕСЂР·РёРЅР°: cannot SELECT
+2026-03-01 17:25:09, INFO TRASH skip Deleted Items: cannot SELECT
+2026-03-01 17:25:09, INFO TRASH cleaned: INBOX.Trash
+2026-03-01 17:25:09, INFO CYCLE DONE: saved=1
+

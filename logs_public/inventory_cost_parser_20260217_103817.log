@@ -1,0 +1,14 @@
+﻿2026-02-17 10:38:17,092, INFO Р›РѕРі-С„Р°Р№Р»: [WINDOWS_PATH]
+2026-02-17 10:38:17,093, INFO Р¤Р°Р№Р»: reports\excel\clean\Р’РµРґРѕРјРѕСЃС‚СЊ РїРѕ С‚РѕРІР°СЂР°Рј РЅР° СЃРєР»Р°РґР°С… (38).xlsx.__clean.xlsx
+2026-02-17 10:38:17,303, ERROR FAILED
+Traceback (most recent call last):
+  File "[WINDOWS_PATH]
+    out = build_inventory_cost_json(p)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "[WINDOWS_PATH]
+    colmap, data_start, _ = find_header_block(raw)
+                            ^^^^^^^^^^^^^^^^^^^^^^
+  File "[WINDOWS_PATH]
+    raise ValueError("РќРµ РЅР°Р№РґРµРЅР° СЃС‚СЂРѕРєР° Р·Р°РіРѕР»РѕРІРєРѕРІ")
+ValueError: РќРµ РЅР°Р№РґРµРЅР° СЃС‚СЂРѕРєР° Р·Р°РіРѕР»РѕРІРєРѕРІ
+

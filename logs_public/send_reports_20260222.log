@@ -1,0 +1,929 @@
+﻿2026-02-22 12:48:32, INFO вњ… json_read_success В· file=roles.json; encoding=utf-8
+2026-02-22 12:48:32, INFO {"event": "json_read_success", "file": "roles.json", "encoding": "utf-8"}
+2026-02-22 12:48:32, INFO вњ… json_read_success В· file=managers.json; encoding=utf-8
+2026-02-22 12:48:32, INFO {"event": "json_read_success", "file": "managers.json", "encoding": "utf-8"}
+2026-02-22 12:48:32, INFO {"event": "managers_normalized", "count": 4}
+2026-02-22 12:48:32, INFO рџ¤– bot_starting В· version=v9.4.16/19.02.2026
+2026-02-22 12:48:32, INFO {"event": "bot_starting", "version": "v9.4.16/19.02.2026"}
+2026-02-22 12:48:32, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 12:48:32, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 12:48:32, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 12:48:32, INFO вЏ° РќР°СЃС‚СЂРѕРµРЅ РµР¶РµРґРЅРµРІРЅС‹Р№ РґР¶РѕР±: РїСЂРѕРІРµСЂРєР° РґРЅРµР№ РјРѕР»С‡Р°РЅРёСЏ РІ 14:00
+2026-02-22 12:48:32, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 12:48:32, INFO вЏ° РќР°СЃС‚СЂРѕРµРЅ РµР¶РµРґРЅРµРІРЅС‹Р№ РґР¶РѕР±: РїСЂРѕРІРµСЂРєР° РґРЅРµР№ РјРѕР»С‡Р°РЅРёСЏ РІ 21:00
+2026-02-22 12:48:32, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 12:48:32, INFO рџ§№ РќР°СЃС‚СЂРѕРµРЅ janitor: РїСЂРѕРІРµСЂРєР° РѕС‡РµСЂРµРґРё СѓРґР°Р»РµРЅРёСЏ РєР°Р¶РґС‹Рµ 3600 СЃРµРє (60 РјРёРЅ)
+2026-02-22 12:48:32, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 12:48:32, INFO рџ¤– РќР°СЃС‚СЂРѕРµРЅ РѕР±СЂР°Р±РѕС‚С‡РёРє РѕС‡РµСЂРµРґРё РР: РёРЅС‚РµСЂРІР°Р» 120 СЃРµРє
+2026-02-22 12:48:32, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 12:48:32, INFO рџ“Љ РќР°СЃС‚СЂРѕРµРЅР° РµР¶РµРґРЅРµРІРЅР°СЏ СЃРІРѕРґРєР° Р°РґРјРёРЅСѓ РІ 23:00
+2026-02-22 12:48:32, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 12:48:32, INFO рџ”„ РќР°СЃС‚СЂРѕРµРЅ СЃР±СЂРѕСЃ СЃС‡С‘С‚С‡РёРєР° РР-РіРµРЅРµСЂР°С†РёР№ РІ 00:01
+2026-02-22 12:48:32, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 12:48:32, INFO рџ¤– РќР°СЃС‚СЂРѕРµРЅР° РµР¶РµРЅРµРґРµР»СЊРЅР°СЏ AI РіРµРЅРµСЂР°С†РёСЏ: РїРѕРЅРµРґРµР»СЊРЅРёРє 10:00
+2026-02-22 12:48:32, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 12:48:32, INFO рџ“Љ РќР°СЃС‚СЂРѕРµРЅР° РµР¶РµРґРЅРµРІРЅР°СЏ Р°РЅР°Р»РёС‚РёРєР°: РєР°Р¶РґС‹Р№ РґРµРЅСЊ 22:00
+2026-02-22 12:48:32, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 12:48:32, INFO рџ“¦ РќР°СЃС‚СЂРѕРµРЅР° РєСЂР°С‚РєР°СЏ СЃРІРѕРґРєР° РѕСЃС‚Р°С‚РєРѕРІ: РµР¶РµРґРЅРµРІРЅРѕ 09:00
+2026-02-22 12:48:32, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 12:48:32, INFO рџ’° РќР°СЃС‚СЂРѕРµРЅР° РєСЂР°С‚РєР°СЏ СЃРІРѕРґРєР° РІР°Р»РѕРІРѕР№: РµР¶РµРґРЅРµРІРЅРѕ 20:00
+2026-02-22 12:48:32, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 12:48:32, INFO рџ›’ РќР°СЃС‚СЂРѕРµРЅР° РєСЂР°С‚РєР°СЏ СЃРІРѕРґРєР° РїСЂРѕРґР°Р¶: РµР¶РµРґРЅРµРІРЅРѕ 21:00
+2026-02-22 12:48:32, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 12:48:32, INFO рџ§№ РќР°СЃС‚СЂРѕРµРЅР° Р°РІС‚РѕРѕС‡РёСЃС‚РєР° С„Р°Р№Р»РѕРІ: Р»РѕРіРё 2Рґ, AI 7Рґ, HTML 30Рґ, JSON 7Рґ, Excel 14Рґ | Р—Р°РїСѓСЃРє РІ 03:00
+2026-02-22 12:48:32, INFO рџ—‘пёЏ РђРІС‚РѕСѓРґР°Р»РµРЅРёРµ СЃРѕРѕР±С‰РµРЅРёР№ С‡РµСЂРµР· 24 С‡Р°СЃРѕРІ
+2026-02-22 12:48:32, INFO рџ“Ў bot_polling_started
+2026-02-22 12:48:32, INFO {"event": "bot_polling_started"}
+2026-02-22 12:48:36, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getMe "HTTP/1.1 200 OK"
+2026-02-22 12:48:38, INFO рџ—‚пёЏ index_built В· files=122; report_types=7; build_ms=1789.0
+2026-02-22 12:48:38, INFO {"event": "index_built", "files": 122, "report_types": 7, "build_ms": 1789.0}
+2026-02-22 12:48:38, INFO рџ—‚пёЏ initial_index_built
+2026-02-22 12:48:38, INFO {"event": "initial_index_built"}
+2026-02-22 12:48:38, INFO вњ… json_read_success В· file=deletion_queue.json; encoding=utf-8
+2026-02-22 12:48:38, INFO {"event": "json_read_success", "file": "deletion_queue.json", "encoding": "utf-8"}
+2026-02-22 12:48:38, INFO рџ§№ Р’РѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРѕ 4 Р·Р°РґР°С‡ РЅР° СѓРґР°Р»РµРЅРёРµ РёР· РѕС‡РµСЂРµРґРё
+2026-02-22 12:48:38, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/deleteWebhook "HTTP/1.1 200 OK"
+2026-02-22 12:48:38, INFO Added job "pipeline" to job store "default"
+2026-02-22 12:48:38, INFO Added job "new_reports" to job store "default"
+2026-02-22 12:48:38, INFO Added job "silence_alerts_14h" to job store "default"
+2026-02-22 12:48:38, INFO Added job "silence_alerts_21h" to job store "default"
+2026-02-22 12:48:38, INFO Added job "janitor" to job store "default"
+2026-02-22 12:48:38, INFO Added job "ai_queue_processor" to job store "default"
+2026-02-22 12:48:38, INFO Added job "daily_summary" to job store "default"
+2026-02-22 12:48:38, INFO Added job "reset_ai_state" to job store "default"
+2026-02-22 12:48:38, INFO Added job "weekly_ai_generation" to job store "default"
+2026-02-22 12:48:38, INFO Added job "daily_analytics" to job store "default"
+2026-02-22 12:48:38, INFO Added job "inventory_summary" to job store "default"
+2026-02-22 12:48:38, INFO Added job "gross_summary" to job store "default"
+2026-02-22 12:48:38, INFO Added job "sales_summary" to job store "default"
+2026-02-22 12:48:38, INFO Added job "cleanup_old_files" to job store "default"
+2026-02-22 12:48:38, INFO Scheduler started
+2026-02-22 12:48:38, INFO Application started
+2026-02-22 12:48:48, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:48:57, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:48:58, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/sendMessage "HTTP/1.1 200 OK"
+2026-02-22 12:49:07, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:49:09, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:49:09, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-22 12:49:09, INFO рџ“ callback_query В· data=menu_analytics; chat_id=[CHAT_ID]; user_role=admin
+2026-02-22 12:49:09, INFO {"event": "callback_query", "data": "menu_analytics", "chat_id": [ID], "user_role": "admin"}
+2026-02-22 12:49:09, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/editMessageText "HTTP/1.1 200 OK"
+2026-02-22 12:49:11, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:49:11, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-22 12:49:11, INFO рџ“ callback_query В· data=analytics|refresh; chat_id=[CHAT_ID]; user_role=admin
+2026-02-22 12:49:11, INFO {"event": "callback_query", "data": "analytics|refresh", "chat_id": [ID], "user_role": "admin"}
+2026-02-22 12:49:11, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-22 12:49:11, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/sendMessage "HTTP/1.1 200 OK"
+2026-02-22 12:49:11, INFO {"event": "weekly_analytics_start"}
+2026-02-22 12:49:11, INFO в–¶пёЏ run_script_start В· script=sales_profitability_report.py; args=()
+2026-02-22 12:49:11, INFO {"event": "run_script_start", "script": "sales_profitability_report.py", "args": []}
+2026-02-22 12:49:11, INFO вњ… run_script_finish В· script=sales_profitability_report.py; return_code=0
+2026-02-22 12:49:11, INFO {"event": "run_script_finish", "script": "sales_profitability_report.py", "return_code": 0}
+2026-02-22 12:49:11, INFO {"event": "analytics_report", "script": "sales_profitability_report.py", "rc": 0}
+2026-02-22 12:49:11, INFO в–¶пёЏ run_script_start В· script=net_profit_report.py; args=()
+2026-02-22 12:49:11, INFO {"event": "run_script_start", "script": "net_profit_report.py", "args": []}
+2026-02-22 12:49:12, INFO вњ… run_script_finish В· script=net_profit_report.py; return_code=0
+2026-02-22 12:49:12, INFO {"event": "run_script_finish", "script": "net_profit_report.py", "return_code": 0}
+2026-02-22 12:49:12, INFO {"event": "analytics_report", "script": "net_profit_report.py", "rc": 0}
+2026-02-22 12:49:12, INFO в–¶пёЏ run_script_start В· script=inventory_turnover_report.py; args=()
+2026-02-22 12:49:12, INFO {"event": "run_script_start", "script": "inventory_turnover_report.py", "args": []}
+2026-02-22 12:49:12, INFO вњ… run_script_finish В· script=inventory_turnover_report.py; return_code=0
+2026-02-22 12:49:12, INFO {"event": "run_script_finish", "script": "inventory_turnover_report.py", "return_code": 0}
+2026-02-22 12:49:12, INFO {"event": "analytics_report", "script": "inventory_turnover_report.py", "rc": 0}
+2026-02-22 12:49:12, INFO в–¶пёЏ run_script_start В· script=rfm_clients_report.py; args=()
+2026-02-22 12:49:12, INFO {"event": "run_script_start", "script": "rfm_clients_report.py", "args": []}
+2026-02-22 12:49:12, INFO вњ… run_script_finish В· script=rfm_clients_report.py; return_code=0
+2026-02-22 12:49:12, INFO {"event": "run_script_finish", "script": "rfm_clients_report.py", "return_code": 0}
+2026-02-22 12:49:12, INFO {"event": "analytics_report", "script": "rfm_clients_report.py", "rc": 0}
+2026-02-22 12:49:12, INFO в–¶пёЏ run_script_start В· script=revenue_concentration_report.py; args=()
+2026-02-22 12:49:12, INFO {"event": "run_script_start", "script": "revenue_concentration_report.py", "args": []}
+2026-02-22 12:49:12, INFO вњ… run_script_finish В· script=revenue_concentration_report.py; return_code=0
+2026-02-22 12:49:12, INFO {"event": "run_script_finish", "script": "revenue_concentration_report.py", "return_code": 0}
+2026-02-22 12:49:12, INFO {"event": "analytics_report", "script": "revenue_concentration_report.py", "rc": 0}
+2026-02-22 12:49:12, INFO в–¶пёЏ run_script_start В· script=dso_aging_report.py; args=()
+2026-02-22 12:49:12, INFO {"event": "run_script_start", "script": "dso_aging_report.py", "args": []}
+2026-02-22 12:49:12, INFO вњ… run_script_finish В· script=dso_aging_report.py; return_code=0
+2026-02-22 12:49:12, INFO {"event": "run_script_finish", "script": "dso_aging_report.py", "return_code": 0}
+2026-02-22 12:49:12, INFO {"event": "analytics_report", "script": "dso_aging_report.py", "rc": 0}
+2026-02-22 12:49:12, INFO {"event": "weekly_analytics_finish", "success": 6, "total": 6}
+2026-02-22 12:49:12, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/sendMessage "HTTP/1.1 200 OK"
+2026-02-22 12:49:12, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/sendMessage "HTTP/1.1 400 Bad Request"
+2026-02-22 12:49:12, INFO {"event": "analytics_notify_error", "chat_id": "[ID]", "error": "Chat not found", "level": "WARNING"}
+2026-02-22 12:49:17, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:49:17, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-22 12:49:17, INFO рџ“ callback_query В· data=analytics|net_profit_submenu; chat_id=[CHAT_ID]; user_role=admin
+2026-02-22 12:49:17, INFO {"event": "callback_query", "data": "analytics|net_profit_submenu", "chat_id": [ID], "user_role": "admin"}
+2026-02-22 12:49:17, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-22 12:49:17, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/editMessageText "HTTP/1.1 200 OK"
+2026-02-22 12:49:25, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:49:26, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-22 12:49:26, INFO рџ“ callback_query В· data=analytics|net_profit_mtd; chat_id=[CHAT_ID]; user_role=admin
+2026-02-22 12:49:26, INFO {"event": "callback_query", "data": "analytics|net_profit_mtd", "chat_id": [ID], "user_role": "admin"}
+2026-02-22 12:49:26, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-22 12:49:26, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/sendDocument "HTTP/1.1 200 OK"
+2026-02-22 12:49:26, INFO {"event": "analytics_sent", "report_type": "net_profit_mtd", "files_count": 1, "chat_id": [ID]}
+2026-02-22 12:49:26, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/sendMessage "HTTP/1.1 200 OK"
+2026-02-22 12:49:32, INFO Running job "pipeline (trigger: interval[0:10:00], next run at: 2026-02-22 07:59:32 UTC)" (scheduled at 2026-02-22 07:49:32.941221+00:00)
+2026-02-22 12:49:32, INFO рџ”Ќ pipeline_cycle_start
+2026-02-22 12:49:32, INFO {"event": "pipeline_cycle_start"}
+2026-02-22 12:49:32, INFO в–¶пёЏ run_script_start В· script=imap_fetcher.py; args=('--once',)
+2026-02-22 12:49:32, INFO {"event": "run_script_start", "script": "imap_fetcher.py", "args": ["--once"]}
+2026-02-22 12:49:36, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:49:46, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:49:56, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:50:06, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:50:16, INFO рџ“„ script_stdout В· script=imap_fetcher.py; output=2026-02-22 12:49:37, INFO === imap_fetcher vv4.4.3 ===
+2026-02-22 12:49:37, INFO IMAP cfg: host=mail.minbarakat.kz port=993 ssl=True user=[EMAIL] pass_set=True tz=Asia/Almaty env=[WINDOWS_PATH]
+2026-02-22 12:49:39, ERROR IMAP connect/login failed (attempt 1/5): b'[AUTHENTICATIONFAILED] Authentication failed.'
+2026-02-22 12:49:47, ERROR IMAP connect/login failed (attempt 2/5): b'[AUTHENTICATIONFAILED] Authentication failed.'
+2026-02-22 12:49:57, ERROR IMAP connect/login failed (attempt 3/5): b'[AUTHENTICATIONFAILED] Authentication failed.'
+2026-02-22 12:50:04, ERROR IMAP connect/login failed (attempt 4/5): b'[AUTHENTICATIONFAILED] Authentication failed.'
+2026-02-22 12:50:11, ERROR IMAP connect/login failed (attempt 5/5): b'[AUTHENTICATIONFAILED] Authentication failed.'
+2026-02-22 12:50:16, ERROR IMAP error: b'[AUTHENTICATIONFAILED] Authentication failed.'
+2026-02-22 12:50:16, INFO {"event": "script_stdout", "script": "imap_fetcher.py", "output": "2026-02-22 12:49:37, INFO === imap_fetcher vv4.4.3 ===\r\n2026-02-22 12:49:37, INFO IMAP cfg: host=mail.minbarakat.kz port=993 ssl=True user=[EMAIL] pass_set=True tz=Asia/Almaty env=[WINDOWS_PATH]
+2026-02-22 12:50:16, INFO вњ… run_script_finish В· script=imap_fetcher.py; return_code=0
+2026-02-22 12:50:16, INFO {"event": "run_script_finish", "script": "imap_fetcher.py", "return_code": 0}
+2026-02-22 12:50:16, INFO рџ”­ queue_empty
+2026-02-22 12:50:16, INFO {"event": "queue_empty"}
+2026-02-22 12:50:16, INFO вњ… pipeline_cycle_finish
+2026-02-22 12:50:16, INFO {"event": "pipeline_cycle_finish"}
+2026-02-22 12:50:16, INFO Job "pipeline (trigger: interval[0:10:00], next run at: 2026-02-22 07:59:32 UTC)" executed successfully
+2026-02-22 12:50:16, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:50:26, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:50:32, INFO Running job "janitor (trigger: interval[1:00:00], next run at: 2026-02-22 08:50:32 UTC)" (scheduled at 2026-02-22 07:50:32.957065+00:00)
+2026-02-22 12:50:32, INFO рџ§№ janitor_start
+2026-02-22 12:50:32, INFO {"event": "janitor_start"}
+2026-02-22 12:50:32, INFO вњ… json_read_success В· file=deletion_queue.json; encoding=utf-8
+2026-02-22 12:50:32, INFO {"event": "json_read_success", "file": "deletion_queue.json", "encoding": "utf-8"}
+2026-02-22 12:50:32, INFO вЏ° deletion_too_old В· chat_id=[CHAT_ID]; message_id=362; age_hours=75.7
+2026-02-22 12:50:32, INFO {"event": "deletion_too_old", "chat_id": [ID], "message_id": 362, "age_hours": 75.7}
+2026-02-22 12:50:32, INFO вЏ° deletion_too_old В· chat_id=[CHAT_ID]; message_id=377; age_hours=70.5
+2026-02-22 12:50:32, INFO {"event": "deletion_too_old", "chat_id": [ID], "message_id": 377, "age_hours": 70.5}
+2026-02-22 12:50:32, INFO вЏ° deletion_too_old В· chat_id=[CHAT_ID]; message_id=382; age_hours=70.5
+2026-02-22 12:50:32, INFO {"event": "deletion_too_old", "chat_id": [ID], "message_id": 382, "age_hours": 70.5}
+2026-02-22 12:50:32, INFO вЏ° deletion_too_old В· chat_id=[CHAT_ID]; message_id=440; age_hours=51.8
+2026-02-22 12:50:32, INFO {"event": "deletion_too_old", "chat_id": [ID], "message_id": 440, "age_hours": 51.8}
+2026-02-22 12:50:32, INFO вњ… janitor_finish В· total=4; deleted=0; failed=0; too_old=4; remaining=0
+2026-02-22 12:50:32, INFO {"event": "janitor_finish", "total": 4, "deleted": 0, "failed": 0, "too_old": 4, "remaining": 0}
+2026-02-22 12:50:32, INFO Job "janitor (trigger: interval[1:00:00], next run at: 2026-02-22 08:50:32 UTC)" executed successfully
+2026-02-22 12:50:36, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:50:46, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:50:56, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:51:06, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:51:17, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:51:27, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:51:31, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:51:31, INFO Application is stopping. This might take a moment.
+2026-02-22 12:51:31, INFO Scheduler has been shut down
+2026-02-22 12:51:31, INFO Application.stop() complete
+2026-02-22 12:51:36, INFO вњ… json_read_success В· file=roles.json; encoding=utf-8
+2026-02-22 12:51:36, INFO {"event": "json_read_success", "file": "roles.json", "encoding": "utf-8"}
+2026-02-22 12:51:36, INFO вњ… json_read_success В· file=managers.json; encoding=utf-8
+2026-02-22 12:51:36, INFO {"event": "json_read_success", "file": "managers.json", "encoding": "utf-8"}
+2026-02-22 12:51:36, INFO {"event": "managers_normalized", "count": 4}
+2026-02-22 12:51:36, INFO рџ¤– bot_starting В· version=v9.4.16/19.02.2026
+2026-02-22 12:51:36, INFO {"event": "bot_starting", "version": "v9.4.16/19.02.2026"}
+2026-02-22 12:51:36, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 12:51:36, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 12:51:36, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 12:51:36, INFO вЏ° РќР°СЃС‚СЂРѕРµРЅ РµР¶РµРґРЅРµРІРЅС‹Р№ РґР¶РѕР±: РїСЂРѕРІРµСЂРєР° РґРЅРµР№ РјРѕР»С‡Р°РЅРёСЏ РІ 14:00
+2026-02-22 12:51:36, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 12:51:36, INFO вЏ° РќР°СЃС‚СЂРѕРµРЅ РµР¶РµРґРЅРµРІРЅС‹Р№ РґР¶РѕР±: РїСЂРѕРІРµСЂРєР° РґРЅРµР№ РјРѕР»С‡Р°РЅРёСЏ РІ 21:00
+2026-02-22 12:51:36, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 12:51:36, INFO рџ§№ РќР°СЃС‚СЂРѕРµРЅ janitor: РїСЂРѕРІРµСЂРєР° РѕС‡РµСЂРµРґРё СѓРґР°Р»РµРЅРёСЏ РєР°Р¶РґС‹Рµ 3600 СЃРµРє (60 РјРёРЅ)
+2026-02-22 12:51:36, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 12:51:36, INFO рџ¤– РќР°СЃС‚СЂРѕРµРЅ РѕР±СЂР°Р±РѕС‚С‡РёРє РѕС‡РµСЂРµРґРё РР: РёРЅС‚РµСЂРІР°Р» 120 СЃРµРє
+2026-02-22 12:51:36, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 12:51:36, INFO рџ“Љ РќР°СЃС‚СЂРѕРµРЅР° РµР¶РµРґРЅРµРІРЅР°СЏ СЃРІРѕРґРєР° Р°РґРјРёРЅСѓ РІ 23:00
+2026-02-22 12:51:36, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 12:51:36, INFO рџ”„ РќР°СЃС‚СЂРѕРµРЅ СЃР±СЂРѕСЃ СЃС‡С‘С‚С‡РёРєР° РР-РіРµРЅРµСЂР°С†РёР№ РІ 00:01
+2026-02-22 12:51:36, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 12:51:36, INFO рџ¤– РќР°СЃС‚СЂРѕРµРЅР° РµР¶РµРЅРµРґРµР»СЊРЅР°СЏ AI РіРµРЅРµСЂР°С†РёСЏ: РїРѕРЅРµРґРµР»СЊРЅРёРє 10:00
+2026-02-22 12:51:36, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 12:51:36, INFO рџ“Љ РќР°СЃС‚СЂРѕРµРЅР° РµР¶РµРґРЅРµРІРЅР°СЏ Р°РЅР°Р»РёС‚РёРєР°: РєР°Р¶РґС‹Р№ РґРµРЅСЊ 22:00
+2026-02-22 12:51:36, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 12:51:36, INFO рџ“¦ РќР°СЃС‚СЂРѕРµРЅР° РєСЂР°С‚РєР°СЏ СЃРІРѕРґРєР° РѕСЃС‚Р°С‚РєРѕРІ: РµР¶РµРґРЅРµРІРЅРѕ 09:00
+2026-02-22 12:51:36, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 12:51:36, INFO рџ’° РќР°СЃС‚СЂРѕРµРЅР° РєСЂР°С‚РєР°СЏ СЃРІРѕРґРєР° РІР°Р»РѕРІРѕР№: РµР¶РµРґРЅРµРІРЅРѕ 20:00
+2026-02-22 12:51:36, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 12:51:36, INFO рџ›’ РќР°СЃС‚СЂРѕРµРЅР° РєСЂР°С‚РєР°СЏ СЃРІРѕРґРєР° РїСЂРѕРґР°Р¶: РµР¶РµРґРЅРµРІРЅРѕ 21:00
+2026-02-22 12:51:36, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 12:51:36, INFO рџ§№ РќР°СЃС‚СЂРѕРµРЅР° Р°РІС‚РѕРѕС‡РёСЃС‚РєР° С„Р°Р№Р»РѕРІ: Р»РѕРіРё 2Рґ, AI 7Рґ, HTML 30Рґ, JSON 7Рґ, Excel 14Рґ | Р—Р°РїСѓСЃРє РІ 03:00
+2026-02-22 12:51:36, INFO рџ—‘пёЏ РђРІС‚РѕСѓРґР°Р»РµРЅРёРµ СЃРѕРѕР±С‰РµРЅРёР№ С‡РµСЂРµР· 24 С‡Р°СЃРѕРІ
+2026-02-22 12:51:36, INFO рџ“Ў bot_polling_started
+2026-02-22 12:51:36, INFO {"event": "bot_polling_started"}
+2026-02-22 12:51:37, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getMe "HTTP/1.1 200 OK"
+2026-02-22 12:51:37, INFO рџ—‚пёЏ index_built В· files=122; report_types=7; build_ms=606.6
+2026-02-22 12:51:37, INFO {"event": "index_built", "files": 122, "report_types": 7, "build_ms": 606.6}
+2026-02-22 12:51:37, INFO рџ—‚пёЏ initial_index_built
+2026-02-22 12:51:37, INFO {"event": "initial_index_built"}
+2026-02-22 12:51:37, INFO вњ… json_read_success В· file=deletion_queue.json; encoding=utf-8
+2026-02-22 12:51:37, INFO {"event": "json_read_success", "file": "deletion_queue.json", "encoding": "utf-8"}
+2026-02-22 12:51:38, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/deleteWebhook "HTTP/1.1 200 OK"
+2026-02-22 12:51:38, INFO Added job "pipeline" to job store "default"
+2026-02-22 12:51:38, INFO Added job "new_reports" to job store "default"
+2026-02-22 12:51:38, INFO Added job "silence_alerts_14h" to job store "default"
+2026-02-22 12:51:38, INFO Added job "silence_alerts_21h" to job store "default"
+2026-02-22 12:51:38, INFO Added job "janitor" to job store "default"
+2026-02-22 12:51:38, INFO Added job "ai_queue_processor" to job store "default"
+2026-02-22 12:51:38, INFO Added job "daily_summary" to job store "default"
+2026-02-22 12:51:38, INFO Added job "reset_ai_state" to job store "default"
+2026-02-22 12:51:38, INFO Added job "weekly_ai_generation" to job store "default"
+2026-02-22 12:51:38, INFO Added job "daily_analytics" to job store "default"
+2026-02-22 12:51:38, INFO Added job "inventory_summary" to job store "default"
+2026-02-22 12:51:38, INFO Added job "gross_summary" to job store "default"
+2026-02-22 12:51:38, INFO Added job "sales_summary" to job store "default"
+2026-02-22 12:51:38, INFO Added job "cleanup_old_files" to job store "default"
+2026-02-22 12:51:38, INFO Scheduler started
+2026-02-22 12:51:38, INFO Application started
+2026-02-22 12:51:48, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:51:58, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:52:08, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:52:18, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:52:28, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:52:36, INFO Running job "pipeline (trigger: interval[0:10:00], next run at: 2026-02-22 08:02:36 UTC)" (scheduled at 2026-02-22 07:52:36.934739+00:00)
+2026-02-22 12:52:36, INFO рџ”Ќ pipeline_cycle_start
+2026-02-22 12:52:36, INFO {"event": "pipeline_cycle_start"}
+2026-02-22 12:52:36, INFO в–¶пёЏ run_script_start В· script=imap_fetcher.py; args=('--once',)
+2026-02-22 12:52:36, INFO {"event": "run_script_start", "script": "imap_fetcher.py", "args": ["--once"]}
+2026-02-22 12:52:38, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:52:48, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:52:58, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:53:09, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:53:17, INFO рџ“„ script_stdout В· script=imap_fetcher.py; output=2026-02-22 12:52:38, INFO === imap_fetcher vv4.4.3 ===
+2026-02-22 12:52:38, INFO IMAP cfg: host=mail.minbarakat.kz port=993 ssl=True user=[EMAIL] pass_set=True tz=Asia/Almaty env=[WINDOWS_PATH]
+2026-02-22 12:52:40, ERROR IMAP connect/login failed (attempt 1/5): b'[AUTHENTICATIONFAILED] Authentication failed.'
+2026-02-22 12:52:48, ERROR IMAP connect/login failed (attempt 2/5): b'[AUTHENTICATIONFAILED] Authentication failed.'
+2026-02-22 12:52:58, ERROR IMAP connect/login failed (attempt 3/5): b'[AUTHENTICATIONFAILED] Authentication failed.'
+2026-02-22 12:53:05, ERROR IMAP connect/login failed (attempt 4/5): b'[AUTHENTICATIONFAILED] Authentication failed.'
+2026-02-22 12:53:12, ERROR IMAP connect/login failed (attempt 5/5): b'[AUTHENTICATIONFAILED] Authentication failed.'
+2026-02-22 12:53:17, ERROR IMAP error: b'[AUTHENTICATIONFAILED] Authentication failed.'
+2026-02-22 12:53:17, INFO {"event": "script_stdout", "script": "imap_fetcher.py", "output": "2026-02-22 12:52:38, INFO === imap_fetcher vv4.4.3 ===\r\n2026-02-22 12:52:38, INFO IMAP cfg: host=mail.minbarakat.kz port=993 ssl=True user=[EMAIL] pass_set=True tz=Asia/Almaty env=[WINDOWS_PATH]
+2026-02-22 12:53:17, INFO вњ… run_script_finish В· script=imap_fetcher.py; return_code=0
+2026-02-22 12:53:17, INFO {"event": "run_script_finish", "script": "imap_fetcher.py", "return_code": 0}
+2026-02-22 12:53:17, INFO рџ”­ queue_empty
+2026-02-22 12:53:17, INFO {"event": "queue_empty"}
+2026-02-22 12:53:17, INFO вњ… pipeline_cycle_finish
+2026-02-22 12:53:17, INFO {"event": "pipeline_cycle_finish"}
+2026-02-22 12:53:17, INFO Job "pipeline (trigger: interval[0:10:00], next run at: 2026-02-22 08:02:36 UTC)" executed successfully
+2026-02-22 12:53:19, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:53:29, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:53:36, INFO Running job "janitor (trigger: interval[1:00:00], next run at: 2026-02-22 08:53:36 UTC)" (scheduled at 2026-02-22 07:53:36.943543+00:00)
+2026-02-22 12:53:36, INFO рџ§№ janitor_start
+2026-02-22 12:53:36, INFO {"event": "janitor_start"}
+2026-02-22 12:53:36, INFO вњ… json_read_success В· file=deletion_queue.json; encoding=utf-8
+2026-02-22 12:53:36, INFO {"event": "json_read_success", "file": "deletion_queue.json", "encoding": "utf-8"}
+2026-02-22 12:53:36, INFO вњ… janitor_finish В· processed=0
+2026-02-22 12:53:36, INFO {"event": "janitor_finish", "processed": 0}
+2026-02-22 12:53:36, INFO Job "janitor (trigger: interval[1:00:00], next run at: 2026-02-22 08:53:36 UTC)" executed successfully
+2026-02-22 12:53:39, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:53:49, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:53:59, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:54:09, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:54:19, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:54:29, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:54:36, INFO Running job "new_reports (trigger: interval[0:10:00], next run at: 2026-02-22 08:04:36 UTC)" (scheduled at 2026-02-22 07:54:36.936816+00:00)
+2026-02-22 12:54:36, INFO рџ”” notifier_start
+2026-02-22 12:54:36, INFO {"event": "notifier_start"}
+2026-02-22 12:54:36, INFO вњ… json_read_success В· file=notify_state.json; encoding=utf-8
+2026-02-22 12:54:36, INFO {"event": "json_read_success", "file": "notify_state.json", "encoding": "utf-8"}
+2026-02-22 12:54:36, INFO вњ… json_read_success В· file=notify_state.json; encoding=utf-8
+2026-02-22 12:54:36, INFO {"event": "json_read_success", "file": "notify_state.json", "encoding": "utf-8"}
+2026-02-22 12:54:36, INFO рџ”” notifier_finish В· total_notifications=0; watermark_time=[ID].9561596
+2026-02-22 12:54:36, INFO {"event": "notifier_finish", "total_notifications": 0, "watermark_time": [ID].9561596}
+2026-02-22 12:54:36, INFO Job "new_reports (trigger: interval[0:10:00], next run at: 2026-02-22 08:04:36 UTC)" executed successfully
+2026-02-22 12:54:39, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:54:49, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:55:00, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:55:10, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:55:20, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:55:30, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:55:40, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:55:50, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:56:00, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:56:10, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:56:14, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 12:56:14, INFO Application is stopping. This might take a moment.
+2026-02-22 12:56:14, INFO Scheduler has been shut down
+2026-02-22 12:56:14, INFO Application.stop() complete
+2026-02-22 13:02:54, INFO вњ… json_read_success В· file=roles.json; encoding=utf-8
+2026-02-22 13:02:54, INFO {"event": "json_read_success", "file": "roles.json", "encoding": "utf-8"}
+2026-02-22 13:02:54, INFO вњ… json_read_success В· file=managers.json; encoding=utf-8
+2026-02-22 13:02:54, INFO {"event": "json_read_success", "file": "managers.json", "encoding": "utf-8"}
+2026-02-22 13:02:54, INFO {"event": "managers_normalized", "count": 4}
+2026-02-22 13:02:54, INFO рџ¤– bot_starting В· version=v9.4.16/19.02.2026
+2026-02-22 13:02:54, INFO {"event": "bot_starting", "version": "v9.4.16/19.02.2026"}
+2026-02-22 13:02:55, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 13:02:55, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 13:02:55, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 13:02:55, INFO вЏ° РќР°СЃС‚СЂРѕРµРЅ РµР¶РµРґРЅРµРІРЅС‹Р№ РґР¶РѕР±: РїСЂРѕРІРµСЂРєР° РґРЅРµР№ РјРѕР»С‡Р°РЅРёСЏ РІ 14:00
+2026-02-22 13:02:55, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 13:02:55, INFO вЏ° РќР°СЃС‚СЂРѕРµРЅ РµР¶РµРґРЅРµРІРЅС‹Р№ РґР¶РѕР±: РїСЂРѕРІРµСЂРєР° РґРЅРµР№ РјРѕР»С‡Р°РЅРёСЏ РІ 21:00
+2026-02-22 13:02:55, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 13:02:55, INFO рџ§№ РќР°СЃС‚СЂРѕРµРЅ janitor: РїСЂРѕРІРµСЂРєР° РѕС‡РµСЂРµРґРё СѓРґР°Р»РµРЅРёСЏ РєР°Р¶РґС‹Рµ 3600 СЃРµРє (60 РјРёРЅ)
+2026-02-22 13:02:55, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 13:02:55, INFO рџ¤– РќР°СЃС‚СЂРѕРµРЅ РѕР±СЂР°Р±РѕС‚С‡РёРє РѕС‡РµСЂРµРґРё РР: РёРЅС‚РµСЂРІР°Р» 120 СЃРµРє
+2026-02-22 13:02:55, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 13:02:55, INFO рџ“Љ РќР°СЃС‚СЂРѕРµРЅР° РµР¶РµРґРЅРµРІРЅР°СЏ СЃРІРѕРґРєР° Р°РґРјРёРЅСѓ РІ 23:00
+2026-02-22 13:02:55, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 13:02:55, INFO рџ”„ РќР°СЃС‚СЂРѕРµРЅ СЃР±СЂРѕСЃ СЃС‡С‘С‚С‡РёРєР° РР-РіРµРЅРµСЂР°С†РёР№ РІ 00:01
+2026-02-22 13:02:55, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 13:02:55, INFO рџ¤– РќР°СЃС‚СЂРѕРµРЅР° РµР¶РµРЅРµРґРµР»СЊРЅР°СЏ AI РіРµРЅРµСЂР°С†РёСЏ: РїРѕРЅРµРґРµР»СЊРЅРёРє 10:00
+2026-02-22 13:02:55, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 13:02:55, INFO рџ“Љ РќР°СЃС‚СЂРѕРµРЅР° РµР¶РµРґРЅРµРІРЅР°СЏ Р°РЅР°Р»РёС‚РёРєР°: РєР°Р¶РґС‹Р№ РґРµРЅСЊ 22:00
+2026-02-22 13:02:55, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 13:02:55, INFO рџ“¦ РќР°СЃС‚СЂРѕРµРЅР° РєСЂР°С‚РєР°СЏ СЃРІРѕРґРєР° РѕСЃС‚Р°С‚РєРѕРІ: РµР¶РµРґРЅРµРІРЅРѕ 09:00
+2026-02-22 13:02:55, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 13:02:55, INFO рџ’° РќР°СЃС‚СЂРѕРµРЅР° РєСЂР°С‚РєР°СЏ СЃРІРѕРґРєР° РІР°Р»РѕРІРѕР№: РµР¶РµРґРЅРµРІРЅРѕ 20:00
+2026-02-22 13:02:55, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 13:02:55, INFO рџ›’ РќР°СЃС‚СЂРѕРµРЅР° РєСЂР°С‚РєР°СЏ СЃРІРѕРґРєР° РїСЂРѕРґР°Р¶: РµР¶РµРґРЅРµРІРЅРѕ 21:00
+2026-02-22 13:02:55, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-22 13:02:55, INFO рџ§№ РќР°СЃС‚СЂРѕРµРЅР° Р°РІС‚РѕРѕС‡РёСЃС‚РєР° С„Р°Р№Р»РѕРІ: Р»РѕРіРё 2Рґ, AI 7Рґ, HTML 30Рґ, JSON 7Рґ, Excel 14Рґ | Р—Р°РїСѓСЃРє РІ 03:00
+2026-02-22 13:02:55, INFO рџ—‘пёЏ РђРІС‚РѕСѓРґР°Р»РµРЅРёРµ СЃРѕРѕР±С‰РµРЅРёР№ С‡РµСЂРµР· 24 С‡Р°СЃРѕРІ
+2026-02-22 13:02:55, INFO рџ“Ў bot_polling_started
+2026-02-22 13:02:55, INFO {"event": "bot_polling_started"}
+2026-02-22 13:02:55, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getMe "HTTP/1.1 200 OK"
+2026-02-22 13:02:56, INFO рџ—‚пёЏ index_built В· files=122; report_types=7; build_ms=526.2
+2026-02-22 13:02:56, INFO {"event": "index_built", "files": 122, "report_types": 7, "build_ms": 526.2}
+2026-02-22 13:02:56, INFO рџ—‚пёЏ initial_index_built
+2026-02-22 13:02:56, INFO {"event": "initial_index_built"}
+2026-02-22 13:02:56, INFO вњ… json_read_success В· file=deletion_queue.json; encoding=utf-8
+2026-02-22 13:02:56, INFO {"event": "json_read_success", "file": "deletion_queue.json", "encoding": "utf-8"}
+2026-02-22 13:02:56, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/deleteWebhook "HTTP/1.1 200 OK"
+2026-02-22 13:02:56, INFO Added job "pipeline" to job store "default"
+2026-02-22 13:02:56, INFO Added job "new_reports" to job store "default"
+2026-02-22 13:02:56, INFO Added job "silence_alerts_14h" to job store "default"
+2026-02-22 13:02:56, INFO Added job "silence_alerts_21h" to job store "default"
+2026-02-22 13:02:56, INFO Added job "janitor" to job store "default"
+2026-02-22 13:02:56, INFO Added job "ai_queue_processor" to job store "default"
+2026-02-22 13:02:56, INFO Added job "daily_summary" to job store "default"
+2026-02-22 13:02:56, INFO Added job "reset_ai_state" to job store "default"
+2026-02-22 13:02:56, INFO Added job "weekly_ai_generation" to job store "default"
+2026-02-22 13:02:56, INFO Added job "daily_analytics" to job store "default"
+2026-02-22 13:02:56, INFO Added job "inventory_summary" to job store "default"
+2026-02-22 13:02:56, INFO Added job "gross_summary" to job store "default"
+2026-02-22 13:02:56, INFO Added job "sales_summary" to job store "default"
+2026-02-22 13:02:56, INFO Added job "cleanup_old_files" to job store "default"
+2026-02-22 13:02:56, INFO Scheduler started
+2026-02-22 13:02:56, INFO Application started
+2026-02-22 13:03:06, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:03:16, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:03:26, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:03:36, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:03:46, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:03:55, INFO Running job "pipeline (trigger: interval[0:10:00], next run at: 2026-02-22 08:13:55 UTC)" (scheduled at 2026-02-22 08:03:55.167612+00:00)
+2026-02-22 13:03:55, INFO рџ”Ќ pipeline_cycle_start
+2026-02-22 13:03:55, INFO {"event": "pipeline_cycle_start"}
+2026-02-22 13:03:55, INFO в–¶пёЏ run_script_start В· script=imap_fetcher.py; args=('--once',)
+2026-02-22 13:03:55, INFO {"event": "run_script_start", "script": "imap_fetcher.py", "args": ["--once"]}
+2026-02-22 13:03:56, INFO рџ“„ script_stdout В· script=imap_fetcher.py; output=2026-02-22 13:03:55, INFO === imap_fetcher vv4.4.3 ===
+2026-02-22 13:03:55, INFO IMAP cfg: host=mail.minbarakat.kz port=993 ssl=True user=[EMAIL] pass_set=True tz=Asia/Almaty env=[WINDOWS_PATH]
+2026-02-22 13:03:56, INFO IMAP LOGIN OK (attempt 1/5)
+2026-02-22 13:03:56, INFO SEARCH found 0 msgs
+2026-02-22 13:03:56, INFO INBOX EXPUNGE OK
+2026-02-22 13:03:56, INFO TRASH skip Trash: cannot SELECT
+2026-02-22 13:03:56, INFO TRASH skip РљРѕСЂР·РёРЅР°: cannot SELECT
+2026-02-22 13:03:56, INFO TRASH skip Deleted Items: cannot SELECT
+2026-02-22 13:03:56, INFO TRASH cleaned: INBOX.Trash
+2026-02-22 13:03:56, INFO CYCLE DONE: saved=0
+2026-02-22 13:03:56, INFO {"event": "script_stdout", "script": "imap_fetcher.py", "output": "2026-02-22 13:03:55, INFO === imap_fetcher vv4.4.3 ===\r\n2026-02-22 13:03:55, INFO IMAP cfg: host=mail.minbarakat.kz port=993 ssl=True user=[EMAIL] pass_set=True tz=Asia/Almaty env=[WINDOWS_PATH]
+2026-02-22 13:03:56, INFO вњ… run_script_finish В· script=imap_fetcher.py; return_code=0
+2026-02-22 13:03:56, INFO {"event": "run_script_finish", "script": "imap_fetcher.py", "return_code": 0}
+2026-02-22 13:03:56, INFO рџ”¬ queue_found_files В· count=26
+2026-02-22 13:03:56, INFO {"event": "queue_found_files", "count": 26}
+2026-02-22 13:03:56, INFO рџ’° gross_processing_start В· file=Р’Р°Р»РѕРІР°СЏ РїСЂРёР±С‹Р»СЊ (100).xlsx
+2026-02-22 13:03:56, INFO {"event": "gross_processing_start", "file": "Р’Р°Р»РѕРІР°СЏ РїСЂРёР±С‹Р»СЊ (100).xlsx"}
+2026-02-22 13:03:56, INFO в–¶пёЏ run_script_start В· script=gross_report.py; args=('[WINDOWS_PATH]
+2026-02-22 13:03:56, INFO {"event": "run_script_start", "script": "gross_report.py", "args": ["[WINDOWS_PATH]
+2026-02-22 13:03:56, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:03:57, INFO вњ… run_script_finish В· script=gross_report.py; return_code=0
+2026-02-22 13:03:57, INFO {"event": "run_script_finish", "script": "gross_report.py", "return_code": 0}
+2026-02-22 13:03:57, INFO вњ… gross_sum_success В· file=Р’Р°Р»РѕРІР°СЏ РїСЂРёР±С‹Р»СЊ (100).xlsx
+2026-02-22 13:03:57, INFO {"event": "gross_sum_success", "file": "Р’Р°Р»РѕРІР°СЏ РїСЂРёР±С‹Р»СЊ (100).xlsx"}
+2026-02-22 13:03:57, INFO в–¶пёЏ run_script_start В· script=gross_report_pct.py; args=('[WINDOWS_PATH]
+2026-02-22 13:03:57, INFO {"event": "run_script_start", "script": "gross_report_pct.py", "args": ["[WINDOWS_PATH]
+2026-02-22 13:03:58, INFO вњ… run_script_finish В· script=gross_report_pct.py; return_code=0
+2026-02-22 13:03:58, INFO {"event": "run_script_finish", "script": "gross_report_pct.py", "return_code": 0}
+2026-02-22 13:03:58, INFO вњ… gross_pct_success В· file=Р’Р°Р»РѕРІР°СЏ РїСЂРёР±С‹Р»СЊ (100).xlsx
+2026-02-22 13:03:58, INFO {"event": "gross_pct_success", "file": "Р’Р°Р»РѕРІР°СЏ РїСЂРёР±С‹Р»СЊ (100).xlsx"}
+2026-02-22 13:03:58, INFO рџ’° gross_processing_complete В· file=Р’Р°Р»РѕРІР°СЏ РїСЂРёР±С‹Р»СЊ (100).xlsx; sum_rc=0; pct_rc=0
+2026-02-22 13:03:58, INFO {"event": "gross_processing_complete", "file": "Р’Р°Р»РѕРІР°СЏ РїСЂРёР±С‹Р»СЊ (100).xlsx", "sum_rc": 0, "pct_rc": 0}
+2026-02-22 13:03:58, INFO в–¶пёЏ run_script_start В· script=gross_parser.py; args=('[WINDOWS_PATH]
+2026-02-22 13:03:58, INFO {"event": "run_script_start", "script": "gross_parser.py", "args": ["[WINDOWS_PATH]
+2026-02-22 13:03:59, INFO вњ… run_script_finish В· script=gross_parser.py; return_code=0
+2026-02-22 13:03:59, INFO {"event": "run_script_finish", "script": "gross_parser.py", "return_code": 0}
+2026-02-22 13:03:59, INFO {"event": "gross_parser_done", "file": "Р’Р°Р»РѕРІР°СЏ РїСЂРёР±С‹Р»СЊ (100).xlsx", "rc": 0}
+2026-02-22 13:03:59, INFO рџ“¦ file_processed В· original=Р’Р°Р»РѕРІР°СЏ РїСЂРёР±С‹Р»СЊ (100).xlsx; moved_to=20260222130359_Р’Р°Р»РѕРІР°СЏ РїСЂРёР±С‹Р»СЊ (100).xlsx
+2026-02-22 13:03:59, INFO {"event": "file_processed", "original": "Р’Р°Р»РѕРІР°СЏ РїСЂРёР±С‹Р»СЊ (100).xlsx", "moved_to": "20260222130359_Р’Р°Р»РѕРІР°СЏ РїСЂРёР±С‹Р»СЊ (100).xlsx"}
+2026-02-22 13:03:59, INFO рџ’° gross_processing_start В· file=Р’Р°Р»РѕРІР°СЏ РїСЂРёР±С‹Р»СЊ (101).xlsx
+2026-02-22 13:03:59, INFO {"event": "gross_processing_start", "file": "Р’Р°Р»РѕРІР°СЏ РїСЂРёР±С‹Р»СЊ (101).xlsx"}
+2026-02-22 13:03:59, INFO в–¶пёЏ run_script_start В· script=gross_report.py; args=('[WINDOWS_PATH]
+2026-02-22 13:03:59, INFO {"event": "run_script_start", "script": "gross_report.py", "args": ["[WINDOWS_PATH]
+2026-02-22 13:04:00, INFO вњ… run_script_finish В· script=gross_report.py; return_code=0
+2026-02-22 13:04:00, INFO {"event": "run_script_finish", "script": "gross_report.py", "return_code": 0}
+2026-02-22 13:04:00, INFO вњ… gross_sum_success В· file=Р’Р°Р»РѕРІР°СЏ РїСЂРёР±С‹Р»СЊ (101).xlsx
+2026-02-22 13:04:00, INFO {"event": "gross_sum_success", "file": "Р’Р°Р»РѕРІР°СЏ РїСЂРёР±С‹Р»СЊ (101).xlsx"}
+2026-02-22 13:04:00, INFO в–¶пёЏ run_script_start В· script=gross_report_pct.py; args=('[WINDOWS_PATH]
+2026-02-22 13:04:00, INFO {"event": "run_script_start", "script": "gross_report_pct.py", "args": ["[WINDOWS_PATH]
+2026-02-22 13:04:01, INFO вњ… run_script_finish В· script=gross_report_pct.py; return_code=0
+2026-02-22 13:04:01, INFO {"event": "run_script_finish", "script": "gross_report_pct.py", "return_code": 0}
+2026-02-22 13:04:01, INFO вњ… gross_pct_success В· file=Р’Р°Р»РѕРІР°СЏ РїСЂРёР±С‹Р»СЊ (101).xlsx
+2026-02-22 13:04:01, INFO {"event": "gross_pct_success", "file": "Р’Р°Р»РѕРІР°СЏ РїСЂРёР±С‹Р»СЊ (101).xlsx"}
+2026-02-22 13:04:01, INFO рџ’° gross_processing_complete В· file=Р’Р°Р»РѕРІР°СЏ РїСЂРёР±С‹Р»СЊ (101).xlsx; sum_rc=0; pct_rc=0
+2026-02-22 13:04:01, INFO {"event": "gross_processing_complete", "file": "Р’Р°Р»РѕРІР°СЏ РїСЂРёР±С‹Р»СЊ (101).xlsx", "sum_rc": 0, "pct_rc": 0}
+2026-02-22 13:04:01, INFO в–¶пёЏ run_script_start В· script=gross_parser.py; args=('[WINDOWS_PATH]
+2026-02-22 13:04:01, INFO {"event": "run_script_start", "script": "gross_parser.py", "args": ["[WINDOWS_PATH]
+2026-02-22 13:04:02, INFO вњ… run_script_finish В· script=gross_parser.py; return_code=0
+2026-02-22 13:04:02, INFO {"event": "run_script_finish", "script": "gross_parser.py", "return_code": 0}
+2026-02-22 13:04:02, INFO {"event": "gross_parser_done", "file": "Р’Р°Р»РѕРІР°СЏ РїСЂРёР±С‹Р»СЊ (101).xlsx", "rc": 0}
+2026-02-22 13:04:02, INFO рџ“¦ file_processed В· original=Р’Р°Р»РѕРІР°СЏ РїСЂРёР±С‹Р»СЊ (101).xlsx; moved_to=20260222130402_Р’Р°Р»РѕРІР°СЏ РїСЂРёР±С‹Р»СЊ (101).xlsx
+2026-02-22 13:04:02, INFO {"event": "file_processed", "original": "Р’Р°Р»РѕРІР°СЏ РїСЂРёР±С‹Р»СЊ (101).xlsx", "moved_to": "20260222130402_Р’Р°Р»РѕРІР°СЏ РїСЂРёР±С‹Р»СЊ (101).xlsx"}
+2026-02-22 13:04:02, INFO рџ—‘пёЏрџ’° cash_file_rejected В· original=Р’РµРґРѕРјРѕСЃС‚СЊ РїРѕ РґРµРЅРµР¶РЅС‹Рј СЃСЂРµРґСЃС‚РІР°Рј (100).xlsx; moved_to=20260222_130402_Р’РµРґРѕРјРѕСЃС‚СЊ РїРѕ РґРµРЅРµР¶РЅС‹Рј СЃСЂРµРґСЃС‚РІР°Рј (100).xlsx; level=INFO
+2026-02-22 13:04:02, INFO {"event": "cash_file_rejected", "original": "Р’РµРґРѕРјРѕСЃС‚СЊ РїРѕ РґРµРЅРµР¶РЅС‹Рј СЃСЂРµРґСЃС‚РІР°Рј (100).xlsx", "moved_to": "20260222_130402_Р’РµРґРѕРјРѕСЃС‚СЊ РїРѕ РґРµРЅРµР¶РЅС‹Рј СЃСЂРµРґСЃС‚РІР°Рј (100).xlsx", "level": "INFO"}
+2026-02-22 13:04:02, INFO рџ—‘пёЏрџ’° cash_file_rejected В· original=Р’РµРґРѕРјРѕСЃС‚СЊ РїРѕ РґРµРЅРµР¶РЅС‹Рј СЃСЂРµРґСЃС‚РІР°Рј (99).xlsx; moved_to=20260222_130402_Р’РµРґРѕРјРѕСЃС‚СЊ РїРѕ РґРµРЅРµР¶РЅС‹Рј СЃСЂРµРґСЃС‚РІР°Рј (99).xlsx; level=INFO
+2026-02-22 13:04:02, INFO {"event": "cash_file_rejected", "original": "Р’РµРґРѕРјРѕСЃС‚СЊ РїРѕ РґРµРЅРµР¶РЅС‹Рј СЃСЂРµРґСЃС‚РІР°Рј (99).xlsx", "moved_to": "20260222_130402_Р’РµРґРѕРјРѕСЃС‚СЊ РїРѕ РґРµРЅРµР¶РЅС‹Рј СЃСЂРµРґСЃС‚РІР°Рј (99).xlsx", "level": "INFO"}
+2026-02-22 13:04:02, INFO в–¶пёЏ run_script_start В· script=inventory.py; args=('[WINDOWS_PATH]
+2026-02-22 13:04:02, INFO {"event": "run_script_start", "script": "inventory.py", "args": ["[WINDOWS_PATH]
+2026-02-22 13:04:03, INFO вњ… run_script_finish В· script=inventory.py; return_code=0
+2026-02-22 13:04:03, INFO {"event": "run_script_finish", "script": "inventory.py", "return_code": 0}
+2026-02-22 13:04:03, INFO {"event": "inventory_parser_skip_no_cost", "file": "Р’РµРґРѕРјРѕСЃС‚СЊ РїРѕ С‚РѕРІР°СЂР°Рј РЅР° СЃРєР»Р°РґР°С… (43).xlsx", "reason": "Р¤Р°Р№Р» Р±РµР· СЃРµР±РµСЃС‚РѕРёРјРѕСЃС‚Рё (РћСЃС‚Р°С‚РєРё/Р’РµРґРѕРјРѕСЃС‚СЊ С‚РѕРІР°СЂРѕРІ)"}
+2026-02-22 13:04:03, INFO рџ“¦ file_processed В· original=Р’РµРґРѕРјРѕСЃС‚СЊ РїРѕ С‚РѕРІР°СЂР°Рј РЅР° СЃРєР»Р°РґР°С… (43).xlsx; moved_to=20260222130403_Р’РµРґРѕРјРѕСЃС‚СЊ РїРѕ С‚РѕРІР°СЂР°Рј РЅР° СЃРєР»Р°РґР°С… (43).xlsx
+2026-02-22 13:04:03, INFO {"event": "file_processed", "original": "Р’РµРґРѕРјРѕСЃС‚СЊ РїРѕ С‚РѕРІР°СЂР°Рј РЅР° СЃРєР»Р°РґР°С… (43).xlsx", "moved_to": "20260222130403_Р’РµРґРѕРјРѕСЃС‚СЊ РїРѕ С‚РѕРІР°СЂР°Рј РЅР° СЃРєР»Р°РґР°С… (43).xlsx"}
+2026-02-22 13:04:03, INFO в–¶пёЏ run_script_start В· script=debt_auto_report.py; args=('[WINDOWS_PATH]
+2026-02-22 13:04:03, INFO {"event": "run_script_start", "script": "debt_auto_report.py", "args": ["[WINDOWS_PATH]
+2026-02-22 13:04:05, INFO рџ“„ script_stdout В· script=debt_auto_report.py; output=вњ… РћС‚С‡С‘С‚ СЃРѕС…СЂР°РЅС‘РЅ: [WINDOWS_PATH]
+2026-02-22 13:04:05, INFO {"event": "script_stdout", "script": "debt_auto_report.py", "output": "вњ… РћС‚С‡С‘С‚ СЃРѕС…СЂР°РЅС‘РЅ: [WINDOWS_PATH]
+2026-02-22 13:04:05, INFO вњ… run_script_finish В· script=debt_auto_report.py; return_code=0
+2026-02-22 13:04:05, INFO {"event": "run_script_finish", "script": "debt_auto_report.py", "return_code": 0}
+2026-02-22 13:04:05, INFO рџ“¦ file_processed В· original=Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё (94).xlsx; moved_to=20260222130405_Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё (94).xlsx
+2026-02-22 13:04:05, INFO {"event": "file_processed", "original": "Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё (94).xlsx", "moved_to": "20260222130405_Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё (94).xlsx"}
+2026-02-22 13:04:05, INFO в–¶пёЏ run_script_start В· script=debt_auto_report.py; args=('[WINDOWS_PATH]
+2026-02-22 13:04:05, INFO {"event": "run_script_start", "script": "debt_auto_report.py", "args": ["[WINDOWS_PATH]
+2026-02-22 13:04:06, INFO рџ“„ script_stdout В· script=debt_auto_report.py; output=вњ… РћС‚С‡С‘С‚ СЃРѕС…СЂР°РЅС‘РЅ: [WINDOWS_PATH]
+2026-02-22 13:04:06, INFO {"event": "script_stdout", "script": "debt_auto_report.py", "output": "вњ… РћС‚С‡С‘С‚ СЃРѕС…СЂР°РЅС‘РЅ: [WINDOWS_PATH]
+2026-02-22 13:04:06, INFO вњ… run_script_finish В· script=debt_auto_report.py; return_code=0
+2026-02-22 13:04:06, INFO {"event": "run_script_finish", "script": "debt_auto_report.py", "return_code": 0}
+2026-02-22 13:04:06, INFO рџ“¦ file_processed В· original=Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё (95).xlsx; moved_to=20260222130406_Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё (95).xlsx
+2026-02-22 13:04:06, INFO {"event": "file_processed", "original": "Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё (95).xlsx", "moved_to": "20260222130406_Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё (95).xlsx"}
+2026-02-22 13:04:06, INFO в–¶пёЏ run_script_start В· script=debt_auto_report.py; args=('[WINDOWS_PATH]
+2026-02-22 13:04:06, INFO {"event": "run_script_start", "script": "debt_auto_report.py", "args": ["[WINDOWS_PATH]
+2026-02-22 13:04:07, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:04:07, INFO рџ“„ script_stdout В· script=debt_auto_report.py; output=вњ… РћС‚С‡С‘С‚ СЃРѕС…СЂР°РЅС‘РЅ: [WINDOWS_PATH]
+2026-02-22 13:04:07, INFO {"event": "script_stdout", "script": "debt_auto_report.py", "output": "вњ… РћС‚С‡С‘С‚ СЃРѕС…СЂР°РЅС‘РЅ: [WINDOWS_PATH]
+2026-02-22 13:04:07, INFO вњ… run_script_finish В· script=debt_auto_report.py; return_code=0
+2026-02-22 13:04:07, INFO {"event": "run_script_finish", "script": "debt_auto_report.py", "return_code": 0}
+2026-02-22 13:04:07, INFO {"event": "ai_daily_skipped", "manager": "РђР»РµРЅР°", "reason": "Weekly AI mode"}
+2026-02-22 13:04:07, INFO рџ“¦ file_processed В· original=Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_РђР»РµРЅР° (69).xlsx; moved_to=20260222130407_Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_РђР»РµРЅР° (69).xlsx
+2026-02-22 13:04:07, INFO {"event": "file_processed", "original": "Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_РђР»РµРЅР° (69).xlsx", "moved_to": "20260222130407_Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_РђР»РµРЅР° (69).xlsx"}
+2026-02-22 13:04:07, INFO в–¶пёЏ run_script_start В· script=debt_auto_report.py; args=('[WINDOWS_PATH]
+2026-02-22 13:04:07, INFO {"event": "run_script_start", "script": "debt_auto_report.py", "args": ["[WINDOWS_PATH]
+2026-02-22 13:04:08, INFO рџ“„ script_stdout В· script=debt_auto_report.py; output=вњ… РћС‚С‡С‘С‚ СЃРѕС…СЂР°РЅС‘РЅ: [WINDOWS_PATH]
+2026-02-22 13:04:08, INFO {"event": "script_stdout", "script": "debt_auto_report.py", "output": "вњ… РћС‚С‡С‘С‚ СЃРѕС…СЂР°РЅС‘РЅ: [WINDOWS_PATH]
+2026-02-22 13:04:08, INFO вњ… run_script_finish В· script=debt_auto_report.py; return_code=0
+2026-02-22 13:04:08, INFO {"event": "run_script_finish", "script": "debt_auto_report.py", "return_code": 0}
+2026-02-22 13:04:08, INFO {"event": "ai_daily_skipped", "manager": "РђР»РµРЅР°", "reason": "Weekly AI mode"}
+2026-02-22 13:04:08, INFO рџ“¦ file_processed В· original=Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_РђР»РµРЅР° (70).xlsx; moved_to=20260222130408_Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_РђР»РµРЅР° (70).xlsx
+2026-02-22 13:04:08, INFO {"event": "file_processed", "original": "Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_РђР»РµРЅР° (70).xlsx", "moved_to": "20260222130408_Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_РђР»РµРЅР° (70).xlsx"}
+2026-02-22 13:04:08, INFO в–¶пёЏ run_script_start В· script=debt_auto_report.py; args=('[WINDOWS_PATH]
+2026-02-22 13:04:08, INFO {"event": "run_script_start", "script": "debt_auto_report.py", "args": ["[WINDOWS_PATH]
+2026-02-22 13:04:09, INFO рџ“„ script_stdout В· script=debt_auto_report.py; output=вњ… РћС‚С‡С‘С‚ СЃРѕС…СЂР°РЅС‘РЅ: [WINDOWS_PATH]
+2026-02-22 13:04:09, INFO {"event": "script_stdout", "script": "debt_auto_report.py", "output": "вњ… РћС‚С‡С‘С‚ СЃРѕС…СЂР°РЅС‘РЅ: [WINDOWS_PATH]
+2026-02-22 13:04:09, INFO вњ… run_script_finish В· script=debt_auto_report.py; return_code=0
+2026-02-22 13:04:09, INFO {"event": "run_script_finish", "script": "debt_auto_report.py", "return_code": 0}
+2026-02-22 13:04:09, INFO {"event": "ai_daily_skipped", "manager": "Р•СЂРіР°Р»Рё", "reason": "Weekly AI mode"}
+2026-02-22 13:04:09, INFO рџ“¦ file_processed В· original=Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_Р•СЂРіР°Р»Рё (67).xlsx; moved_to=20260222130409_Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_Р•СЂРіР°Р»Рё (67).xlsx
+2026-02-22 13:04:09, INFO {"event": "file_processed", "original": "Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_Р•СЂРіР°Р»Рё (67).xlsx", "moved_to": "20260222130409_Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_Р•СЂРіР°Р»Рё (67).xlsx"}
+2026-02-22 13:04:09, INFO в–¶пёЏ run_script_start В· script=debt_auto_report.py; args=('[WINDOWS_PATH]
+2026-02-22 13:04:09, INFO {"event": "run_script_start", "script": "debt_auto_report.py", "args": ["[WINDOWS_PATH]
+2026-02-22 13:04:10, INFO рџ“„ script_stdout В· script=debt_auto_report.py; output=вњ… РћС‚С‡С‘С‚ СЃРѕС…СЂР°РЅС‘РЅ: [WINDOWS_PATH]
+2026-02-22 13:04:10, INFO {"event": "script_stdout", "script": "debt_auto_report.py", "output": "вњ… РћС‚С‡С‘С‚ СЃРѕС…СЂР°РЅС‘РЅ: [WINDOWS_PATH]
+2026-02-22 13:04:10, INFO вњ… run_script_finish В· script=debt_auto_report.py; return_code=0
+2026-02-22 13:04:10, INFO {"event": "run_script_finish", "script": "debt_auto_report.py", "return_code": 0}
+2026-02-22 13:04:10, INFO {"event": "ai_daily_skipped", "manager": "Р•СЂРіР°Р»Рё", "reason": "Weekly AI mode"}
+2026-02-22 13:04:10, INFO рџ“¦ file_processed В· original=Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_Р•СЂРіР°Р»Рё (68).xlsx; moved_to=20260222130410_Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_Р•СЂРіР°Р»Рё (68).xlsx
+2026-02-22 13:04:10, INFO {"event": "file_processed", "original": "Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_Р•СЂРіР°Р»Рё (68).xlsx", "moved_to": "20260222130410_Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_Р•СЂРіР°Р»Рё (68).xlsx"}
+2026-02-22 13:04:10, INFO в–¶пёЏ run_script_start В· script=debt_auto_report.py; args=('[WINDOWS_PATH]
+2026-02-22 13:04:10, INFO {"event": "run_script_start", "script": "debt_auto_report.py", "args": ["[WINDOWS_PATH]
+2026-02-22 13:04:11, INFO рџ“„ script_stdout В· script=debt_auto_report.py; output=вњ… РћС‚С‡С‘С‚ СЃРѕС…СЂР°РЅС‘РЅ: [WINDOWS_PATH]
+2026-02-22 13:04:11, INFO {"event": "script_stdout", "script": "debt_auto_report.py", "output": "вњ… РћС‚С‡С‘С‚ СЃРѕС…СЂР°РЅС‘РЅ: [WINDOWS_PATH]
+2026-02-22 13:04:11, INFO вњ… run_script_finish В· script=debt_auto_report.py; return_code=0
+2026-02-22 13:04:11, INFO {"event": "run_script_finish", "script": "debt_auto_report.py", "return_code": 0}
+2026-02-22 13:04:11, INFO рџ“¦ file_processed В· original=Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_Р·Р°_26_05 (42).xlsx; moved_to=20260222130411_Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_Р·Р°_26_05 (42).xlsx
+2026-02-22 13:04:11, INFO {"event": "file_processed", "original": "Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_Р·Р°_26_05 (42).xlsx", "moved_to": "20260222130411_Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_Р·Р°_26_05 (42).xlsx"}
+2026-02-22 13:04:11, INFO в–¶пёЏ run_script_start В· script=debt_auto_report.py; args=('[WINDOWS_PATH]
+2026-02-22 13:04:11, INFO {"event": "run_script_start", "script": "debt_auto_report.py", "args": ["[WINDOWS_PATH]
+2026-02-22 13:04:12, INFO рџ“„ script_stdout В· script=debt_auto_report.py; output=вњ… РћС‚С‡С‘С‚ СЃРѕС…СЂР°РЅС‘РЅ: [WINDOWS_PATH]
+2026-02-22 13:04:12, INFO {"event": "script_stdout", "script": "debt_auto_report.py", "output": "вњ… РћС‚С‡С‘С‚ СЃРѕС…СЂР°РЅС‘РЅ: [WINDOWS_PATH]
+2026-02-22 13:04:12, INFO вњ… run_script_finish В· script=debt_auto_report.py; return_code=0
+2026-02-22 13:04:12, INFO {"event": "run_script_finish", "script": "debt_auto_report.py", "return_code": 0}
+2026-02-22 13:04:12, INFO {"event": "ai_daily_skipped", "manager": "РњР°РіРёСЂР°", "reason": "Weekly AI mode"}
+2026-02-22 13:04:12, INFO рџ“¦ file_processed В· original=Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_РњР°РіРёСЂР° (67).xlsx; moved_to=20260222130412_Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_РњР°РіРёСЂР° (67).xlsx
+2026-02-22 13:04:12, INFO {"event": "file_processed", "original": "Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_РњР°РіРёСЂР° (67).xlsx", "moved_to": "20260222130412_Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_РњР°РіРёСЂР° (67).xlsx"}
+2026-02-22 13:04:12, INFO в–¶пёЏ run_script_start В· script=debt_auto_report.py; args=('[WINDOWS_PATH]
+2026-02-22 13:04:12, INFO {"event": "run_script_start", "script": "debt_auto_report.py", "args": ["[WINDOWS_PATH]
+2026-02-22 13:04:13, INFO рџ“„ script_stdout В· script=debt_auto_report.py; output=вњ… РћС‚С‡С‘С‚ СЃРѕС…СЂР°РЅС‘РЅ: [WINDOWS_PATH]
+2026-02-22 13:04:13, INFO {"event": "script_stdout", "script": "debt_auto_report.py", "output": "вњ… РћС‚С‡С‘С‚ СЃРѕС…СЂР°РЅС‘РЅ: [WINDOWS_PATH]
+2026-02-22 13:04:13, INFO вњ… run_script_finish В· script=debt_auto_report.py; return_code=0
+2026-02-22 13:04:13, INFO {"event": "run_script_finish", "script": "debt_auto_report.py", "return_code": 0}
+2026-02-22 13:04:13, INFO {"event": "ai_daily_skipped", "manager": "РњР°РіРёСЂР°", "reason": "Weekly AI mode"}
+2026-02-22 13:04:13, INFO рџ“¦ file_processed В· original=Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_РњР°РіРёСЂР° (68).xlsx; moved_to=20260222130413_Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_РњР°РіРёСЂР° (68).xlsx
+2026-02-22 13:04:13, INFO {"event": "file_processed", "original": "Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_РњР°РіРёСЂР° (68).xlsx", "moved_to": "20260222130413_Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_РњР°РіРёСЂР° (68).xlsx"}
+2026-02-22 13:04:13, INFO в–¶пёЏ run_script_start В· script=debt_auto_report.py; args=('[WINDOWS_PATH]
+2026-02-22 13:04:13, INFO {"event": "run_script_start", "script": "debt_auto_report.py", "args": ["[WINDOWS_PATH]
+2026-02-22 13:04:14, INFO рџ“„ script_stdout В· script=debt_auto_report.py; output=вњ… РћС‚С‡С‘С‚ СЃРѕС…СЂР°РЅС‘РЅ: [WINDOWS_PATH]
+2026-02-22 13:04:14, INFO {"event": "script_stdout", "script": "debt_auto_report.py", "output": "вњ… РћС‚С‡С‘С‚ СЃРѕС…СЂР°РЅС‘РЅ: [WINDOWS_PATH]
+2026-02-22 13:04:14, INFO вњ… run_script_finish В· script=debt_auto_report.py; return_code=0
+2026-02-22 13:04:14, INFO {"event": "run_script_finish", "script": "debt_auto_report.py", "return_code": 0}
+2026-02-22 13:04:14, INFO {"event": "ai_daily_skipped", "manager": "РћРєСЃР°РЅР°", "reason": "Weekly AI mode"}
+2026-02-22 13:04:14, INFO рџ“¦ file_processed В· original=Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_РћРєСЃР°РЅР° (66).xlsx; moved_to=20260222130414_Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_РћРєСЃР°РЅР° (66).xlsx
+2026-02-22 13:04:14, INFO {"event": "file_processed", "original": "Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_РћРєСЃР°РЅР° (66).xlsx", "moved_to": "20260222130414_Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_РћРєСЃР°РЅР° (66).xlsx"}
+2026-02-22 13:04:14, INFO в–¶пёЏ run_script_start В· script=debt_auto_report.py; args=('[WINDOWS_PATH]
+2026-02-22 13:04:14, INFO {"event": "run_script_start", "script": "debt_auto_report.py", "args": ["[WINDOWS_PATH]
+2026-02-22 13:04:15, INFO рџ“„ script_stdout В· script=debt_auto_report.py; output=вњ… РћС‚С‡С‘С‚ СЃРѕС…СЂР°РЅС‘РЅ: [WINDOWS_PATH]
+2026-02-22 13:04:15, INFO {"event": "script_stdout", "script": "debt_auto_report.py", "output": "вњ… РћС‚С‡С‘С‚ СЃРѕС…СЂР°РЅС‘РЅ: [WINDOWS_PATH]
+2026-02-22 13:04:15, INFO вњ… run_script_finish В· script=debt_auto_report.py; return_code=0
+2026-02-22 13:04:15, INFO {"event": "run_script_finish", "script": "debt_auto_report.py", "return_code": 0}
+2026-02-22 13:04:15, INFO {"event": "ai_daily_skipped", "manager": "РћРєСЃР°РЅР°", "reason": "Weekly AI mode"}
+2026-02-22 13:04:15, INFO рџ“¦ file_processed В· original=Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_РћРєСЃР°РЅР° (67).xlsx; moved_to=20260222130415_Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_РћРєСЃР°РЅР° (67).xlsx
+2026-02-22 13:04:15, INFO {"event": "file_processed", "original": "Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_РћРєСЃР°РЅР° (67).xlsx", "moved_to": "20260222130415_Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_РћРєСЃР°РЅР° (67).xlsx"}
+2026-02-22 13:04:15, INFO в–¶пёЏ run_script_start В· script=inventory.py; args=('[WINDOWS_PATH]
+2026-02-22 13:04:15, INFO {"event": "run_script_start", "script": "inventory.py", "args": ["[WINDOWS_PATH]
+2026-02-22 13:04:16, INFO вњ… run_script_finish В· script=inventory.py; return_code=0
+2026-02-22 13:04:16, INFO {"event": "run_script_finish", "script": "inventory.py", "return_code": 0}
+2026-02-22 13:04:16, INFO в–¶пёЏ run_script_start В· script=inventory_cost_parser.py; args=('[WINDOWS_PATH]
+2026-02-22 13:04:16, INFO {"event": "run_script_start", "script": "inventory_cost_parser.py", "args": ["[WINDOWS_PATH]
+2026-02-22 13:04:17, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:04:17, INFO вњ… run_script_finish В· script=inventory_cost_parser.py; return_code=0
+2026-02-22 13:04:17, INFO {"event": "run_script_finish", "script": "inventory_cost_parser.py", "return_code": 0}
+2026-02-22 13:04:17, INFO {"event": "inventory_parser_done", "file": "Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РїР°СЂС‚РёСЏРј_С‚РѕРІР°СЂРѕРІ_РЅР°_СЃРєР»Р°РґР°С… (43).xlsx", "rc": 0}
+2026-02-22 13:04:17, INFO рџ“¦ file_processed В· original=Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РїР°СЂС‚РёСЏРј_С‚РѕРІР°СЂРѕРІ_РЅР°_СЃРєР»Р°РґР°С… (43).xlsx; moved_to=20260222130417_Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РїР°СЂС‚РёСЏРј_С‚РѕРІР°СЂРѕРІ_РЅР°_СЃРєР»Р°РґР°С… (43).xlsx
+2026-02-22 13:04:17, INFO {"event": "file_processed", "original": "Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РїР°СЂС‚РёСЏРј_С‚РѕРІР°СЂРѕРІ_РЅР°_СЃРєР»Р°РґР°С… (43).xlsx", "moved_to": "20260222130417_Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РїР°СЂС‚РёСЏРј_С‚РѕРІР°СЂРѕРІ_РЅР°_СЃРєР»Р°РґР°С… (43).xlsx"}
+2026-02-22 13:04:17, INFO в–¶пёЏ run_script_start В· script=debt_auto_report.py; args=('[WINDOWS_PATH]
+2026-02-22 13:04:17, INFO {"event": "run_script_start", "script": "debt_auto_report.py", "args": ["[WINDOWS_PATH]
+2026-02-22 13:04:18, INFO рџ“„ script_stdout В· script=debt_auto_report.py; output=вњ… РћС‚С‡С‘С‚ СЃРѕС…СЂР°РЅС‘РЅ: [WINDOWS_PATH]
+2026-02-22 13:04:18, INFO {"event": "script_stdout", "script": "debt_auto_report.py", "output": "вњ… РћС‚С‡С‘С‚ СЃРѕС…СЂР°РЅС‘РЅ: [WINDOWS_PATH]
+2026-02-22 13:04:18, INFO вњ… run_script_finish В· script=debt_auto_report.py; return_code=0
+2026-02-22 13:04:18, INFO {"event": "run_script_finish", "script": "debt_auto_report.py", "return_code": 0}
+2026-02-22 13:04:18, INFO {"event": "ai_daily_skipped", "manager": "РђР»РµРЅР°", "reason": "Weekly AI mode"}
+2026-02-22 13:04:18, INFO рџ“¦ file_processed В· original=Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ РђР»РµРЅР° (30).xlsx; moved_to=20260222130418_Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ РђР»РµРЅР° (30).xlsx
+2026-02-22 13:04:18, INFO {"event": "file_processed", "original": "Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ РђР»РµРЅР° (30).xlsx", "moved_to": "20260222130418_Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ РђР»РµРЅР° (30).xlsx"}
+2026-02-22 13:04:18, INFO в–¶пёЏ run_script_start В· script=debt_auto_report.py; args=('[WINDOWS_PATH]
+2026-02-22 13:04:18, INFO {"event": "run_script_start", "script": "debt_auto_report.py", "args": ["[WINDOWS_PATH]
+2026-02-22 13:04:19, INFO рџ“„ script_stdout В· script=debt_auto_report.py; output=вњ… РћС‚С‡С‘С‚ СЃРѕС…СЂР°РЅС‘РЅ: [WINDOWS_PATH]
+2026-02-22 13:04:19, INFO {"event": "script_stdout", "script": "debt_auto_report.py", "output": "вњ… РћС‚С‡С‘С‚ СЃРѕС…СЂР°РЅС‘РЅ: [WINDOWS_PATH]
+2026-02-22 13:04:19, INFO вњ… run_script_finish В· script=debt_auto_report.py; return_code=0
+2026-02-22 13:04:19, INFO {"event": "run_script_finish", "script": "debt_auto_report.py", "return_code": 0}
+2026-02-22 13:04:19, INFO {"event": "ai_daily_skipped", "manager": "Р•СЂРіР°Р»Рё", "reason": "Weekly AI mode"}
+2026-02-22 13:04:19, INFO рџ“¦ file_processed В· original=Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ Р•СЂРіР°Р»Рё (30).xlsx; moved_to=20260222130419_Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ Р•СЂРіР°Р»Рё (30).xlsx
+2026-02-22 13:04:19, INFO {"event": "file_processed", "original": "Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ Р•СЂРіР°Р»Рё (30).xlsx", "moved_to": "20260222130419_Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ Р•СЂРіР°Р»Рё (30).xlsx"}
+2026-02-22 13:04:19, INFO в–¶пёЏ run_script_start В· script=debt_auto_report.py; args=('[WINDOWS_PATH]
+2026-02-22 13:04:19, INFO {"event": "run_script_start", "script": "debt_auto_report.py", "args": ["[WINDOWS_PATH]
+2026-02-22 13:04:20, INFO рџ“„ script_stdout В· script=debt_auto_report.py; output=вњ… РћС‚С‡С‘С‚ СЃРѕС…СЂР°РЅС‘РЅ: [WINDOWS_PATH]
+2026-02-22 13:04:20, INFO {"event": "script_stdout", "script": "debt_auto_report.py", "output": "вњ… РћС‚С‡С‘С‚ СЃРѕС…СЂР°РЅС‘РЅ: [WINDOWS_PATH]
+2026-02-22 13:04:20, INFO вњ… run_script_finish В· script=debt_auto_report.py; return_code=0
+2026-02-22 13:04:20, INFO {"event": "run_script_finish", "script": "debt_auto_report.py", "return_code": 0}
+2026-02-22 13:04:20, INFO {"event": "ai_daily_skipped", "manager": "РњР°РіРёСЂР°", "reason": "Weekly AI mode"}
+2026-02-22 13:04:20, INFO рџ“¦ file_processed В· original=Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ РњР°РіРёСЂР° (32).xlsx; moved_to=20260222130420_Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ РњР°РіРёСЂР° (32).xlsx
+2026-02-22 13:04:20, INFO {"event": "file_processed", "original": "Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ РњР°РіРёСЂР° (32).xlsx", "moved_to": "20260222130420_Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ РњР°РіРёСЂР° (32).xlsx"}
+2026-02-22 13:04:20, INFO в–¶пёЏ run_script_start В· script=debt_auto_report.py; args=('[WINDOWS_PATH]
+2026-02-22 13:04:20, INFO {"event": "run_script_start", "script": "debt_auto_report.py", "args": ["[WINDOWS_PATH]
+2026-02-22 13:04:21, INFO рџ“„ script_stdout В· script=debt_auto_report.py; output=вњ… РћС‚С‡С‘С‚ СЃРѕС…СЂР°РЅС‘РЅ: [WINDOWS_PATH]
+2026-02-22 13:04:21, INFO {"event": "script_stdout", "script": "debt_auto_report.py", "output": "вњ… РћС‚С‡С‘С‚ СЃРѕС…СЂР°РЅС‘РЅ: [WINDOWS_PATH]
+2026-02-22 13:04:21, INFO вњ… run_script_finish В· script=debt_auto_report.py; return_code=0
+2026-02-22 13:04:21, INFO {"event": "run_script_finish", "script": "debt_auto_report.py", "return_code": 0}
+2026-02-22 13:04:21, INFO {"event": "ai_daily_skipped", "manager": "РћРєСЃР°РЅР°", "reason": "Weekly AI mode"}
+2026-02-22 13:04:21, INFO рџ“¦ file_processed В· original=Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ РћРєСЃР°РЅР° (30).xlsx; moved_to=20260222130421_Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ РћРєСЃР°РЅР° (30).xlsx
+2026-02-22 13:04:21, INFO {"event": "file_processed", "original": "Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ РћРєСЃР°РЅР° (30).xlsx", "moved_to": "20260222130421_Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ РћРєСЃР°РЅР° (30).xlsx"}
+2026-02-22 13:04:21, INFO в–¶пёЏ run_script_start В· script=debt_auto_report.py; args=('[WINDOWS_PATH]
+2026-02-22 13:04:21, INFO {"event": "run_script_start", "script": "debt_auto_report.py", "args": ["[WINDOWS_PATH]
+2026-02-22 13:04:23, INFO рџ“„ script_stdout В· script=debt_auto_report.py; output=вњ… РћС‚С‡С‘С‚ СЃРѕС…СЂР°РЅС‘РЅ: [WINDOWS_PATH]
+2026-02-22 13:04:23, INFO {"event": "script_stdout", "script": "debt_auto_report.py", "output": "вњ… РћС‚С‡С‘С‚ СЃРѕС…СЂР°РЅС‘РЅ: [WINDOWS_PATH]
+2026-02-22 13:04:23, INFO вњ… run_script_finish В· script=debt_auto_report.py; return_code=0
+2026-02-22 13:04:23, INFO {"event": "run_script_finish", "script": "debt_auto_report.py", "return_code": 0}
+2026-02-22 13:04:23, INFO рџ“¦ file_processed В· original=Р”РµС‚Р°Р»СЊРЅС‹Р№_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё (30).xlsx; moved_to=20260222130423_Р”РµС‚Р°Р»СЊРЅС‹Р№_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё (30).xlsx
+2026-02-22 13:04:23, INFO {"event": "file_processed", "original": "Р”РµС‚Р°Р»СЊРЅС‹Р№_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё (30).xlsx", "moved_to": "20260222130423_Р”РµС‚Р°Р»СЊРЅС‹Р№_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё (30).xlsx"}
+2026-02-22 13:04:23, INFO в–¶пёЏ run_script_start В· script=expenses_report.py; args=('[WINDOWS_PATH]
+2026-02-22 13:04:23, INFO {"event": "run_script_start", "script": "expenses_report.py", "args": ["[WINDOWS_PATH]
+2026-02-22 13:04:24, INFO рџ“„ script_stdout В· script=expenses_report.py; output=2026-02-22 08:04:24,573, INFO РџР°СЂСЃРёРЅРі С„Р°Р№Р»Р°: Р—Р°С‚СЂР°С‚С‹ СЃ РЅР°СЂР°СЃС‚Р°СЋС‰РёРј (43).xlsx.__clean.xlsx
+2026-02-22 08:04:24,756, INFO РџРµСЂРёРѕРґ: 2026-02-01 - 2026-02-19, С‚РёРї: MTD
+2026-02-22 08:04:24,756, INFO РўР°Р±Р»РёС†Р°: start_row=7, name_col=1, amount_col=2
+2026-02-22 08:04:24,759, INFO Р“РѕС‚РѕРІРѕ: РїРѕРґСЂР°Р·РґРµР»РµРЅРёР№=1, РґРµС‚Р°Р»РµР№=25, total=[ID].74, grand_total=[ID].74
+2026-02-22 08:04:24,759, INFO JSON СЃРѕС…СЂР°РЅС‘РЅ: reports\json\expenses_Р—Р°С‚СЂР°С‚С‹_СЃ_РЅР°СЂР°СЃС‚Р°СЋС‰РёРј_43_xlsx___clean_20260201.json
+2026-02-22 08:04:24,760, INFO HTML СЃРѕС…СЂР°РЅС‘РЅ: reports\html\expenses_Р—Р°С‚СЂР°С‚С‹_СЃ_РЅР°СЂР°СЃС‚Р°СЋС‰РёРј_43_xlsx___clean_20260201.html
+[OK] [WINDOWS_PATH]
+2026-02-22 13:04:24, INFO {"event": "script_stdout", "script": "expenses_report.py", "output": "2026-02-22 08:04:24,573, INFO РџР°СЂСЃРёРЅРі С„Р°Р№Р»Р°: Р—Р°С‚СЂР°С‚С‹ СЃ РЅР°СЂР°СЃС‚Р°СЋС‰РёРј (43).xlsx.__clean.xlsx\r\n2026-02-22 08:04:24,756, INFO РџРµСЂРёРѕРґ: 2026-02-01 - 2026-02-19, С‚РёРї: MTD\r\n2026-02-22 08:04:24,756, INFO РўР°Р±Р»РёС†Р°: start_row=7, name_col=1, amount_col=2\r\n2026-02-22 08:04:24,759, INFO Р“РѕС‚РѕРІРѕ: РїРѕРґСЂР°Р·РґРµР»РµРЅРёР№=1, РґРµС‚Р°Р»РµР№=25, total=[ID].74, grand_total=[ID].74\r\n2026-02-22 08:04:24,759, INFO JSON СЃРѕС…СЂР°РЅС‘РЅ: reports\\json\\expenses_Р—Р°С‚СЂР°С‚С‹_СЃ_РЅР°СЂР°СЃС‚Р°СЋС‰РёРј_43_xlsx___clean_20260201.json\r\n2026-02-22 08:04:24,760, INFO HTML СЃРѕС…СЂР°РЅС‘РЅ: reports\\html\\expenses_Р—Р°С‚СЂР°С‚С‹_СЃ_РЅР°СЂР°СЃС‚Р°СЋС‰РёРј_43_xlsx___clean_20260201.html\r\n[OK] [WINDOWS_PATH]
+2026-02-22 13:04:24, INFO вњ… run_script_finish В· script=expenses_report.py; return_code=0
+2026-02-22 13:04:24, INFO {"event": "run_script_finish", "script": "expenses_report.py", "return_code": 0}
+2026-02-22 13:04:24, INFO {"event": "expenses_report_done", "file": "Р—Р°С‚СЂР°С‚С‹ СЃ РЅР°СЂР°СЃС‚Р°СЋС‰РёРј (43).xlsx", "rc": 0}
+2026-02-22 13:04:24, INFO в–¶пёЏ run_script_start В· script=expenses_parser.py; args=('[WINDOWS_PATH]
+2026-02-22 13:04:24, INFO {"event": "run_script_start", "script": "expenses_parser.py", "args": ["[WINDOWS_PATH]
+2026-02-22 13:04:25, INFO рџ“„ script_stdout В· script=expenses_parser.py; output=2026-02-22 08:04:25,465, INFO РџР°СЂСЃРёРЅРі С„Р°Р№Р»Р°: Р—Р°С‚СЂР°С‚С‹ СЃ РЅР°СЂР°СЃС‚Р°СЋС‰РёРј (43).xlsx.__clean.xlsx
+2026-02-22 08:04:25,635, INFO РџРµСЂРёРѕРґ: 2026-02-01 - 2026-02-19, С‚РёРї: MTD
+2026-02-22 08:04:25,636, INFO РўР°Р±Р»РёС†Р°: start_row=7, name_col=1, amount_col=2
+2026-02-22 08:04:25,637, INFO Р“РѕС‚РѕРІРѕ: РїРѕРґСЂР°Р·РґРµР»РµРЅРёР№=1, РґРµС‚Р°Р»РµР№=25, total=[ID].74, grand_total=[ID].74
+2026-02-22 08:04:25,638, INFO JSON СЃРѕС…СЂР°РЅС‘РЅ: reports\json\expenses_Р—Р°С‚СЂР°С‚С‹_СЃ_РЅР°СЂР°СЃС‚Р°СЋС‰РёРј_43_xlsx___clean_20260201.json
+2026-02-22 08:04:25,639, INFO HTML СЃРѕС…СЂР°РЅС‘РЅ: reports\html\expenses_Р—Р°С‚СЂР°С‚С‹_СЃ_РЅР°СЂР°СЃС‚Р°СЋС‰РёРј_43_xlsx___clean_20260201.html
+[OK] [WINDOWS_PATH]
+2026-02-22 13:04:25, INFO {"event": "script_stdout", "script": "expenses_parser.py", "output": "2026-02-22 08:04:25,465, INFO РџР°СЂСЃРёРЅРі С„Р°Р№Р»Р°: Р—Р°С‚СЂР°С‚С‹ СЃ РЅР°СЂР°СЃС‚Р°СЋС‰РёРј (43).xlsx.__clean.xlsx\r\n2026-02-22 08:04:25,635, INFO РџРµСЂРёРѕРґ: 2026-02-01 - 2026-02-19, С‚РёРї: MTD\r\n2026-02-22 08:04:25,636, INFO РўР°Р±Р»РёС†Р°: start_row=7, name_col=1, amount_col=2\r\n2026-02-22 08:04:25,637, INFO Р“РѕС‚РѕРІРѕ: РїРѕРґСЂР°Р·РґРµР»РµРЅРёР№=1, РґРµС‚Р°Р»РµР№=25, total=[ID].74, grand_total=[ID].74\r\n2026-02-22 08:04:25,638, INFO JSON СЃРѕС…СЂР°РЅС‘РЅ: reports\\json\\expenses_Р—Р°С‚СЂР°С‚С‹_СЃ_РЅР°СЂР°СЃС‚Р°СЋС‰РёРј_43_xlsx___clean_20260201.json\r\n2026-02-22 08:04:25,639, INFO HTML СЃРѕС…СЂР°РЅС‘РЅ: reports\\html\\expenses_Р—Р°С‚СЂР°С‚С‹_СЃ_РЅР°СЂР°СЃС‚Р°СЋС‰РёРј_43_xlsx___clean_20260201.html\r\n[OK] [WINDOWS_PATH]
+2026-02-22 13:04:25, INFO вњ… run_script_finish В· script=expenses_parser.py; return_code=0
+2026-02-22 13:04:25, INFO {"event": "run_script_finish", "script": "expenses_parser.py", "return_code": 0}
+2026-02-22 13:04:25, INFO {"event": "expenses_parser_done", "file": "Р—Р°С‚СЂР°С‚С‹ СЃ РЅР°СЂР°СЃС‚Р°СЋС‰РёРј (43).xlsx", "rc": 0}
+2026-02-22 13:04:25, INFO рџ“¦ file_processed В· original=Р—Р°С‚СЂР°С‚С‹ СЃ РЅР°СЂР°СЃС‚Р°СЋС‰РёРј (43).xlsx; moved_to=20260222130425_Р—Р°С‚СЂР°С‚С‹ СЃ РЅР°СЂР°СЃС‚Р°СЋС‰РёРј (43).xlsx
+2026-02-22 13:04:25, INFO {"event": "file_processed", "original": "Р—Р°С‚СЂР°С‚С‹ СЃ РЅР°СЂР°СЃС‚Р°СЋС‰РёРј (43).xlsx", "moved_to": "20260222130425_Р—Р°С‚СЂР°С‚С‹ СЃ РЅР°СЂР°СЃС‚Р°СЋС‰РёРј (43).xlsx"}
+2026-02-22 13:04:25, INFO в–¶пёЏ run_script_start В· script=inventory.py; args=('[WINDOWS_PATH]
+2026-02-22 13:04:25, INFO {"event": "run_script_start", "script": "inventory.py", "args": ["[WINDOWS_PATH]
+2026-02-22 13:04:26, INFO вњ… run_script_finish В· script=inventory.py; return_code=0
+2026-02-22 13:04:26, INFO {"event": "run_script_finish", "script": "inventory.py", "return_code": 0}
+2026-02-22 13:04:26, INFO {"event": "inventory_parser_skip_no_cost", "file": "РћСЃС‚Р°С‚РєРё РІСЃРµРј (60).xlsx", "reason": "Р¤Р°Р№Р» Р±РµР· СЃРµР±РµСЃС‚РѕРёРјРѕСЃС‚Рё (РћСЃС‚Р°С‚РєРё/Р’РµРґРѕРјРѕСЃС‚СЊ С‚РѕРІР°СЂРѕРІ)"}
+2026-02-22 13:04:26, INFO рџ“¦ file_processed В· original=РћСЃС‚Р°С‚РєРё РІСЃРµРј (60).xlsx; moved_to=20260222130426_РћСЃС‚Р°С‚РєРё РІСЃРµРј (60).xlsx
+2026-02-22 13:04:26, INFO {"event": "file_processed", "original": "РћСЃС‚Р°С‚РєРё РІСЃРµРј (60).xlsx", "moved_to": "20260222130426_РћСЃС‚Р°С‚РєРё РІСЃРµРј (60).xlsx"}
+2026-02-22 13:04:26, INFO в–¶пёЏ run_script_start В· script=sales_report.py; args=('[WINDOWS_PATH]
+2026-02-22 13:04:26, INFO {"event": "run_script_start", "script": "sales_report.py", "args": ["[WINDOWS_PATH]
+2026-02-22 13:04:27, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:04:28, INFO вњ… run_script_finish В· script=sales_report.py; return_code=0
+2026-02-22 13:04:28, INFO {"event": "run_script_finish", "script": "sales_report.py", "return_code": 0}
+2026-02-22 13:04:28, INFO в–¶пёЏ run_script_start В· script=sales_parser.py; args=('[WINDOWS_PATH]
+2026-02-22 13:04:28, INFO {"event": "run_script_start", "script": "sales_parser.py", "args": ["[WINDOWS_PATH]
+2026-02-22 13:04:29, INFO вњ… run_script_finish В· script=sales_parser.py; return_code=0
+2026-02-22 13:04:29, INFO {"event": "run_script_finish", "script": "sales_parser.py", "return_code": 0}
+2026-02-22 13:04:29, INFO {"event": "sales_parser_done", "file": "РџСЂРѕРґР°Р¶Рё (98).xlsx", "rc": 0}
+2026-02-22 13:04:29, INFO рџ“¦ file_processed В· original=РџСЂРѕРґР°Р¶Рё (98).xlsx; moved_to=20260222130429_РџСЂРѕРґР°Р¶Рё (98).xlsx
+2026-02-22 13:04:29, INFO {"event": "file_processed", "original": "РџСЂРѕРґР°Р¶Рё (98).xlsx", "moved_to": "20260222130429_РџСЂРѕРґР°Р¶Рё (98).xlsx"}
+2026-02-22 13:04:29, INFO в–¶пёЏ run_script_start В· script=sales_report.py; args=('[WINDOWS_PATH]
+2026-02-22 13:04:29, INFO {"event": "run_script_start", "script": "sales_report.py", "args": ["[WINDOWS_PATH]
+2026-02-22 13:04:30, INFO вњ… run_script_finish В· script=sales_report.py; return_code=0
+2026-02-22 13:04:30, INFO {"event": "run_script_finish", "script": "sales_report.py", "return_code": 0}
+2026-02-22 13:04:30, INFO в–¶пёЏ run_script_start В· script=sales_parser.py; args=('[WINDOWS_PATH]
+2026-02-22 13:04:30, INFO {"event": "run_script_start", "script": "sales_parser.py", "args": ["[WINDOWS_PATH]
+2026-02-22 13:04:31, INFO вњ… run_script_finish В· script=sales_parser.py; return_code=0
+2026-02-22 13:04:31, INFO {"event": "run_script_finish", "script": "sales_parser.py", "return_code": 0}
+2026-02-22 13:04:31, INFO {"event": "sales_parser_done", "file": "РџСЂРѕРґР°Р¶Рё (99).xlsx", "rc": 0}
+2026-02-22 13:04:31, INFO рџ“¦ file_processed В· original=РџСЂРѕРґР°Р¶Рё (99).xlsx; moved_to=20260222130431_РџСЂРѕРґР°Р¶Рё (99).xlsx
+2026-02-22 13:04:31, INFO {"event": "file_processed", "original": "РџСЂРѕРґР°Р¶Рё (99).xlsx", "moved_to": "20260222130431_РџСЂРѕРґР°Р¶Рё (99).xlsx"}
+2026-02-22 13:04:31, INFO рџ—‘пёЏрџ“¦ cash_files_moved_to_rejected В· count=2; files=['Р’РµРґРѕРјРѕСЃС‚СЊ РїРѕ РґРµРЅРµР¶РЅС‹Рј СЃСЂРµРґСЃС‚РІР°Рј (100).xlsx', 'Р’РµРґРѕРјРѕСЃС‚СЊ РїРѕ РґРµРЅРµР¶РЅС‹Рј СЃСЂРµРґСЃС‚РІР°Рј (99).xlsx']
+2026-02-22 13:04:31, INFO {"event": "cash_files_moved_to_rejected", "count": 2, "files": ["Р’РµРґРѕРјРѕСЃС‚СЊ РїРѕ РґРµРЅРµР¶РЅС‹Рј СЃСЂРµРґСЃС‚РІР°Рј (100).xlsx", "Р’РµРґРѕРјРѕСЃС‚СЊ РїРѕ РґРµРЅРµР¶РЅС‹Рј СЃСЂРµРґСЃС‚РІР°Рј (99).xlsx"]}
+2026-02-22 13:04:32, INFO рџ—‚пёЏ index_built В· files=147; report_types=7; build_ms=638.1
+2026-02-22 13:04:32, INFO {"event": "index_built", "files": 147, "report_types": 7, "build_ms": 638.1}
+2026-02-22 13:04:32, INFO рџ”„ index_rebuilt_after_generation В· files_processed=26
+2026-02-22 13:04:32, INFO {"event": "index_rebuilt_after_generation", "files_processed": 26}
+2026-02-22 13:04:32, INFO рџ”” РќР°С‡РёРЅР°РµС‚СЃСЏ РїСЂРѕРІРµСЂРєР° РґРЅРµР№ РјРѕР»С‡Р°РЅРёСЏ...
+2026-02-22 13:04:33, INFO рџ“„ РќР°Р№РґРµРЅ РѕС‚С‡С‘С‚ РґР»СЏ РђР»РµРЅР°: debt_ext_Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ РђР»РµРЅР° (30).html (РїРµСЂРёРѕРґ=)
+2026-02-22 13:04:33, INFO рџ“Љ Р Р°СЃРїР°СЂСЃРµРЅРѕ 61 РєР»РёРµРЅС‚РѕРІ РёР· debt_ext_Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ РђР»РµРЅР° (30).html
+2026-02-22 13:04:33, INFO рџ“Љ РЈ РђР»РµРЅР°: 3 РјРѕР»С‡Р°С‰РёС… РєР»РёРµРЅС‚РѕРІ
+2026-02-22 13:04:34, INFO рџ“„ РќР°Р№РґРµРЅ РѕС‚С‡С‘С‚ РґР»СЏ Р•СЂРіР°Р»Рё: debt_ext_Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ Р•СЂРіР°Р»Рё (30).html (РїРµСЂРёРѕРґ=)
+2026-02-22 13:04:35, INFO рџ“Љ Р Р°СЃРїР°СЂСЃРµРЅРѕ 78 РєР»РёРµРЅС‚РѕРІ РёР· debt_ext_Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ Р•СЂРіР°Р»Рё (30).html
+2026-02-22 13:04:35, INFO рџ“Љ РЈ Р•СЂРіР°Р»Рё: 10 РјРѕР»С‡Р°С‰РёС… РєР»РёРµРЅС‚РѕРІ
+2026-02-22 13:04:37, INFO рџ“„ РќР°Р№РґРµРЅ РѕС‚С‡С‘С‚ РґР»СЏ РњР°РіРёСЂР°: debt_ext_Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ РњР°РіРёСЂР° (32).html (РїРµСЂРёРѕРґ=)
+2026-02-22 13:04:37, INFO рџ“Љ Р Р°СЃРїР°СЂСЃРµРЅРѕ 132 РєР»РёРµРЅС‚РѕРІ РёР· debt_ext_Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ РњР°РіРёСЂР° (32).html
+2026-02-22 13:04:37, INFO рџ“Љ РЈ РњР°РіРёСЂР°: 4 РјРѕР»С‡Р°С‰РёС… РєР»РёРµРЅС‚РѕРІ
+2026-02-22 13:04:39, INFO рџ“„ РќР°Р№РґРµРЅ РѕС‚С‡С‘С‚ РґР»СЏ РћРєСЃР°РЅР°: debt_ext_Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ РћРєСЃР°РЅР° (30).html (РїРµСЂРёРѕРґ=)
+2026-02-22 13:04:39, INFO рџ“Љ Р Р°СЃРїР°СЂСЃРµРЅРѕ 105 РєР»РёРµРЅС‚РѕРІ РёР· debt_ext_Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ РћРєСЃР°РЅР° (30).html
+2026-02-22 13:04:39, INFO рџ“Љ РЈ РћРєСЃР°РЅР°: 2 РјРѕР»С‡Р°С‰РёС… РєР»РёРµРЅС‚РѕРІ
+2026-02-22 13:04:41, INFO рџ“„ РќР°Р№РґРµРЅ РѕС‚С‡С‘С‚ РґР»СЏ РђР»РµРЅР°: debt_ext_Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ РђР»РµРЅР° (30).html (РїРµСЂРёРѕРґ=)
+2026-02-22 13:04:41, INFO рџ‘¤ РђР»РµРЅР° - СЃСѓР±Р°РґРјРёРЅ, РїРѕРґС€РµС„РЅС‹Рµ: РњР°РіРёСЂР°, РћРєСЃР°РЅР°
+2026-02-22 13:04:43, INFO рџ“„ РќР°Р№РґРµРЅ РѕС‚С‡С‘С‚ РґР»СЏ РњР°РіРёСЂР°: debt_ext_Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ РњР°РіРёСЂР° (32).html (РїРµСЂРёРѕРґ=)
+2026-02-22 13:04:45, INFO рџ“„ РќР°Р№РґРµРЅ РѕС‚С‡С‘С‚ РґР»СЏ РћРєСЃР°РЅР°: debt_ext_Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ РћРєСЃР°РЅР° (30).html (РїРµСЂРёРѕРґ=)
+2026-02-22 13:04:45, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:04:46, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/sendMessage "HTTP/1.1 400 Bad Request"
+2026-02-22 13:04:46, ERROR вќЊ РћС€РёР±РєР° РѕС‚РїСЂР°РІРєРё РђР»РµРЅР°: Chat not found
+2026-02-22 13:04:47, INFO рџ“„ РќР°Р№РґРµРЅ РѕС‚С‡С‘С‚ РґР»СЏ Р•СЂРіР°Р»Рё: debt_ext_Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ Р•СЂРіР°Р»Рё (30).html (РїРµСЂРёРѕРґ=)
+2026-02-22 13:04:47, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/sendMessage "HTTP/1.1 400 Bad Request"
+2026-02-22 13:04:47, ERROR вќЊ РћС€РёР±РєР° РѕС‚РїСЂР°РІРєРё Р•СЂРіР°Р»Рё: Chat not found
+2026-02-22 13:04:50, INFO рџ“„ РќР°Р№РґРµРЅ РѕС‚С‡С‘С‚ РґР»СЏ РњР°РіРёСЂР°: debt_ext_Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ РњР°РіРёСЂР° (32).html (РїРµСЂРёРѕРґ=)
+2026-02-22 13:04:50, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/sendMessage "HTTP/1.1 400 Bad Request"
+2026-02-22 13:04:50, ERROR вќЊ РћС€РёР±РєР° РѕС‚РїСЂР°РІРєРё РњР°РіРёСЂР°: Chat not found
+2026-02-22 13:04:52, INFO рџ“„ РќР°Р№РґРµРЅ РѕС‚С‡С‘С‚ РґР»СЏ РћРєСЃР°РЅР°: debt_ext_Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ РћРєСЃР°РЅР° (30).html (РїРµСЂРёРѕРґ=)
+2026-02-22 13:04:52, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/sendMessage "HTTP/1.1 400 Bad Request"
+2026-02-22 13:04:52, ERROR вќЊ РћС€РёР±РєР° РѕС‚РїСЂР°РІРєРё РћРєСЃР°РЅР°: Chat not found
+2026-02-22 13:04:52, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/sendMessage "HTTP/1.1 200 OK"
+2026-02-22 13:04:52, INFO вњ… json_read_success В· file=deletion_queue.json; encoding=utf-8
+2026-02-22 13:04:52, INFO {"event": "json_read_success", "file": "deletion_queue.json", "encoding": "utf-8"}
+2026-02-22 13:04:52, INFO рџ—‘пёЏ deletion_scheduled В· chat_id=[CHAT_ID]; message_id=8; due_time=23.02 13:04; delay_hours=24
+2026-02-22 13:04:52, INFO {"event": "deletion_scheduled", "chat_id": [ID], "message_id": 8, "due_time": "23.02 13:04", "delay_hours": 24}
+2026-02-22 13:04:52, INFO вњ… Р”РµС‚Р°Р»СЊРЅР°СЏ СЃРІРѕРґРєР° РѕС‚РїСЂР°РІР»РµРЅР° Р°РґРјРёРЅСѓ
+2026-02-22 13:04:52, INFO рџ”” РџСЂРѕРІРµСЂРєР° РґРЅРµР№ РјРѕР»С‡Р°РЅРёСЏ Р·Р°РІРµСЂС€РµРЅР°
+2026-02-22 13:04:53, INFO вњ… pipeline_cycle_finish
+2026-02-22 13:04:53, INFO {"event": "pipeline_cycle_finish"}
+2026-02-22 13:04:53, INFO Job "pipeline (trigger: interval[0:10:00], next run at: 2026-02-22 08:13:55 UTC)" executed successfully
+2026-02-22 13:04:55, INFO Running job "janitor (trigger: interval[1:00:00], next run at: 2026-02-22 09:04:55 UTC)" (scheduled at 2026-02-22 08:04:55.173919+00:00)
+2026-02-22 13:04:55, INFO рџ§№ janitor_start
+2026-02-22 13:04:55, INFO {"event": "janitor_start"}
+2026-02-22 13:04:55, INFO вњ… json_read_success В· file=deletion_queue.json; encoding=utf-8
+2026-02-22 13:04:55, INFO {"event": "json_read_success", "file": "deletion_queue.json", "encoding": "utf-8"}
+2026-02-22 13:04:55, INFO вњ… janitor_finish В· total=1; deleted=0; failed=0; too_old=0; remaining=1
+2026-02-22 13:04:55, INFO {"event": "janitor_finish", "total": 1, "deleted": 0, "failed": 0, "too_old": 0, "remaining": 1}
+2026-02-22 13:04:55, INFO Job "janitor (trigger: interval[1:00:00], next run at: 2026-02-22 09:04:55 UTC)" executed successfully
+2026-02-22 13:04:55, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:05:06, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:05:16, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:05:26, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:05:36, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:05:46, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:05:55, INFO Running job "new_reports (trigger: interval[0:10:00], next run at: 2026-02-22 08:15:55 UTC)" (scheduled at 2026-02-22 08:05:55.168646+00:00)
+2026-02-22 13:05:55, INFO рџ”” notifier_start
+2026-02-22 13:05:55, INFO {"event": "notifier_start"}
+2026-02-22 13:05:55, INFO вњ… json_read_success В· file=notify_state.json; encoding=utf-8
+2026-02-22 13:05:55, INFO {"event": "json_read_success", "file": "notify_state.json", "encoding": "utf-8"}
+2026-02-22 13:05:55, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/sendMessage "HTTP/1.1 200 OK"
+2026-02-22 13:05:55, INFO рџ“Ё notification_sent В· chat_id=[CHAT_ID]; reports_count=25
+2026-02-22 13:05:55, INFO {"event": "notification_sent", "chat_id": [ID], "reports_count": 25}
+2026-02-22 13:05:55, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/sendMessage "HTTP/1.1 400 Bad Request"
+2026-02-22 13:05:55, INFO вќЊ notification_error В· chat_id=[CHAT_ID]; error=Chat not found; level=ERROR
+2026-02-22 13:05:55, INFO {"event": "notification_error", "chat_id": [ID], "error": "Chat not found", "level": "ERROR"}
+2026-02-22 13:05:55, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/sendMessage "HTTP/1.1 400 Bad Request"
+2026-02-22 13:05:55, INFO вќЊ notification_error В· chat_id=[CHAT_ID]; error=Chat not found; level=ERROR
+2026-02-22 13:05:55, INFO {"event": "notification_error", "chat_id": [ID], "error": "Chat not found", "level": "ERROR"}
+2026-02-22 13:05:56, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/sendMessage "HTTP/1.1 400 Bad Request"
+2026-02-22 13:05:56, INFO вќЊ notification_error В· chat_id=[CHAT_ID]; error=Chat not found; level=ERROR
+2026-02-22 13:05:56, INFO {"event": "notification_error", "chat_id": [ID], "error": "Chat not found", "level": "ERROR"}
+2026-02-22 13:05:56, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/sendMessage "HTTP/1.1 400 Bad Request"
+2026-02-22 13:05:56, INFO вќЊ notification_error В· chat_id=[CHAT_ID]; error=Chat not found; level=ERROR
+2026-02-22 13:05:56, INFO {"event": "notification_error", "chat_id": [ID], "error": "Chat not found", "level": "ERROR"}
+2026-02-22 13:05:56, INFO вњ… json_read_success В· file=notify_state.json; encoding=utf-8
+2026-02-22 13:05:56, INFO {"event": "json_read_success", "file": "notify_state.json", "encoding": "utf-8"}
+2026-02-22 13:05:56, INFO рџ”” notifier_finish В· total_notifications=25; watermark_time=[ID].1794186
+2026-02-22 13:05:56, INFO {"event": "notifier_finish", "total_notifications": 25, "watermark_time": [ID].1794186}
+2026-02-22 13:05:56, INFO Job "new_reports (trigger: interval[0:10:00], next run at: 2026-02-22 08:15:55 UTC)" executed successfully
+2026-02-22 13:05:56, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:06:06, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:06:16, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:06:26, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:06:36, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:06:47, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:06:57, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:07:07, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:07:17, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:07:27, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:07:37, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:07:47, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:07:55, INFO Running job "ai_queue_processor (trigger: interval[0:02:00], next run at: 2026-02-22 08:09:55 UTC)" (scheduled at 2026-02-22 08:07:55.173919+00:00)
+2026-02-22 13:07:55, INFO Job "ai_queue_processor (trigger: interval[0:02:00], next run at: 2026-02-22 08:09:55 UTC)" executed successfully
+2026-02-22 13:07:57, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:08:07, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:08:17, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:08:28, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:08:38, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:08:48, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:08:58, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:09:08, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:09:18, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:09:28, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:09:38, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:09:48, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:09:55, INFO Running job "ai_queue_processor (trigger: interval[0:02:00], next run at: 2026-02-22 08:11:55 UTC)" (scheduled at 2026-02-22 08:09:55.173919+00:00)
+2026-02-22 13:09:55, INFO Job "ai_queue_processor (trigger: interval[0:02:00], next run at: 2026-02-22 08:11:55 UTC)" executed successfully
+2026-02-22 13:09:58, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:10:08, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:10:19, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:10:29, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:10:39, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:10:49, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:10:59, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:11:09, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:11:17, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:11:17, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-22 13:11:17, INFO рџ“ callback_query В· data=menu_analytics; chat_id=[CHAT_ID]; user_role=admin
+2026-02-22 13:11:17, INFO {"event": "callback_query", "data": "menu_analytics", "chat_id": [ID], "user_role": "admin"}
+2026-02-22 13:11:17, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/editMessageText "HTTP/1.1 200 OK"
+2026-02-22 13:11:22, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:11:22, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-22 13:11:22, INFO рџ“ callback_query В· data=back_main; chat_id=[CHAT_ID]; user_role=admin
+2026-02-22 13:11:22, INFO {"event": "callback_query", "data": "back_main", "chat_id": [ID], "user_role": "admin"}
+2026-02-22 13:11:22, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/editMessageText "HTTP/1.1 200 OK"
+2026-02-22 13:11:24, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:11:24, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-22 13:11:24, INFO рџ“ callback_query В· data=menu_analytics; chat_id=[CHAT_ID]; user_role=admin
+2026-02-22 13:11:24, INFO {"event": "callback_query", "data": "menu_analytics", "chat_id": [ID], "user_role": "admin"}
+2026-02-22 13:11:24, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/editMessageText "HTTP/1.1 200 OK"
+2026-02-22 13:11:26, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:11:26, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-22 13:11:26, INFO рџ“ callback_query В· data=analytics|refresh; chat_id=[CHAT_ID]; user_role=admin
+2026-02-22 13:11:26, INFO {"event": "callback_query", "data": "analytics|refresh", "chat_id": [ID], "user_role": "admin"}
+2026-02-22 13:11:26, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-22 13:11:26, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/sendMessage "HTTP/1.1 200 OK"
+2026-02-22 13:11:26, INFO {"event": "weekly_analytics_start"}
+2026-02-22 13:11:26, INFO в–¶пёЏ run_script_start В· script=sales_profitability_report.py; args=()
+2026-02-22 13:11:26, INFO {"event": "run_script_start", "script": "sales_profitability_report.py", "args": []}
+2026-02-22 13:11:26, INFO вњ… run_script_finish В· script=sales_profitability_report.py; return_code=0
+2026-02-22 13:11:26, INFO {"event": "run_script_finish", "script": "sales_profitability_report.py", "return_code": 0}
+2026-02-22 13:11:26, INFO {"event": "analytics_report", "script": "sales_profitability_report.py", "rc": 0}
+2026-02-22 13:11:26, INFO в–¶пёЏ run_script_start В· script=net_profit_report.py; args=()
+2026-02-22 13:11:26, INFO {"event": "run_script_start", "script": "net_profit_report.py", "args": []}
+2026-02-22 13:11:26, INFO вњ… run_script_finish В· script=net_profit_report.py; return_code=0
+2026-02-22 13:11:26, INFO {"event": "run_script_finish", "script": "net_profit_report.py", "return_code": 0}
+2026-02-22 13:11:26, INFO {"event": "analytics_report", "script": "net_profit_report.py", "rc": 0}
+2026-02-22 13:11:26, INFO в–¶пёЏ run_script_start В· script=inventory_turnover_report.py; args=()
+2026-02-22 13:11:26, INFO {"event": "run_script_start", "script": "inventory_turnover_report.py", "args": []}
+2026-02-22 13:11:26, INFO вњ… run_script_finish В· script=inventory_turnover_report.py; return_code=0
+2026-02-22 13:11:26, INFO {"event": "run_script_finish", "script": "inventory_turnover_report.py", "return_code": 0}
+2026-02-22 13:11:26, INFO {"event": "analytics_report", "script": "inventory_turnover_report.py", "rc": 0}
+2026-02-22 13:11:26, INFO в–¶пёЏ run_script_start В· script=rfm_clients_report.py; args=()
+2026-02-22 13:11:26, INFO {"event": "run_script_start", "script": "rfm_clients_report.py", "args": []}
+2026-02-22 13:11:26, INFO вњ… run_script_finish В· script=rfm_clients_report.py; return_code=0
+2026-02-22 13:11:26, INFO {"event": "run_script_finish", "script": "rfm_clients_report.py", "return_code": 0}
+2026-02-22 13:11:26, INFO {"event": "analytics_report", "script": "rfm_clients_report.py", "rc": 0}
+2026-02-22 13:11:26, INFO в–¶пёЏ run_script_start В· script=revenue_concentration_report.py; args=()
+2026-02-22 13:11:26, INFO {"event": "run_script_start", "script": "revenue_concentration_report.py", "args": []}
+2026-02-22 13:11:26, INFO вњ… run_script_finish В· script=revenue_concentration_report.py; return_code=0
+2026-02-22 13:11:26, INFO {"event": "run_script_finish", "script": "revenue_concentration_report.py", "return_code": 0}
+2026-02-22 13:11:26, INFO {"event": "analytics_report", "script": "revenue_concentration_report.py", "rc": 0}
+2026-02-22 13:11:26, INFO в–¶пёЏ run_script_start В· script=dso_aging_report.py; args=()
+2026-02-22 13:11:26, INFO {"event": "run_script_start", "script": "dso_aging_report.py", "args": []}
+2026-02-22 13:11:27, INFO вњ… run_script_finish В· script=dso_aging_report.py; return_code=0
+2026-02-22 13:11:27, INFO {"event": "run_script_finish", "script": "dso_aging_report.py", "return_code": 0}
+2026-02-22 13:11:27, INFO {"event": "analytics_report", "script": "dso_aging_report.py", "rc": 0}
+2026-02-22 13:11:27, INFO {"event": "weekly_analytics_finish", "success": 6, "total": 6}
+2026-02-22 13:11:27, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/sendMessage "HTTP/1.1 200 OK"
+2026-02-22 13:11:27, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/sendMessage "HTTP/1.1 400 Bad Request"
+2026-02-22 13:11:27, INFO {"event": "analytics_notify_error", "chat_id": "[ID]", "error": "Chat not found", "level": "WARNING"}
+2026-02-22 13:11:30, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:11:30, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-22 13:11:30, INFO рџ“ callback_query В· data=analytics|sales_profit; chat_id=[CHAT_ID]; user_role=admin
+2026-02-22 13:11:30, INFO {"event": "callback_query", "data": "analytics|sales_profit", "chat_id": [ID], "user_role": "admin"}
+2026-02-22 13:11:30, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-22 13:11:30, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/sendDocument "HTTP/1.1 200 OK"
+2026-02-22 13:11:30, INFO {"event": "analytics_sent", "report_type": "sales_profit", "files_count": 1, "chat_id": [ID]}
+2026-02-22 13:11:31, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/sendMessage "HTTP/1.1 200 OK"
+2026-02-22 13:11:40, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:11:50, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:11:55, INFO Running job "ai_queue_processor (trigger: interval[0:02:00], next run at: 2026-02-22 08:13:55 UTC)" (scheduled at 2026-02-22 08:11:55.173919+00:00)
+2026-02-22 13:11:55, INFO Job "ai_queue_processor (trigger: interval[0:02:00], next run at: 2026-02-22 08:13:55 UTC)" executed successfully
+2026-02-22 13:12:00, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:12:02, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:12:03, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-22 13:12:03, INFO рџ“ callback_query В· data=menu_analytics; chat_id=[CHAT_ID]; user_role=admin
+2026-02-22 13:12:03, INFO {"event": "callback_query", "data": "menu_analytics", "chat_id": [ID], "user_role": "admin"}
+2026-02-22 13:12:03, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/editMessageText "HTTP/1.1 200 OK"
+2026-02-22 13:12:05, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:12:05, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-22 13:12:05, INFO рџ“ callback_query В· data=analytics|net_profit_submenu; chat_id=[CHAT_ID]; user_role=admin
+2026-02-22 13:12:05, INFO {"event": "callback_query", "data": "analytics|net_profit_submenu", "chat_id": [ID], "user_role": "admin"}
+2026-02-22 13:12:05, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-22 13:12:05, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/editMessageText "HTTP/1.1 200 OK"
+2026-02-22 13:12:07, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:12:07, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-22 13:12:07, INFO рџ“ callback_query В· data=analytics|net_profit_mtd; chat_id=[CHAT_ID]; user_role=admin
+2026-02-22 13:12:07, INFO {"event": "callback_query", "data": "analytics|net_profit_mtd", "chat_id": [ID], "user_role": "admin"}
+2026-02-22 13:12:07, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-22 13:12:08, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/sendDocument "HTTP/1.1 200 OK"
+2026-02-22 13:12:08, INFO {"event": "analytics_sent", "report_type": "net_profit_mtd", "files_count": 1, "chat_id": [ID]}
+2026-02-22 13:12:08, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/sendMessage "HTTP/1.1 200 OK"
+2026-02-22 13:12:17, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:12:27, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:12:38, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:12:48, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:12:58, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:13:08, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:13:15, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:13:15, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-22 13:13:15, INFO рџ“ callback_query В· data=menu_analytics; chat_id=[CHAT_ID]; user_role=admin
+2026-02-22 13:13:15, INFO {"event": "callback_query", "data": "menu_analytics", "chat_id": [ID], "user_role": "admin"}
+2026-02-22 13:13:15, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/editMessageText "HTTP/1.1 200 OK"
+2026-02-22 13:13:17, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:13:17, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-22 13:13:17, INFO рџ“ callback_query В· data=analytics|net_profit_submenu; chat_id=[CHAT_ID]; user_role=admin
+2026-02-22 13:13:17, INFO {"event": "callback_query", "data": "analytics|net_profit_submenu", "chat_id": [ID], "user_role": "admin"}
+2026-02-22 13:13:17, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-22 13:13:17, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/editMessageText "HTTP/1.1 200 OK"
+2026-02-22 13:13:18, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:13:19, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-22 13:13:19, INFO рџ“ callback_query В· data=analytics|net_profit_day; chat_id=[CHAT_ID]; user_role=admin
+2026-02-22 13:13:19, INFO {"event": "callback_query", "data": "analytics|net_profit_day", "chat_id": [ID], "user_role": "admin"}
+2026-02-22 13:13:19, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-22 13:13:19, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/sendDocument "HTTP/1.1 200 OK"
+2026-02-22 13:13:19, INFO {"event": "analytics_sent", "report_type": "net_profit_day", "files_count": 1, "chat_id": [ID]}
+2026-02-22 13:13:19, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/sendMessage "HTTP/1.1 200 OK"
+2026-02-22 13:13:29, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:13:39, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:13:49, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:13:55, INFO Running job "pipeline (trigger: interval[0:10:00], next run at: 2026-02-22 08:23:55 UTC)" (scheduled at 2026-02-22 08:13:55.167612+00:00)
+2026-02-22 13:13:55, INFO Running job "ai_queue_processor (trigger: interval[0:02:00], next run at: 2026-02-22 08:15:55 UTC)" (scheduled at 2026-02-22 08:13:55.173919+00:00)
+2026-02-22 13:13:55, INFO рџ”Ќ pipeline_cycle_start
+2026-02-22 13:13:55, INFO {"event": "pipeline_cycle_start"}
+2026-02-22 13:13:55, INFO в–¶пёЏ run_script_start В· script=imap_fetcher.py; args=('--once',)
+2026-02-22 13:13:55, INFO {"event": "run_script_start", "script": "imap_fetcher.py", "args": ["--once"]}
+2026-02-22 13:13:55, INFO Job "ai_queue_processor (trigger: interval[0:02:00], next run at: 2026-02-22 08:15:55 UTC)" executed successfully
+2026-02-22 13:13:56, INFO рџ“„ script_stdout В· script=imap_fetcher.py; output=2026-02-22 13:13:55, INFO === imap_fetcher vv4.4.3 ===
+2026-02-22 13:13:55, INFO IMAP cfg: host=mail.minbarakat.kz port=993 ssl=True user=[EMAIL] pass_set=True tz=Asia/Almaty env=[WINDOWS_PATH]
+2026-02-22 13:13:55, INFO IMAP LOGIN OK (attempt 1/5)
+2026-02-22 13:13:55, INFO SEARCH found 0 msgs
+2026-02-22 13:13:56, INFO INBOX EXPUNGE OK
+2026-02-22 13:13:56, INFO TRASH skip Trash: cannot SELECT
+2026-02-22 13:13:56, INFO TRASH skip РљРѕСЂР·РёРЅР°: cannot SELECT
+2026-02-22 13:13:56, INFO TRASH skip Deleted Items: cannot SELECT
+2026-02-22 13:13:56, INFO TRASH cleaned: INBOX.Trash
+2026-02-22 13:13:56, INFO CYCLE DONE: saved=0
+2026-02-22 13:13:56, INFO {"event": "script_stdout", "script": "imap_fetcher.py", "output": "2026-02-22 13:13:55, INFO === imap_fetcher vv4.4.3 ===\r\n2026-02-22 13:13:55, INFO IMAP cfg: host=mail.minbarakat.kz port=993 ssl=True user=[EMAIL] pass_set=True tz=Asia/Almaty env=[WINDOWS_PATH]
+2026-02-22 13:13:56, INFO вњ… run_script_finish В· script=imap_fetcher.py; return_code=0
+2026-02-22 13:13:56, INFO {"event": "run_script_finish", "script": "imap_fetcher.py", "return_code": 0}
+2026-02-22 13:13:56, INFO рџ”­ queue_empty
+2026-02-22 13:13:56, INFO {"event": "queue_empty"}
+2026-02-22 13:13:56, INFO вњ… pipeline_cycle_finish
+2026-02-22 13:13:56, INFO {"event": "pipeline_cycle_finish"}
+2026-02-22 13:13:56, INFO Job "pipeline (trigger: interval[0:10:00], next run at: 2026-02-22 08:23:55 UTC)" executed successfully
+2026-02-22 13:13:59, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:14:08, INFO HTTP Request: POST https://api.telegram.org/bot8341384846:AAGNI_ivs3k-8kejriJlcXbigRXzBvDqGmw/getUpdates "HTTP/1.1 200 OK"
+2026-02-22 13:14:08, INFO Application is stopping. This might take a moment.
+2026-02-22 13:14:08, INFO Scheduler has been shut down
+2026-02-22 13:14:08, INFO Application.stop() complete
+

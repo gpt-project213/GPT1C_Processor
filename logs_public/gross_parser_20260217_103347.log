@@ -1,0 +1,17 @@
+﻿2026-02-17 10:33:47,253, INFO Р›РѕРі-С„Р°Р№Р»: [WINDOWS_PATH]
+2026-02-17 10:33:47,254, INFO Р¤Р°Р№Р»: reports\excel\Р’Р°Р»РѕРІР°СЏ РїСЂРёР±С‹Р»СЊ (332).xlsx
+2026-02-17 10:33:47,255, ERROR FAILED
+Traceback (most recent call last):
+  File "[WINDOWS_PATH]
+    out = build_gross_json(p)
+          ^^^^^^^^^^^^^^^^^^^
+  File "[WINDOWS_PATH]
+    raw = read_excel_raw(xlsx)
+          ^^^^^^^^^^^^^^^^^^^^
+  File "[WINDOWS_PATH]
+    p = ensure_clean_xlsx(p, force_fix=True)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "[WINDOWS_PATH]
+    raise FileNotFoundError(src)
+FileNotFoundError: [WINDOWS_PATH]
+

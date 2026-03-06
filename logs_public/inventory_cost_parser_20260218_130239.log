@@ -1,0 +1,14 @@
+﻿2026-02-18 08:02:39,964, INFO Р›РѕРі-С„Р°Р№Р»: [WINDOWS_PATH]
+2026-02-18 08:02:39,965, INFO Р¤Р°Р№Р»: [WINDOWS_PATH]
+2026-02-18 08:02:40,157, ERROR FAILED
+Traceback (most recent call last):
+  File "[WINDOWS_PATH]
+    out = build_inventory_cost_json(p)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "[WINDOWS_PATH]
+    colmap, data_start, _ = find_header_block(raw)
+                            ^^^^^^^^^^^^^^^^^^^^^^
+  File "[WINDOWS_PATH]
+    raise ValueError("РќРµ РЅР°Р№РґРµРЅР° СЃС‚СЂРѕРєР° Р·Р°РіРѕР»РѕРІРєРѕРІ")
+ValueError: РќРµ РЅР°Р№РґРµРЅР° СЃС‚СЂРѕРєР° Р·Р°РіРѕР»РѕРІРєРѕРІ
+

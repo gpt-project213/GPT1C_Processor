@@ -1,0 +1,21 @@
+﻿2026-02-28 12:46:39,087, INFO Р›РѕРі-С„Р°Р№Р»: [WINDOWS_PATH]
+2026-02-28 12:46:39,087, INFO Р¤Р°Р№Р»: [WINDOWS_PATH]
+2026-02-28 12:46:39,096, ERROR РћС€РёР±РєР°
+Traceback (most recent call last):
+  File "[WINDOWS_PATH]
+    out = build_report(p)
+          ^^^^^^^^^^^^^^^
+  File "[WINDOWS_PATH]
+    raw = read_excel_raw(xlsx)
+          ^^^^^^^^^^^^^^^^^^^^
+  File "[WINDOWS_PATH]
+    p = ensure_clean_xlsx(p, force_fix=True)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "[WINDOWS_PATH]
+    _safe_replace(temp_path, clean)
+  File "[WINDOWS_PATH]
+    src.replace(dst)
+  File "[WINDOWS_PATH]
+    os.replace(self, target)
+OSError: [WinError 17] РЎРёСЃС‚РµРјРµ РЅРµ СѓРґР°РµС‚СЃСЏ РїРµСЂРµРјРµСЃС‚РёС‚СЊ С„Р°Р№Р» РЅР° РґСЂСѓРіРѕР№ РґРёСЃРє: '[WINDOWS_PATH]
+

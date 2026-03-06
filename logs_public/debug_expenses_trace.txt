@@ -1,0 +1,57 @@
+﻿2026-02-18 17:51:51 INFO ===========================================================
+2026-02-18 17:51:51 INFO Обработка: Затраты (11).xlsx.__clean.xlsx
+python : 2026-02-18 17:51:51,602, INFO Clean copy уже существует → Затраты (11).xlsx.__clean.xlsx
+строка:1 знак:1
++ python -X utf8 -u -c "from pathlib import Path; import expenses_parse ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (2026-02-18 17:5...sx.__clean.xlsx:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+2026-02-18 17:51:51 INFO Очищенный: Затраты (11).xlsx.__clean.xlsx
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+  File "[WINDOWS_PATH]
+    return process_file(xlsx_path)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "[WINDOWS_PATH]
+    rows = read_excel_as_text_rows(clean_path)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "[WINDOWS_PATH]
+    df = pd.read_excel(p, sheet_name=sheet, header=None, dtype=object, engine="openpyxl")
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "[WINDOWS_PATH]
+ad_excel
+    io = ExcelFile(
+         ^^^^^^^^^^
+  File "[WINDOWS_PATH]
+_init__
+    self._reader = self._engines[engine](
+                   ^^^^^^^^^^^^^^^^^^^^^^
+  File "[WINDOWS_PATH]
+n __init__
+    super().__init__(
+  File "[WINDOWS_PATH]
+init__
+    self.book = self.load_workbook(self.handles.handle, engine_kwargs)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "[WINDOWS_PATH]
+n load_workbook
+    return load_workbook(
+           ^^^^^^^^^^^^^^
+  File "[WINDOWS_PATH]
+ad_workbook
+    reader.read()
+  File "[WINDOWS_PATH]
+ad
+    self.read_strings()
+  File "[WINDOWS_PATH]
+ad_strings
+    with self.archive.open(strings_path,) as src:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "[WINDOWS_PATH]
+    zinfo = self.getinfo(name)
+            ^^^^^^^^^^^^^^^^^^
+  File "[WINDOWS_PATH]
+    raise KeyError(
+KeyError: "There is no item named 'xl/sharedStrings.xml' in the archive"
+

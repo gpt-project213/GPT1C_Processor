@@ -1,0 +1,17 @@
+﻿{
+  "date": "2026-03-06",
+  "users": {
+    "User_7422963573": {
+      "chat_id": [ID],
+      "requests": {
+        "SALES_SIMPLE": 1,
+        "INVENTORY_SIMPLE": 1
+      },
+      "delivered": [
+        "SALES_SIMPLE",
+        "INVENTORY_SIMPLE"
+      ],
+      "errors": []
+    }
+  }
+}

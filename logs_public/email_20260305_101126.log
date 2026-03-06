@@ -1,0 +1,12 @@
+﻿2026-03-05 10:11:26, INFO === imap_fetcher vv4.4.3 ===
+2026-03-05 10:11:26, INFO IMAP cfg: host=mail.minbarakat.kz port=993 ssl=True user=[EMAIL] pass_set=True tz=Asia/Almaty env=[WINDOWS_PATH]
+2026-03-05 10:11:26, INFO IMAP LOGIN OK (attempt 1/5)
+2026-03-05 10:11:26, INFO SEARCH found 1 msgs
+2026-03-05 10:11:26, INFO SKIP no-manager-in-name: 2026 РіРѕРґ Р±Р°Р»Р°РЅСЃ Excel (2).xlsx
+2026-03-05 10:11:26, INFO INBOX EXPUNGE OK
+2026-03-05 10:11:27, INFO TRASH skip Trash: cannot SELECT
+2026-03-05 10:11:27, INFO TRASH skip РљРѕСЂР·РёРЅР°: cannot SELECT
+2026-03-05 10:11:27, INFO TRASH skip Deleted Items: cannot SELECT
+2026-03-05 10:11:27, INFO TRASH cleaned: INBOX.Trash
+2026-03-05 10:11:27, INFO CYCLE DONE: saved=0
+

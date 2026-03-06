@@ -1,0 +1,17 @@
+﻿2026-02-12 15:50:24, INFO РћР±СЂР°Р±РѕС‚РєР° С„Р°Р№Р»Р°: Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_Р•СЂРіР°Р»Рё (53).xlsx
+2026-02-12 15:50:24, ERROR РћС€РёР±РєР° РїСЂРё РѕР±СЂР°Р±РѕС‚РєРµ: [WinError 17] РЎРёСЃС‚РµРјРµ РЅРµ СѓРґР°РµС‚СЃСЏ РїРµСЂРµРјРµСЃС‚РёС‚СЊ С„Р°Р№Р» РЅР° РґСЂСѓРіРѕР№ РґРёСЃРє: '[WINDOWS_PATH]
+Traceback (most recent call last):
+  File "[WINDOWS_PATH]
+    build_report(args.xlsx, force=force); return 0
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "[WINDOWS_PATH]
+    clean = ensure_clean_xlsx(src, force_fix=True)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "[WINDOWS_PATH]
+    _safe_replace(temp_path, clean)
+  File "[WINDOWS_PATH]
+    src.replace(dst)
+  File "[WINDOWS_PATH]
+    os.replace(self, target)
+OSError: [WinError 17] РЎРёСЃС‚РµРјРµ РЅРµ СѓРґР°РµС‚СЃСЏ РїРµСЂРµРјРµСЃС‚РёС‚СЊ С„Р°Р№Р» РЅР° РґСЂСѓРіРѕР№ РґРёСЃРє: '[WINDOWS_PATH]
+

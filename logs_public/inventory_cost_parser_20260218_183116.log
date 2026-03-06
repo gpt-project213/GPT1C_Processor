@@ -1,0 +1,41 @@
+﻿2026-02-18 13:31:16,775, INFO Р›РѕРі-С„Р°Р№Р»: [WINDOWS_PATH]
+2026-02-18 13:31:16,775, INFO Р¤Р°Р№Р»: [WINDOWS_PATH]
+2026-02-18 13:31:16,933, ERROR FAILED
+Traceback (most recent call last):
+  File "[WINDOWS_PATH]
+    out = build_inventory_cost_json(p)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "[WINDOWS_PATH]
+    raw = read_excel_raw(xlsx)
+          ^^^^^^^^^^^^^^^^^^^^
+  File "[WINDOWS_PATH]
+    return pd.read_excel(p, header=None, dtype=str)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "[WINDOWS_PATH]
+    io = ExcelFile(
+         ^^^^^^^^^^
+  File "[WINDOWS_PATH]
+    self._reader = self._engines[engine](
+                   ^^^^^^^^^^^^^^^^^^^^^^
+  File "[WINDOWS_PATH]
+    super().__init__(
+  File "[WINDOWS_PATH]
+    self.book = self.load_workbook(self.handles.handle, engine_kwargs)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "[WINDOWS_PATH]
+    return load_workbook(
+           ^^^^^^^^^^^^^^
+  File "[WINDOWS_PATH]
+    reader.read()
+  File "[WINDOWS_PATH]
+    self.read_strings()
+  File "[WINDOWS_PATH]
+    with self.archive.open(strings_path,) as src:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "[WINDOWS_PATH]
+    zinfo = self.getinfo(name)
+            ^^^^^^^^^^^^^^^^^^
+  File "[WINDOWS_PATH]
+    raise KeyError(
+KeyError: "There is no item named 'xl/sharedStrings.xml' in the archive"
+

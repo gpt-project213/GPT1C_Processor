@@ -1,0 +1,57 @@
+﻿2026-02-18 19:23:31, INFO === imap_fetcher vv4.4.2 ===
+2026-02-18 19:23:31, INFO IMAP cfg: host=mail.minbarakat.kz port=993 ssl=True user=[EMAIL] pass_set=True tz=Asia/Almaty env=[WINDOWS_PATH]
+2026-02-18 19:23:31, INFO IMAP LOGIN OK (attempt 1/5)
+2026-02-18 19:23:31, INFO SEARCH found 1 msgs
+2026-02-18 19:23:31, INFO SUMMARY REPORT detected: Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_Р•СЂРіР°Р»Рё (60).xlsx (phrase: РІРµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё)
+2026-02-18 19:23:31, INFO SAVED: reports\queue\Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_Р•СЂРіР°Р»Рё (60).xlsx (from [EMAIL])
+2026-02-18 19:23:31, ERROR Clean copy FAIL for Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_Р•СЂРіР°Р»Рё (60).xlsx: ensure_clean_xlsx() takes 1 positional argument but 2 were given
+2026-02-18 19:23:31, INFO SUMMARY REPORT detected: Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_РњР°РіРёСЂР° (60).xlsx (phrase: РІРµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё)
+2026-02-18 19:23:31, INFO SAVED: reports\queue\Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_РњР°РіРёСЂР° (60).xlsx (from [EMAIL])
+2026-02-18 19:23:31, ERROR Clean copy FAIL for Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_РњР°РіРёСЂР° (60).xlsx: ensure_clean_xlsx() takes 1 positional argument but 2 were given
+2026-02-18 19:23:31, INFO SUMMARY REPORT detected: Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_РћРєСЃР°РЅР° (59).xlsx (phrase: РІРµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё)
+2026-02-18 19:23:31, INFO SAVED: reports\queue\Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_РћРєСЃР°РЅР° (59).xlsx (from [EMAIL])
+2026-02-18 19:23:31, ERROR Clean copy FAIL for Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_РћРєСЃР°РЅР° (59).xlsx: ensure_clean_xlsx() takes 1 positional argument but 2 were given
+2026-02-18 19:23:31, INFO SUMMARY REPORT detected: Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё (87).xlsx (phrase: РІРµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё)
+2026-02-18 19:23:31, INFO SAVED: reports\queue\Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё (87).xlsx (from [EMAIL])
+2026-02-18 19:23:31, ERROR Clean copy FAIL for Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё (87).xlsx: ensure_clean_xlsx() takes 1 positional argument but 2 were given
+2026-02-18 19:23:31, INFO SUMMARY REPORT detected: Р’РµРґРѕРјРѕСЃС‚СЊ РїРѕ РґРµРЅРµР¶РЅС‹Рј СЃСЂРµРґСЃС‚РІР°Рј (92).xlsx (keyword: РІРµРґРѕРјРѕСЃС‚СЊ)
+2026-02-18 19:23:31, INFO SAVED: reports\queue\Р’РµРґРѕРјРѕСЃС‚СЊ РїРѕ РґРµРЅРµР¶РЅС‹Рј СЃСЂРµРґСЃС‚РІР°Рј (92).xlsx (from [EMAIL])
+2026-02-18 19:23:31, ERROR Clean copy FAIL for Р’РµРґРѕРјРѕСЃС‚СЊ РїРѕ РґРµРЅРµР¶РЅС‹Рј СЃСЂРµРґСЃС‚РІР°Рј (92).xlsx: ensure_clean_xlsx() takes 1 positional argument but 2 were given
+2026-02-18 19:23:31, INFO SUMMARY REPORT detected: Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ РђР»РµРЅР° (26).xlsx (keyword: РґРµС‚Р°Р»СЊРЅС‹Р№)
+2026-02-18 19:23:31, INFO SAVED: reports\queue\Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ РђР»РµРЅР° (26).xlsx (from [EMAIL])
+2026-02-18 19:23:31, ERROR Clean copy FAIL for Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ РђР»РµРЅР° (26).xlsx: ensure_clean_xlsx() takes 1 positional argument but 2 were given
+2026-02-18 19:23:31, INFO SUMMARY REPORT detected: Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ Р•СЂРіР°Р»Рё (26).xlsx (keyword: РґРµС‚Р°Р»СЊРЅС‹Р№)
+2026-02-18 19:23:31, INFO SAVED: reports\queue\Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ Р•СЂРіР°Р»Рё (26).xlsx (from [EMAIL])
+2026-02-18 19:23:31, ERROR Clean copy FAIL for Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ Р•СЂРіР°Р»Рё (26).xlsx: ensure_clean_xlsx() takes 1 positional argument but 2 were given
+2026-02-18 19:23:31, INFO SUMMARY REPORT detected: Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ РњР°РіРёСЂР° (26).xlsx (keyword: РґРµС‚Р°Р»СЊРЅС‹Р№)
+2026-02-18 19:23:31, INFO SAVED: reports\queue\Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ РњР°РіРёСЂР° (26).xlsx (from [EMAIL])
+2026-02-18 19:23:31, ERROR Clean copy FAIL for Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ РњР°РіРёСЂР° (26).xlsx: ensure_clean_xlsx() takes 1 positional argument but 2 were given
+2026-02-18 19:23:31, INFO SUMMARY REPORT detected: Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ РћРєСЃР°РЅР° (26).xlsx (keyword: РґРµС‚Р°Р»СЊРЅС‹Р№)
+2026-02-18 19:23:31, INFO SAVED: reports\queue\Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ РћРєСЃР°РЅР° (26).xlsx (from [EMAIL])
+2026-02-18 19:23:31, ERROR Clean copy FAIL for Р”РµС‚Р°Р»СЊРЅС‹Р№ Р”РµР±РёС‚РѕСЂС‹ РћРєСЃР°РЅР° (26).xlsx: ensure_clean_xlsx() takes 1 positional argument but 2 were given
+2026-02-18 19:23:31, INFO SUMMARY REPORT detected: Р”РµС‚Р°Р»СЊРЅС‹Р№_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё (26).xlsx (phrase: РґРµС‚Р°Р»СЊРЅС‹Р№_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё)
+2026-02-18 19:23:31, INFO SAVED: reports\queue\Р”РµС‚Р°Р»СЊРЅС‹Р№_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё (26).xlsx (from [EMAIL])
+2026-02-18 19:23:31, ERROR Clean copy FAIL for Р”РµС‚Р°Р»СЊРЅС‹Р№_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё (26).xlsx: ensure_clean_xlsx() takes 1 positional argument but 2 were given
+2026-02-18 19:23:31, INFO SUMMARY REPORT detected: Р—Р°С‚СЂР°С‚С‹ (11).xlsx (keyword: Р·Р°С‚СЂР°С‚С‹)
+2026-02-18 19:23:31, INFO SAVED: reports\queue\Р—Р°С‚СЂР°С‚С‹ (11).xlsx (from [EMAIL])
+2026-02-18 19:23:31, ERROR Clean copy FAIL for Р—Р°С‚СЂР°С‚С‹ (11).xlsx: ensure_clean_xlsx() takes 1 positional argument but 2 were given
+2026-02-18 19:23:31, INFO SUMMARY REPORT detected: РћСЃС‚Р°С‚РєРё РІСЃРµРј (54).xlsx (keyword: РѕСЃС‚Р°С‚РєРё)
+2026-02-18 19:23:31, INFO SAVED: reports\queue\РћСЃС‚Р°С‚РєРё РІСЃРµРј (54).xlsx (from [EMAIL])
+2026-02-18 19:23:31, ERROR Clean copy FAIL for РћСЃС‚Р°С‚РєРё РІСЃРµРј (54).xlsx: ensure_clean_xlsx() takes 1 positional argument but 2 were given
+2026-02-18 19:23:31, INFO SUMMARY REPORT detected: РџСЂРѕРґР°Р¶Рё (91).xlsx (keyword: РїСЂРѕРґР°Р¶Рё)
+2026-02-18 19:23:31, INFO SAVED: reports\queue\РџСЂРѕРґР°Р¶Рё (91).xlsx (from [EMAIL])
+2026-02-18 19:23:31, ERROR Clean copy FAIL for РџСЂРѕРґР°Р¶Рё (91).xlsx: ensure_clean_xlsx() takes 1 positional argument but 2 were given
+2026-02-18 19:23:31, INFO SUMMARY REPORT detected: Р’Р°Р»РѕРІР°СЏ РїСЂРёР±С‹Р»СЊ (93).xlsx (keyword: РІР°Р»РѕРІР°СЏ)
+2026-02-18 19:23:31, INFO SAVED: reports\queue\Р’Р°Р»РѕРІР°СЏ РїСЂРёР±С‹Р»СЊ (93).xlsx (from [EMAIL])
+2026-02-18 19:23:31, ERROR Clean copy FAIL for Р’Р°Р»РѕРІР°СЏ РїСЂРёР±С‹Р»СЊ (93).xlsx: ensure_clean_xlsx() takes 1 positional argument but 2 were given
+2026-02-18 19:23:31, INFO SUMMARY REPORT detected: Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_РђР»РµРЅР° (62).xlsx (phrase: РІРµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё)
+2026-02-18 19:23:31, INFO SAVED: reports\queue\Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_РђР»РµРЅР° (62).xlsx (from [EMAIL])
+2026-02-18 19:23:31, ERROR Clean copy FAIL for Р’РµРґРѕРјРѕСЃС‚СЊ_РїРѕ_РІР·Р°РёРјРѕСЂР°СЃС‡РµС‚Р°Рј_СЃ_РєРѕРЅС‚СЂР°РіРµРЅС‚Р°РјРё_РђР»РµРЅР° (62).xlsx: ensure_clean_xlsx() takes 1 positional argument but 2 were given
+2026-02-18 19:23:31, INFO MAIL flagged \Deleted, msg #b'1'
+2026-02-18 19:23:32, INFO INBOX EXPUNGE OK
+2026-02-18 19:23:32, INFO TRASH skip Trash: cannot SELECT
+2026-02-18 19:23:32, INFO TRASH skip РљРѕСЂР·РёРЅР°: cannot SELECT
+2026-02-18 19:23:32, INFO TRASH skip Deleted Items: cannot SELECT
+2026-02-18 19:23:32, INFO TRASH cleaned: INBOX.Trash
+2026-02-18 19:23:32, INFO CYCLE DONE: saved=1
+

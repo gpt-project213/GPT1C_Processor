@@ -1,0 +1,6 @@
+﻿2026-03-06 13:37:20, INFO START CLEANUP (dry=True, ttl_days=90)
+2026-03-06 13:37:20, INFO Artifacts files: 307, XLSX files: 467
+2026-03-06 13:37:20, INFO TTL REMOVED: artifacts=0, xlsx=0
+2026-03-06 13:37:20, INFO CAP REMOVED: artifacts=0, xlsx=0
+2026-03-06 13:37:20, INFO DONE
+
