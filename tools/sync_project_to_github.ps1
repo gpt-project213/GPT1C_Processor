@@ -453,7 +453,7 @@ function Run-HardcodedPathsLinter {
     }
 
     Log "Running hardcoded-paths linter"
-    $lintResult = Exec-Python -PythonExe $pythonExe -PyArgs @($lintScript)
+    $lintResult = Exec-Python -PythonExe $pythonExe -PyArgs @("-X", "utf8", $lintScript)
 
     foreach ($line in $lintResult.Output) {
         Log ("  LINT: " + $line)
