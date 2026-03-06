@@ -30,7 +30,7 @@ RAW base: https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/maste
 
 ## 3. Tracked files
 
-- tracked files count: 63
+- tracked files count: 64
 
 ---
 
@@ -52,7 +52,6 @@ RAW base: https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/maste
 - config/imap.example.json
 - config/managers.example.json
 - config/roles.example.json
-- DEPENDENCY_MAP.md
 
 ---
 

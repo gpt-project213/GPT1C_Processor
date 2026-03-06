@@ -1,5 +1,5 @@
 ﻿{
-    "generated_at":  "2026-03-06 11:04:09",
+    "generated_at":  "2026-03-06 11:10:06",
     "timezone":  "Asia/Almaty",
     "repo":  {
                  "owner":  "gpt-project213",
@@ -9,13 +9,13 @@
                  "raw_base":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master"
              },
     "summary":  {
-                    "total_files":  63,
+                    "total_files":  64,
                     "top_levels":  5
                 },
     "sections":  [
                      {
                          "section":  ".",
-                         "count":  43,
+                         "count":  44,
                          "files":  [
                                        {
                                            "path":  ".gitignore",
@@ -81,6 +81,15 @@
                                            "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/ai_analyzer.py"
                                        },
                                        {
+                                           "path":  "AI_CONTEXT.md",
+                                           "name":  "AI_CONTEXT.md",
+                                           "extension":  ".md",
+                                           "type":  "md",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/AI_CONTEXT.md",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/AI_CONTEXT.md"
+                                       },
+                                       {
                                            "path":  "analyze_debt_excel.py",
                                            "name":  "analyze_debt_excel.py",
                                            "extension":  ".py",
@@ -126,13 +135,13 @@
                                            "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/debt_auto_report.py"
                                        },
                                        {
-                                           "path":  "DEPENDENCY_MAP.md.txt",
-                                           "name":  "DEPENDENCY_MAP.md.txt",
-                                           "extension":  ".txt",
-                                           "type":  "txt",
+                                           "path":  "DEPENDENCY_MAP.md",
+                                           "name":  "DEPENDENCY_MAP.md",
+                                           "extension":  ".md",
+                                           "type":  "md",
                                            "top_level":  ".",
-                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/DEPENDENCY_MAP.md.txt",
-                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/DEPENDENCY_MAP.md.txt"
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/DEPENDENCY_MAP.md",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/DEPENDENCY_MAP.md"
                                        },
                                        {
                                            "path":  "dso_aging_report.py",
