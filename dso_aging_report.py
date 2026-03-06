@@ -1,7 +1,10 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-dso_aging_report.py · v1.0.2 (2026-02-09)
+dso_aging_report.py · v1.1.0 (06.03.2026)
+FIX #DSO-1: период из JSON, не /30
+FIX #DSO-2: aging из days_silence, не синтетика
+FIX #DSO-3: sales по периоду, не по max revenue
 ────────────────────────────────────────────────────────────────────
 Отчёт "DSO + Aging дебиторки"
 
@@ -43,7 +46,7 @@ LOGS.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("dso")
 
-__VERSION__ = "1.0.0"
+__VERSION__ = "1.1.0"
 NBSP = "\u202f"
 
 # ──────────────────────────────────────────────────────────────────
@@ -68,29 +71,83 @@ def load_latest_json(pattern: str, skip_keywords: list = None, min_clients: int 
     return None
 
 
-def load_best_sales_json(min_clients: int = 3) -> Optional[Dict[str, Any]]:
-    """Выбирает sales JSON с максимальной выручкой (устраняет DSO-explosion при выборе мелкого менеджера)."""
+def _parse_period_date(s: str):
+    """Парсит дату 'dd.mm.yyyy'. Возвращает datetime или None."""
+    from datetime import datetime as _dt
+    for fmt in ("%d.%m.%Y", "%Y-%m-%d"):
+        try:
+            return _dt.strptime(s.strip(), fmt)
+        except Exception:
+            pass
+    return None
+
+
+def _period_days(period_min: str, period_max: str) -> int:
+    """
+    FIX Bug #DSO-1: реальный период в днях вместо хардкодного 30.
+    Считает кол-во дней между period_min и period_max включительно.
+    Fallback = 30 если даты не распознаны.
+    """
+    d1 = _parse_period_date(period_min or "")
+    d2 = _parse_period_date(period_max or "")
+    if d1 and d2 and d2 >= d1:
+        return (d2 - d1).days + 1
+    LOG.warning("Не удалось распознать период ('%s' - '%s'), fallback=30", period_min, period_max)
+    return 30
+
+
+def load_best_sales_json(min_clients: int = 3,
+                          debt_period_min: str = None,
+                          debt_period_max: str = None) -> Optional[Dict[str, Any]]:
+    """
+    FIX Bug #DSO-3: выбирает sales по совпадению периода с долгом, не по max(revenue).
+
+    Приоритет:
+    1. Файл с периодом, пересекающимся с периодом дебиторки
+    2. Fallback: файл с max(revenue) — логируем предупреждение
+    """
+    import re as _re
     files = sorted(JSON_DIR.glob("sales_*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
-    best = None
-    best_rev = -1.0
-    for path in files:
-        if "товару" in path.name.lower():
+    d_min = _parse_period_date(debt_period_min or "")
+    d_max = _parse_period_date(debt_period_max or "")
+
+    candidates_match = []   # совпадение периода
+    candidates_all   = []   # все пригодные файлы
+
+    for p in files:
+        name_lower = p.name.lower()
+        if "товару" in name_lower or "profitability" in name_lower:
             continue
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            with open(p, "r", encoding="utf-8") as f:
                 data = json.load(f)
             clients = data.get("clients", []) or []
             if len(clients) < min_clients:
                 continue
             rev = float(data.get("total_revenue", 0.0) or 0.0)
-            if rev > best_rev:
-                best_rev = rev
-                best = data
+            candidates_all.append((rev, p, data))
+
+            # Проверяем пересечение периодов
+            if d_min and d_max:
+                period_str = data.get("period", "") or ""
+                m = _re.search(r"(\d{2}\.\d{2}\.\d{4})[^\d]+(\d{2}\.\d{2}\.\d{4})", period_str)
+                if m:
+                    s1 = _parse_period_date(m.group(1))
+                    s2 = _parse_period_date(m.group(2))
+                    if s1 and s2 and s2 >= d_min and s1 <= d_max:
+                        candidates_match.append((rev, p, data))
         except Exception as e:
-            LOG.warning("Ошибка чтения %s: %s", path.name, e)
-    if best:
-        LOG.info("Выбран sales по max revenue: total_revenue=%s", best.get("total_revenue"))
-    return best
+            LOG.warning("Ошибка чтения %s: %s", p.name, e)
+
+    for pool, label in [(candidates_match, "период"), (candidates_all, "max revenue (fallback)")]:
+        if pool:
+            rev, p, data = max(pool, key=lambda x: x[0])
+            if "fallback" in label:
+                LOG.warning("DSO-3 fallback: period не совпал, берём %s (revenue=%.0f)", p.name, rev)
+            else:
+                LOG.info("DSO-3: выбран sales по '%s': %s", label, p.name)
+            return data
+    return None
 
 def load_best_debt_json() -> Optional[Dict[str, Any]]:
     """Сначала ищет debt_*.json (simple), иначе берёт debt_ext_*.json и упрощает до формата debt_*"""
@@ -141,19 +198,29 @@ def generate_report():
     LOG.info("="*60)
     LOG.info("ГЕНЕРАЦИЯ ОТЧЁТА: DSO + Aging")
     
-    # Загрузка
+    # Загрузка дебиторки
     debt_data = load_best_debt_json()
-    sales_data = load_best_sales_json(min_clients=3)
-    
     if not debt_data:
         LOG.error("Нет данных о дебиторке")
         return
-    
-    # Средняя дневная выручка для DSO
+
+    # FIX Bug #DSO-1: реальный период из debt JSON
+    period_min  = debt_data.get("period_min") or ""
+    period_max  = debt_data.get("period_max") or ""
+    period_days = _period_days(period_min, period_max)
+    LOG.info("DSO-1 fix: period_min=%s period_max=%s -> %d дней", period_min, period_max, period_days)
+
+    # FIX Bug #DSO-3: подбираем sales по совпадению периода
+    sales_data = load_best_sales_json(min_clients=3,
+                                      debt_period_min=period_min,
+                                      debt_period_max=period_max)
+
+    # Дневная выручка по реальному периоду (не 30)
     daily_revenue = 0.0
     if sales_data:
-        total_revenue = sales_data.get("total_revenue", 0.0)
-        daily_revenue = total_revenue / 30  # Примерно месяц
+        total_revenue = float(sales_data.get("total_revenue", 0.0) or 0.0)
+        daily_revenue = total_revenue / period_days
+        LOG.info("Дневная выручка: %.0f / %d = %.0f тг/день", total_revenue, period_days, daily_revenue)
     
     # Группировка по менеджерам
     managers_data = defaultdict(lambda: {
@@ -176,24 +243,24 @@ def generate_report():
             continue
         
         managers_data[manager]["total_debt"] += closing_debt
-        
-        # Упрощённая aging (по закрывающему долгу)
-        # В реальности нужны даты движений
-        # Здесь просто распределяем: >30 дней = 10%
-        problem_threshold = closing_debt * 0.1
-        if problem_threshold > 10000:  # Если долг большой, помечаем как проблемный
+
+        # FIX Bug #DSO-2: реальная aging через поле days_silence из debt_ext JSON
+        # Убраны синтетические коэффициенты 0.1 / 0.2 / 0.3 / 0.4 / 0.6
+        days_silence = int(client_data.get("days_silence") or 0)
+
+        if days_silence > 30:
+            managers_data[manager]["aging"][">30"] += closing_debt
             managers_data[manager]["problem_clients"].append({
                 "name": client_name,
-                "debt": closing_debt
+                "debt": closing_debt,
+                "days": days_silence,
             })
-            managers_data[manager]["aging"][">30"] += problem_threshold
-            managers_data[manager]["aging"]["15-30"] += closing_debt * 0.2
-            managers_data[manager]["aging"]["8-14"] += closing_debt * 0.3
-            managers_data[manager]["aging"]["0-7"] += closing_debt * 0.4
+        elif days_silence > 14:
+            managers_data[manager]["aging"]["15-30"] += closing_debt
+        elif days_silence > 7:
+            managers_data[manager]["aging"]["8-14"] += closing_debt
         else:
-            # Нормальный долг
-            managers_data[manager]["aging"]["0-7"] += closing_debt * 0.6
-            managers_data[manager]["aging"]["8-14"] += closing_debt * 0.4
+            managers_data[manager]["aging"]["0-7"] += closing_debt
     
     # Расчёт DSO
     for manager, data in managers_data.items():
@@ -306,10 +373,11 @@ h2{{color:#2c3e50;margin-top:40px;padding-bottom:10px;border-bottom:2px solid #0
 <th style="width:40px">#</th>
 <th>Клиент</th>
 <th style="width:150px;text-align:right">Долг</th>
+<th style="width:70px;text-align:right">Дней</th>
 </tr>
 </thead>
 <tbody>
-{problem_rows if problem_rows else '<tr><td colspan="3" style="text-align:center;color:#28a745">Нет проблемных клиентов ✅</td></tr>'}
+{problem_rows if problem_rows else '<tr><td colspan="4" style="text-align:center;color:#28a745">Нет проблемных клиентов ✅</td></tr>'}
 </tbody>
 </table>
 
