@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{ title or "Рентабельность" }}</title>
+<style>
+:root{ --bg:#f7f9ff; --grid:#c5d4ff; --th:#dbe5ff; --alt:#eef3ff; --ink:#0f172a; --accent:#2563eb; --bad:#e11d48; --good:#16a34a; --warning:#f59e0b; }
+*{box-sizing:border-box}
+body{font-family:system-ui,Segoe UI,Arial,sans-serif;font-size:13px;margin:0;background:var(--bg);color:var(--ink);line-height:1.45}
+.wrap{max-width:1000px;margin:0 auto;padding:18px}
+h1{margin:0 0 8px;color:var(--accent);font-size:20px}
+small{color:#334155}
+.key{font-weight:600}
+.table-wrap{overflow:auto;border:1px solid var(--grid);border-radius:10px;background:#fff;margin:12px 0;box-shadow:0 2px 8px rgba(0,0,0,.03)}
+table{width:100%;border-collapse:collapse;table-layout:fixed;min-width:620px}
+thead th{background:var(--th);text-align:left;padding:8px;border-bottom:1px solid var(--grid)}
+tbody td{padding:8px;border-bottom:1px solid #eef2ff;vertical-align:top;text-align:left}
+.section{margin:16px 0 6px;font-weight:700;text-align:left}
+.pct{font-weight:700}.pct.ok{color:#156f3b}.pct.bad{color:#b91c1c}
+.tech{margin-top:12px;color:#475569;font-size:12px}
+
+/* ═══════════════════════════════════════════════════════════
+   MOBILE-FIRST АДАПТИВНОСТЬ (ДОБАВЛЕНО)
+   ═══════════════════════════════════════════════════════════ */
+@media (max-width:768px){
+  .wrap{padding:12px}
+  h1{font-size:18px}
+  small{font-size:12px}
+  
+  /* 🔥 КРИТИЧНО: Убираем min-width у таблиц */
+  table{min-width:auto !important;table-layout:auto}
+  
+  /* Компактные таблицы */
+  thead th{padding:6px;font-size:12px}
+  tbody td{padding:6px;font-size:12px}
+  
+  /* Секции */
+  .section{margin:12px 0 4px;font-size:13px}
+  
+  /* Техническая сводка */
+  .tech{font-size:11px}
+}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <small>
+      <span class="key">Период:</span> {{ period or "—" }}
+      &nbsp;|&nbsp; <span class="key">Менеджер:</span> {{ manager or "—" }}
+    </small>
+
+    <h1>Рентабельность</h1>
+
+    <div class="section">Средняя рентабельность</div>
+    {% set overall = overall_margin or 0.0 %}
+    <div><span class="pct {{ 'ok' if overall >= 12 else 'bad' }}">{{ "%.2f"|format(overall) }} %</span></div>
+
+    <div class="section">{{ top_title or "ТОП-15 рентабельности" }}</div>
+    {{ top_table|safe }}
+
+    <div class="section">{{ low_title or "Низкая рентабельность — ТОП-15" }}</div>
+    {{ low_table|safe }}
+
+    {% if tech_block %}
+    <div class="tech">
+      <div class="section">Техническая сводка</div>
+      <div>{{ tech_block|safe }}</div>
+    </div>
+    {% endif %}
+  </div>
+</body>
+</html>

@@ -1,0 +1,71 @@
+<!doctype html><html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{ title or "Остатки (быстрый обзор)" }}</title>
+<style>
+:root{ --bg:#f7fbff; --grid:#d7e6ff; --th:#e8f1ff; --alt:#f3f8ff; --ink:#111; }
+*{box-sizing:border-box}
+body{font-family:system-ui,Segoe UI,Arial,sans-serif;font-size:13px;margin:0;background:var(--bg);color:var(--ink)}
+.wrap{max-width:1200px;margin:0 auto;padding:16px}
+h1{margin:0 0 6px;font-size:20px}
+small{color:#555;line-height:1.5}
+.key{font-weight:600}
+.table-wrap{overflow:auto;border:1px solid var(--grid);border-radius:10px;background:#fff;margin-top:10px}
+table{width:100%;border-collapse:collapse}
+colgroup col:nth-child(1){width:70%}
+colgroup col:nth-child(2){width:30%}
+th,td{padding:6px 8px;border-bottom:1px solid var(--grid)}
+th{background:var(--th);text-align:center}
+tr:nth-child(even) td{background:var(--alt)}
+td.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+
+/* ═══════════════════════════════════════════════════════════
+   MOBILE-FIRST АДАПТИВНОСТЬ (ДОБАВЛЕНО)
+   ═══════════════════════════════════════════════════════════ */
+@media (max-width:768px){ 
+  h1{font-size:18px} 
+  .wrap{padding:12px}
+  
+  /* Убираем фиксированные ширины колонок */
+  colgroup col:nth-child(1){width:auto}
+  colgroup col:nth-child(2){width:auto}
+  
+  /* Компактные отступы */
+  th,td{padding:5px 6px;font-size:12px}
+  
+  /* Категории более заметные */
+  tr.category td{padding:8px 6px;font-size:13px;font-weight:700}
+  
+  /* Уменьшаем размер мелкого текста */
+  small{font-size:12px}
+}
+</style>
+</head>
+<body><div class="wrap">
+
+<h1>{{ title or "Остатки (быстрый обзор)" }}</h1>
+<small>
+  <span class="key">Период:</span> {{ period }}<br>
+  <span class="key">Сформировано:</span> {{ generated_at }}<br>
+  <span class="key">Общее количество:</span> {{ grand_total_qty }}
+</small>
+
+<div class="table-wrap">
+<table>
+<colgroup><col><col></colgroup>
+<tr><th>Товар</th><th>Количество</th></tr>
+{% for group in products|groupby('category') %}
+<tr class="category">
+  <td colspan="2"><strong>{{ group.grouper }}</strong></td>
+</tr>
+{% for p in group.list %}
+<tr>
+  <td>{{ p.product }}</td>
+  <td class="num">{{ p.qty_raw | qty }}</td>
+</tr>
+{% endfor %}
+{% endfor %}
+</table>
+</div>
+
+</div></body></html>

@@ -1,0 +1,566 @@
+#!/usr/bin/env python
+# coding: utf-8
+"""
+sales_profitability_report.py · v1.0.1 (2026-02-09)
+────────────────────────────────────────────────────────────────────
+Отчёт "Продажи + Рентабельность"
+
+Цель: Показать продажи с маржой по каждому товару
+
+Источники:
+- reports/json/sales_*.json     (продажи по клиентам/товарам)
+- reports/json/gross_*.json     (маржа по товарам)
+
+Выход:
+- reports/analytics/sales_profitability.json
+- reports/analytics/sales_profitability.html
+
+Что показывает:
+- Каждый клиент → товары с маржой
+- Выделение низкомаржинальных товаров
+- Рекомендации по корректировке прайса
+"""
+from __future__ import annotations
+
+import json
+import math
+import re
+import logging
+from pathlib import Path
+from datetime import datetime, timezone, timedelta
+from typing import Dict, List, Any, Optional
+from collections import defaultdict
+
+# ──────────────────────────────────────────────────────────────────
+# Настройки
+TZ = timezone(timedelta(hours=5))
+ROOT = Path(__file__).resolve().parent
+JSON_DIR = ROOT / "reports" / "json"
+ANALYTICS_DIR = ROOT / "reports" / "analytics"
+LOGS = ROOT / "logs"
+ANALYTICS_DIR.mkdir(parents=True, exist_ok=True)
+LOGS.mkdir(parents=True, exist_ok=True)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+LOG = logging.getLogger("sales_profitability")
+
+__VERSION__ = "1.0.0"
+NBSP = "\u202f"
+
+# Пороги маржи
+MARGIN_LOSS = 0.0        # < 0% = убыток
+MARGIN_CRITICAL = 5.0    # < 5% = критично
+MARGIN_LOW = 10.0        # < 10% = низкая
+
+# ──────────────────────────────────────────────────────────────────
+# Утилиты
+def _ensure_file_logging():
+    ts = datetime.now(TZ).strftime("%Y%m%d_%H%M%S")
+    p = LOGS / f"sales_profitability_{ts}.log"
+    fh = logging.FileHandler(p, encoding="utf-8")
+    fh.setFormatter(logging.Formatter("%(asctime)s, %(levelname)s %(message)s"))
+    fh.setLevel(logging.INFO)
+    LOG.addHandler(fh)
+    LOG.info("Лог-файл: %s", p)
+
+def normalize_product_name(name: str) -> str:
+    """
+    Нормализовать название товара для JOIN
+    ВАЖНО: Сохранить дату партии (ДДММГГ) и себестоимость в конце названия
+    
+    Пример:
+    "УКПФ Филе на подложке (140126) 1730" → "укпф филе на подложке 140126 1730"
+    "Куриное филе/12 кг (201225) 1350" → "куриное филе 12 кг 201225 1350"
+    """
+    s = name.lower().strip()
+    
+    # Заменить слэши и дефисы на пробелы
+    s = s.replace("/", " ")
+    s = s.replace("-", " ")
+    
+    # Убрать скобки (но цифры внутри останутся)
+    s = s.replace("(", " ")
+    s = s.replace(")", " ")
+    
+    # Схлопнуть множественные пробелы
+    s = re.sub(r"\s+", " ", s)
+    
+    return s.strip()
+
+def fmt_money(x: float) -> str:
+    return f"{float(x):,.0f}".replace(",", NBSP) + " ₸"
+
+def fmt_pct(x: float) -> str:
+    return f"{float(x):.1f}%"
+
+def calculate_price_adjustment(current_margin: float, target_margin: float = 10.0) -> float:
+    """Вычислить на сколько % поднять цену для достижения целевой маржи"""
+    if current_margin >= target_margin:
+        return 0.0
+    
+    # Упрощённая формула: новая_цена = текущая_цена × (1 + adjustment)
+    # target_margin = (новая_цена - себестоимость) / новая_цена × 100
+    # Решаем относительно adjustment
+    
+    if current_margin <= 0:
+        # При отрицательной марже рост цены должен быть существенным
+        return 15.0  # минимум 15%
+    
+    # adjustment ≈ (target - current) / (100 - target)
+    adjustment = (target_margin - current_margin) / (100 - target_margin) * 100
+    return max(1.0, adjustment)  # минимум 1%
+
+# ──────────────────────────────────────────────────────────────────
+# Загрузка JSON
+def load_latest_sales() -> Optional[Dict[str, Any]]:
+    """Загрузить sales JSON с МАКСИМАЛЬНОЙ выручкой (устраняет выбор мелкого менеджера по mtime)."""
+    files = sorted(JSON_DIR.glob("sales_*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if not files:
+        LOG.error("Не найдены файлы sales_*.json")
+        return None
+
+    best = None
+    best_rev = -1.0
+    for path in files:
+        if "товару" in path.name.lower():
+            LOG.warning("Пропускаю (по товару): %s", path.name)
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            clients = data.get("clients", []) or []
+            if len(clients) < 3:
+                LOG.warning("Пропускаю %s: клиентов < 3", path.name)
+                continue
+            rev = float(data.get("total_revenue", 0.0) or 0.0)
+            if rev > best_rev:
+                best_rev = rev
+                best = data
+        except Exception as e:
+            LOG.warning("Ошибка чтения %s: %s", path.name, e)
+
+    if best:
+        LOG.info("Выбран sales по max revenue: %s", best.get("total_revenue"))
+        return best
+
+    LOG.error("Нет подходящего sales JSON")
+    return None
+    for path in files:
+        if "товару" in path.name.lower():
+            LOG.warning("Пропускаю (по товару): %s", path.name)
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if len(data.get("clients", [])) < 3:
+                LOG.warning("Пропускаю %s: клиентов < 3", path.name)
+                continue
+            LOG.info("Загружаю sales: %s", path.name)
+            return data
+        except Exception as e:
+            LOG.warning("Ошибка чтения %s: %s", path.name, e)
+    LOG.error("Нет подходящего sales JSON")
+    return None
+
+def load_latest_gross() -> Optional[Dict[str, Any]]:
+    """Загрузить последний gross JSON"""
+    files = sorted(JSON_DIR.glob("gross_*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if not files:
+        LOG.error("Не найдены файлы gross_*.json")
+        return None
+    
+    path = files[0]
+    LOG.info("Загружаю gross: %s", path.name)
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+# ──────────────────────────────────────────────────────────────────
+# Построение справочника маржи
+def build_margin_dict(gross_data: Dict[str, Any]) -> Dict[str, Dict[str, float]]:
+    """
+    Создать словарь: {normalized_product_name: {margin_pct, revenue, cost, profit}}
+    """
+    margin_dict = {}
+    for product in gross_data.get("products", []):
+        name = product["product"]
+        key = normalize_product_name(name)
+        margin_dict[key] = {
+            "margin_pct": product["margin_pct"],
+            "revenue": product["revenue"],
+            "cost": product["cost"],
+            "profit": product["profit"],
+            "original_name": name
+        }
+    
+    LOG.info("Построен справочник маржи: %d товаров", len(margin_dict))
+    return margin_dict
+
+# ──────────────────────────────────────────────────────────────────
+# Анализ продаж с рентабельностью
+def analyze_sales_with_profitability(sales_data: Dict[str, Any],
+                                     margin_dict: Dict[str, Dict[str, float]]) -> Dict[str, Any]:
+    """
+    Добавить маржу к каждому товару в продажах
+    """
+    clients_enriched = []
+    
+    total_matched = 0
+    total_unmatched = 0
+    low_margin_items = []  # Список товаров с низкой маржой
+    
+    for client_data in sales_data.get("clients", []):
+        client_name = client_data["client"]
+        client_total = client_data["total"]
+        
+        products_with_margin = []
+        client_revenue_with_margin = 0.0
+        client_profit = 0.0
+        
+        for product in client_data["products"]:
+            prod_name = product["product"]
+            prod_sum = product["sum"]
+            prod_qty = product["qty"]
+            prod_price = product["price"]
+            
+            # JOIN по нормализованному названию
+            key = normalize_product_name(prod_name)
+            margin_info = margin_dict.get(key)
+            
+            if margin_info:
+                margin_pct = margin_info["margin_pct"]
+                total_matched += 1
+                
+                # Вычислить прибыль для этой продажи
+                item_profit = prod_sum * (margin_pct / 100)
+                
+                # Статус товара
+                if margin_pct < MARGIN_LOSS:
+                    status = "LOSS"
+                    status_label = "🚫 Убыток"
+                elif margin_pct < MARGIN_CRITICAL:
+                    status = "CRITICAL"
+                    status_label = "⚠️ Критично"
+                elif margin_pct < MARGIN_LOW:
+                    status = "LOW"
+                    status_label = "📊 Низкая"
+                else:
+                    status = "OK"
+                    status_label = "✅ Норма"
+                
+                product_enriched = {
+                    "product": prod_name,
+                    "qty": prod_qty,
+                    "price": prod_price,
+                    "sum": prod_sum,
+                    "margin_pct": margin_pct,
+                    "profit": item_profit,
+                    "status": status,
+                    "status_label": status_label
+                }
+                
+                products_with_margin.append(product_enriched)
+                client_revenue_with_margin += prod_sum
+                client_profit += item_profit
+                
+                # Собрать товары с низкой маржой для сводки
+                if margin_pct < MARGIN_LOW:
+                    low_margin_items.append({
+                        "product": prod_name,
+                        "client": client_name,
+                        "margin_pct": margin_pct,
+                        "revenue": prod_sum,
+                        "status": status,
+                        "price_adjustment": calculate_price_adjustment(margin_pct)
+                    })
+            else:
+                total_unmatched += 1
+                products_with_margin.append({
+                    "product": prod_name,
+                    "qty": prod_qty,
+                    "price": prod_price,
+                    "sum": prod_sum,
+                    "margin_pct": None,
+                    "profit": None,
+                    "status": "UNKNOWN",
+                    "status_label": "❓ Нет данных"
+                })
+        
+        # Средняя маржа клиента
+        avg_margin = (client_profit / client_revenue_with_margin * 100) if client_revenue_with_margin > 0 else 0.0
+        
+        clients_enriched.append({
+            "client": client_name,
+            "total_revenue": client_total,
+            "avg_margin_pct": avg_margin,
+            "total_profit": client_profit,
+            "products": products_with_margin
+        })
+    
+    # Сортировка товаров с низкой маржой по выручке (убыв)
+    low_margin_items.sort(key=lambda x: -x["revenue"])
+    
+    LOG.info("Анализ завершён:")
+    LOG.info("  - Клиентов: %d", len(clients_enriched))
+    LOG.info("  - Товаров matched: %d", total_matched)
+    LOG.info("  - Товаров unmatched: %d", total_unmatched)
+    LOG.info("  - Товаров с низкой маржой: %d", len(low_margin_items))
+    
+    return {
+        "clients": clients_enriched,
+        "low_margin_items": low_margin_items,
+        "total_matched": total_matched,
+        "total_unmatched": total_unmatched
+    }
+
+# ──────────────────────────────────────────────────────────────────
+# Генерация отчётов
+def generate_json_report(result: Dict[str, Any],
+                         sales_data: Dict[str, Any],
+                         gross_data: Dict[str, Any]) -> Path:
+    """Сохранить JSON отчёт"""
+    output = {
+        "report_type": "SALES_WITH_PROFITABILITY",
+        "generated_at": datetime.now(TZ).strftime("%Y-%m-%d %H:%M:%S"),
+        "version": __VERSION__,
+        "sources": {
+            "sales_period": sales_data.get("period"),
+            "sales_manager": sales_data.get("manager"),
+            "gross_period": gross_data.get("period")
+        },
+        "thresholds": {
+            "loss_margin": MARGIN_LOSS,
+            "critical_margin": MARGIN_CRITICAL,
+            "low_margin": MARGIN_LOW
+        },
+        "match_rate": {
+            "matched": result["total_matched"],
+            "unmatched": result["total_unmatched"]
+        },
+        "clients": result["clients"],
+        "low_margin_summary": result["low_margin_items"][:20]  # топ-20
+    }
+    
+    path = ANALYTICS_DIR / "sales_profitability.json"
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(output, f, ensure_ascii=False, indent=2)
+    
+    LOG.info("JSON отчёт: %s", path)
+    return path
+
+def generate_html_report(result: Dict[str, Any],
+                         sales_data: Dict[str, Any],
+                         gross_data: Dict[str, Any]) -> Path:
+    """Сгенерировать HTML отчёт"""
+    
+    clients = result["clients"]
+    low_margin_items = result["low_margin_items"][:20]  # топ-20
+    
+    html = f"""<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Продажи + Рентабельность</title>
+<style>
+:root {{
+  --bg:#f7fbff; --grid:#d7e6ff; --th:#e8f1ff; --alt:#f3f8ff; --ink:#111;
+  --red:#dc3545; --yellow:#ffc107; --orange:#fd7e14; --green:#28a745;
+}}
+* {{ box-sizing:border-box }}
+body {{ font-family:system-ui,Arial,sans-serif; font-size:14px; margin:0; background:var(--bg); color:var(--ink) }}
+.wrap {{ max-width:1400px; margin:0 auto; padding:20px }}
+h1 {{ margin:0 0 10px; font-size:24px }}
+h2 {{ margin:20px 0 10px; font-size:18px; border-bottom:2px solid var(--grid); padding-bottom:5px }}
+.meta {{ color:#555; line-height:1.6; margin-bottom:20px }}
+.key {{ font-weight:600 }}
+.alert {{ background:#fff3cd; border-left:4px solid var(--orange); padding:15px; margin:20px 0; border-radius:5px }}
+.alert h3 {{ margin:0 0 10px; color:var(--orange) }}
+.client-card {{ background:#fff; border:1px solid var(--grid); border-radius:8px; padding:15px; margin-bottom:15px }}
+.client-header {{ display:flex; justify-content:space-between; align-items:center; margin-bottom:10px }}
+.client-name {{ font-size:16px; font-weight:600 }}
+.client-metrics {{ display:flex; gap:20px; margin-bottom:10px; font-size:13px; color:#666 }}
+.client-metrics strong {{ color:var(--ink) }}
+table {{ width:100%; border-collapse:collapse }}
+th,td {{ padding:8px; border-bottom:1px solid var(--grid); text-align:left }}
+th {{ background:var(--th); font-weight:600; font-size:12px }}
+td {{ font-size:13px }}
+.num {{ text-align:right; font-variant-numeric:tabular-nums }}
+.status-loss {{ background:#ffe5e8; color:var(--red); font-weight:600; padding:4px 8px; border-radius:4px }}
+.status-critical {{ background:#fff4e5; color:var(--orange); font-weight:600; padding:4px 8px; border-radius:4px }}
+.status-low {{ background:#fffbec; color:#856404; font-weight:600; padding:4px 8px; border-radius:4px }}
+.status-ok {{ color:var(--green); font-weight:600 }}
+.margin-loss {{ color:var(--red); font-weight:700 }}
+.margin-critical {{ color:var(--orange); font-weight:700 }}
+.margin-low {{ color:#856404; font-weight:700 }}
+.margin-ok {{ color:var(--green) }}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>📊 Продажи + Рентабельность</h1>
+<div class="meta">
+  <span class="key">Период:</span> {sales_data.get("period", "Не указан")}<br>
+  <span class="key">Менеджер:</span> {sales_data.get("manager", "Не указан")}<br>
+  <span class="key">Сформировано:</span> {datetime.now(TZ).strftime("%d.%m.%Y %H:%M")}<br>
+  <span class="key">Версия:</span> {__VERSION__}
+</div>
+"""
+    
+    # Сводка по низкомаржинальным товарам
+    if low_margin_items:
+        html += f"""
+<div class="alert">
+  <h3>⚠️ Товары с низкой рентабельностью (требуют корректировки прайса)</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Товар</th>
+        <th class="num">Выручка</th>
+        <th class="num">Маржа %</th>
+        <th class="num">Рекомендация</th>
+      </tr>
+    </thead>
+    <tbody>
+"""
+        for item in low_margin_items:
+            margin_class = (
+                "margin-loss" if item["margin_pct"] < MARGIN_LOSS else
+                "margin-critical" if item["margin_pct"] < MARGIN_CRITICAL else
+                "margin-low"
+            )
+            adjustment = item["price_adjustment"]
+            
+            html += f"""
+      <tr>
+        <td>{item["product"]}</td>
+        <td class="num">{fmt_money(item["revenue"])}</td>
+        <td class="num {margin_class}">{fmt_pct(item["margin_pct"])}</td>
+        <td class="num">Поднять цену на {fmt_pct(adjustment)}</td>
+      </tr>
+"""
+        
+        html += """
+    </tbody>
+  </table>
+</div>
+"""
+    
+    # Клиенты с товарами
+    html += "<h2>Клиенты и товары</h2>\n"
+    
+    for client in clients:
+        html += f"""
+<div class="client-card">
+  <div class="client-header">
+    <div class="client-name">{client["client"]}</div>
+  </div>
+  <div class="client-metrics">
+    <div>Выручка: <strong>{fmt_money(client["total_revenue"])}</strong></div>
+    <div>Средняя маржа: <strong>{fmt_pct(client["avg_margin_pct"])}</strong></div>
+    <div>Прибыль: <strong>{fmt_money(client["total_profit"])}</strong></div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Товар</th>
+        <th class="num">Кол-во</th>
+        <th class="num">Цена</th>
+        <th class="num">Сумма</th>
+        <th class="num">Маржа %</th>
+        <th class="num">Прибыль</th>
+        <th>Статус</th>
+      </tr>
+    </thead>
+    <tbody>
+"""
+        for prod in client["products"]:
+            margin_text = fmt_pct(prod["margin_pct"]) if prod["margin_pct"] is not None else "—"
+            profit_text = fmt_money(prod["profit"]) if prod["profit"] is not None else "—"
+            
+            margin_class = ""
+            if prod["margin_pct"] is not None:
+                if prod["margin_pct"] < MARGIN_LOSS:
+                    margin_class = "margin-loss"
+                elif prod["margin_pct"] < MARGIN_CRITICAL:
+                    margin_class = "margin-critical"
+                elif prod["margin_pct"] < MARGIN_LOW:
+                    margin_class = "margin-low"
+                else:
+                    margin_class = "margin-ok"
+            
+            status_class = f"status-{prod['status'].lower()}" if prod["status"] != "UNKNOWN" else ""
+            
+            html += f"""
+      <tr>
+        <td>{prod["product"]}</td>
+        <td class="num">{prod["qty"]:.2f}</td>
+        <td class="num">{fmt_money(prod["price"])}</td>
+        <td class="num">{fmt_money(prod["sum"])}</td>
+        <td class="num {margin_class}">{margin_text}</td>
+        <td class="num">{profit_text}</td>
+        <td><span class="{status_class}">{prod["status_label"]}</span></td>
+      </tr>
+"""
+        
+        html += """
+    </tbody>
+  </table>
+</div>
+"""
+    
+    html += """
+</div>
+</body>
+</html>
+"""
+    
+    path = ANALYTICS_DIR / "sales_profitability.html"
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(html)
+    
+    LOG.info("HTML отчёт: %s", path)
+    return path
+
+# ──────────────────────────────────────────────────────────────────
+# Главная функция
+def main() -> int:
+    _ensure_file_logging()
+    LOG.info("=== Отчёт: Продажи + Рентабельность ===")
+    
+    try:
+        # 1. Загрузка данных
+        sales_data = load_latest_sales()
+        if not sales_data:
+            return 1
+        
+        gross_data = load_latest_gross()
+        if not gross_data:
+            return 1
+        
+        # 2. Построение справочника маржи
+        margin_dict = build_margin_dict(gross_data)
+        
+        # 3. Анализ продаж с рентабельностью
+        result = analyze_sales_with_profitability(sales_data, margin_dict)
+        
+        # 4. Генерация отчётов
+        json_path = generate_json_report(result, sales_data, gross_data)
+        html_path = generate_html_report(result, sales_data, gross_data)
+        
+        LOG.info("=== ГОТОВО ===")
+        LOG.info("JSON: %s", json_path)
+        LOG.info("HTML: %s", html_path)
+        
+        return 0
+        
+    except Exception as e:
+        LOG.error("FAILED", exc_info=e)
+        return 2
+
+if __name__ == "__main__":
+    raise SystemExit(main())
