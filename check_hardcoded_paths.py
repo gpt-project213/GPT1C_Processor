@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-check_hardcoded_paths.py — линтер жёстких путей
+check_hardcoded_paths.py -- линтер жёстких путей
 Запуск: python check_hardcoded_paths.py [--fix-hint] [файл1.py файл2.py ...]
-Без аргументов — проверяет все .py в текущей папке рекурсивно.
+Без аргументов -- проверяет все .py в текущей папке рекурсивно.
 Exit code: 0 = OK, 1 = найдены нарушения.
 
 Используется как pre-commit hook и в sync_project_to_github.ps1.
@@ -14,34 +14,34 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 
-# ── Что считается нарушением ──────────────────────────────────────────────────
+# -- Что считается нарушением --------------------------------------------------
 
 # 1. Жёсткий диск: "E:\...", 'C:\...', r"D:\..."  (включая r"..." raw-строки)
-#    X:\ исключён — стандартный placeholder в документации/примерах ("X:\...\folder")
+#    X:\ исключён -- стандартный placeholder в документации/примерах ("X:\...\folder")
 DRIVE_RE = re.compile(
     r"""[rR]?["']([A-WYZ]:[/\\][^"']{2,80})["']""",
     re.IGNORECASE
 )
 
-# 2. Голый относительный Path без ROOT-якоря — Path("logs"), Path("reports/html")
+# 2. Голый относительный Path без ROOT-якоря -- Path("logs"), Path("reports/html")
 #    Только если в файле нет ROOT = Path(__file__) и нет from config import
 BARE_PATH_RE = re.compile(
     r'''Path\(\s*["'](?!https?://)([a-zA-Z0-9_/\\.-]{3,60})["']\s*\)'''
 )
 
-# Исключения — допустимые строки в Path()
+# Исключения -- допустимые строки в Path()
 BARE_PATH_WHITELIST = {
     "utf-8", "utf-8-sig", "r", "w", "rb", "wb",
     "html", "xml", "json", "yaml", ".", "..",
     "utf8", "cp1251",
 }
 
-# ── Паттерны "файл уже правильный" ───────────────────────────────────────────
+# -- Паттерны "файл уже правильный" -------------------------------------------
 HAS_ROOT     = re.compile(r'ROOT\s*=\s*Path\s*\(\s*__file__\s*\)')
 HAS_CFG      = re.compile(r'from\s+config\s+import|import\s+config\b')
 HAS_ROOT_DIR = re.compile(r'ROOT_DIR\s*=\s*Path\s*\(\s*__file__\s*\)')
 
-# ── Исключённые файлы (сам линтер, конфиги и т.д.) ───────────────────────────
+# -- Исключённые файлы (сам линтер, конфиги и т.д.) ---------------------------
 SKIP_FILES = {
     "check_hardcoded_paths.py",
     "setup.py", "conf.py",
@@ -50,7 +50,7 @@ SKIP_FILES = {
     "inject_local.py",       # вспомогательный инструмент tools/
 }
 
-# ── Цвета для терминала ───────────────────────────────────────────────────────
+# -- Цвета для терминала -------------------------------------------------------
 RED    = "\033[91m"
 YELLOW = "\033[93m"
 GREEN  = "\033[92m"
@@ -79,11 +79,11 @@ def check_file(path: Path) -> list[tuple[int, str, str]]:
         if stripped.startswith("#"):
             continue
 
-        # Пропускаем строки в docstring (упрощённо — строки только с кавычками)
+        # Пропускаем строки в docstring (упрощённо -- строки только с кавычками)
         if stripped.startswith('"""') or stripped.startswith("'''"):
             continue
 
-        # ── Проверка 1: жёсткий путь на диск ─────────────────────────────────
+        # -- Проверка 1: жёсткий путь на диск ---------------------------------
         for m in DRIVE_RE.finditer(line):
             path_val = m.group(1).replace("\\", "/")
             parts = [p for p in path_val.split("/") if p and ":" not in p]
@@ -91,10 +91,10 @@ def check_file(path: Path) -> list[tuple[int, str, str]]:
             issues.append((
                 i,
                 "HARDCODED_DRIVE",
-                f'Жёсткий путь: {m.group(0)!r}  →  замени на ROOT / "{hint_rel}"'
+                f'Жёсткий путь: {m.group(0)!r}  ->  замени на ROOT / "{hint_rel}"'
             ))
 
-        # ── Проверка 2: голый Path() без ROOT ────────────────────────────────
+        # -- Проверка 2: голый Path() без ROOT --------------------------------
         if not anchored:
             for m in BARE_PATH_RE.finditer(line):
                 val = m.group(1)
@@ -105,15 +105,23 @@ def check_file(path: Path) -> list[tuple[int, str, str]]:
                 issues.append((
                     i,
                     "BARE_PATH",
-                    f'Path("{val}") без ROOT — добавь ROOT = Path(__file__).resolve().parent  в начало файла'
+                    f'Path("{val}") без ROOT -- добавь ROOT = Path(__file__).resolve().parent  в начало файла'
                 ))
 
     return issues
 
 
 def main(argv=None):
+    # Фикс Windows cp1251: принудительно UTF-8 для вывода в консоль
+    import sys as _sys
+    if hasattr(_sys.stdout, "reconfigure"):
+        try:
+            _sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
     ap = argparse.ArgumentParser(description="Линтер жёстких путей")
-    ap.add_argument("files", nargs="*", help="Файлы для проверки (по умолчанию — все .py рекурсивно)")
+    ap.add_argument("files", nargs="*", help="Файлы для проверки (по умолчанию -- все .py рекурсивно)")
     ap.add_argument("--strict", action="store_true", help="BARE_PATH тоже считать ошибкой (exit 1)")
     ap.add_argument("--quiet",  action="store_true", help="Только итог, без деталей")
     args = ap.parse_args(argv)
@@ -158,17 +166,17 @@ def main(argv=None):
             for line_num, code, msg in warnings:
                 print(f"  {YELLOW}L{line_num:4d} [{code}]{RESET} {msg}")
 
-    # ── Итог ─────────────────────────────────────────────────────────────────
+    # -- Итог -----------------------------------------------------------------
     print()
     if total_errors == 0 and total_warnings == 0:
-        print(f"{GREEN}✅ Жёстких путей не найдено — проект портативный!{RESET}")
+        print(f"{GREEN}[OK] Zhyostkikh putey ne naydeno -- proekt portativny!{RESET}")
         return 0
 
     if total_errors > 0:
-        print(f"{RED}🔴 ОШИБКИ: {total_errors} жёстких путей на диск в {files_with_issues} файлах{RESET}")
+        print(f"{RED}[ERROR] Zhyostkie puti: {total_errors} v {files_with_issues} faylakh{RESET}")
 
     if total_warnings > 0:
-        print(f"{YELLOW}⚠️  ПРЕДУПРЕЖДЕНИЯ: {total_warnings} голых Path() без ROOT{RESET}")
+        print(f"{YELLOW}[WARN] Bare Path() bez ROOT: {total_warnings}{RESET}")
 
     if total_errors > 0:
         print(f"\n{BOLD}Правило:{RESET}")
