@@ -1,5 +1,5 @@
 ﻿{
-    "generated_at":  "2026-03-06 11:46:10",
+    "generated_at":  "2026-03-06 13:58:21",
     "timezone":  "Asia/Almaty",
     "repo":  {
                  "owner":  "gpt-project213",
@@ -9,13 +9,13 @@
                  "raw_base":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master"
              },
     "summary":  {
-                    "total_files":  65,
+                    "total_files":  67,
                     "top_levels":  5
                 },
     "sections":  [
                      {
                          "section":  ".",
-                         "count":  45,
+                         "count":  46,
                          "files":  [
                                        {
                                            "path":  ".gitignore",
@@ -97,6 +97,15 @@
                                            "top_level":  ".",
                                            "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/analyze_debt_excel.py",
                                            "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/analyze_debt_excel.py"
+                                       },
+                                       {
+                                           "path":  "check_hardcoded_paths.py",
+                                           "name":  "check_hardcoded_paths.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/check_hardcoded_paths.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/check_hardcoded_paths.py"
                                        },
                                        {
                                            "path":  "cleanup_cache.py",
@@ -252,6 +261,15 @@
                                            "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/net_profit_report.py"
                                        },
                                        {
+                                           "path":  "Project status.MD",
+                                           "name":  "Project status.MD",
+                                           "extension":  ".MD",
+                                           "type":  "md",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/Project status.MD",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/Project status.MD"
+                                       },
+                                       {
                                            "path":  "PROJECT_CONTEXT.md",
                                            "name":  "PROJECT_CONTEXT.md",
                                            "extension":  ".md",
@@ -277,15 +295,6 @@
                                            "top_level":  ".",
                                            "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/repo_map.json",
                                            "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/repo_map.json"
-                                       },
-                                       {
-                                           "path":  "reports_scan.csv",
-                                           "name":  "reports_scan.csv",
-                                           "extension":  ".csv",
-                                           "type":  "csv",
-                                           "top_level":  ".",
-                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/reports_scan.csv",
-                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/reports_scan.csv"
                                        },
                                        {
                                            "path":  "requirements.txt",
@@ -586,7 +595,7 @@
                      },
                      {
                          "section":  "tools",
-                         "count":  4,
+                         "count":  5,
                          "files":  [
                                        {
                                            "path":  "tools/__init__.py",
@@ -596,6 +605,15 @@
                                            "top_level":  "tools",
                                            "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/tools/__init__.py",
                                            "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/tools/__init__.py"
+                                       },
+                                       {
+                                           "path":  "tools/install_hooks.py",
+                                           "name":  "install_hooks.py",
+                                           "extension":  ".py",
+                                           "type":  "py",
+                                           "top_level":  "tools",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/tools/install_hooks.py",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/tools/install_hooks.py"
                                        },
                                        {
                                            "path":  "tools/patch_mobile_click.py",
