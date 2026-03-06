@@ -1,5 +1,5 @@
 ﻿{
-    "generated_at":  "2026-03-06 11:10:06",
+    "generated_at":  "2026-03-06 11:46:10",
     "timezone":  "Asia/Almaty",
     "repo":  {
                  "owner":  "gpt-project213",
@@ -9,13 +9,13 @@
                  "raw_base":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master"
              },
     "summary":  {
-                    "total_files":  64,
+                    "total_files":  65,
                     "top_levels":  5
                 },
     "sections":  [
                      {
                          "section":  ".",
-                         "count":  44,
+                         "count":  45,
                          "files":  [
                                        {
                                            "path":  ".gitignore",
@@ -277,6 +277,15 @@
                                            "top_level":  ".",
                                            "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/repo_map.json",
                                            "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/repo_map.json"
+                                       },
+                                       {
+                                           "path":  "reports_scan.csv",
+                                           "name":  "reports_scan.csv",
+                                           "extension":  ".csv",
+                                           "type":  "csv",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/reports_scan.csv",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/reports_scan.csv"
                                        },
                                        {
                                            "path":  "requirements.txt",
