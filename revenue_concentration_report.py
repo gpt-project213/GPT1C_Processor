@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-revenue_concentration_report.py · v1.1.1 (26.02.2026)
+revenue_concentration_report.py · v1.1.2 (06.03.2026)
+FIX: Bug #RC1 - добавлена normalize_client_name (NameError при каждом запуске)
 ────────────────────────────────────────────────────────────────────
 Отчёт "Концентрация выручки"
 
@@ -39,8 +40,24 @@ LOGS.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("concentration")
 
-__VERSION__ = "1.1.0"
+__VERSION__ = "1.1.2"
 NBSP = "\u202f"
+
+# ──────────────────────────────────────────────────────────────────
+# FIX v1.1.2 (06.03.2026): Bug #RC1 - NameError: normalize_client_name not defined
+# Функция вызывалась на line 122 но нигде не была определена
+def normalize_client_name(name: str) -> str:
+    """
+    Нормализует имя клиента для дедупликации при мёрже нескольких JSON.
+    Убирает префиксы менеджера, скобки, спецсимволы, схлопывает пробелы.
+    "О ТД Асем (холодильник № 4)" -> "тд асем холодильник 4"
+    """
+    import re as _re
+    s = str(name).lower().strip()
+    s = _re.sub(r"^[оаемOАЕМ]\s+", "", s)   # убираем префикс менеджера
+    s = _re.sub(r"[^\w\s]", " ", s)          # убираем спецсимволы
+    s = _re.sub(r"\s+", " ", s)               # схлопываем пробелы
+    return s.strip()
 
 # ──────────────────────────────────────────────────────────────────
 def load_all_jsons_merged(pattern: str, min_clients: int = 0, skip_keywords: list = None) -> Optional[Dict[str, Any]]:
