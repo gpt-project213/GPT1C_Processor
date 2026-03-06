@@ -1,0 +1,435 @@
+﻿[2026-03-06 13:58:17] START GITHUB SYNC
+[2026-03-06 13:58:17] ProjectRoot = E:\GPT1C_Processor_analitic
+[2026-03-06 13:58:17] TargetBranch = master
+[2026-03-06 13:58:18] Repo = gpt-project213/GPT1C_Processor
+[2026-03-06 13:58:18] CurrentDirectory = E:\GPT1C_Processor_analitic
+    CMD: git rev-parse --abbrev-ref HEAD
+    OUT: master
+[2026-03-06 13:58:18] CurrentBranch = master
+    CMD: git remote get-url origin
+    OUT: https://github.com/gpt-project213/GPT1C_Processor.git
+[2026-03-06 13:58:18] Origin = https://github.com/gpt-project213/GPT1C_Processor.git
+    CMD: git -c core.quotepath=false ls-files
+    OUT: .gitignore
+    OUT: AI_CONTEXT.md
+    OUT: CODE_INDEX.md
+    OUT: DEPENDENCY_MAP.md
+    OUT: PROJECT_CONTEXT.md
+    OUT: STATUS.md
+    OUT: ai_analyzer.py
+    OUT: analyze_debt_excel.py
+    OUT: bot/gross_summary.py
+    OUT: bot/inject_local.py
+    OUT: bot/inventory_summary.py
+    OUT: bot/opportunity_loss.py
+    OUT: bot/sales_summary.py
+    OUT: bot/send_reports.py
+    OUT: bot/silence_alerts.py
+    OUT: bot/user_tracker.py
+    OUT: cleanup_cache.py
+    OUT: config.py
+    OUT: config/pattern_config.yaml
+    OUT: debt_auto_report.py
+    OUT: dso_aging_report.py
+    OUT: expenses_parser.py
+    OUT: expenses_report.py
+    OUT: gen_raw_links.ps1
+    OUT: gross_parser.py
+    OUT: gross_report.py
+    OUT: gross_report_pct.py
+    OUT: imap_fetcher.py
+    OUT: inventory.py
+    OUT: inventory_cost_parser.py
+    OUT: inventory_turnover_report.py
+    OUT: net_profit_report.py
+    OUT: raw_links.txt
+    OUT: repo_map.json
+    OUT: reports_scan.csv
+    OUT: requirements.txt
+    OUT: revenue_concentration_report.py
+    OUT: rfm_clients_report.py
+    OUT: run_new_reports_now.py
+    OUT: run_pipeline.py
+    OUT: run_pipeline_all_mp.py
+    OUT: sales_parser.py
+    OUT: sales_profitability_report.py
+    OUT: sales_report.py
+    OUT: send_tg.py
+    OUT: start_bot_watchdog.bat
+    OUT: templates/base.html
+    OUT: templates/debt_auto.html
+    OUT: templates/gross.html
+    OUT: templates/gross_percent.html
+    OUT: templates/inventory_simple.html
+    OUT: templates/sales_by_product.html
+    OUT: templates/sales_report_grouped.html
+    OUT: tools/__init__.py
+    OUT: tools/patch_mobile_click.py
+    OUT: tools/sync_project_to_github.ps1
+    OUT: tools/txt_to_html.py
+    OUT: utils.py
+    OUT: utils_common.py
+    OUT: utils_excel.py
+    OUT: ╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Т╨Р╨Ы╨Ю╨Т╨Ю╨Щ.txt
+    OUT: ╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Ф╨Х╨С╨Ш╨в╨Ю╨а╨Ъ╨Ш.txt
+    OUT: ╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Ч╨Р╨в╨а╨Р╨в.txt
+    OUT: ╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Ю╨б╨в╨Р╨в╨Ъ╨Ю╨Т.txt
+    OUT: ╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Я╨а╨Ю╨Ф╨Р╨Ц.txt
+[2026-03-06 13:58:18] Sensitive/runtime tracked files: none
+[2026-03-06 13:58:18] Git status before pre-pull phase:
+    CMD: git status --short
+    OUT:  M cleanup_cache.py
+    OUT:  D reports_scan.csv
+    OUT:  M sales_report.py
+    OUT:  M tools/sync_project_to_github.ps1
+    OUT: ?? "Project status.MD"
+    OUT: ?? check_hardcoded_paths.py
+    OUT: ?? tools/install_hooks.py
+[2026-03-06 13:58:19]    M cleanup_cache.py
+[2026-03-06 13:58:19]    D reports_scan.csv
+[2026-03-06 13:58:19]    M sales_report.py
+[2026-03-06 13:58:19]    M tools/sync_project_to_github.ps1
+[2026-03-06 13:58:19]   ?? "Project status.MD"
+[2026-03-06 13:58:19]   ?? check_hardcoded_paths.py
+[2026-03-06 13:58:19]   ?? tools/install_hooks.py
+    CMD: git status --porcelain
+    OUT:  M cleanup_cache.py
+    OUT:  D reports_scan.csv
+    OUT:  M sales_report.py
+    OUT:  M tools/sync_project_to_github.ps1
+    OUT: ?? "Project status.MD"
+    OUT: ?? check_hardcoded_paths.py
+    OUT: ?? tools/install_hooks.py
+[2026-03-06 13:58:19] Local changes detected before pull. Staging
+    CMD: git add .
+    CMD: git diff --cached --name-only
+    OUT: Project status.MD
+    OUT: check_hardcoded_paths.py
+    OUT: cleanup_cache.py
+    OUT: reports_scan.csv
+    OUT: sales_report.py
+    OUT: tools/install_hooks.py
+    OUT: tools/sync_project_to_github.ps1
+[2026-03-06 13:58:19]   pre-pull: Project status.MD
+[2026-03-06 13:58:19]   pre-pull: check_hardcoded_paths.py
+[2026-03-06 13:58:19]   pre-pull: cleanup_cache.py
+[2026-03-06 13:58:19]   pre-pull: reports_scan.csv
+[2026-03-06 13:58:19]   pre-pull: sales_report.py
+[2026-03-06 13:58:19]   pre-pull: tools/install_hooks.py
+[2026-03-06 13:58:19]   pre-pull: tools/sync_project_to_github.ps1
+[2026-03-06 13:58:19] PrePullCommitMessage = auto commit before pull 2026-03-06 13:58:19
+    CMD: git commit -m auto commit before pull 2026-03-06 13:58:19
+    OUT: [master 4800ef2] auto commit before pull 2026-03-06 13:58:19
+    OUT:  7 files changed, 787 insertions(+), 795 deletions(-)
+    OUT:  create mode 100644 Project status.MD
+    OUT:  create mode 100644 check_hardcoded_paths.py
+    OUT:  delete mode 100644 reports_scan.csv
+    OUT:  create mode 100644 tools/install_hooks.py
+[2026-03-06 13:58:19] Pre-pull auto-commit created
+[2026-03-06 13:58:19] Running git pull --rebase
+    CMD: git pull --rebase origin master
+    OUT: From https://github.com/gpt-project213/GPT1C_Processor
+    OUT:  * branch            master     -> FETCH_HEAD
+    OUT: Current branch master is up to date.
+[2026-03-06 13:58:20]   From https://github.com/gpt-project213/GPT1C_Processor
+[2026-03-06 13:58:20]    * branch            master     -> FETCH_HEAD
+[2026-03-06 13:58:20]   Current branch master is up to date.
+[2026-03-06 13:58:20] Pull --rebase completed
+    CMD: git -c core.quotepath=false ls-files
+    OUT: .gitignore
+    OUT: AI_CONTEXT.md
+    OUT: CODE_INDEX.md
+    OUT: DEPENDENCY_MAP.md
+    OUT: PROJECT_CONTEXT.md
+    OUT: Project status.MD
+    OUT: STATUS.md
+    OUT: ai_analyzer.py
+    OUT: analyze_debt_excel.py
+    OUT: bot/gross_summary.py
+    OUT: bot/inject_local.py
+    OUT: bot/inventory_summary.py
+    OUT: bot/opportunity_loss.py
+    OUT: bot/sales_summary.py
+    OUT: bot/send_reports.py
+    OUT: bot/silence_alerts.py
+    OUT: bot/user_tracker.py
+    OUT: check_hardcoded_paths.py
+    OUT: cleanup_cache.py
+    OUT: config.py
+    OUT: config/pattern_config.yaml
+    OUT: debt_auto_report.py
+    OUT: dso_aging_report.py
+    OUT: expenses_parser.py
+    OUT: expenses_report.py
+    OUT: gen_raw_links.ps1
+    OUT: gross_parser.py
+    OUT: gross_report.py
+    OUT: gross_report_pct.py
+    OUT: imap_fetcher.py
+    OUT: inventory.py
+    OUT: inventory_cost_parser.py
+    OUT: inventory_turnover_report.py
+    OUT: net_profit_report.py
+    OUT: raw_links.txt
+    OUT: repo_map.json
+    OUT: requirements.txt
+    OUT: revenue_concentration_report.py
+    OUT: rfm_clients_report.py
+    OUT: run_new_reports_now.py
+    OUT: run_pipeline.py
+    OUT: run_pipeline_all_mp.py
+    OUT: sales_parser.py
+    OUT: sales_profitability_report.py
+    OUT: sales_report.py
+    OUT: send_tg.py
+    OUT: start_bot_watchdog.bat
+    OUT: templates/base.html
+    OUT: templates/debt_auto.html
+    OUT: templates/gross.html
+    OUT: templates/gross_percent.html
+    OUT: templates/inventory_simple.html
+    OUT: templates/sales_by_product.html
+    OUT: templates/sales_report_grouped.html
+    OUT: tools/__init__.py
+    OUT: tools/install_hooks.py
+    OUT: tools/patch_mobile_click.py
+    OUT: tools/sync_project_to_github.ps1
+    OUT: tools/txt_to_html.py
+    OUT: utils.py
+    OUT: utils_common.py
+    OUT: utils_excel.py
+    OUT: ╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Т╨Р╨Ы╨Ю╨Т╨Ю╨Щ.txt
+    OUT: ╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Ф╨Х╨С╨Ш╨в╨Ю╨а╨Ъ╨Ш.txt
+    OUT: ╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Ч╨Р╨в╨а╨Р╨в.txt
+    OUT: ╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Ю╨б╨в╨Р╨в╨Ъ╨Ю╨Т.txt
+    OUT: ╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Я╨а╨Ю╨Ф╨Р╨Ц.txt
+[2026-03-06 13:58:20] Updated raw_links.txt
+    CMD: git -c core.quotepath=false ls-files
+    OUT: .gitignore
+    OUT: AI_CONTEXT.md
+    OUT: CODE_INDEX.md
+    OUT: DEPENDENCY_MAP.md
+    OUT: PROJECT_CONTEXT.md
+    OUT: Project status.MD
+    OUT: STATUS.md
+    OUT: ai_analyzer.py
+    OUT: analyze_debt_excel.py
+    OUT: bot/gross_summary.py
+    OUT: bot/inject_local.py
+    OUT: bot/inventory_summary.py
+    OUT: bot/opportunity_loss.py
+    OUT: bot/sales_summary.py
+    OUT: bot/send_reports.py
+    OUT: bot/silence_alerts.py
+    OUT: bot/user_tracker.py
+    OUT: check_hardcoded_paths.py
+    OUT: cleanup_cache.py
+    OUT: config.py
+    OUT: config/pattern_config.yaml
+    OUT: debt_auto_report.py
+    OUT: dso_aging_report.py
+    OUT: expenses_parser.py
+    OUT: expenses_report.py
+    OUT: gen_raw_links.ps1
+    OUT: gross_parser.py
+    OUT: gross_report.py
+    OUT: gross_report_pct.py
+    OUT: imap_fetcher.py
+    OUT: inventory.py
+    OUT: inventory_cost_parser.py
+    OUT: inventory_turnover_report.py
+    OUT: net_profit_report.py
+    OUT: raw_links.txt
+    OUT: repo_map.json
+    OUT: requirements.txt
+    OUT: revenue_concentration_report.py
+    OUT: rfm_clients_report.py
+    OUT: run_new_reports_now.py
+    OUT: run_pipeline.py
+    OUT: run_pipeline_all_mp.py
+    OUT: sales_parser.py
+    OUT: sales_profitability_report.py
+    OUT: sales_report.py
+    OUT: send_tg.py
+    OUT: start_bot_watchdog.bat
+    OUT: templates/base.html
+    OUT: templates/debt_auto.html
+    OUT: templates/gross.html
+    OUT: templates/gross_percent.html
+    OUT: templates/inventory_simple.html
+    OUT: templates/sales_by_product.html
+    OUT: templates/sales_report_grouped.html
+    OUT: tools/__init__.py
+    OUT: tools/install_hooks.py
+    OUT: tools/patch_mobile_click.py
+    OUT: tools/sync_project_to_github.ps1
+    OUT: tools/txt_to_html.py
+    OUT: utils.py
+    OUT: utils_common.py
+    OUT: utils_excel.py
+    OUT: ╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Т╨Р╨Ы╨Ю╨Т╨Ю╨Щ.txt
+    OUT: ╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Ф╨Х╨С╨Ш╨в╨Ю╨а╨Ъ╨Ш.txt
+    OUT: ╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Ч╨Р╨в╨а╨Р╨в.txt
+    OUT: ╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Ю╨б╨в╨Р╨в╨Ъ╨Ю╨Т.txt
+    OUT: ╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Я╨а╨Ю╨Ф╨Р╨Ц.txt
+[2026-03-06 13:58:21] Updated repo_map.json
+    CMD: git -c core.quotepath=false ls-files
+    OUT: .gitignore
+    OUT: AI_CONTEXT.md
+    OUT: CODE_INDEX.md
+    OUT: DEPENDENCY_MAP.md
+    OUT: PROJECT_CONTEXT.md
+    OUT: Project status.MD
+    OUT: STATUS.md
+    OUT: ai_analyzer.py
+    OUT: analyze_debt_excel.py
+    OUT: bot/gross_summary.py
+    OUT: bot/inject_local.py
+    OUT: bot/inventory_summary.py
+    OUT: bot/opportunity_loss.py
+    OUT: bot/sales_summary.py
+    OUT: bot/send_reports.py
+    OUT: bot/silence_alerts.py
+    OUT: bot/user_tracker.py
+    OUT: check_hardcoded_paths.py
+    OUT: cleanup_cache.py
+    OUT: config.py
+    OUT: config/pattern_config.yaml
+    OUT: debt_auto_report.py
+    OUT: dso_aging_report.py
+    OUT: expenses_parser.py
+    OUT: expenses_report.py
+    OUT: gen_raw_links.ps1
+    OUT: gross_parser.py
+    OUT: gross_report.py
+    OUT: gross_report_pct.py
+    OUT: imap_fetcher.py
+    OUT: inventory.py
+    OUT: inventory_cost_parser.py
+    OUT: inventory_turnover_report.py
+    OUT: net_profit_report.py
+    OUT: raw_links.txt
+    OUT: repo_map.json
+    OUT: requirements.txt
+    OUT: revenue_concentration_report.py
+    OUT: rfm_clients_report.py
+    OUT: run_new_reports_now.py
+    OUT: run_pipeline.py
+    OUT: run_pipeline_all_mp.py
+    OUT: sales_parser.py
+    OUT: sales_profitability_report.py
+    OUT: sales_report.py
+    OUT: send_tg.py
+    OUT: start_bot_watchdog.bat
+    OUT: templates/base.html
+    OUT: templates/debt_auto.html
+    OUT: templates/gross.html
+    OUT: templates/gross_percent.html
+    OUT: templates/inventory_simple.html
+    OUT: templates/sales_by_product.html
+    OUT: templates/sales_report_grouped.html
+    OUT: tools/__init__.py
+    OUT: tools/install_hooks.py
+    OUT: tools/patch_mobile_click.py
+    OUT: tools/sync_project_to_github.ps1
+    OUT: tools/txt_to_html.py
+    OUT: utils.py
+    OUT: utils_common.py
+    OUT: utils_excel.py
+    OUT: ╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Т╨Р╨Ы╨Ю╨Т╨Ю╨Щ.txt
+    OUT: ╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Ф╨Х╨С╨Ш╨в╨Ю╨а╨Ъ╨Ш.txt
+    OUT: ╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Ч╨Р╨в╨а╨Р╨в.txt
+    OUT: ╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Ю╨б╨в╨Р╨в╨Ъ╨Ю╨Т.txt
+    OUT: ╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Я╨а╨Ю╨Ф╨Р╨Ц.txt
+[2026-03-06 13:58:21] Updated AI_CONTEXT.md
+    CMD: git -c core.quotepath=false ls-files
+    OUT: .gitignore
+    OUT: AI_CONTEXT.md
+    OUT: CODE_INDEX.md
+    OUT: DEPENDENCY_MAP.md
+    OUT: PROJECT_CONTEXT.md
+    OUT: Project status.MD
+    OUT: STATUS.md
+    OUT: ai_analyzer.py
+    OUT: analyze_debt_excel.py
+    OUT: bot/gross_summary.py
+    OUT: bot/inject_local.py
+    OUT: bot/inventory_summary.py
+    OUT: bot/opportunity_loss.py
+    OUT: bot/sales_summary.py
+    OUT: bot/send_reports.py
+    OUT: bot/silence_alerts.py
+    OUT: bot/user_tracker.py
+    OUT: check_hardcoded_paths.py
+    OUT: cleanup_cache.py
+    OUT: config.py
+    OUT: config/pattern_config.yaml
+    OUT: debt_auto_report.py
+    OUT: dso_aging_report.py
+    OUT: expenses_parser.py
+    OUT: expenses_report.py
+    OUT: gen_raw_links.ps1
+    OUT: gross_parser.py
+    OUT: gross_report.py
+    OUT: gross_report_pct.py
+    OUT: imap_fetcher.py
+    OUT: inventory.py
+    OUT: inventory_cost_parser.py
+    OUT: inventory_turnover_report.py
+    OUT: net_profit_report.py
+    OUT: raw_links.txt
+    OUT: repo_map.json
+    OUT: requirements.txt
+    OUT: revenue_concentration_report.py
+    OUT: rfm_clients_report.py
+    OUT: run_new_reports_now.py
+    OUT: run_pipeline.py
+    OUT: run_pipeline_all_mp.py
+    OUT: sales_parser.py
+    OUT: sales_profitability_report.py
+    OUT: sales_report.py
+    OUT: send_tg.py
+    OUT: start_bot_watchdog.bat
+    OUT: templates/base.html
+    OUT: templates/debt_auto.html
+    OUT: templates/gross.html
+    OUT: templates/gross_percent.html
+    OUT: templates/inventory_simple.html
+    OUT: templates/sales_by_product.html
+    OUT: templates/sales_report_grouped.html
+    OUT: tools/__init__.py
+    OUT: tools/install_hooks.py
+    OUT: tools/patch_mobile_click.py
+    OUT: tools/sync_project_to_github.ps1
+    OUT: tools/txt_to_html.py
+    OUT: utils.py
+    OUT: utils_common.py
+    OUT: utils_excel.py
+    OUT: ╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Т╨Р╨Ы╨Ю╨Т╨Ю╨Щ.txt
+    OUT: ╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Ф╨Х╨С╨Ш╨в╨Ю╨а╨Ъ╨Ш.txt
+    OUT: ╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Ч╨Р╨в╨а╨Р╨в.txt
+    OUT: ╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Ю╨б╨в╨Р╨в╨Ъ╨Ю╨Т.txt
+    OUT: ╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Я╨а╨Ю╨Ф╨Р╨Ц.txt
+[2026-03-06 13:58:21] Updated STATUS.md
+[2026-03-06 13:58:21] Staging changes with git add .
+    CMD: git add .
+[2026-03-06 13:58:21] git add completed
+    CMD: git diff --cached --name-only
+    OUT: AI_CONTEXT.md
+    OUT: STATUS.md
+    OUT: raw_links.txt
+    OUT: repo_map.json
+[2026-03-06 13:58:21] Staged files:
+[2026-03-06 13:58:21]   AI_CONTEXT.md
+[2026-03-06 13:58:21]   STATUS.md
+[2026-03-06 13:58:21]   raw_links.txt
+[2026-03-06 13:58:21]   repo_map.json
+[2026-03-06 13:58:21] CommitMessage = update project status
+[2026-03-06 13:58:21] Creating commit
+    CMD: git commit -m update project status
+    OUT: [master 42d6434] update project status
+    OUT:  4 files changed, 37 insertions(+), 17 deletions(-)
+[2026-03-06 13:58:22]   [master 42d6434] update project status
+[2026-03-06 13:58:22]    4 files changed, 37 insertions(+), 17 deletions(-)
+[2026-03-06 13:58:22] Commit created
+[2026-03-06 13:58:22] Р—Р°РїСѓСЃРє Р»РёРЅС‚РµСЂР° РїСѓС‚РµР№...

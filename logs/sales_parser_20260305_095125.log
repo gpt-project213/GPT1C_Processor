@@ -1,0 +1,5 @@
+2026-03-05 04:51:25,051, INFO Лог-файл: E:\GPT1C_Processor_analitic\logs\sales_parser_20260305_095125.log
+2026-03-05 04:51:25,051, INFO Файл: E:\GPT1C_Processor_analitic\reports\excel\clean\Продажи по товару Ергали (2).xlsx.__clean.xlsx
+2026-03-05 04:51:25,252, INFO JSON создан: E:\GPT1C_Processor_analitic\reports\json\sales_продажи_по_товару_ергали_2xlsx__clean_февраль_2026.json
+2026-03-05 04:51:25,253, INFO Клиентов: 70, Выручка: 0.00 ₸
+2026-03-05 04:51:25,253, INFO OK: E:\GPT1C_Processor_analitic\reports\json\sales_продажи_по_товару_ергали_2xlsx__clean_февраль_2026.json

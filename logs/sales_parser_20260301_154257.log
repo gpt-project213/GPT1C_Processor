@@ -1,0 +1,5 @@
+2026-03-01 15:42:57,308, INFO Лог-файл: F:\GPT1C_Processor_analitic\logs\sales_parser_20260301_154257.log
+2026-03-01 15:42:57,309, INFO Файл: reports\excel\processed\20260227094145_Продажи Ергали (218).xlsx
+2026-03-01 15:42:57,513, INFO JSON создан: F:\GPT1C_Processor_analitic\reports\json\sales_20260227094145_продажи_ергали_218_27_февраля_2026_.json
+2026-03-01 15:42:57,513, INFO Клиентов: 2, Выручка: 543191.00 ₸
+2026-03-01 15:42:57,513, INFO OK: F:\GPT1C_Processor_analitic\reports\json\sales_20260227094145_продажи_ергали_218_27_февраля_2026_.json

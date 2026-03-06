@@ -1,0 +1,42 @@
+2026-02-28 12:47:37,067, INFO Лог-файл: F:\GPT1C_Processor_analitic\logs\sales_20260228_174737.log
+2026-02-28 12:47:37,067, INFO Файл: F:\GPT1C_Processor_analitic\reports\queue\Продажи Оксана (243).xlsx
+2026-02-28 12:47:37,067, ERROR FAILED on F:\GPT1C_Processor_analitic\reports\queue\Продажи Оксана (243).xlsx
+Traceback (most recent call last):
+  File "F:\GPT1C_Processor_analitic\sales_report.py", line 865, in main
+    out, suspect = build_report(path, write_suspect_html=args.suspect)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GPT1C_Processor_analitic\sales_report.py", line 786, in build_report
+    raw = read_excel_raw(xlsx)
+          ^^^^^^^^^^^^^^^^^^^^
+  File "F:\GPT1C_Processor_analitic\sales_report.py", line 263, in read_excel_raw
+    clean_path = ensure_clean_xlsx(path, force_fix=True)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GPT1C_Processor_analitic\utils_excel.py", line 208, in ensure_clean_xlsx
+    _safe_replace(temp_path, clean)
+  File "F:\GPT1C_Processor_analitic\utils_excel.py", line 149, in _safe_replace
+    src.replace(dst)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\pathlib.py", line 1188, in replace
+    os.replace(self, target)
+OSError: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmp1_68gfyn\\Продажи Оксана (243).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Продажи Оксана (243).xlsx.__clean.xlsx'
+2026-02-28 12:47:37,067, INFO done.
+2026-02-28 12:47:37,715, INFO Лог-файл: F:\GPT1C_Processor_analitic\logs\sales_20260228_174737.log
+2026-02-28 12:47:37,716, INFO Файл: F:\GPT1C_Processor_analitic\reports\queue\Продажи Оксана (244).xlsx
+2026-02-28 12:47:37,716, ERROR FAILED on F:\GPT1C_Processor_analitic\reports\queue\Продажи Оксана (244).xlsx
+Traceback (most recent call last):
+  File "F:\GPT1C_Processor_analitic\sales_report.py", line 865, in main
+    out, suspect = build_report(path, write_suspect_html=args.suspect)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GPT1C_Processor_analitic\sales_report.py", line 786, in build_report
+    raw = read_excel_raw(xlsx)
+          ^^^^^^^^^^^^^^^^^^^^
+  File "F:\GPT1C_Processor_analitic\sales_report.py", line 263, in read_excel_raw
+    clean_path = ensure_clean_xlsx(path, force_fix=True)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GPT1C_Processor_analitic\utils_excel.py", line 208, in ensure_clean_xlsx
+    _safe_replace(temp_path, clean)
+  File "F:\GPT1C_Processor_analitic\utils_excel.py", line 149, in _safe_replace
+    src.replace(dst)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\pathlib.py", line 1188, in replace
+    os.replace(self, target)
+OSError: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmpmfxftvtj\\Продажи Оксана (244).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Продажи Оксана (244).xlsx.__clean.xlsx'
+2026-02-28 12:47:37,716, INFO done.

@@ -1,0 +1,6 @@
+2026-03-05 09:50:17, INFO Обработка файла: Дебиторы Магира (32).xlsx
+2026-03-05 09:50:17, INFO Создана чистая копия: Дебиторы Магира (32).xlsx.__clean.xlsx
+2026-03-05 09:50:17, INFO Определён тип отчёта: extended
+2026-03-05 09:50:17, INFO JSON сохранён: E:\GPT1C_Processor_analitic\reports\json\debt_ext_Дебиторы Магира (32).json
+2026-03-05 09:50:17, INFO Simple-extract: debt_Дебиторы Магира (32).json (138 контрагентов, closing=10686136)
+2026-03-05 09:50:17, INFO Отчёт сохранён: E:\GPT1C_Processor_analitic\reports\html\debt_ext_Дебиторы Магира (32).html

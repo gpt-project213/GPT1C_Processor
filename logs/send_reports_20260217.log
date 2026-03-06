@@ -1,0 +1,972 @@
+2026-02-17 17:08:04, INFO ✅ json_read_success · file=roles.json; encoding=utf-8
+2026-02-17 17:08:04, INFO {"event": "json_read_success", "file": "roles.json", "encoding": "utf-8"}
+2026-02-17 17:08:04, INFO ✅ json_read_success · file=managers.json; encoding=utf-8
+2026-02-17 17:08:04, INFO {"event": "json_read_success", "file": "managers.json", "encoding": "utf-8"}
+2026-02-17 17:08:04, INFO {"event": "managers_normalized", "count": 4}
+2026-02-17 17:08:04, INFO 🤖 bot_starting · version=v9.4.9
+2026-02-17 17:08:04, INFO {"event": "bot_starting", "version": "v9.4.9"}
+2026-02-17 17:08:04, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-17 17:08:04, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-17 17:08:04, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-17 17:08:04, INFO ⏰ Настроен ежедневный джоб: проверка дней молчания в 14:00
+2026-02-17 17:08:04, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-17 17:08:04, INFO ⏰ Настроен ежедневный джоб: проверка дней молчания в 21:00
+2026-02-17 17:08:04, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-17 17:08:04, INFO 🧹 Настроен janitor: проверка очереди удаления каждые 3600 сек (60 мин)
+2026-02-17 17:08:04, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-17 17:08:04, INFO 🤖 Настроен обработчик очереди ИИ: интервал 120 сек
+2026-02-17 17:08:04, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-17 17:08:04, INFO 📊 Настроена ежедневная сводка админу в 23:00
+2026-02-17 17:08:04, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-17 17:08:04, INFO 🔄 Настроен сброс счётчика ИИ-генераций в 00:01
+2026-02-17 17:08:04, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-17 17:08:04, INFO 🤖 Настроена еженедельная AI генерация: понедельник 10:00
+2026-02-17 17:08:04, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-17 17:08:04, INFO 📊 Настроена еженедельная аналитика: понедельник 10:00
+2026-02-17 17:08:04, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-17 17:08:04, INFO 📦 Настроена краткая сводка остатков: ежедневно 09:00
+2026-02-17 17:08:04, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-17 17:08:04, INFO 💰 Настроена краткая сводка валовой: ежедневно 20:00
+2026-02-17 17:08:04, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-17 17:08:04, INFO 🛒 Настроена краткая сводка продаж: ежедневно 21:00
+2026-02-17 17:08:04, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-17 17:08:04, INFO 🧹 Настроена автоочистка файлов: логи 2д, AI 7д, HTML 30д, JSON 7д, Excel 14д | Запуск в 03:00
+2026-02-17 17:08:04, INFO 🗑️ Автоудаление сообщений через 24 часов
+2026-02-17 17:08:04, INFO 📡 bot_polling_started
+2026-02-17 17:08:04, INFO {"event": "bot_polling_started"}
+2026-02-17 17:08:05, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getMe "HTTP/1.1 200 OK"
+2026-02-17 17:08:07, INFO 🗂️ index_built · files=175; report_types=5; build_ms=2293.0
+2026-02-17 17:08:07, INFO {"event": "index_built", "files": 175, "report_types": 5, "build_ms": 2293.0}
+2026-02-17 17:08:07, INFO 🗂️ initial_index_built
+2026-02-17 17:08:07, INFO {"event": "initial_index_built"}
+2026-02-17 17:08:07, INFO ✅ json_read_success · file=deletion_queue.json; encoding=utf-8
+2026-02-17 17:08:07, INFO {"event": "json_read_success", "file": "deletion_queue.json", "encoding": "utf-8"}
+2026-02-17 17:08:07, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/deleteWebhook "HTTP/1.1 200 OK"
+2026-02-17 17:08:07, INFO Added job "pipeline" to job store "default"
+2026-02-17 17:08:07, INFO Added job "new_reports" to job store "default"
+2026-02-17 17:08:07, INFO Added job "silence_alerts_14h" to job store "default"
+2026-02-17 17:08:07, INFO Added job "silence_alerts_21h" to job store "default"
+2026-02-17 17:08:07, INFO Added job "janitor" to job store "default"
+2026-02-17 17:08:07, INFO Added job "ai_queue_processor" to job store "default"
+2026-02-17 17:08:07, INFO Added job "daily_summary" to job store "default"
+2026-02-17 17:08:07, INFO Added job "reset_ai_state" to job store "default"
+2026-02-17 17:08:07, INFO Added job "weekly_ai_generation" to job store "default"
+2026-02-17 17:08:07, INFO Added job "weekly_analytics" to job store "default"
+2026-02-17 17:08:07, INFO Added job "inventory_summary" to job store "default"
+2026-02-17 17:08:07, INFO Added job "gross_summary" to job store "default"
+2026-02-17 17:08:07, INFO Added job "sales_summary" to job store "default"
+2026-02-17 17:08:07, INFO Added job "cleanup_old_files" to job store "default"
+2026-02-17 17:08:07, INFO Scheduler started
+2026-02-17 17:08:07, INFO Application started
+2026-02-17 17:08:18, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:08:28, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:08:38, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:08:48, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:08:58, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:09:04, INFO Running job "pipeline (trigger: interval[0:10:00], next run at: 2026-02-17 12:19:04 UTC)" (scheduled at 2026-02-17 12:09:04.577548+00:00)
+2026-02-17 17:09:04, INFO 🔍 pipeline_cycle_start
+2026-02-17 17:09:04, INFO {"event": "pipeline_cycle_start"}
+2026-02-17 17:09:04, INFO ▶️ run_script_start · script=imap_fetcher.py; args=('--once',)
+2026-02-17 17:09:04, INFO {"event": "run_script_start", "script": "imap_fetcher.py", "args": ["--once"]}
+2026-02-17 17:09:08, INFO 📄 script_stdout · script=imap_fetcher.py; output=2026-02-17 17:09:04, INFO === imap_fetcher vv4.4.1 ===
+2026-02-17 17:09:04, INFO IMAP cfg: host=mail.minbarakat.kz port=993 ssl=True user=corp@minbarakat.kz pass_set=True tz=Asia/Almaty env=C:\Users\User\Documents\GPT1C_Processor_temp\.env cfg=C:\Users\User\Documents\GPT1C_Processor_temp\config\imap.json
+2026-02-17 17:09:05, INFO IMAP LOGIN OK (attempt 1/5)
+2026-02-17 17:09:05, INFO SEARCH found 3 msgs
+2026-02-17 17:09:05, INFO SUMMARY REPORT detected: Валовая прибыль Магира (8).xlsx (keyword: валовая)
+2026-02-17 17:09:05, INFO SAVED: reports\queue\Валовая прибыль Магира (8).xlsx (from saida111278@mail.ru)
+2026-02-17 17:09:05, INFO Clean copy: reports\excel\clean\Валовая прибыль Магира (8).xlsx.__clean.xlsx
+2026-02-17 17:09:05, INFO SUMMARY REPORT detected: Валовая прибыль Оксана (8).xlsx (keyword: валовая)
+2026-02-17 17:09:05, INFO SAVED: reports\queue\Валовая прибыль Оксана (8).xlsx (from saida111278@mail.ru)
+2026-02-17 17:09:05, INFO Clean copy: reports\excel\clean\Валовая прибыль Оксана (8).xlsx.__clean.xlsx
+2026-02-17 17:09:05, INFO SUMMARY REPORT detected: Продажи Алена (25).xlsx (keyword: продажи)
+2026-02-17 17:09:05, INFO SAVED: reports\queue\Продажи Алена (25).xlsx (from saida111278@mail.ru)
+2026-02-17 17:09:05, INFO Clean copy: reports\excel\clean\Продажи Алена (25).xlsx.__clean.xlsx
+2026-02-17 17:09:05, INFO SUMMARY REPORT detected: Продажи Ергали (25).xlsx (keyword: продажи)
+2026-02-17 17:09:05, INFO SAVED: reports\queue\Продажи Ергали (25).xlsx (from saida111278@mail.ru)
+2026-02-17 17:09:05, INFO Clean copy: reports\excel\clean\Продажи Ергали (25).xlsx.__clean.xlsx
+2026-02-17 17:09:05, INFO SUMMARY REPORT detected: Продажи Магира (25).xlsx (keyword: продажи)
+2026-02-17 17:09:05, INFO SAVED: reports\queue\Продажи Магира (25).xlsx (from saida111278@mail.ru)
+2026-02-17 17:09:05, INFO Clean copy: reports\excel\clean\Продажи Магира (25).xlsx.__clean.xlsx
+2026-02-17 17:09:05, INFO SUMMARY REPORT detected: Продажи Оксана (24).xlsx (keyword: продажи)
+2026-02-17 17:09:05, INFO SAVED: reports\queue\Продажи Оксана (24).xlsx (from saida111278@mail.ru)
+2026-02-17 17:09:05, INFO Clean copy: reports\excel\clean\Продажи Оксана (24).xlsx.__clean.xlsx
+2026-02-17 17:09:05, INFO SUMMARY REPORT detected: Валовая прибыль Алена (8).xlsx (keyword: валовая)
+2026-02-17 17:09:05, INFO SAVED: reports\queue\Валовая прибыль Алена (8).xlsx (from saida111278@mail.ru)
+2026-02-17 17:09:05, INFO Clean copy: reports\excel\clean\Валовая прибыль Алена (8).xlsx.__clean.xlsx
+2026-02-17 17:09:05, INFO SUMMARY REPORT detected: Валовая прибыль Ергали (8).xlsx (keyword: валовая)
+2026-02-17 17:09:05, INFO SAVED: reports\queue\Валовая прибыль Ергали (8).xlsx (from saida111278@mail.ru)
+2026-02-17 17:09:05, INFO Clean copy: reports\excel\clean\Валовая прибыль Ергали (8).xlsx.__clean.xlsx
+2026-02-17 17:09:05, INFO MAIL flagged \Deleted, msg #b'1'
+2026-02-17 17:09:06, INFO SUMMARY REPORT detected: Ведомость_по_партиям_товаров_на_складах (39).xlsx (keyword: ведомость)
+2026-02-17 17:09:06, INFO SAVED: reports\queue\Ведомость_по_партиям_товаров_на_складах (39).xlsx (from saida111278@mail.ru)
+2026-02-17 17:09:06, INFO Clean copy: reports\excel\clean\Ведомость_по_партиям_товаров_на_складах (39).xlsx.__clean.xlsx
+2026-02-17 17:09:06, INFO SUMMARY REPORT detected: Ведомость по денежным средствам (91).xlsx (keyword: ведомость)
+2026-02-17 17:09:06, INFO SAVED: reports\queue\Ведомость по денежным средствам (91).xlsx (from saida111278@mail.ru)
+2026-02-17 17:09:06, INFO Clean copy: reports\excel\clean\Ведомость по денежным средствам (91).xlsx.__clean.xlsx
+2026-02-17 17:09:06, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами (86).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-17 17:09:06, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами (86).xlsx (from saida111278@mail.ru)
+2026-02-17 17:09:06, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами (86).xlsx.__clean.xlsx
+2026-02-17 17:09:06, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (58).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-17 17:09:06, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (58).xlsx (from saida111278@mail.ru)
+2026-02-17 17:09:06, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (58).xlsx.__clean.xlsx
+2026-02-17 17:09:06, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Магира (59).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-17 17:09:06, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (59).xlsx (from saida111278@mail.ru)
+2026-02-17 17:09:06, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (59).xlsx.__clean.xlsx
+2026-02-17 17:09:06, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (38).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-17 17:09:06, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (38).xlsx (from saida111278@mail.ru)
+2026-02-17 17:09:06, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (38).xlsx.__clean.xlsx
+2026-02-17 17:09:06, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (59).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-17 17:09:06, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (59).xlsx (from saida111278@mail.ru)
+2026-02-17 17:09:06, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (59).xlsx.__clean.xlsx
+2026-02-17 17:09:06, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Алена (61).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-17 17:09:06, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (61).xlsx (from saida111278@mail.ru)
+2026-02-17 17:09:06, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (61).xlsx.__clean.xlsx
+2026-02-17 17:09:06, INFO SUMMARY REPORT detected: Валовая прибыль (92).xlsx (keyword: валовая)
+2026-02-17 17:09:06, INFO SAVED: reports\queue\Валовая прибыль (92).xlsx (from saida111278@mail.ru)
+2026-02-17 17:09:06, INFO Clean copy: reports\excel\clean\Валовая прибыль (92).xlsx.__clean.xlsx
+2026-02-17 17:09:06, INFO SUMMARY REPORT detected: Продажи (90).xlsx (keyword: продажи)
+2026-02-17 17:09:06, INFO SAVED: reports\queue\Продажи (90).xlsx (from saida111278@mail.ru)
+2026-02-17 17:09:06, INFO Clean copy: reports\excel\clean\Продажи (90).xlsx.__clean.xlsx
+2026-02-17 17:09:06, INFO SKIP no-manager-in-name: Затраты с нарастающим (39).xlsx
+2026-02-17 17:09:06, INFO SUMMARY REPORT detected: Ведомость по товарам на складах (39).xlsx (phrase: ведомость по товарам на складах)
+2026-02-17 17:09:06, INFO SAVED: reports\queue\Ведомость по товарам на складах (39).xlsx (from saida111278@mail.ru)
+2026-02-17 17:09:06, INFO Clean copy: reports\excel\clean\Ведомость по товарам на складах (39).xlsx.__clean.xlsx
+2026-02-17 17:09:06, INFO MAIL flagged \Deleted, msg #b'2'
+2026-02-17 17:09:07, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (60).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-17 17:09:07, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (60).xlsx (from saida111278@mail.ru)
+2026-02-17 17:09:07, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (60).xlsx.__clean.xlsx
+2026-02-17 17:09:07, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Магира (60).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-17 17:09:07, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (60).xlsx (from saida111278@mail.ru)
+2026-02-17 17:09:07, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (60).xlsx.__clean.xlsx
+2026-02-17 17:09:07, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (59).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-17 17:09:07, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (59).xlsx (from saida111278@mail.ru)
+2026-02-17 17:09:07, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (59).xlsx.__clean.xlsx
+2026-02-17 17:09:07, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами (87).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-17 17:09:07, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами (87).xlsx (from saida111278@mail.ru)
+2026-02-17 17:09:07, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами (87).xlsx.__clean.xlsx
+2026-02-17 17:09:07, INFO SUMMARY REPORT detected: Ведомость по денежным средствам (92).xlsx (keyword: ведомость)
+2026-02-17 17:09:07, INFO SAVED: reports\queue\Ведомость по денежным средствам (92).xlsx (from saida111278@mail.ru)
+2026-02-17 17:09:07, INFO Clean copy: reports\excel\clean\Ведомость по денежным средствам (92).xlsx.__clean.xlsx
+2026-02-17 17:09:07, INFO SUMMARY REPORT detected: Детальный Дебиторы Алена (26).xlsx (keyword: детальный)
+2026-02-17 17:09:07, INFO SAVED: reports\queue\Детальный Дебиторы Алена (26).xlsx (from saida111278@mail.ru)
+2026-02-17 17:09:07, INFO Clean copy: reports\excel\clean\Детальный Дебиторы Алена (26).xlsx.__clean.xlsx
+2026-02-17 17:09:07, INFO SUMMARY REPORT detected: Детальный Дебиторы Ергали (26).xlsx (keyword: детальный)
+2026-02-17 17:09:07, INFO SAVED: reports\queue\Детальный Дебиторы Ергали (26).xlsx (from saida111278@mail.ru)
+2026-02-17 17:09:07, INFO Clean copy: reports\excel\clean\Детальный Дебиторы Ергали (26).xlsx.__clean.xlsx
+2026-02-17 17:09:07, INFO SUMMARY REPORT detected: Детальный Дебиторы Магира (26).xlsx (keyword: детальный)
+2026-02-17 17:09:07, INFO SAVED: reports\queue\Детальный Дебиторы Магира (26).xlsx (from saida111278@mail.ru)
+2026-02-17 17:09:07, INFO Clean copy: reports\excel\clean\Детальный Дебиторы Магира (26).xlsx.__clean.xlsx
+2026-02-17 17:09:07, INFO SUMMARY REPORT detected: Детальный Дебиторы Оксана (26).xlsx (keyword: детальный)
+2026-02-17 17:09:07, INFO SAVED: reports\queue\Детальный Дебиторы Оксана (26).xlsx (from saida111278@mail.ru)
+2026-02-17 17:09:07, INFO Clean copy: reports\excel\clean\Детальный Дебиторы Оксана (26).xlsx.__clean.xlsx
+2026-02-17 17:09:07, INFO SUMMARY REPORT detected: Детальный_по_взаиморасчетам_с_контрагентами (26).xlsx (phrase: детальный_по_взаиморасчетам_с_контрагентами)
+2026-02-17 17:09:07, INFO SAVED: reports\queue\Детальный_по_взаиморасчетам_с_контрагентами (26).xlsx (from saida111278@mail.ru)
+2026-02-17 17:09:07, INFO Clean copy: reports\excel\clean\Детальный_по_взаиморасчетам_с_контрагентами (26).xlsx.__clean.xlsx
+2026-02-17 17:09:07, INFO SKIP no-manager-in-name: Затраты (11).xlsx
+2026-02-17 17:09:07, INFO SUMMARY REPORT detected: Остатки всем (54).xlsx (keyword: остатки)
+2026-02-17 17:09:07, INFO SAVED: reports\queue\Остатки всем (54).xlsx (from saida111278@mail.ru)
+2026-02-17 17:09:07, INFO Clean copy: reports\excel\clean\Остатки всем (54).xlsx.__clean.xlsx
+2026-02-17 17:09:07, INFO SUMMARY REPORT detected: Продажи (91).xlsx (keyword: продажи)
+2026-02-17 17:09:07, INFO SAVED: reports\queue\Продажи (91).xlsx (from saida111278@mail.ru)
+2026-02-17 17:09:07, INFO Clean copy: reports\excel\clean\Продажи (91).xlsx.__clean.xlsx
+2026-02-17 17:09:07, INFO SUMMARY REPORT detected: Валовая прибыль (93).xlsx (keyword: валовая)
+2026-02-17 17:09:07, INFO SAVED: reports\queue\Валовая прибыль (93).xlsx (from saida111278@mail.ru)
+2026-02-17 17:09:07, INFO Clean copy: reports\excel\clean\Валовая прибыль (93).xlsx.__clean.xlsx
+2026-02-17 17:09:07, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Алена (62).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-17 17:09:07, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (62).xlsx (from saida111278@mail.ru)
+2026-02-17 17:09:07, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (62).xlsx.__clean.xlsx
+2026-02-17 17:09:07, INFO MAIL flagged \Deleted, msg #b'3'
+2026-02-17 17:09:07, INFO INBOX EXPUNGE OK
+2026-02-17 17:09:07, INFO TRASH skip Trash: cannot SELECT
+2026-02-17 17:09:07, INFO TRASH skip Корзина: cannot SELECT
+2026-02-17 17:09:07, INFO TRASH skip Deleted Items: cannot SELECT
+2026-02-17 17:09:08, INFO TRASH cleaned: INBOX.Trash
+2026-02-17 17:09:08, INFO CYCLE DONE: saved=3
+2026-02-17 17:09:08, INFO {"event": "script_stdout", "script": "imap_fetcher.py", "output": "2026-02-17 17:09:04, INFO === imap_fetcher vv4.4.1 ===\r\n2026-02-17 17:09:04, INFO IMAP cfg: host=mail.minbarakat.kz port=993 ssl=True user=corp@minbarakat.kz pass_set=True tz=Asia/Almaty env=C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\.env cfg=C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\config\\imap.json\r\n2026-02-17 17:09:05, INFO IMAP LOGIN OK (attempt 1/5)\r\n2026-02-17 17:09:05, INFO SEARCH found 3 msgs\r\n2026-02-17 17:09:05, INFO SUMMARY REPORT detected: Валовая прибыль Магира (8).xlsx (keyword: валовая)\r\n2026-02-17 17:09:05, INFO SAVED: reports\\queue\\Валовая прибыль Магира (8).xlsx (from saida111278@mail.ru)\r\n2026-02-17 17:09:05, INFO Clean copy: reports\\excel\\clean\\Валовая прибыль Магира (8).xlsx.__clean.xlsx\r\n2026-02-17 17:09:05, INFO SUMMARY REPORT detected: Валовая прибыль Оксана (8).xlsx (keyword: валовая)\r\n2026-02-17 17:09:05, INFO SAVED: reports\\queue\\Валовая прибыль Оксана (8).xlsx (from saida111278@mail.ru)\r\n2026-02-17 17:09:05, INFO Clean copy: reports\\excel\\clean\\Валовая прибыль Оксана (8).xlsx.__clean.xlsx\r\n2026-02-17 17:09:05, INFO SUMMARY REPORT detected: Продажи Алена (25).xlsx (keyword: продажи)\r\n2026-02-17 17:09:05, INFO SAVED: reports\\queue\\Продажи Алена (25).xlsx (from saida111278@mail.ru)\r\n2026-02-17 17:09:05, INFO Clean copy: reports\\excel\\clean\\Продажи Алена (25).xlsx.__clean.xlsx\r\n2026-02-17 17:09:05, INFO SUMMARY REPORT detected: Продажи Ергали (25).xlsx (keyword: продажи)\r\n2026-02-17 17:09:05, INFO SAVED: reports\\queue\\Продажи Ергали (25).xlsx (from saida111278@mail.ru)\r\n2026-02-17 17:09:05, INFO Clean copy: reports\\excel\\clean\\Продажи Ергали (25).xlsx.__clean.xlsx\r\n2026-02-17 17:09:05, INFO SUMMARY REPORT detected: Продажи Магира (25).xlsx (keyword: продажи)\r\n2026-02-17 17:09:05, INFO SAVED: reports\\queue\\Продажи Магира (25).xlsx (from saida111278@mail.ru)\r\n2026-02-17 17:09:05, INFO Clean copy: reports\\excel\\clean\\Продажи Магира (25).xlsx.__clean.xlsx\r\n2026-02-17 17:09:05, INFO SUMMARY REPORT detected: Продажи Оксана (24).xlsx (keyword: продажи)\r\n2026-02-17 17:09:05, INFO SAVED: reports\\queue\\Продажи Оксана (24).xlsx (from saida111278@mail.ru)\r\n2026-02-17 17:09:05, INFO Clean copy: reports\\excel\\clean\\Продажи Оксана (24).xlsx.__clean.xlsx\r\n2026-02-17 17:09:05, INFO SUMMARY REPORT detected: Валовая прибыль Алена (8).xlsx (keyword: валовая)\r\n2026-02-17 17:09:05, INFO SAVED: reports\\queue\\Валовая прибыль Алена (8).xlsx (from saida111278@mail.ru)\r\n2026-02-17 17:09:05, INFO Clean copy: reports\\excel\\clean\\Валовая прибыль Алена (8).xlsx.__clean.xlsx\r\n2026-02-17 17:09:05, INFO SUMMARY REPORT detected: Валовая прибыль Ергали (8).xlsx (keyword: валовая)\r\n2026-02-17 17:09:05, INFO SAVED: reports\\queue\\Валовая прибыль Ергали (8).xlsx (from saida111278@mail.ru)\r\n2026-02-17 17:09:05, INFO Clean copy: reports\\excel\\clean\\Валовая прибыль Ергали (8).xlsx.__clean.xlsx\r\n2026-02-17 17:09:05, INFO MAIL flagged \\Deleted, msg #b'1'\r\n2026-02-17 17:09:06, INFO SUMMARY REPORT detected: Ведомость_по_партиям_товаров_на_складах (39).xlsx (keyword: ведомость)\r\n2026-02-17 17:09:06, INFO SAVED: reports\\queue\\Ведомость_по_партиям_товаров_на_складах (39).xlsx (from saida111278@mail.ru)\r\n2026-02-17 17:09:06, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_партиям_товаров_на_складах (39).xlsx.__clean.xlsx\r\n2026-02-17 17:09:06, INFO SUMMARY REPORT detected: Ведомость по денежным средствам (91).xlsx (keyword: ведомость)\r\n2026-02-17 17:09:06, INFO SAVED: reports\\queue\\Ведомость по денежным средствам (91).xlsx (from saida111278@mail.ru)\r\n2026-02-17 17:09:06, INFO Clean copy: reports\\excel\\clean\\Ведомость по денежным средствам (91).xlsx.__clean.xlsx\r\n2026-02-17 17:09:06, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами (86).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)\r\n2026-02-17 17:09:06, INFO SAVED: reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами (86).xlsx (from saida111278@mail.ru)\r\n2026-02-17 17:09:06, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_взаиморасчетам_с_контрагентами (86).xlsx.__clean.xlsx\r\n2026-02-17 17:09:06, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (58).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)\r\n2026-02-17 17:09:06, INFO SAVED: reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (58).xlsx (from saida111278@mail.ru)\r\n2026-02-17 17:09:06, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (58).xlsx.__clean.xlsx\r\n2026-02-17 17:09:06, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Магира (59).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)\r\n2026-02-17 17:09:06, INFO SAVED: reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (59).xlsx (from saida111278@mail.ru)\r\n2026-02-17 17:09:06, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (59).xlsx.__clean.xlsx\r\n2026-02-17 17:09:06, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (38).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)\r\n2026-02-17 17:09:06, INFO SAVED: reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (38).xlsx (from saida111278@mail.ru)\r\n2026-02-17 17:09:06, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (38).xlsx.__clean.xlsx\r\n2026-02-17 17:09:06, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (59).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)\r\n2026-02-17 17:09:06, INFO SAVED: reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (59).xlsx (from saida111278@mail.ru)\r\n2026-02-17 17:09:06, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (59).xlsx.__clean.xlsx\r\n2026-02-17 17:09:06, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Алена (61).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)\r\n2026-02-17 17:09:06, INFO SAVED: reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (61).xlsx (from saida111278@mail.ru)\r\n2026-02-17 17:09:06, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (61).xlsx.__clean.xlsx\r\n2026-02-17 17:09:06, INFO SUMMARY REPORT detected: Валовая прибыль (92).xlsx (keyword: валовая)\r\n2026-02-17 17:09:06, INFO SAVED: reports\\queue\\Валовая прибыль (92).xlsx (from saida111278@mail.ru)\r\n2026-02-17 17:09:06, INFO Clean copy: reports\\excel\\clean\\Валовая прибыль (92).xlsx.__clean.xlsx\r\n2026-02-17 17:09:06, INFO SUMMARY REPORT detected: Продажи (90).xlsx (keyword: продажи)\r\n2026-02-17 17:09:06, INFO SAVED: reports\\queue\\Продажи (90).xlsx (from saida111278@mail.ru)\r\n2026-02-17 17:09:06, INFO Clean copy: reports\\excel\\clean\\Продажи (90).xlsx.__clean.xlsx\r\n2026-02-17 17:09:06, INFO SKIP no-manager-in-name: Затраты с нарастающим (39).xlsx\r\n2026-02-17 17:09:06, INFO SUMMARY REPORT detected: Ведомость по товарам на складах (39).xlsx (phrase: ведомость по товарам на складах)\r\n2026-02-17 17:09:06, INFO SAVED: reports\\queue\\Ведомость по товарам на складах (39).xlsx (from saida111278@mail.ru)\r\n2026-02-17 17:09:06, INFO Clean copy: reports\\excel\\clean\\Ведомость по товарам на складах (39).xlsx.__clean.xlsx\r\n2026-02-17 17:09:06, INFO MAIL flagged \\Deleted, msg #b'2'\r\n2026-02-17 17:09:07, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (60).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)\r\n2026-02-17 17:09:07, INFO SAVED: reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (60).xlsx (from saida111278@mail.ru)\r\n2026-02-17 17:09:07, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (60).xlsx.__clean.xlsx\r\n2026-02-17 17:09:07, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Магира (60).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)\r\n2026-02-17 17:09:07, INFO SAVED: reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (60).xlsx (from saida111278@mail.ru)\r\n2026-02-17 17:09:07, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (60).xlsx.__clean.xlsx\r\n2026-02-17 17:09:07, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (59).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)\r\n2026-02-17 17:09:07, INFO SAVED: reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (59).xlsx (from saida111278@mail.ru)\r\n2026-02-17 17:09:07, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (59).xlsx.__clean.xlsx\r\n2026-02-17 17:09:07, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами (87).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)\r\n2026-02-17 17:09:07, INFO SAVED: reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами (87).xlsx (from saida111278@mail.ru)\r\n2026-02-17 17:09:07, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_взаиморасчетам_с_контрагентами (87).xlsx.__clean.xlsx\r\n2026-02-17 17:09:07, INFO SUMMARY REPORT detected: Ведомость по денежным средствам (92).xlsx (keyword: ведомость)\r\n2026-02-17 17:09:07, INFO SAVED: reports\\queue\\Ведомость по денежным средствам (92).xlsx (from saida111278@mail.ru)\r\n2026-02-17 17:09:07, INFO Clean copy: reports\\excel\\clean\\Ведомость по денежным средствам (92).xlsx.__clean.xlsx\r\n2026-02-17 17:09:07, INFO SUMMARY REPORT detected: Детальный Дебиторы Алена (26).xlsx (keyword: детальный)\r\n2026-02-17 17:09:07, INFO SAVED: reports\\queue\\Детальный Дебиторы Алена (26).xlsx (from saida111278@mail.ru)\r\n2026-02-17 17:09:07, INFO Clean copy: reports\\excel\\clean\\Детальный Дебиторы Алена (26).xlsx.__clean.xlsx\r\n2026-02-17 17:09:07, INFO SUMMARY REPORT detected: Детальный Дебиторы Ергали (26).xlsx (keyword: детальный)\r\n2026-02-17 17:09:07, INFO SAVED: reports\\queue\\Детальный Дебиторы Ергали (26).xlsx (from saida111278@mail.ru)\r\n2026-02-17 17:09:07, INFO Clean copy: reports\\excel\\clean\\Детальный Дебиторы Ергали (26).xlsx.__clean.xlsx\r\n2026-02-17 17:09:07, INFO SUMMARY REPORT detected: Детальный Дебиторы Магира (26).xlsx (keyword: детальный)\r\n2026-02-17 17:09:07, INFO SAVED: reports\\queue\\Детальный Дебиторы Магира (26).xlsx (from saida111278@mail.ru)\r\n2026-02-17 17:09:07, INFO Clean copy: reports\\excel\\clean\\Детальный Дебиторы Магира (26).xlsx.__clean.xlsx\r\n2026-02-17 17:09:07, INFO SUMMARY REPORT detected: Детальный Дебиторы Оксана (26).xlsx (keyword: детальный)\r\n2026-02-17 17:09:07, INFO SAVED: reports\\queue\\Детальный Дебиторы Оксана (26).xlsx (from saida111278@mail.ru)\r\n2026-02-17 17:09:07, INFO Clean copy: reports\\excel\\clean\\Детальный Дебиторы Оксана (26).xlsx.__clean.xlsx\r\n2026-02-17 17:09:07, INFO SUMMARY REPORT detected: Детальный_по_взаиморасчетам_с_контрагентами (26).xlsx (phrase: детальный_по_взаиморасчетам_с_контрагентами)\r\n2026-02-17 17:09:07, INFO SAVED: reports\\queue\\Детальный_по_взаиморасчетам_с_контрагентами (26).xlsx (from saida111278@mail.ru)\r\n2026-02-17 17:09:07, INFO Clean copy: reports\\excel\\clean\\Детальный_по_взаиморасчетам_с_контрагентами (26).xlsx.__clean.xlsx\r\n2026-02-17 17:09:07, INFO SKIP no-manager-in-name: Затраты (11).xlsx\r\n2026-02-17 17:09:07, INFO SUMMARY REPORT detected: Остатки всем (54).xlsx (keyword: остатки)\r\n2026-02-17 17:09:07, INFO SAVED: reports\\queue\\Остатки всем (54).xlsx (from saida111278@mail.ru)\r\n2026-02-17 17:09:07, INFO Clean copy: reports\\excel\\clean\\Остатки всем (54).xlsx.__clean.xlsx\r\n2026-02-17 17:09:07, INFO SUMMARY REPORT detected: Продажи (91).xlsx (keyword: продажи)\r\n2026-02-17 17:09:07, INFO SAVED: reports\\queue\\Продажи (91).xlsx (from saida111278@mail.ru)\r\n2026-02-17 17:09:07, INFO Clean copy: reports\\excel\\clean\\Продажи (91).xlsx.__clean.xlsx\r\n2026-02-17 17:09:07, INFO SUMMARY REPORT detected: Валовая прибыль (93).xlsx (keyword: валовая)\r\n2026-02-17 17:09:07, INFO SAVED: reports\\queue\\Валовая прибыль (93).xlsx (from saida111278@mail.ru)\r\n2026-02-17 17:09:07, INFO Clean copy: reports\\excel\\clean\\Валовая прибыль (93).xlsx.__clean.xlsx\r\n2026-02-17 17:09:07, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Алена (62).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)\r\n2026-02-17 17:09:07, INFO SAVED: reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (62).xlsx (from saida111278@mail.ru)\r\n2026-02-17 17:09:07, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (62).xlsx.__clean.xlsx\r\n2026-02-17 17:09:07, INFO MAIL flagged \\Deleted, msg #b'3'\r\n2026-02-17 17:09:07, INFO INBOX EXPUNGE OK\r\n2026-02-17 17:09:07, INFO TRASH skip Trash: cannot SELECT\r\n2026-02-17 17:09:07, INFO TRASH skip Корзина: cannot SELECT\r\n2026-02-17 17:09:07, INFO TRASH skip Deleted Items: cannot SELECT\r\n2026-02-17 17:09:08, INFO TRASH cleaned: INBOX.Trash\r\n2026-02-17 17:09:08, INFO CYCLE DONE: saved=3"}
+2026-02-17 17:09:08, INFO ✅ run_script_finish · script=imap_fetcher.py; return_code=0
+2026-02-17 17:09:08, INFO {"event": "run_script_finish", "script": "imap_fetcher.py", "return_code": 0}
+2026-02-17 17:09:08, INFO 🔬 queue_found_files · count=55
+2026-02-17 17:09:08, INFO {"event": "queue_found_files", "count": 55}
+2026-02-17 17:09:08, INFO 💰 gross_processing_start · file=Валовая прибыль (92).xlsx
+2026-02-17 17:09:08, INFO {"event": "gross_processing_start", "file": "Валовая прибыль (92).xlsx"}
+2026-02-17 17:09:08, INFO ▶️ run_script_start · script=gross_report.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Валовая прибыль (92).xlsx',)
+2026-02-17 17:09:08, INFO {"event": "run_script_start", "script": "gross_report.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Валовая прибыль (92).xlsx"]}
+2026-02-17 17:09:08, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:09:12, INFO ✅ run_script_finish · script=gross_report.py; return_code=0
+2026-02-17 17:09:12, INFO {"event": "run_script_finish", "script": "gross_report.py", "return_code": 0}
+2026-02-17 17:09:12, INFO ✅ gross_sum_success · file=Валовая прибыль (92).xlsx
+2026-02-17 17:09:12, INFO {"event": "gross_sum_success", "file": "Валовая прибыль (92).xlsx"}
+2026-02-17 17:09:12, INFO ▶️ run_script_start · script=gross_report_pct.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Валовая прибыль (92).xlsx.__clean.xlsx',)
+2026-02-17 17:09:12, INFO {"event": "run_script_start", "script": "gross_report_pct.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Валовая прибыль (92).xlsx.__clean.xlsx"]}
+2026-02-17 17:09:13, INFO ✅ run_script_finish · script=gross_report_pct.py; return_code=0
+2026-02-17 17:09:13, INFO {"event": "run_script_finish", "script": "gross_report_pct.py", "return_code": 0}
+2026-02-17 17:09:13, INFO ✅ gross_pct_success · file=Валовая прибыль (92).xlsx
+2026-02-17 17:09:13, INFO {"event": "gross_pct_success", "file": "Валовая прибыль (92).xlsx"}
+2026-02-17 17:09:13, INFO 💰 gross_processing_complete · file=Валовая прибыль (92).xlsx; sum_rc=0; pct_rc=0
+2026-02-17 17:09:13, INFO {"event": "gross_processing_complete", "file": "Валовая прибыль (92).xlsx", "sum_rc": 0, "pct_rc": 0}
+2026-02-17 17:09:13, INFO ▶️ run_script_start · script=gross_parser.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Валовая прибыль (92).xlsx.__clean.xlsx',)
+2026-02-17 17:09:13, INFO {"event": "run_script_start", "script": "gross_parser.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Валовая прибыль (92).xlsx.__clean.xlsx"]}
+2026-02-17 17:09:14, INFO ✅ run_script_finish · script=gross_parser.py; return_code=0
+2026-02-17 17:09:14, INFO {"event": "run_script_finish", "script": "gross_parser.py", "return_code": 0}
+2026-02-17 17:09:14, INFO {"event": "gross_parser_done", "file": "Валовая прибыль (92).xlsx", "rc": 0}
+2026-02-17 17:09:14, INFO ⚠️ file_missing_for_move · file=Валовая прибыль (92).xlsx; level=WARNING
+2026-02-17 17:09:14, INFO {"event": "file_missing_for_move", "file": "Валовая прибыль (92).xlsx", "level": "WARNING"}
+2026-02-17 17:09:14, INFO 💰 gross_processing_start · file=Валовая прибыль (93).xlsx
+2026-02-17 17:09:14, INFO {"event": "gross_processing_start", "file": "Валовая прибыль (93).xlsx"}
+2026-02-17 17:09:14, INFO ▶️ run_script_start · script=gross_report.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Валовая прибыль (93).xlsx',)
+2026-02-17 17:09:14, INFO {"event": "run_script_start", "script": "gross_report.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Валовая прибыль (93).xlsx"]}
+2026-02-17 17:09:15, INFO ✅ run_script_finish · script=gross_report.py; return_code=0
+2026-02-17 17:09:15, INFO {"event": "run_script_finish", "script": "gross_report.py", "return_code": 0}
+2026-02-17 17:09:15, INFO ✅ gross_sum_success · file=Валовая прибыль (93).xlsx
+2026-02-17 17:09:15, INFO {"event": "gross_sum_success", "file": "Валовая прибыль (93).xlsx"}
+2026-02-17 17:09:15, INFO ▶️ run_script_start · script=gross_report_pct.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Валовая прибыль (93).xlsx.__clean.xlsx',)
+2026-02-17 17:09:15, INFO {"event": "run_script_start", "script": "gross_report_pct.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Валовая прибыль (93).xlsx.__clean.xlsx"]}
+2026-02-17 17:09:16, INFO ✅ run_script_finish · script=gross_report_pct.py; return_code=0
+2026-02-17 17:09:16, INFO {"event": "run_script_finish", "script": "gross_report_pct.py", "return_code": 0}
+2026-02-17 17:09:16, INFO ✅ gross_pct_success · file=Валовая прибыль (93).xlsx
+2026-02-17 17:09:16, INFO {"event": "gross_pct_success", "file": "Валовая прибыль (93).xlsx"}
+2026-02-17 17:09:16, INFO 💰 gross_processing_complete · file=Валовая прибыль (93).xlsx; sum_rc=0; pct_rc=0
+2026-02-17 17:09:16, INFO {"event": "gross_processing_complete", "file": "Валовая прибыль (93).xlsx", "sum_rc": 0, "pct_rc": 0}
+2026-02-17 17:09:16, INFO ▶️ run_script_start · script=gross_parser.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Валовая прибыль (93).xlsx.__clean.xlsx',)
+2026-02-17 17:09:16, INFO {"event": "run_script_start", "script": "gross_parser.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Валовая прибыль (93).xlsx.__clean.xlsx"]}
+2026-02-17 17:09:17, INFO ✅ run_script_finish · script=gross_parser.py; return_code=0
+2026-02-17 17:09:17, INFO {"event": "run_script_finish", "script": "gross_parser.py", "return_code": 0}
+2026-02-17 17:09:17, INFO {"event": "gross_parser_done", "file": "Валовая прибыль (93).xlsx", "rc": 0}
+2026-02-17 17:09:17, INFO ⚠️ file_missing_for_move · file=Валовая прибыль (93).xlsx; level=WARNING
+2026-02-17 17:09:17, INFO {"event": "file_missing_for_move", "file": "Валовая прибыль (93).xlsx", "level": "WARNING"}
+2026-02-17 17:09:17, INFO 💰 gross_processing_start · file=Валовая прибыль Алена (8).xlsx
+2026-02-17 17:09:17, INFO {"event": "gross_processing_start", "file": "Валовая прибыль Алена (8).xlsx"}
+2026-02-17 17:09:17, INFO ▶️ run_script_start · script=gross_report.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Валовая прибыль Алена (8).xlsx',)
+2026-02-17 17:09:17, INFO {"event": "run_script_start", "script": "gross_report.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Валовая прибыль Алена (8).xlsx"]}
+2026-02-17 17:09:18, INFO ✅ run_script_finish · script=gross_report.py; return_code=0
+2026-02-17 17:09:18, INFO {"event": "run_script_finish", "script": "gross_report.py", "return_code": 0}
+2026-02-17 17:09:18, INFO ✅ gross_sum_success · file=Валовая прибыль Алена (8).xlsx
+2026-02-17 17:09:18, INFO {"event": "gross_sum_success", "file": "Валовая прибыль Алена (8).xlsx"}
+2026-02-17 17:09:18, INFO ▶️ run_script_start · script=gross_report_pct.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Валовая прибыль Алена (8).xlsx.__clean.xlsx',)
+2026-02-17 17:09:18, INFO {"event": "run_script_start", "script": "gross_report_pct.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Валовая прибыль Алена (8).xlsx.__clean.xlsx"]}
+2026-02-17 17:09:18, INFO ✅ run_script_finish · script=gross_report_pct.py; return_code=0
+2026-02-17 17:09:18, INFO {"event": "run_script_finish", "script": "gross_report_pct.py", "return_code": 0}
+2026-02-17 17:09:18, INFO ✅ gross_pct_success · file=Валовая прибыль Алена (8).xlsx
+2026-02-17 17:09:18, INFO {"event": "gross_pct_success", "file": "Валовая прибыль Алена (8).xlsx"}
+2026-02-17 17:09:18, INFO 💰 gross_processing_complete · file=Валовая прибыль Алена (8).xlsx; sum_rc=0; pct_rc=0
+2026-02-17 17:09:18, INFO {"event": "gross_processing_complete", "file": "Валовая прибыль Алена (8).xlsx", "sum_rc": 0, "pct_rc": 0}
+2026-02-17 17:09:18, INFO ▶️ run_script_start · script=gross_parser.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Валовая прибыль Алена (8).xlsx.__clean.xlsx',)
+2026-02-17 17:09:18, INFO {"event": "run_script_start", "script": "gross_parser.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Валовая прибыль Алена (8).xlsx.__clean.xlsx"]}
+2026-02-17 17:09:19, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:09:19, INFO ✅ run_script_finish · script=gross_parser.py; return_code=0
+2026-02-17 17:09:19, INFO {"event": "run_script_finish", "script": "gross_parser.py", "return_code": 0}
+2026-02-17 17:09:19, INFO {"event": "gross_parser_done", "file": "Валовая прибыль Алена (8).xlsx", "rc": 0}
+2026-02-17 17:09:19, INFO {"event": "ai_daily_skipped", "manager": "Алена", "reason": "Weekly AI mode"}
+2026-02-17 17:09:19, INFO ⚠️ file_missing_for_move · file=Валовая прибыль Алена (8).xlsx; level=WARNING
+2026-02-17 17:09:19, INFO {"event": "file_missing_for_move", "file": "Валовая прибыль Алена (8).xlsx", "level": "WARNING"}
+2026-02-17 17:09:19, INFO 💰 gross_processing_start · file=Валовая прибыль Ергали (8).xlsx
+2026-02-17 17:09:19, INFO {"event": "gross_processing_start", "file": "Валовая прибыль Ергали (8).xlsx"}
+2026-02-17 17:09:19, INFO ▶️ run_script_start · script=gross_report.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Валовая прибыль Ергали (8).xlsx',)
+2026-02-17 17:09:19, INFO {"event": "run_script_start", "script": "gross_report.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Валовая прибыль Ергали (8).xlsx"]}
+2026-02-17 17:09:20, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:09:20, INFO 👤 Новый пользователь зарегистрирован: Вадим (ID: 7422963573)
+2026-02-17 17:09:20, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/sendMessage "HTTP/1.1 200 OK"
+2026-02-17 17:09:20, INFO ✅ run_script_finish · script=gross_report.py; return_code=0
+2026-02-17 17:09:20, INFO {"event": "run_script_finish", "script": "gross_report.py", "return_code": 0}
+2026-02-17 17:09:20, INFO ✅ gross_sum_success · file=Валовая прибыль Ергали (8).xlsx
+2026-02-17 17:09:20, INFO {"event": "gross_sum_success", "file": "Валовая прибыль Ергали (8).xlsx"}
+2026-02-17 17:09:20, INFO ▶️ run_script_start · script=gross_report_pct.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Валовая прибыль Ергали (8).xlsx.__clean.xlsx',)
+2026-02-17 17:09:20, INFO {"event": "run_script_start", "script": "gross_report_pct.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Валовая прибыль Ергали (8).xlsx.__clean.xlsx"]}
+2026-02-17 17:09:21, INFO ✅ run_script_finish · script=gross_report_pct.py; return_code=0
+2026-02-17 17:09:21, INFO {"event": "run_script_finish", "script": "gross_report_pct.py", "return_code": 0}
+2026-02-17 17:09:21, INFO ✅ gross_pct_success · file=Валовая прибыль Ергали (8).xlsx
+2026-02-17 17:09:21, INFO {"event": "gross_pct_success", "file": "Валовая прибыль Ергали (8).xlsx"}
+2026-02-17 17:09:21, INFO 💰 gross_processing_complete · file=Валовая прибыль Ергали (8).xlsx; sum_rc=0; pct_rc=0
+2026-02-17 17:09:21, INFO {"event": "gross_processing_complete", "file": "Валовая прибыль Ергали (8).xlsx", "sum_rc": 0, "pct_rc": 0}
+2026-02-17 17:09:21, INFO ▶️ run_script_start · script=gross_parser.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Валовая прибыль Ергали (8).xlsx.__clean.xlsx',)
+2026-02-17 17:09:21, INFO {"event": "run_script_start", "script": "gross_parser.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Валовая прибыль Ергали (8).xlsx.__clean.xlsx"]}
+2026-02-17 17:09:22, INFO ✅ run_script_finish · script=gross_parser.py; return_code=0
+2026-02-17 17:09:22, INFO {"event": "run_script_finish", "script": "gross_parser.py", "return_code": 0}
+2026-02-17 17:09:22, INFO {"event": "gross_parser_done", "file": "Валовая прибыль Ергали (8).xlsx", "rc": 0}
+2026-02-17 17:09:22, INFO {"event": "ai_daily_skipped", "manager": "Ергали", "reason": "Weekly AI mode"}
+2026-02-17 17:09:22, INFO ⚠️ file_missing_for_move · file=Валовая прибыль Ергали (8).xlsx; level=WARNING
+2026-02-17 17:09:22, INFO {"event": "file_missing_for_move", "file": "Валовая прибыль Ергали (8).xlsx", "level": "WARNING"}
+2026-02-17 17:09:22, INFO 💰 gross_processing_start · file=Валовая прибыль Магира (8).xlsx
+2026-02-17 17:09:22, INFO {"event": "gross_processing_start", "file": "Валовая прибыль Магира (8).xlsx"}
+2026-02-17 17:09:22, INFO ▶️ run_script_start · script=gross_report.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Валовая прибыль Магира (8).xlsx',)
+2026-02-17 17:09:22, INFO {"event": "run_script_start", "script": "gross_report.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Валовая прибыль Магира (8).xlsx"]}
+2026-02-17 17:09:23, INFO ✅ run_script_finish · script=gross_report.py; return_code=0
+2026-02-17 17:09:23, INFO {"event": "run_script_finish", "script": "gross_report.py", "return_code": 0}
+2026-02-17 17:09:23, INFO ✅ gross_sum_success · file=Валовая прибыль Магира (8).xlsx
+2026-02-17 17:09:23, INFO {"event": "gross_sum_success", "file": "Валовая прибыль Магира (8).xlsx"}
+2026-02-17 17:09:23, INFO ▶️ run_script_start · script=gross_report_pct.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Валовая прибыль Магира (8).xlsx.__clean.xlsx',)
+2026-02-17 17:09:23, INFO {"event": "run_script_start", "script": "gross_report_pct.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Валовая прибыль Магира (8).xlsx.__clean.xlsx"]}
+2026-02-17 17:09:23, INFO ✅ run_script_finish · script=gross_report_pct.py; return_code=0
+2026-02-17 17:09:23, INFO {"event": "run_script_finish", "script": "gross_report_pct.py", "return_code": 0}
+2026-02-17 17:09:23, INFO ✅ gross_pct_success · file=Валовая прибыль Магира (8).xlsx
+2026-02-17 17:09:23, INFO {"event": "gross_pct_success", "file": "Валовая прибыль Магира (8).xlsx"}
+2026-02-17 17:09:23, INFO 💰 gross_processing_complete · file=Валовая прибыль Магира (8).xlsx; sum_rc=0; pct_rc=0
+2026-02-17 17:09:23, INFO {"event": "gross_processing_complete", "file": "Валовая прибыль Магира (8).xlsx", "sum_rc": 0, "pct_rc": 0}
+2026-02-17 17:09:23, INFO ▶️ run_script_start · script=gross_parser.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Валовая прибыль Магира (8).xlsx.__clean.xlsx',)
+2026-02-17 17:09:23, INFO {"event": "run_script_start", "script": "gross_parser.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Валовая прибыль Магира (8).xlsx.__clean.xlsx"]}
+2026-02-17 17:09:24, INFO ✅ run_script_finish · script=gross_parser.py; return_code=0
+2026-02-17 17:09:24, INFO {"event": "run_script_finish", "script": "gross_parser.py", "return_code": 0}
+2026-02-17 17:09:24, INFO {"event": "gross_parser_done", "file": "Валовая прибыль Магира (8).xlsx", "rc": 0}
+2026-02-17 17:09:24, INFO {"event": "ai_daily_skipped", "manager": "Магира", "reason": "Weekly AI mode"}
+2026-02-17 17:09:24, INFO ⚠️ file_missing_for_move · file=Валовая прибыль Магира (8).xlsx; level=WARNING
+2026-02-17 17:09:24, INFO {"event": "file_missing_for_move", "file": "Валовая прибыль Магира (8).xlsx", "level": "WARNING"}
+2026-02-17 17:09:24, INFO 💰 gross_processing_start · file=Валовая прибыль Оксана (8).xlsx
+2026-02-17 17:09:24, INFO {"event": "gross_processing_start", "file": "Валовая прибыль Оксана (8).xlsx"}
+2026-02-17 17:09:24, INFO ▶️ run_script_start · script=gross_report.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Валовая прибыль Оксана (8).xlsx',)
+2026-02-17 17:09:24, INFO {"event": "run_script_start", "script": "gross_report.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Валовая прибыль Оксана (8).xlsx"]}
+2026-02-17 17:09:25, INFO ✅ run_script_finish · script=gross_report.py; return_code=0
+2026-02-17 17:09:25, INFO {"event": "run_script_finish", "script": "gross_report.py", "return_code": 0}
+2026-02-17 17:09:25, INFO ✅ gross_sum_success · file=Валовая прибыль Оксана (8).xlsx
+2026-02-17 17:09:25, INFO {"event": "gross_sum_success", "file": "Валовая прибыль Оксана (8).xlsx"}
+2026-02-17 17:09:25, INFO ▶️ run_script_start · script=gross_report_pct.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Валовая прибыль Оксана (8).xlsx.__clean.xlsx',)
+2026-02-17 17:09:25, INFO {"event": "run_script_start", "script": "gross_report_pct.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Валовая прибыль Оксана (8).xlsx.__clean.xlsx"]}
+2026-02-17 17:09:26, INFO ✅ run_script_finish · script=gross_report_pct.py; return_code=0
+2026-02-17 17:09:26, INFO {"event": "run_script_finish", "script": "gross_report_pct.py", "return_code": 0}
+2026-02-17 17:09:26, INFO ✅ gross_pct_success · file=Валовая прибыль Оксана (8).xlsx
+2026-02-17 17:09:26, INFO {"event": "gross_pct_success", "file": "Валовая прибыль Оксана (8).xlsx"}
+2026-02-17 17:09:26, INFO 💰 gross_processing_complete · file=Валовая прибыль Оксана (8).xlsx; sum_rc=0; pct_rc=0
+2026-02-17 17:09:26, INFO {"event": "gross_processing_complete", "file": "Валовая прибыль Оксана (8).xlsx", "sum_rc": 0, "pct_rc": 0}
+2026-02-17 17:09:26, INFO ▶️ run_script_start · script=gross_parser.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Валовая прибыль Оксана (8).xlsx.__clean.xlsx',)
+2026-02-17 17:09:26, INFO {"event": "run_script_start", "script": "gross_parser.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Валовая прибыль Оксана (8).xlsx.__clean.xlsx"]}
+2026-02-17 17:09:27, INFO ✅ run_script_finish · script=gross_parser.py; return_code=0
+2026-02-17 17:09:27, INFO {"event": "run_script_finish", "script": "gross_parser.py", "return_code": 0}
+2026-02-17 17:09:27, INFO {"event": "gross_parser_done", "file": "Валовая прибыль Оксана (8).xlsx", "rc": 0}
+2026-02-17 17:09:27, INFO {"event": "ai_daily_skipped", "manager": "Оксана", "reason": "Weekly AI mode"}
+2026-02-17 17:09:27, INFO ⚠️ file_missing_for_move · file=Валовая прибыль Оксана (8).xlsx; level=WARNING
+2026-02-17 17:09:27, INFO {"event": "file_missing_for_move", "file": "Валовая прибыль Оксана (8).xlsx", "level": "WARNING"}
+2026-02-17 17:09:27, INFO ▶️ run_script_start · script=inventory.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Ведомость по товарам на складах (39).xlsx',)
+2026-02-17 17:09:27, INFO {"event": "run_script_start", "script": "inventory.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Ведомость по товарам на складах (39).xlsx"]}
+2026-02-17 17:09:28, INFO ✅ run_script_finish · script=inventory.py; return_code=0
+2026-02-17 17:09:28, INFO {"event": "run_script_finish", "script": "inventory.py", "return_code": 0}
+2026-02-17 17:09:28, INFO ▶️ run_script_start · script=inventory_cost_parser.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Ведомость по товарам на складах (39).xlsx.__clean.xlsx',)
+2026-02-17 17:09:28, INFO {"event": "run_script_start", "script": "inventory_cost_parser.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Ведомость по товарам на складах (39).xlsx.__clean.xlsx"]}
+2026-02-17 17:09:29, INFO ⚠️ script_stderr · script=inventory_cost_parser.py; output=2026-02-17 12:09:28 INFO Лог-файл: C:\Users\User\Documents\GPT1C_Processor_temp\logs\inventory_cost_parser_20260217_170928.log
+2026-02-17 12:09:28 INFO Файл: C:\Users\User\Documents\GPT1C_Processor_temp\reports\excel\clean\Ведомость по товарам на складах (39).xlsx.__clean.xlsx
+2026-02-17 17:09:28, INFO Clean copy → Ведомость по товарам на складах (39).xlsx.__clean.xlsx.__clean.xlsx
+2026-02-17 12:09:28 ERROR FAILED
+Traceback (most recent call last):
+  File "C:\Users\User\Documents\GPT1C_Processor_temp\inventory_cost_parser.py", line 373, in main
+    out = build_inventory_cost_json(p)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\Documents\GPT1C_Processor_temp\inventory_cost_parser.py", line 325, in build_inventory_cost_json
+    colmap, data_start, _ = find_header_block(raw)
+                            ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\Documents\GPT1C_Processor_temp\inventory_cost_parser.py", line 184, in find_header_block
+    raise ValueError("Не найдена строка заголовков")
+ValueError: Не найдена строка заголовков; level=WARNING
+2026-02-17 17:09:29, INFO {"event": "script_stderr", "script": "inventory_cost_parser.py", "output": "2026-02-17 12:09:28 INFO Лог-файл: C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\logs\\inventory_cost_parser_20260217_170928.log\r\n2026-02-17 12:09:28 INFO Файл: C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Ведомость по товарам на складах (39).xlsx.__clean.xlsx\r\n2026-02-17 17:09:28, INFO Clean copy → Ведомость по товарам на складах (39).xlsx.__clean.xlsx.__clean.xlsx\r\n2026-02-17 12:09:28 ERROR FAILED\r\nTraceback (most recent call last):\r\n  File \"C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\inventory_cost_parser.py\", line 373, in main\r\n    out = build_inventory_cost_json(p)\r\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\n  File \"C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\inventory_cost_parser.py\", line 325, in build_inventory_cost_json\r\n    colmap, data_start, _ = find_header_block(raw)\r\n                            ^^^^^^^^^^^^^^^^^^^^^^\r\n  File \"C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\inventory_cost_parser.py\", line 184, in find_header_block\r\n    raise ValueError(\"Не найдена строка заголовков\")\r\nValueError: Не найдена строка заголовков", "level": "WARNING"}
+2026-02-17 17:09:29, INFO ✅ run_script_finish · script=inventory_cost_parser.py; return_code=2
+2026-02-17 17:09:29, INFO {"event": "run_script_finish", "script": "inventory_cost_parser.py", "return_code": 2}
+2026-02-17 17:09:29, INFO {"event": "inventory_parser_done", "file": "Ведомость по товарам на складах (39).xlsx", "rc": 2}
+2026-02-17 17:09:29, INFO ⚠️ file_missing_for_move · file=Ведомость по товарам на складах (39).xlsx; level=WARNING
+2026-02-17 17:09:29, INFO {"event": "file_missing_for_move", "file": "Ведомость по товарам на складах (39).xlsx", "level": "WARNING"}
+2026-02-17 17:09:29, INFO ▶️ run_script_start · script=debt_auto_report.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами (86).xlsx',)
+2026-02-17 17:09:29, INFO {"event": "run_script_start", "script": "debt_auto_report.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами (86).xlsx"]}
+2026-02-17 17:09:30, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:09:30, INFO 📄 script_stdout · script=debt_auto_report.py; output=✅ Отчёт сохранён: C:\Users\User\Documents\GPT1C_Processor_temp\reports\html\debt_ext_Ведомость_по_взаиморасчетам_с_контрагентами (86).html
+2026-02-17 17:09:30, INFO {"event": "script_stdout", "script": "debt_auto_report.py", "output": "✅ Отчёт сохранён: C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\html\\debt_ext_Ведомость_по_взаиморасчетам_с_контрагентами (86).html"}
+2026-02-17 17:09:30, INFO ✅ run_script_finish · script=debt_auto_report.py; return_code=0
+2026-02-17 17:09:30, INFO {"event": "run_script_finish", "script": "debt_auto_report.py", "return_code": 0}
+2026-02-17 17:09:30, INFO ⚠️ file_missing_for_move · file=Ведомость_по_взаиморасчетам_с_контрагентами (86).xlsx; level=WARNING
+2026-02-17 17:09:30, INFO {"event": "file_missing_for_move", "file": "Ведомость_по_взаиморасчетам_с_контрагентами (86).xlsx", "level": "WARNING"}
+2026-02-17 17:09:30, INFO ▶️ run_script_start · script=debt_auto_report.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами (87).xlsx',)
+2026-02-17 17:09:30, INFO {"event": "run_script_start", "script": "debt_auto_report.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами (87).xlsx"]}
+2026-02-17 17:09:31, INFO 📄 script_stdout · script=debt_auto_report.py; output=✅ Отчёт сохранён: C:\Users\User\Documents\GPT1C_Processor_temp\reports\html\Ведомость_по_взаиморасчетам_с_контрагентами (87)_debt.html
+2026-02-17 17:09:31, INFO {"event": "script_stdout", "script": "debt_auto_report.py", "output": "✅ Отчёт сохранён: C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\html\\Ведомость_по_взаиморасчетам_с_контрагентами (87)_debt.html"}
+2026-02-17 17:09:31, INFO ✅ run_script_finish · script=debt_auto_report.py; return_code=0
+2026-02-17 17:09:31, INFO {"event": "run_script_finish", "script": "debt_auto_report.py", "return_code": 0}
+2026-02-17 17:09:31, INFO ⚠️ file_missing_for_move · file=Ведомость_по_взаиморасчетам_с_контрагентами (87).xlsx; level=WARNING
+2026-02-17 17:09:31, INFO {"event": "file_missing_for_move", "file": "Ведомость_по_взаиморасчетам_с_контрагентами (87).xlsx", "level": "WARNING"}
+2026-02-17 17:09:31, INFO ▶️ run_script_start · script=debt_auto_report.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (61).xlsx',)
+2026-02-17 17:09:31, INFO {"event": "run_script_start", "script": "debt_auto_report.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (61).xlsx"]}
+2026-02-17 17:09:32, INFO 📄 script_stdout · script=debt_auto_report.py; output=✅ Отчёт сохранён: C:\Users\User\Documents\GPT1C_Processor_temp\reports\html\debt_ext_Ведомость_по_взаиморасчетам_с_контрагентами_Алена (61).html
+2026-02-17 17:09:32, INFO {"event": "script_stdout", "script": "debt_auto_report.py", "output": "✅ Отчёт сохранён: C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\html\\debt_ext_Ведомость_по_взаиморасчетам_с_контрагентами_Алена (61).html"}
+2026-02-17 17:09:32, INFO ✅ run_script_finish · script=debt_auto_report.py; return_code=0
+2026-02-17 17:09:32, INFO {"event": "run_script_finish", "script": "debt_auto_report.py", "return_code": 0}
+2026-02-17 17:09:32, INFO {"event": "ai_daily_skipped", "manager": "Алена", "reason": "Weekly AI mode"}
+2026-02-17 17:09:32, INFO ⚠️ file_missing_for_move · file=Ведомость_по_взаиморасчетам_с_контрагентами_Алена (61).xlsx; level=WARNING
+2026-02-17 17:09:32, INFO {"event": "file_missing_for_move", "file": "Ведомость_по_взаиморасчетам_с_контрагентами_Алена (61).xlsx", "level": "WARNING"}
+2026-02-17 17:09:32, INFO ▶️ run_script_start · script=debt_auto_report.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (62).xlsx',)
+2026-02-17 17:09:32, INFO {"event": "run_script_start", "script": "debt_auto_report.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (62).xlsx"]}
+2026-02-17 17:09:33, INFO 📄 script_stdout · script=debt_auto_report.py; output=✅ Отчёт сохранён: C:\Users\User\Documents\GPT1C_Processor_temp\reports\html\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (62)_debt.html
+2026-02-17 17:09:33, INFO {"event": "script_stdout", "script": "debt_auto_report.py", "output": "✅ Отчёт сохранён: C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\html\\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (62)_debt.html"}
+2026-02-17 17:09:33, INFO ✅ run_script_finish · script=debt_auto_report.py; return_code=0
+2026-02-17 17:09:33, INFO {"event": "run_script_finish", "script": "debt_auto_report.py", "return_code": 0}
+2026-02-17 17:09:33, INFO {"event": "ai_daily_skipped", "manager": "Алена", "reason": "Weekly AI mode"}
+2026-02-17 17:09:33, INFO ⚠️ file_missing_for_move · file=Ведомость_по_взаиморасчетам_с_контрагентами_Алена (62).xlsx; level=WARNING
+2026-02-17 17:09:33, INFO {"event": "file_missing_for_move", "file": "Ведомость_по_взаиморасчетам_с_контрагентами_Алена (62).xlsx", "level": "WARNING"}
+2026-02-17 17:09:33, INFO ▶️ run_script_start · script=debt_auto_report.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (59).xlsx',)
+2026-02-17 17:09:33, INFO {"event": "run_script_start", "script": "debt_auto_report.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (59).xlsx"]}
+2026-02-17 17:09:34, INFO 📄 script_stdout · script=debt_auto_report.py; output=✅ Отчёт сохранён: C:\Users\User\Documents\GPT1C_Processor_temp\reports\html\debt_ext_Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (59).html
+2026-02-17 17:09:34, INFO {"event": "script_stdout", "script": "debt_auto_report.py", "output": "✅ Отчёт сохранён: C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\html\\debt_ext_Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (59).html"}
+2026-02-17 17:09:34, INFO ✅ run_script_finish · script=debt_auto_report.py; return_code=0
+2026-02-17 17:09:34, INFO {"event": "run_script_finish", "script": "debt_auto_report.py", "return_code": 0}
+2026-02-17 17:09:34, INFO {"event": "ai_daily_skipped", "manager": "Ергали", "reason": "Weekly AI mode"}
+2026-02-17 17:09:34, INFO ⚠️ file_missing_for_move · file=Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (59).xlsx; level=WARNING
+2026-02-17 17:09:34, INFO {"event": "file_missing_for_move", "file": "Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (59).xlsx", "level": "WARNING"}
+2026-02-17 17:09:34, INFO ▶️ run_script_start · script=debt_auto_report.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (60).xlsx',)
+2026-02-17 17:09:34, INFO {"event": "run_script_start", "script": "debt_auto_report.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (60).xlsx"]}
+2026-02-17 17:09:35, INFO 📄 script_stdout · script=debt_auto_report.py; output=✅ Отчёт сохранён: C:\Users\User\Documents\GPT1C_Processor_temp\reports\html\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (60)_debt.html
+2026-02-17 17:09:35, INFO {"event": "script_stdout", "script": "debt_auto_report.py", "output": "✅ Отчёт сохранён: C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\html\\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (60)_debt.html"}
+2026-02-17 17:09:35, INFO ✅ run_script_finish · script=debt_auto_report.py; return_code=0
+2026-02-17 17:09:35, INFO {"event": "run_script_finish", "script": "debt_auto_report.py", "return_code": 0}
+2026-02-17 17:09:35, INFO {"event": "ai_daily_skipped", "manager": "Ергали", "reason": "Weekly AI mode"}
+2026-02-17 17:09:35, INFO ⚠️ file_missing_for_move · file=Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (60).xlsx; level=WARNING
+2026-02-17 17:09:35, INFO {"event": "file_missing_for_move", "file": "Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (60).xlsx", "level": "WARNING"}
+2026-02-17 17:09:35, INFO ▶️ run_script_start · script=debt_auto_report.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (38).xlsx',)
+2026-02-17 17:09:35, INFO {"event": "run_script_start", "script": "debt_auto_report.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (38).xlsx"]}
+2026-02-17 17:09:36, INFO 📄 script_stdout · script=debt_auto_report.py; output=✅ Отчёт сохранён: C:\Users\User\Documents\GPT1C_Processor_temp\reports\html\Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (38)_debt.html
+2026-02-17 17:09:36, INFO {"event": "script_stdout", "script": "debt_auto_report.py", "output": "✅ Отчёт сохранён: C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\html\\Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (38)_debt.html"}
+2026-02-17 17:09:36, INFO ✅ run_script_finish · script=debt_auto_report.py; return_code=0
+2026-02-17 17:09:36, INFO {"event": "run_script_finish", "script": "debt_auto_report.py", "return_code": 0}
+2026-02-17 17:09:36, INFO ⚠️ file_missing_for_move · file=Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (38).xlsx; level=WARNING
+2026-02-17 17:09:36, INFO {"event": "file_missing_for_move", "file": "Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (38).xlsx", "level": "WARNING"}
+2026-02-17 17:09:36, INFO ▶️ run_script_start · script=debt_auto_report.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (59).xlsx',)
+2026-02-17 17:09:36, INFO {"event": "run_script_start", "script": "debt_auto_report.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (59).xlsx"]}
+2026-02-17 17:09:37, INFO 📄 script_stdout · script=debt_auto_report.py; output=✅ Отчёт сохранён: C:\Users\User\Documents\GPT1C_Processor_temp\reports\html\debt_ext_Ведомость_по_взаиморасчетам_с_контрагентами_Магира (59).html
+2026-02-17 17:09:37, INFO {"event": "script_stdout", "script": "debt_auto_report.py", "output": "✅ Отчёт сохранён: C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\html\\debt_ext_Ведомость_по_взаиморасчетам_с_контрагентами_Магира (59).html"}
+2026-02-17 17:09:37, INFO ✅ run_script_finish · script=debt_auto_report.py; return_code=0
+2026-02-17 17:09:37, INFO {"event": "run_script_finish", "script": "debt_auto_report.py", "return_code": 0}
+2026-02-17 17:09:37, INFO {"event": "ai_daily_skipped", "manager": "Магира", "reason": "Weekly AI mode"}
+2026-02-17 17:09:37, INFO ⚠️ file_missing_for_move · file=Ведомость_по_взаиморасчетам_с_контрагентами_Магира (59).xlsx; level=WARNING
+2026-02-17 17:09:37, INFO {"event": "file_missing_for_move", "file": "Ведомость_по_взаиморасчетам_с_контрагентами_Магира (59).xlsx", "level": "WARNING"}
+2026-02-17 17:09:37, INFO ▶️ run_script_start · script=debt_auto_report.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (60).xlsx',)
+2026-02-17 17:09:37, INFO {"event": "run_script_start", "script": "debt_auto_report.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (60).xlsx"]}
+2026-02-17 17:09:38, INFO 📄 script_stdout · script=debt_auto_report.py; output=✅ Отчёт сохранён: C:\Users\User\Documents\GPT1C_Processor_temp\reports\html\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (60)_debt.html
+2026-02-17 17:09:38, INFO {"event": "script_stdout", "script": "debt_auto_report.py", "output": "✅ Отчёт сохранён: C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\html\\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (60)_debt.html"}
+2026-02-17 17:09:38, INFO ✅ run_script_finish · script=debt_auto_report.py; return_code=0
+2026-02-17 17:09:38, INFO {"event": "run_script_finish", "script": "debt_auto_report.py", "return_code": 0}
+2026-02-17 17:09:38, INFO {"event": "ai_daily_skipped", "manager": "Магира", "reason": "Weekly AI mode"}
+2026-02-17 17:09:38, INFO ⚠️ file_missing_for_move · file=Ведомость_по_взаиморасчетам_с_контрагентами_Магира (60).xlsx; level=WARNING
+2026-02-17 17:09:38, INFO {"event": "file_missing_for_move", "file": "Ведомость_по_взаиморасчетам_с_контрагентами_Магира (60).xlsx", "level": "WARNING"}
+2026-02-17 17:09:38, INFO ▶️ run_script_start · script=debt_auto_report.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (58).xlsx',)
+2026-02-17 17:09:38, INFO {"event": "run_script_start", "script": "debt_auto_report.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (58).xlsx"]}
+2026-02-17 17:09:39, INFO 📄 script_stdout · script=debt_auto_report.py; output=✅ Отчёт сохранён: C:\Users\User\Documents\GPT1C_Processor_temp\reports\html\debt_ext_Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (58).html
+2026-02-17 17:09:39, INFO {"event": "script_stdout", "script": "debt_auto_report.py", "output": "✅ Отчёт сохранён: C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\html\\debt_ext_Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (58).html"}
+2026-02-17 17:09:39, INFO ✅ run_script_finish · script=debt_auto_report.py; return_code=0
+2026-02-17 17:09:39, INFO {"event": "run_script_finish", "script": "debt_auto_report.py", "return_code": 0}
+2026-02-17 17:09:39, INFO {"event": "ai_daily_skipped", "manager": "Оксана", "reason": "Weekly AI mode"}
+2026-02-17 17:09:39, INFO ⚠️ file_missing_for_move · file=Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (58).xlsx; level=WARNING
+2026-02-17 17:09:39, INFO {"event": "file_missing_for_move", "file": "Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (58).xlsx", "level": "WARNING"}
+2026-02-17 17:09:39, INFO ▶️ run_script_start · script=debt_auto_report.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (59).xlsx',)
+2026-02-17 17:09:39, INFO {"event": "run_script_start", "script": "debt_auto_report.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (59).xlsx"]}
+2026-02-17 17:09:40, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:09:40, INFO 📄 script_stdout · script=debt_auto_report.py; output=✅ Отчёт сохранён: C:\Users\User\Documents\GPT1C_Processor_temp\reports\html\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (59)_debt.html
+2026-02-17 17:09:40, INFO {"event": "script_stdout", "script": "debt_auto_report.py", "output": "✅ Отчёт сохранён: C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\html\\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (59)_debt.html"}
+2026-02-17 17:09:40, INFO ✅ run_script_finish · script=debt_auto_report.py; return_code=0
+2026-02-17 17:09:40, INFO {"event": "run_script_finish", "script": "debt_auto_report.py", "return_code": 0}
+2026-02-17 17:09:40, INFO {"event": "ai_daily_skipped", "manager": "Оксана", "reason": "Weekly AI mode"}
+2026-02-17 17:09:40, INFO ⚠️ file_missing_for_move · file=Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (59).xlsx; level=WARNING
+2026-02-17 17:09:40, INFO {"event": "file_missing_for_move", "file": "Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (59).xlsx", "level": "WARNING"}
+2026-02-17 17:09:40, INFO ▶️ run_script_start · script=inventory.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Ведомость_по_партиям_товаров_на_складах (39).xlsx',)
+2026-02-17 17:09:40, INFO {"event": "run_script_start", "script": "inventory.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Ведомость_по_партиям_товаров_на_складах (39).xlsx"]}
+2026-02-17 17:09:41, INFO ✅ run_script_finish · script=inventory.py; return_code=0
+2026-02-17 17:09:41, INFO {"event": "run_script_finish", "script": "inventory.py", "return_code": 0}
+2026-02-17 17:09:41, INFO ▶️ run_script_start · script=inventory_cost_parser.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Ведомость_по_партиям_товаров_на_складах (39).xlsx.__clean.xlsx',)
+2026-02-17 17:09:41, INFO {"event": "run_script_start", "script": "inventory_cost_parser.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Ведомость_по_партиям_товаров_на_складах (39).xlsx.__clean.xlsx"]}
+2026-02-17 17:09:42, INFO ✅ run_script_finish · script=inventory_cost_parser.py; return_code=0
+2026-02-17 17:09:42, INFO {"event": "run_script_finish", "script": "inventory_cost_parser.py", "return_code": 0}
+2026-02-17 17:09:42, INFO {"event": "inventory_parser_done", "file": "Ведомость_по_партиям_товаров_на_складах (39).xlsx", "rc": 0}
+2026-02-17 17:09:42, INFO ⚠️ file_missing_for_move · file=Ведомость_по_партиям_товаров_на_складах (39).xlsx; level=WARNING
+2026-02-17 17:09:42, INFO {"event": "file_missing_for_move", "file": "Ведомость_по_партиям_товаров_на_складах (39).xlsx", "level": "WARNING"}
+2026-02-17 17:09:42, INFO ▶️ run_script_start · script=debt_auto_report.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Детальный Дебиторы Алена (26).xlsx',)
+2026-02-17 17:09:42, INFO {"event": "run_script_start", "script": "debt_auto_report.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Детальный Дебиторы Алена (26).xlsx"]}
+2026-02-17 17:09:43, INFO 📄 script_stdout · script=debt_auto_report.py; output=✅ Отчёт сохранён: C:\Users\User\Documents\GPT1C_Processor_temp\reports\html\debt_ext_Детальный Дебиторы Алена (26).html
+2026-02-17 17:09:43, INFO {"event": "script_stdout", "script": "debt_auto_report.py", "output": "✅ Отчёт сохранён: C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\html\\debt_ext_Детальный Дебиторы Алена (26).html"}
+2026-02-17 17:09:43, INFO ✅ run_script_finish · script=debt_auto_report.py; return_code=0
+2026-02-17 17:09:43, INFO {"event": "run_script_finish", "script": "debt_auto_report.py", "return_code": 0}
+2026-02-17 17:09:43, INFO {"event": "ai_daily_skipped", "manager": "Алена", "reason": "Weekly AI mode"}
+2026-02-17 17:09:43, INFO ⚠️ file_missing_for_move · file=Детальный Дебиторы Алена (26).xlsx; level=WARNING
+2026-02-17 17:09:43, INFO {"event": "file_missing_for_move", "file": "Детальный Дебиторы Алена (26).xlsx", "level": "WARNING"}
+2026-02-17 17:09:43, INFO ▶️ run_script_start · script=debt_auto_report.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Детальный Дебиторы Ергали (26).xlsx',)
+2026-02-17 17:09:43, INFO {"event": "run_script_start", "script": "debt_auto_report.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Детальный Дебиторы Ергали (26).xlsx"]}
+2026-02-17 17:09:44, INFO 📄 script_stdout · script=debt_auto_report.py; output=✅ Отчёт сохранён: C:\Users\User\Documents\GPT1C_Processor_temp\reports\html\debt_ext_Детальный Дебиторы Ергали (26).html
+2026-02-17 17:09:44, INFO {"event": "script_stdout", "script": "debt_auto_report.py", "output": "✅ Отчёт сохранён: C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\html\\debt_ext_Детальный Дебиторы Ергали (26).html"}
+2026-02-17 17:09:44, INFO ✅ run_script_finish · script=debt_auto_report.py; return_code=0
+2026-02-17 17:09:44, INFO {"event": "run_script_finish", "script": "debt_auto_report.py", "return_code": 0}
+2026-02-17 17:09:44, INFO {"event": "ai_daily_skipped", "manager": "Ергали", "reason": "Weekly AI mode"}
+2026-02-17 17:09:44, INFO ⚠️ file_missing_for_move · file=Детальный Дебиторы Ергали (26).xlsx; level=WARNING
+2026-02-17 17:09:44, INFO {"event": "file_missing_for_move", "file": "Детальный Дебиторы Ергали (26).xlsx", "level": "WARNING"}
+2026-02-17 17:09:44, INFO ▶️ run_script_start · script=debt_auto_report.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Детальный Дебиторы Магира (26).xlsx',)
+2026-02-17 17:09:44, INFO {"event": "run_script_start", "script": "debt_auto_report.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Детальный Дебиторы Магира (26).xlsx"]}
+2026-02-17 17:09:45, INFO 📄 script_stdout · script=debt_auto_report.py; output=✅ Отчёт сохранён: C:\Users\User\Documents\GPT1C_Processor_temp\reports\html\debt_ext_Детальный Дебиторы Магира (26).html
+2026-02-17 17:09:45, INFO {"event": "script_stdout", "script": "debt_auto_report.py", "output": "✅ Отчёт сохранён: C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\html\\debt_ext_Детальный Дебиторы Магира (26).html"}
+2026-02-17 17:09:45, INFO ✅ run_script_finish · script=debt_auto_report.py; return_code=0
+2026-02-17 17:09:45, INFO {"event": "run_script_finish", "script": "debt_auto_report.py", "return_code": 0}
+2026-02-17 17:09:45, INFO {"event": "ai_daily_skipped", "manager": "Магира", "reason": "Weekly AI mode"}
+2026-02-17 17:09:45, INFO ⚠️ file_missing_for_move · file=Детальный Дебиторы Магира (26).xlsx; level=WARNING
+2026-02-17 17:09:45, INFO {"event": "file_missing_for_move", "file": "Детальный Дебиторы Магира (26).xlsx", "level": "WARNING"}
+2026-02-17 17:09:45, INFO ▶️ run_script_start · script=debt_auto_report.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Детальный Дебиторы Оксана (26).xlsx',)
+2026-02-17 17:09:45, INFO {"event": "run_script_start", "script": "debt_auto_report.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Детальный Дебиторы Оксана (26).xlsx"]}
+2026-02-17 17:09:46, INFO 📄 script_stdout · script=debt_auto_report.py; output=✅ Отчёт сохранён: C:\Users\User\Documents\GPT1C_Processor_temp\reports\html\debt_ext_Детальный Дебиторы Оксана (26).html
+2026-02-17 17:09:46, INFO {"event": "script_stdout", "script": "debt_auto_report.py", "output": "✅ Отчёт сохранён: C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\html\\debt_ext_Детальный Дебиторы Оксана (26).html"}
+2026-02-17 17:09:46, INFO ✅ run_script_finish · script=debt_auto_report.py; return_code=0
+2026-02-17 17:09:46, INFO {"event": "run_script_finish", "script": "debt_auto_report.py", "return_code": 0}
+2026-02-17 17:09:46, INFO {"event": "ai_daily_skipped", "manager": "Оксана", "reason": "Weekly AI mode"}
+2026-02-17 17:09:46, INFO ⚠️ file_missing_for_move · file=Детальный Дебиторы Оксана (26).xlsx; level=WARNING
+2026-02-17 17:09:46, INFO {"event": "file_missing_for_move", "file": "Детальный Дебиторы Оксана (26).xlsx", "level": "WARNING"}
+2026-02-17 17:09:46, INFO ▶️ run_script_start · script=debt_auto_report.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Детальный_по_взаиморасчетам_с_контрагентами (26).xlsx',)
+2026-02-17 17:09:46, INFO {"event": "run_script_start", "script": "debt_auto_report.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Детальный_по_взаиморасчетам_с_контрагентами (26).xlsx"]}
+2026-02-17 17:09:47, INFO 📄 script_stdout · script=debt_auto_report.py; output=✅ Отчёт сохранён: C:\Users\User\Documents\GPT1C_Processor_temp\reports\html\debt_ext_Детальный_по_взаиморасчетам_с_контрагентами (26).html
+2026-02-17 17:09:47, INFO {"event": "script_stdout", "script": "debt_auto_report.py", "output": "✅ Отчёт сохранён: C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\html\\debt_ext_Детальный_по_взаиморасчетам_с_контрагентами (26).html"}
+2026-02-17 17:09:47, INFO ✅ run_script_finish · script=debt_auto_report.py; return_code=0
+2026-02-17 17:09:47, INFO {"event": "run_script_finish", "script": "debt_auto_report.py", "return_code": 0}
+2026-02-17 17:09:47, INFO ⚠️ file_missing_for_move · file=Детальный_по_взаиморасчетам_с_контрагентами (26).xlsx; level=WARNING
+2026-02-17 17:09:47, INFO {"event": "file_missing_for_move", "file": "Детальный_по_взаиморасчетам_с_контрагентами (26).xlsx", "level": "WARNING"}
+2026-02-17 17:09:47, INFO ▶️ run_script_start · script=inventory.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Остатки всем (54).xlsx',)
+2026-02-17 17:09:47, INFO {"event": "run_script_start", "script": "inventory.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Остатки всем (54).xlsx"]}
+2026-02-17 17:09:48, INFO ✅ run_script_finish · script=inventory.py; return_code=0
+2026-02-17 17:09:48, INFO {"event": "run_script_finish", "script": "inventory.py", "return_code": 0}
+2026-02-17 17:09:48, INFO ▶️ run_script_start · script=inventory_cost_parser.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Остатки всем (54).xlsx.__clean.xlsx',)
+2026-02-17 17:09:48, INFO {"event": "run_script_start", "script": "inventory_cost_parser.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Остатки всем (54).xlsx.__clean.xlsx"]}
+2026-02-17 17:09:49, INFO ⚠️ script_stderr · script=inventory_cost_parser.py; output=2026-02-17 12:09:48 INFO Лог-файл: C:\Users\User\Documents\GPT1C_Processor_temp\logs\inventory_cost_parser_20260217_170948.log
+2026-02-17 12:09:48 INFO Файл: C:\Users\User\Documents\GPT1C_Processor_temp\reports\excel\clean\Остатки всем (54).xlsx.__clean.xlsx
+2026-02-17 17:09:48, INFO Clean copy → Остатки всем (54).xlsx.__clean.xlsx.__clean.xlsx
+2026-02-17 12:09:49 ERROR FAILED
+Traceback (most recent call last):
+  File "C:\Users\User\Documents\GPT1C_Processor_temp\inventory_cost_parser.py", line 373, in main
+    out = build_inventory_cost_json(p)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\Documents\GPT1C_Processor_temp\inventory_cost_parser.py", line 325, in build_inventory_cost_json
+    colmap, data_start, _ = find_header_block(raw)
+                            ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\Documents\GPT1C_Processor_temp\inventory_cost_parser.py", line 184, in find_header_block
+    raise ValueError("Не найдена строка заголовков")
+ValueError: Не найдена строка заголовков; level=WARNING
+2026-02-17 17:09:49, INFO {"event": "script_stderr", "script": "inventory_cost_parser.py", "output": "2026-02-17 12:09:48 INFO Лог-файл: C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\logs\\inventory_cost_parser_20260217_170948.log\r\n2026-02-17 12:09:48 INFO Файл: C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Остатки всем (54).xlsx.__clean.xlsx\r\n2026-02-17 17:09:48, INFO Clean copy → Остатки всем (54).xlsx.__clean.xlsx.__clean.xlsx\r\n2026-02-17 12:09:49 ERROR FAILED\r\nTraceback (most recent call last):\r\n  File \"C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\inventory_cost_parser.py\", line 373, in main\r\n    out = build_inventory_cost_json(p)\r\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\n  File \"C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\inventory_cost_parser.py\", line 325, in build_inventory_cost_json\r\n    colmap, data_start, _ = find_header_block(raw)\r\n                            ^^^^^^^^^^^^^^^^^^^^^^\r\n  File \"C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\inventory_cost_parser.py\", line 184, in find_header_block\r\n    raise ValueError(\"Не найдена строка заголовков\")\r\nValueError: Не найдена строка заголовков", "level": "WARNING"}
+2026-02-17 17:09:49, INFO ✅ run_script_finish · script=inventory_cost_parser.py; return_code=2
+2026-02-17 17:09:49, INFO {"event": "run_script_finish", "script": "inventory_cost_parser.py", "return_code": 2}
+2026-02-17 17:09:49, INFO {"event": "inventory_parser_done", "file": "Остатки всем (54).xlsx", "rc": 2}
+2026-02-17 17:09:49, INFO ⚠️ file_missing_for_move · file=Остатки всем (54).xlsx; level=WARNING
+2026-02-17 17:09:49, INFO {"event": "file_missing_for_move", "file": "Остатки всем (54).xlsx", "level": "WARNING"}
+2026-02-17 17:09:49, INFO ▶️ run_script_start · script=sales_report.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Продажи (90).xlsx',)
+2026-02-17 17:09:49, INFO {"event": "run_script_start", "script": "sales_report.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Продажи (90).xlsx"]}
+2026-02-17 17:09:50, INFO ✅ run_script_finish · script=sales_report.py; return_code=0
+2026-02-17 17:09:50, INFO {"event": "run_script_finish", "script": "sales_report.py", "return_code": 0}
+2026-02-17 17:09:50, INFO ▶️ run_script_start · script=sales_parser.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Продажи (90).xlsx.__clean.xlsx',)
+2026-02-17 17:09:50, INFO {"event": "run_script_start", "script": "sales_parser.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Продажи (90).xlsx.__clean.xlsx"]}
+2026-02-17 17:09:50, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:09:51, INFO ✅ run_script_finish · script=sales_parser.py; return_code=0
+2026-02-17 17:09:51, INFO {"event": "run_script_finish", "script": "sales_parser.py", "return_code": 0}
+2026-02-17 17:09:51, INFO {"event": "sales_parser_done", "file": "Продажи (90).xlsx", "rc": 0}
+2026-02-17 17:09:51, INFO ⚠️ file_missing_for_move · file=Продажи (90).xlsx; level=WARNING
+2026-02-17 17:09:51, INFO {"event": "file_missing_for_move", "file": "Продажи (90).xlsx", "level": "WARNING"}
+2026-02-17 17:09:51, INFO ▶️ run_script_start · script=sales_report.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Продажи (91).xlsx',)
+2026-02-17 17:09:51, INFO {"event": "run_script_start", "script": "sales_report.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Продажи (91).xlsx"]}
+2026-02-17 17:09:52, INFO ✅ run_script_finish · script=sales_report.py; return_code=0
+2026-02-17 17:09:52, INFO {"event": "run_script_finish", "script": "sales_report.py", "return_code": 0}
+2026-02-17 17:09:52, INFO ▶️ run_script_start · script=sales_parser.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Продажи (91).xlsx.__clean.xlsx',)
+2026-02-17 17:09:52, INFO {"event": "run_script_start", "script": "sales_parser.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Продажи (91).xlsx.__clean.xlsx"]}
+2026-02-17 17:09:53, INFO ✅ run_script_finish · script=sales_parser.py; return_code=0
+2026-02-17 17:09:53, INFO {"event": "run_script_finish", "script": "sales_parser.py", "return_code": 0}
+2026-02-17 17:09:53, INFO {"event": "sales_parser_done", "file": "Продажи (91).xlsx", "rc": 0}
+2026-02-17 17:09:53, INFO ⚠️ file_missing_for_move · file=Продажи (91).xlsx; level=WARNING
+2026-02-17 17:09:53, INFO {"event": "file_missing_for_move", "file": "Продажи (91).xlsx", "level": "WARNING"}
+2026-02-17 17:09:53, INFO ▶️ run_script_start · script=sales_report.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Продажи Алена (25).xlsx',)
+2026-02-17 17:09:53, INFO {"event": "run_script_start", "script": "sales_report.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Продажи Алена (25).xlsx"]}
+2026-02-17 17:09:54, INFO ✅ run_script_finish · script=sales_report.py; return_code=0
+2026-02-17 17:09:54, INFO {"event": "run_script_finish", "script": "sales_report.py", "return_code": 0}
+2026-02-17 17:09:54, INFO ▶️ run_script_start · script=sales_parser.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Продажи Алена (25).xlsx.__clean.xlsx',)
+2026-02-17 17:09:54, INFO {"event": "run_script_start", "script": "sales_parser.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Продажи Алена (25).xlsx.__clean.xlsx"]}
+2026-02-17 17:09:55, INFO ✅ run_script_finish · script=sales_parser.py; return_code=0
+2026-02-17 17:09:55, INFO {"event": "run_script_finish", "script": "sales_parser.py", "return_code": 0}
+2026-02-17 17:09:55, INFO {"event": "sales_parser_done", "file": "Продажи Алена (25).xlsx", "rc": 0}
+2026-02-17 17:09:55, INFO {"event": "ai_daily_skipped", "manager": "Алена", "reason": "Weekly AI mode"}
+2026-02-17 17:09:55, INFO ⚠️ file_missing_for_move · file=Продажи Алена (25).xlsx; level=WARNING
+2026-02-17 17:09:55, INFO {"event": "file_missing_for_move", "file": "Продажи Алена (25).xlsx", "level": "WARNING"}
+2026-02-17 17:09:55, INFO ▶️ run_script_start · script=sales_report.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Продажи Ергали (25).xlsx',)
+2026-02-17 17:09:55, INFO {"event": "run_script_start", "script": "sales_report.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Продажи Ергали (25).xlsx"]}
+2026-02-17 17:09:56, INFO ✅ run_script_finish · script=sales_report.py; return_code=0
+2026-02-17 17:09:56, INFO {"event": "run_script_finish", "script": "sales_report.py", "return_code": 0}
+2026-02-17 17:09:56, INFO ▶️ run_script_start · script=sales_parser.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Продажи Ергали (25).xlsx.__clean.xlsx',)
+2026-02-17 17:09:56, INFO {"event": "run_script_start", "script": "sales_parser.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Продажи Ергали (25).xlsx.__clean.xlsx"]}
+2026-02-17 17:09:56, INFO ✅ run_script_finish · script=sales_parser.py; return_code=0
+2026-02-17 17:09:56, INFO {"event": "run_script_finish", "script": "sales_parser.py", "return_code": 0}
+2026-02-17 17:09:56, INFO {"event": "sales_parser_done", "file": "Продажи Ергали (25).xlsx", "rc": 0}
+2026-02-17 17:09:56, INFO {"event": "ai_daily_skipped", "manager": "Ергали", "reason": "Weekly AI mode"}
+2026-02-17 17:09:56, INFO ⚠️ file_missing_for_move · file=Продажи Ергали (25).xlsx; level=WARNING
+2026-02-17 17:09:56, INFO {"event": "file_missing_for_move", "file": "Продажи Ергали (25).xlsx", "level": "WARNING"}
+2026-02-17 17:09:56, INFO ▶️ run_script_start · script=sales_report.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Продажи Магира (25).xlsx',)
+2026-02-17 17:09:56, INFO {"event": "run_script_start", "script": "sales_report.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Продажи Магира (25).xlsx"]}
+2026-02-17 17:09:57, INFO ✅ run_script_finish · script=sales_report.py; return_code=0
+2026-02-17 17:09:57, INFO {"event": "run_script_finish", "script": "sales_report.py", "return_code": 0}
+2026-02-17 17:09:57, INFO ▶️ run_script_start · script=sales_parser.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Продажи Магира (25).xlsx.__clean.xlsx',)
+2026-02-17 17:09:57, INFO {"event": "run_script_start", "script": "sales_parser.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Продажи Магира (25).xlsx.__clean.xlsx"]}
+2026-02-17 17:09:58, INFO ✅ run_script_finish · script=sales_parser.py; return_code=0
+2026-02-17 17:09:58, INFO {"event": "run_script_finish", "script": "sales_parser.py", "return_code": 0}
+2026-02-17 17:09:58, INFO {"event": "sales_parser_done", "file": "Продажи Магира (25).xlsx", "rc": 0}
+2026-02-17 17:09:58, INFO {"event": "ai_daily_skipped", "manager": "Магира", "reason": "Weekly AI mode"}
+2026-02-17 17:09:58, INFO ⚠️ file_missing_for_move · file=Продажи Магира (25).xlsx; level=WARNING
+2026-02-17 17:09:58, INFO {"event": "file_missing_for_move", "file": "Продажи Магира (25).xlsx", "level": "WARNING"}
+2026-02-17 17:09:58, INFO ▶️ run_script_start · script=sales_report.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Продажи Оксана (24).xlsx',)
+2026-02-17 17:09:58, INFO {"event": "run_script_start", "script": "sales_report.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\queue\\Продажи Оксана (24).xlsx"]}
+2026-02-17 17:09:59, INFO ✅ run_script_finish · script=sales_report.py; return_code=0
+2026-02-17 17:09:59, INFO {"event": "run_script_finish", "script": "sales_report.py", "return_code": 0}
+2026-02-17 17:09:59, INFO ▶️ run_script_start · script=sales_parser.py; args=('C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Продажи Оксана (24).xlsx.__clean.xlsx',)
+2026-02-17 17:09:59, INFO {"event": "run_script_start", "script": "sales_parser.py", "args": ["C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\reports\\excel\\clean\\Продажи Оксана (24).xlsx.__clean.xlsx"]}
+2026-02-17 17:10:00, INFO ✅ run_script_finish · script=sales_parser.py; return_code=0
+2026-02-17 17:10:00, INFO {"event": "run_script_finish", "script": "sales_parser.py", "return_code": 0}
+2026-02-17 17:10:00, INFO {"event": "sales_parser_done", "file": "Продажи Оксана (24).xlsx", "rc": 0}
+2026-02-17 17:10:00, INFO {"event": "ai_daily_skipped", "manager": "Оксана", "reason": "Weekly AI mode"}
+2026-02-17 17:10:00, INFO ⚠️ file_missing_for_move · file=Продажи Оксана (24).xlsx; level=WARNING
+2026-02-17 17:10:00, INFO {"event": "file_missing_for_move", "file": "Продажи Оксана (24).xlsx", "level": "WARNING"}
+2026-02-17 17:10:00, INFO ⏭📦 skip_non_debt_cash_batch · count=24; files=['Ведомость по денежным средствам (334).xlsx', 'Ведомость по денежным средствам (335).xlsx', 'Ведомость по денежным средствам (336).xlsx']
+2026-02-17 17:10:00, INFO {"event": "skip_non_debt_cash_batch", "count": 24, "files": ["Ведомость по денежным средствам (334).xlsx", "Ведомость по денежным средствам (335).xlsx", "Ведомость по денежным средствам (336).xlsx"]}
+2026-02-17 17:10:01, INFO 🗂️ index_built · files=208; report_types=6; build_ms=724.3
+2026-02-17 17:10:01, INFO {"event": "index_built", "files": 208, "report_types": 6, "build_ms": 724.3}
+2026-02-17 17:10:01, INFO 🔄 index_rebuilt_after_generation · files_processed=55
+2026-02-17 17:10:01, INFO {"event": "index_rebuilt_after_generation", "files_processed": 55}
+2026-02-17 17:10:01, INFO 🔔 Начинается проверка дней молчания...
+2026-02-17 17:10:01, INFO 📄 Найден отчёт для Алена: debt_ext_Детальный Дебиторы Алена (26).html
+2026-02-17 17:10:01, INFO 📊 Распарсено 58 клиентов из debt_ext_Детальный Дебиторы Алена (26).html
+2026-02-17 17:10:01, INFO 📊 У Алена: 4 молчащих клиентов
+2026-02-17 17:10:01, INFO 📄 Найден отчёт для Ергали: debt_ext_Детальный Дебиторы Ергали (26).html
+2026-02-17 17:10:01, INFO 📊 Распарсено 73 клиентов из debt_ext_Детальный Дебиторы Ергали (26).html
+2026-02-17 17:10:01, INFO 📊 У Ергали: 11 молчащих клиентов
+2026-02-17 17:10:01, INFO 📄 Найден отчёт для Магира: debt_ext_Детальный Дебиторы Магира (26).html
+2026-02-17 17:10:01, INFO 📊 Распарсено 127 клиентов из debt_ext_Детальный Дебиторы Магира (26).html
+2026-02-17 17:10:01, INFO 📊 У Магира: 4 молчащих клиентов
+2026-02-17 17:10:01, INFO 📄 Найден отчёт для Оксана: debt_ext_Детальный Дебиторы Оксана (26).html
+2026-02-17 17:10:01, INFO 📊 Распарсено 99 клиентов из debt_ext_Детальный Дебиторы Оксана (26).html
+2026-02-17 17:10:01, INFO 📊 У Оксана: 5 молчащих клиентов
+2026-02-17 17:10:01, INFO 👤 Алена - субадмин, подшефные: Магира, Оксана
+2026-02-17 17:10:01, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:10:02, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/sendMessage "HTTP/1.1 400 Bad Request"
+2026-02-17 17:10:02, ERROR ❌ Ошибка отправки Алена: Chat not found
+2026-02-17 17:10:02, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/sendMessage "HTTP/1.1 400 Bad Request"
+2026-02-17 17:10:02, ERROR ❌ Ошибка отправки Ергали: Chat not found
+2026-02-17 17:10:03, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/sendMessage "HTTP/1.1 400 Bad Request"
+2026-02-17 17:10:03, ERROR ❌ Ошибка отправки Магира: Chat not found
+2026-02-17 17:10:03, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/sendMessage "HTTP/1.1 400 Bad Request"
+2026-02-17 17:10:03, ERROR ❌ Ошибка отправки Оксана: Chat not found
+2026-02-17 17:10:03, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/sendMessage "HTTP/1.1 200 OK"
+2026-02-17 17:10:03, INFO ✅ Детальная сводка отправлена админу
+2026-02-17 17:10:03, INFO 🔔 Проверка дней молчания завершена
+2026-02-17 17:10:03, INFO ✅ pipeline_cycle_finish
+2026-02-17 17:10:03, INFO {"event": "pipeline_cycle_finish"}
+2026-02-17 17:10:03, INFO Job "pipeline (trigger: interval[0:10:00], next run at: 2026-02-17 12:19:04 UTC)" executed successfully
+2026-02-17 17:10:04, INFO Running job "janitor (trigger: interval[1:00:00], next run at: 2026-02-17 13:10:04 UTC)" (scheduled at 2026-02-17 12:10:04.600464+00:00)
+2026-02-17 17:10:04, INFO 🧹 janitor_start
+2026-02-17 17:10:04, INFO {"event": "janitor_start"}
+2026-02-17 17:10:04, INFO ✅ json_read_success · file=deletion_queue.json; encoding=utf-8
+2026-02-17 17:10:04, INFO {"event": "json_read_success", "file": "deletion_queue.json", "encoding": "utf-8"}
+2026-02-17 17:10:04, INFO ✅ janitor_finish · processed=0
+2026-02-17 17:10:04, INFO {"event": "janitor_finish", "processed": 0}
+2026-02-17 17:10:04, INFO Job "janitor (trigger: interval[1:00:00], next run at: 2026-02-17 13:10:04 UTC)" executed successfully
+2026-02-17 17:10:11, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:10:21, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:10:32, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:10:42, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:10:52, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:10:53, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:10:53, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-17 17:10:53, INFO 📘 callback_query · data=show_stats; chat_id=7422963573; user_role=admin
+2026-02-17 17:10:53, INFO {"event": "callback_query", "data": "show_stats", "chat_id": 7422963573, "user_role": "admin"}
+2026-02-17 17:10:53, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/sendMessage "HTTP/1.1 200 OK"
+2026-02-17 17:10:53, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-17 17:11:03, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:11:04, INFO Running job "new_reports (trigger: interval[0:10:00], next run at: 2026-02-17 12:21:04 UTC)" (scheduled at 2026-02-17 12:11:04.587483+00:00)
+2026-02-17 17:11:04, INFO 🔔 notifier_start
+2026-02-17 17:11:04, INFO {"event": "notifier_start"}
+2026-02-17 17:11:04, INFO ✅ json_read_success · file=notify_state.json; encoding=utf-8
+2026-02-17 17:11:04, INFO {"event": "json_read_success", "file": "notify_state.json", "encoding": "utf-8"}
+2026-02-17 17:11:05, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/sendMessage "HTTP/1.1 200 OK"
+2026-02-17 17:11:05, INFO 📨 notification_sent · chat_id=7422963573; reports_count=37
+2026-02-17 17:11:05, INFO {"event": "notification_sent", "chat_id": 7422963573, "reports_count": 37}
+2026-02-17 17:11:05, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/sendMessage "HTTP/1.1 400 Bad Request"
+2026-02-17 17:11:05, INFO ❌ notification_error · chat_id=188939016; error=Chat not found; level=ERROR
+2026-02-17 17:11:05, INFO {"event": "notification_error", "chat_id": 188939016, "error": "Chat not found", "level": "ERROR"}
+2026-02-17 17:11:05, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/sendMessage "HTTP/1.1 400 Bad Request"
+2026-02-17 17:11:05, INFO ❌ notification_error · chat_id=756622791; error=Chat not found; level=ERROR
+2026-02-17 17:11:05, INFO {"event": "notification_error", "chat_id": 756622791, "error": "Chat not found", "level": "ERROR"}
+2026-02-17 17:11:06, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/sendMessage "HTTP/1.1 400 Bad Request"
+2026-02-17 17:11:06, INFO ❌ notification_error · chat_id=735574334; error=Chat not found; level=ERROR
+2026-02-17 17:11:06, INFO {"event": "notification_error", "chat_id": 735574334, "error": "Chat not found", "level": "ERROR"}
+2026-02-17 17:11:06, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/sendMessage "HTTP/1.1 400 Bad Request"
+2026-02-17 17:11:06, INFO ❌ notification_error · chat_id=1446255940; error=Chat not found; level=ERROR
+2026-02-17 17:11:06, INFO {"event": "notification_error", "chat_id": 1446255940, "error": "Chat not found", "level": "ERROR"}
+2026-02-17 17:11:06, INFO ✅ json_read_success · file=notify_state.json; encoding=utf-8
+2026-02-17 17:11:06, INFO {"event": "json_read_success", "file": "notify_state.json", "encoding": "utf-8"}
+2026-02-17 17:11:06, INFO 🔔 notifier_finish · total_notifications=37; watermark_time=1771329064.6259272
+2026-02-17 17:11:06, INFO {"event": "notifier_finish", "total_notifications": 37, "watermark_time": 1771329064.6259272}
+2026-02-17 17:11:06, INFO Job "new_reports (trigger: interval[0:10:00], next run at: 2026-02-17 12:21:04 UTC)" executed successfully
+2026-02-17 17:11:09, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:11:10, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-17 17:11:10, INFO 📘 callback_query · data=back_main; chat_id=7422963573; user_role=admin
+2026-02-17 17:11:10, INFO {"event": "callback_query", "data": "back_main", "chat_id": 7422963573, "user_role": "admin"}
+2026-02-17 17:11:10, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/editMessageText "HTTP/1.1 200 OK"
+2026-02-17 17:11:13, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:11:13, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-17 17:11:13, INFO 📘 callback_query · data=menu_gross; chat_id=7422963573; user_role=admin
+2026-02-17 17:11:13, INFO {"event": "callback_query", "data": "menu_gross", "chat_id": 7422963573, "user_role": "admin"}
+2026-02-17 17:11:14, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/editMessageText "HTTP/1.1 200 OK"
+2026-02-17 17:11:15, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:11:15, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-17 17:11:15, INFO 📘 callback_query · data=submenu|GROSS_PCT; chat_id=7422963573; user_role=admin
+2026-02-17 17:11:15, INFO {"event": "callback_query", "data": "submenu|GROSS_PCT", "chat_id": 7422963573, "user_role": "admin"}
+2026-02-17 17:11:16, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/editMessageText "HTTP/1.1 200 OK"
+2026-02-17 17:11:17, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:11:17, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-17 17:11:17, INFO 📘 callback_query · data=direct|GROSS_PCT|Ергали; chat_id=7422963573; user_role=admin
+2026-02-17 17:11:17, INFO {"event": "callback_query", "data": "direct|GROSS_PCT|Ергали", "chat_id": 7422963573, "user_role": "admin"}
+2026-02-17 17:11:17, INFO ✅ json_read_success · file=daily_activity.json; encoding=utf-8
+2026-02-17 17:11:17, INFO {"event": "json_read_success", "file": "daily_activity.json", "encoding": "utf-8"}
+2026-02-17 17:11:17, INFO 📝 user_activity_logged · user=User_7422963573; action=request; report=GROSS_PCT
+2026-02-17 17:11:17, INFO {"event": "user_activity_logged", "user": "User_7422963573", "action": "request", "report": "GROSS_PCT"}
+2026-02-17 17:11:17, INFO 📤 send_file · section=GROSS_PCT; manager=Ергали; file=Валовая прибыль Ергали_gross_pct.html
+2026-02-17 17:11:17, INFO {"event": "send_file", "section": "GROSS_PCT", "manager": "Ергали", "file": "Валовая прибыль Ергали_gross_pct.html"}
+2026-02-17 17:11:18, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/sendDocument "HTTP/1.1 200 OK"
+2026-02-17 17:11:18, INFO ✅ json_read_success · file=deletion_queue.json; encoding=utf-8
+2026-02-17 17:11:18, INFO {"event": "json_read_success", "file": "deletion_queue.json", "encoding": "utf-8"}
+2026-02-17 17:11:18, INFO 🗑️ deletion_scheduled · chat_id=7422963573; message_id=260; due_time=18.02 17:11; delay_hours=24
+2026-02-17 17:11:18, INFO {"event": "deletion_scheduled", "chat_id": 7422963573, "message_id": 260, "due_time": "18.02 17:11", "delay_hours": 24}
+2026-02-17 17:11:18, INFO ✅ json_read_success · file=daily_activity.json; encoding=utf-8
+2026-02-17 17:11:18, INFO {"event": "json_read_success", "file": "daily_activity.json", "encoding": "utf-8"}
+2026-02-17 17:11:18, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/sendMessage "HTTP/1.1 200 OK"
+2026-02-17 17:11:22, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:11:22, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-17 17:11:22, INFO 📘 callback_query · data=back_submenu; chat_id=7422963573; user_role=admin
+2026-02-17 17:11:22, INFO {"event": "callback_query", "data": "back_submenu", "chat_id": 7422963573, "user_role": "admin"}
+2026-02-17 17:11:22, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/editMessageText "HTTP/1.1 200 OK"
+2026-02-17 17:11:26, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:11:27, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-17 17:11:27, INFO 📘 callback_query · data=menu_debt; chat_id=7422963573; user_role=admin
+2026-02-17 17:11:27, INFO {"event": "callback_query", "data": "menu_debt", "chat_id": 7422963573, "user_role": "admin"}
+2026-02-17 17:11:27, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/editMessageText "HTTP/1.1 200 OK"
+2026-02-17 17:11:29, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:11:29, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-17 17:11:29, INFO 📘 callback_query · data=submenu|DEBT_SIMPLE; chat_id=7422963573; user_role=admin
+2026-02-17 17:11:29, INFO {"event": "callback_query", "data": "submenu|DEBT_SIMPLE", "chat_id": 7422963573, "user_role": "admin"}
+2026-02-17 17:11:30, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/editMessageText "HTTP/1.1 200 OK"
+2026-02-17 17:11:31, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:11:31, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-17 17:11:31, INFO 📘 callback_query · data=direct|DEBT_SIMPLE|Оксана; chat_id=7422963573; user_role=admin
+2026-02-17 17:11:31, INFO {"event": "callback_query", "data": "direct|DEBT_SIMPLE|Оксана", "chat_id": 7422963573, "user_role": "admin"}
+2026-02-17 17:11:31, INFO ✅ json_read_success · file=daily_activity.json; encoding=utf-8
+2026-02-17 17:11:31, INFO {"event": "json_read_success", "file": "daily_activity.json", "encoding": "utf-8"}
+2026-02-17 17:11:31, INFO 📝 user_activity_logged · user=User_7422963573; action=request; report=DEBT_SIMPLE
+2026-02-17 17:11:31, INFO {"event": "user_activity_logged", "user": "User_7422963573", "action": "request", "report": "DEBT_SIMPLE"}
+2026-02-17 17:11:31, INFO 📤 send_file · section=DEBT_SIMPLE; manager=Оксана; file=Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (59)_debt.html
+2026-02-17 17:11:31, INFO {"event": "send_file", "section": "DEBT_SIMPLE", "manager": "Оксана", "file": "Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (59)_debt.html"}
+2026-02-17 17:11:32, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/sendDocument "HTTP/1.1 200 OK"
+2026-02-17 17:11:32, INFO ✅ json_read_success · file=deletion_queue.json; encoding=utf-8
+2026-02-17 17:11:32, INFO {"event": "json_read_success", "file": "deletion_queue.json", "encoding": "utf-8"}
+2026-02-17 17:11:32, INFO 🗑️ deletion_scheduled · chat_id=7422963573; message_id=262; due_time=18.02 17:11; delay_hours=24
+2026-02-17 17:11:32, INFO {"event": "deletion_scheduled", "chat_id": 7422963573, "message_id": 262, "due_time": "18.02 17:11", "delay_hours": 24}
+2026-02-17 17:11:32, INFO ✅ json_read_success · file=daily_activity.json; encoding=utf-8
+2026-02-17 17:11:32, INFO {"event": "json_read_success", "file": "daily_activity.json", "encoding": "utf-8"}
+2026-02-17 17:11:33, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/sendMessage "HTTP/1.1 200 OK"
+2026-02-17 17:11:39, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:11:39, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-17 17:11:39, INFO 📘 callback_query · data=menu_debt; chat_id=7422963573; user_role=admin
+2026-02-17 17:11:39, INFO {"event": "callback_query", "data": "menu_debt", "chat_id": 7422963573, "user_role": "admin"}
+2026-02-17 17:11:40, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/editMessageText "HTTP/1.1 200 OK"
+2026-02-17 17:11:41, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:11:41, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-17 17:11:41, INFO 📘 callback_query · data=submenu|DEBT_EXTENDED; chat_id=7422963573; user_role=admin
+2026-02-17 17:11:41, INFO {"event": "callback_query", "data": "submenu|DEBT_EXTENDED", "chat_id": 7422963573, "user_role": "admin"}
+2026-02-17 17:11:41, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/editMessageText "HTTP/1.1 200 OK"
+2026-02-17 17:11:43, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:11:43, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-17 17:11:43, INFO 📘 callback_query · data=direct|DEBT_EXTENDED|Алена; chat_id=7422963573; user_role=admin
+2026-02-17 17:11:43, INFO {"event": "callback_query", "data": "direct|DEBT_EXTENDED|Алена", "chat_id": 7422963573, "user_role": "admin"}
+2026-02-17 17:11:43, INFO ✅ json_read_success · file=daily_activity.json; encoding=utf-8
+2026-02-17 17:11:43, INFO {"event": "json_read_success", "file": "daily_activity.json", "encoding": "utf-8"}
+2026-02-17 17:11:43, INFO 📝 user_activity_logged · user=User_7422963573; action=request; report=DEBT_EXTENDED
+2026-02-17 17:11:43, INFO {"event": "user_activity_logged", "user": "User_7422963573", "action": "request", "report": "DEBT_EXTENDED"}
+2026-02-17 17:11:43, INFO 📤 send_file · section=DEBT_EXTENDED; manager=Алена; file=debt_ext_Детальный Дебиторы Алена (26).html
+2026-02-17 17:11:43, INFO {"event": "send_file", "section": "DEBT_EXTENDED", "manager": "Алена", "file": "debt_ext_Детальный Дебиторы Алена (26).html"}
+2026-02-17 17:11:43, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/sendDocument "HTTP/1.1 200 OK"
+2026-02-17 17:11:43, INFO ✅ json_read_success · file=deletion_queue.json; encoding=utf-8
+2026-02-17 17:11:43, INFO {"event": "json_read_success", "file": "deletion_queue.json", "encoding": "utf-8"}
+2026-02-17 17:11:43, INFO 🗑️ deletion_scheduled · chat_id=7422963573; message_id=264; due_time=18.02 17:11; delay_hours=24
+2026-02-17 17:11:43, INFO {"event": "deletion_scheduled", "chat_id": 7422963573, "message_id": 264, "due_time": "18.02 17:11", "delay_hours": 24}
+2026-02-17 17:11:43, INFO ✅ json_read_success · file=daily_activity.json; encoding=utf-8
+2026-02-17 17:11:43, INFO {"event": "json_read_success", "file": "daily_activity.json", "encoding": "utf-8"}
+2026-02-17 17:11:44, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/sendMessage "HTTP/1.1 200 OK"
+2026-02-17 17:11:49, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:11:50, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-17 17:11:50, INFO 📘 callback_query · data=menu_analytics; chat_id=7422963573; user_role=admin
+2026-02-17 17:11:50, INFO {"event": "callback_query", "data": "menu_analytics", "chat_id": 7422963573, "user_role": "admin"}
+2026-02-17 17:11:50, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/editMessageText "HTTP/1.1 200 OK"
+2026-02-17 17:11:54, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:11:54, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-17 17:11:54, INFO 📘 callback_query · data=analytics|sales_profit; chat_id=7422963573; user_role=admin
+2026-02-17 17:11:54, INFO {"event": "callback_query", "data": "analytics|sales_profit", "chat_id": 7422963573, "user_role": "admin"}
+2026-02-17 17:11:54, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-17 17:11:54, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/sendMessage "HTTP/1.1 200 OK"
+2026-02-17 17:11:59, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:11:59, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-17 17:11:59, INFO 📘 callback_query · data=analytics|net_profit; chat_id=7422963573; user_role=admin
+2026-02-17 17:11:59, INFO {"event": "callback_query", "data": "analytics|net_profit", "chat_id": 7422963573, "user_role": "admin"}
+2026-02-17 17:11:59, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-17 17:11:59, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/sendMessage "HTTP/1.1 200 OK"
+2026-02-17 17:12:03, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:12:03, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-17 17:12:03, INFO 📘 callback_query · data=analytics|turnover; chat_id=7422963573; user_role=admin
+2026-02-17 17:12:03, INFO {"event": "callback_query", "data": "analytics|turnover", "chat_id": 7422963573, "user_role": "admin"}
+2026-02-17 17:12:03, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-17 17:12:03, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/sendDocument "HTTP/1.1 200 OK"
+2026-02-17 17:12:13, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:12:23, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:12:33, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:12:43, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:12:47, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:12:48, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-17 17:12:48, INFO 📘 callback_query · data=menu_analytics; chat_id=7422963573; user_role=admin
+2026-02-17 17:12:48, INFO {"event": "callback_query", "data": "menu_analytics", "chat_id": 7422963573, "user_role": "admin"}
+2026-02-17 17:12:48, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/editMessageText "HTTP/1.1 200 OK"
+2026-02-17 17:12:50, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:12:50, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-17 17:12:50, INFO 📘 callback_query · data=analytics|concentration; chat_id=7422963573; user_role=admin
+2026-02-17 17:12:50, INFO {"event": "callback_query", "data": "analytics|concentration", "chat_id": 7422963573, "user_role": "admin"}
+2026-02-17 17:12:50, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-17 17:12:50, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/sendMessage "HTTP/1.1 200 OK"
+2026-02-17 17:12:53, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:12:53, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-17 17:12:53, INFO 📘 callback_query · data=analytics|dso; chat_id=7422963573; user_role=admin
+2026-02-17 17:12:53, INFO {"event": "callback_query", "data": "analytics|dso", "chat_id": 7422963573, "user_role": "admin"}
+2026-02-17 17:12:53, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-02-17 17:12:53, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/sendDocument "HTTP/1.1 200 OK"
+2026-02-17 17:13:03, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:13:04, INFO Running job "ai_queue_processor (trigger: interval[0:02:00], next run at: 2026-02-17 12:15:04 UTC)" (scheduled at 2026-02-17 12:13:04.600464+00:00)
+2026-02-17 17:13:04, INFO Job "ai_queue_processor (trigger: interval[0:02:00], next run at: 2026-02-17 12:15:04 UTC)" executed successfully
+2026-02-17 17:13:13, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:13:23, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:13:33, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:13:44, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:13:54, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:14:04, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:14:14, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:14:24, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:14:34, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:14:45, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:14:55, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:15:04, INFO Running job "ai_queue_processor (trigger: interval[0:02:00], next run at: 2026-02-17 12:17:04 UTC)" (scheduled at 2026-02-17 12:15:04.600464+00:00)
+2026-02-17 17:15:04, INFO Job "ai_queue_processor (trigger: interval[0:02:00], next run at: 2026-02-17 12:17:04 UTC)" executed successfully
+2026-02-17 17:15:05, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:15:15, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:15:25, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:15:35, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:15:45, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:15:55, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:16:06, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:16:16, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:16:26, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:16:36, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:16:46, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:16:56, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:17:04, INFO Running job "ai_queue_processor (trigger: interval[0:02:00], next run at: 2026-02-17 12:19:04 UTC)" (scheduled at 2026-02-17 12:17:04.600464+00:00)
+2026-02-17 17:17:04, INFO Job "ai_queue_processor (trigger: interval[0:02:00], next run at: 2026-02-17 12:19:04 UTC)" executed successfully
+2026-02-17 17:17:07, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:17:17, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:17:27, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:17:37, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:17:47, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:17:58, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:18:08, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:18:18, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:18:28, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:18:38, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:18:48, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:18:58, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:19:04, INFO Running job "pipeline (trigger: interval[0:10:00], next run at: 2026-02-17 12:29:04 UTC)" (scheduled at 2026-02-17 12:19:04.577548+00:00)
+2026-02-17 17:19:04, INFO 🔍 pipeline_cycle_start
+2026-02-17 17:19:04, INFO {"event": "pipeline_cycle_start"}
+2026-02-17 17:19:04, INFO ▶️ run_script_start · script=imap_fetcher.py; args=('--once',)
+2026-02-17 17:19:04, INFO {"event": "run_script_start", "script": "imap_fetcher.py", "args": ["--once"]}
+2026-02-17 17:19:04, INFO Running job "ai_queue_processor (trigger: interval[0:02:00], next run at: 2026-02-17 12:21:04 UTC)" (scheduled at 2026-02-17 12:19:04.600464+00:00)
+2026-02-17 17:19:04, INFO Job "ai_queue_processor (trigger: interval[0:02:00], next run at: 2026-02-17 12:21:04 UTC)" executed successfully
+2026-02-17 17:19:06, INFO 📄 script_stdout · script=imap_fetcher.py; output=2026-02-17 17:19:04, INFO === imap_fetcher vv4.4.1 ===
+2026-02-17 17:19:04, INFO IMAP cfg: host=mail.minbarakat.kz port=993 ssl=True user=corp@minbarakat.kz pass_set=True tz=Asia/Almaty env=C:\Users\User\Documents\GPT1C_Processor_temp\.env cfg=C:\Users\User\Documents\GPT1C_Processor_temp\config\imap.json
+2026-02-17 17:19:05, INFO IMAP LOGIN OK (attempt 1/5)
+2026-02-17 17:19:05, INFO SEARCH found 0 msgs
+2026-02-17 17:19:05, INFO INBOX EXPUNGE OK
+2026-02-17 17:19:05, INFO TRASH skip Trash: cannot SELECT
+2026-02-17 17:19:05, INFO TRASH skip Корзина: cannot SELECT
+2026-02-17 17:19:05, INFO TRASH skip Deleted Items: cannot SELECT
+2026-02-17 17:19:05, INFO TRASH cleaned: INBOX.Trash
+2026-02-17 17:19:05, INFO CYCLE DONE: saved=0
+2026-02-17 17:19:06, INFO {"event": "script_stdout", "script": "imap_fetcher.py", "output": "2026-02-17 17:19:04, INFO === imap_fetcher vv4.4.1 ===\r\n2026-02-17 17:19:04, INFO IMAP cfg: host=mail.minbarakat.kz port=993 ssl=True user=corp@minbarakat.kz pass_set=True tz=Asia/Almaty env=C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\.env cfg=C:\\Users\\User\\Documents\\GPT1C_Processor_temp\\config\\imap.json\r\n2026-02-17 17:19:05, INFO IMAP LOGIN OK (attempt 1/5)\r\n2026-02-17 17:19:05, INFO SEARCH found 0 msgs\r\n2026-02-17 17:19:05, INFO INBOX EXPUNGE OK\r\n2026-02-17 17:19:05, INFO TRASH skip Trash: cannot SELECT\r\n2026-02-17 17:19:05, INFO TRASH skip Корзина: cannot SELECT\r\n2026-02-17 17:19:05, INFO TRASH skip Deleted Items: cannot SELECT\r\n2026-02-17 17:19:05, INFO TRASH cleaned: INBOX.Trash\r\n2026-02-17 17:19:05, INFO CYCLE DONE: saved=0"}
+2026-02-17 17:19:06, INFO ✅ run_script_finish · script=imap_fetcher.py; return_code=0
+2026-02-17 17:19:06, INFO {"event": "run_script_finish", "script": "imap_fetcher.py", "return_code": 0}
+2026-02-17 17:19:06, INFO 🔬 queue_found_files · count=24
+2026-02-17 17:19:06, INFO {"event": "queue_found_files", "count": 24}
+2026-02-17 17:19:06, INFO ⏭📦 skip_non_debt_cash_batch · count=24; files=['Ведомость по денежным средствам (334).xlsx', 'Ведомость по денежным средствам (335).xlsx', 'Ведомость по денежным средствам (336).xlsx']
+2026-02-17 17:19:06, INFO {"event": "skip_non_debt_cash_batch", "count": 24, "files": ["Ведомость по денежным средствам (334).xlsx", "Ведомость по денежным средствам (335).xlsx", "Ведомость по денежным средствам (336).xlsx"]}
+2026-02-17 17:19:06, INFO 🗂️ index_built · files=208; report_types=6; build_ms=723.5
+2026-02-17 17:19:06, INFO {"event": "index_built", "files": 208, "report_types": 6, "build_ms": 723.5}
+2026-02-17 17:19:06, INFO 🔄 index_rebuilt_after_generation · files_processed=24
+2026-02-17 17:19:06, INFO {"event": "index_rebuilt_after_generation", "files_processed": 24}
+2026-02-17 17:19:06, INFO ✅ pipeline_cycle_finish
+2026-02-17 17:19:06, INFO {"event": "pipeline_cycle_finish"}
+2026-02-17 17:19:06, INFO Job "pipeline (trigger: interval[0:10:00], next run at: 2026-02-17 12:29:04 UTC)" executed successfully
+2026-02-17 17:19:09, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:19:19, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:19:29, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:19:39, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:19:49, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:19:59, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:20:10, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:20:20, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:20:30, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:20:40, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:20:50, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:21:00, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:21:04, INFO Running job "new_reports (trigger: interval[0:10:00], next run at: 2026-02-17 12:31:04 UTC)" (scheduled at 2026-02-17 12:21:04.587483+00:00)
+2026-02-17 17:21:04, INFO Running job "ai_queue_processor (trigger: interval[0:02:00], next run at: 2026-02-17 12:23:04 UTC)" (scheduled at 2026-02-17 12:21:04.600464+00:00)
+2026-02-17 17:21:04, INFO 🔔 notifier_start
+2026-02-17 17:21:04, INFO {"event": "notifier_start"}
+2026-02-17 17:21:04, INFO ✅ json_read_success · file=notify_state.json; encoding=utf-8
+2026-02-17 17:21:04, INFO {"event": "json_read_success", "file": "notify_state.json", "encoding": "utf-8"}
+2026-02-17 17:21:04, INFO ✅ json_read_success · file=notify_state.json; encoding=utf-8
+2026-02-17 17:21:04, INFO {"event": "json_read_success", "file": "notify_state.json", "encoding": "utf-8"}
+2026-02-17 17:21:04, INFO 🔔 notifier_finish · total_notifications=0; watermark_time=1771329664.6140554
+2026-02-17 17:21:04, INFO {"event": "notifier_finish", "total_notifications": 0, "watermark_time": 1771329664.6140554}
+2026-02-17 17:21:04, INFO Job "new_reports (trigger: interval[0:10:00], next run at: 2026-02-17 12:31:04 UTC)" executed successfully
+2026-02-17 17:21:04, INFO Job "ai_queue_processor (trigger: interval[0:02:00], next run at: 2026-02-17 12:23:04 UTC)" executed successfully
+2026-02-17 17:21:10, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:21:21, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:21:31, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:21:41, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:21:51, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:22:01, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:22:11, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:22:21, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:22:32, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:22:42, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:22:52, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:23:02, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:23:04, INFO Running job "ai_queue_processor (trigger: interval[0:02:00], next run at: 2026-02-17 12:25:04 UTC)" (scheduled at 2026-02-17 12:23:04.600464+00:00)
+2026-02-17 17:23:04, INFO Job "ai_queue_processor (trigger: interval[0:02:00], next run at: 2026-02-17 12:25:04 UTC)" executed successfully
+2026-02-17 17:23:12, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:23:23, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:23:33, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:23:43, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:23:53, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:24:03, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:24:13, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:24:23, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:24:33, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:24:43, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:24:54, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:25:04, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:25:04, INFO Running job "ai_queue_processor (trigger: interval[0:02:00], next run at: 2026-02-17 12:27:04 UTC)" (scheduled at 2026-02-17 12:25:04.600464+00:00)
+2026-02-17 17:25:04, INFO Job "ai_queue_processor (trigger: interval[0:02:00], next run at: 2026-02-17 12:27:04 UTC)" executed successfully
+2026-02-17 17:25:14, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:25:24, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:25:34, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:25:44, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:25:54, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:26:05, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:26:15, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:26:25, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:26:35, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:26:45, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:26:55, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:27:04, INFO Running job "ai_queue_processor (trigger: interval[0:02:00], next run at: 2026-02-17 12:29:04 UTC)" (scheduled at 2026-02-17 12:27:04.600464+00:00)
+2026-02-17 17:27:04, INFO Job "ai_queue_processor (trigger: interval[0:02:00], next run at: 2026-02-17 12:29:04 UTC)" executed successfully
+2026-02-17 17:27:05, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:27:16, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:27:26, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-17 17:27:36, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"

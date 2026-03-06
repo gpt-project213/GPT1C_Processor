@@ -1,0 +1,6 @@
+2026-02-19 13:46:17,189, INFO Парсинг файла: Затраты (11).xlsx.__clean.xlsx
+2026-02-19 13:46:17,380, INFO Период: 2026-02-16, тип: DAY (текстовый месяц)
+2026-02-19 13:46:17,380, INFO Таблица: start_row=7, name_col=1, amount_col=2
+2026-02-19 13:46:17,380, INFO Готово: подразделений=1, деталей=4, total=256000.00, grand_total=256000.00
+2026-02-19 13:46:17,380, INFO JSON сохранён: C:\Users\User\Documents\GPT1C_Processor_temp\reports\json\expenses_Затраты_11_xlsx___clean_20260216.json
+2026-02-19 13:46:17,398, INFO HTML сохранён: C:\Users\User\Documents\GPT1C_Processor_temp\reports\html\expenses_Затраты_11_xlsx___clean_20260216.html

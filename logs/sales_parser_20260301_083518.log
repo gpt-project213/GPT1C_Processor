@@ -1,0 +1,5 @@
+2026-03-01 03:35:18,475, INFO Лог-файл: F:\GPT1C_Processor_analitic\logs\sales_parser_20260301_083518.log
+2026-03-01 03:35:18,475, INFO Файл: F:\GPT1C_Processor_analitic\reports\excel\clean\Продажи Магира (256).xlsx.__clean.xlsx
+2026-03-01 03:35:18,665, INFO JSON создан: F:\GPT1C_Processor_analitic\reports\json\sales_продажи_магира_256xlsx__clean_27_февраля_2026_г.json
+2026-03-01 03:35:18,665, INFO Клиентов: 4, Выручка: 1472376.55 ₸
+2026-03-01 03:35:18,665, INFO OK: F:\GPT1C_Processor_analitic\reports\json\sales_продажи_магира_256xlsx__clean_27_февраля_2026_г.json

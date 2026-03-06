@@ -1,0 +1,10 @@
+2026-02-18 08:26:27,004, INFO Лог-файл: C:\Users\User\Documents\GPT1C_Processor_temp\logs\inventory_simple_20260218_132627.log
+2026-02-18 08:26:27,004, INFO Файл: C:\Users\User\Documents\GPT1C_Processor_temp\reports\queue\Ведомость_по_партиям_товаров_на_складах (40).xlsx
+2026-02-18 08:26:27,254, INFO === УМНЫЙ ПАРСИНГ: определение категорий и товаров ===
+2026-02-18 08:26:27,265, INFO === РЕЗУЛЬТАТЫ ПАРСИНГА ===
+2026-02-18 08:26:27,266, INFO Найдено категорий: 2
+2026-02-18 08:26:27,266, INFO   КЫЗЫЛЖАР Филе ЦБ: 91 товаров
+2026-02-18 08:26:27,266, INFO   Номенклатура: 55 товаров
+2026-02-18 08:26:27,266, INFO Общий итог: 35799.96
+2026-02-18 08:26:27,272, INFO HTML: C:\Users\User\Documents\GPT1C_Processor_temp\reports\html\inventory_simple_Ведомость_по_партиям_товаров_на_складах (40).html
+2026-02-18 08:26:27,272, INFO OK: C:\Users\User\Documents\GPT1C_Processor_temp\reports\html\inventory_simple_Ведомость_по_партиям_товаров_на_складах (40).html

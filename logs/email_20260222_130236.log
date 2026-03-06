@@ -1,0 +1,90 @@
+2026-02-22 13:02:36, INFO === imap_fetcher vv4.4.3 ===
+2026-02-22 13:02:36, INFO IMAP cfg: host=mail.minbarakat.kz port=993 ssl=True user=test@minbarakat.kz pass_set=True tz=Asia/Almaty env=C:\Users\user\Documents\GPT1C_Processor_analitic\.env cfg=C:\Users\user\Documents\GPT1C_Processor_analitic\config\imap.json
+2026-02-22 13:02:36, INFO IMAP LOGIN OK (attempt 1/5)
+2026-02-22 13:02:36, INFO SEARCH found 2 msgs
+2026-02-22 13:02:36, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Магира (68).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-22 13:02:36, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (68).xlsx (from kz.holod@yandex.ru)
+2026-02-22 13:02:36, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (68).xlsx.__clean.xlsx
+2026-02-22 13:02:36, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (67).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-22 13:02:36, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (67).xlsx (from kz.holod@yandex.ru)
+2026-02-22 13:02:36, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (67).xlsx.__clean.xlsx
+2026-02-22 13:02:36, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами (95).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-22 13:02:36, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами (95).xlsx (from kz.holod@yandex.ru)
+2026-02-22 13:02:36, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами (95).xlsx.__clean.xlsx
+2026-02-22 13:02:36, INFO SUMMARY REPORT detected: Ведомость по денежным средствам (100).xlsx (keyword: ведомость)
+2026-02-22 13:02:36, INFO SAVED: reports\queue\Ведомость по денежным средствам (100).xlsx (from kz.holod@yandex.ru)
+2026-02-22 13:02:36, INFO Clean copy: reports\excel\clean\Ведомость по денежным средствам (100).xlsx.__clean.xlsx
+2026-02-22 13:02:36, INFO SUMMARY REPORT detected: Детальный Дебиторы Алена (30).xlsx (keyword: детальный)
+2026-02-22 13:02:36, INFO SAVED: reports\queue\Детальный Дебиторы Алена (30).xlsx (from kz.holod@yandex.ru)
+2026-02-22 13:02:36, INFO Clean copy: reports\excel\clean\Детальный Дебиторы Алена (30).xlsx.__clean.xlsx
+2026-02-22 13:02:36, INFO SUMMARY REPORT detected: Детальный Дебиторы Ергали (30).xlsx (keyword: детальный)
+2026-02-22 13:02:36, INFO SAVED: reports\queue\Детальный Дебиторы Ергали (30).xlsx (from kz.holod@yandex.ru)
+2026-02-22 13:02:36, INFO Clean copy: reports\excel\clean\Детальный Дебиторы Ергали (30).xlsx.__clean.xlsx
+2026-02-22 13:02:36, INFO SUMMARY REPORT detected: Детальный Дебиторы Магира (32).xlsx (keyword: детальный)
+2026-02-22 13:02:36, INFO SAVED: reports\queue\Детальный Дебиторы Магира (32).xlsx (from kz.holod@yandex.ru)
+2026-02-22 13:02:36, INFO Clean copy: reports\excel\clean\Детальный Дебиторы Магира (32).xlsx.__clean.xlsx
+2026-02-22 13:02:36, INFO SUMMARY REPORT detected: Детальный Дебиторы Оксана (30).xlsx (keyword: детальный)
+2026-02-22 13:02:36, INFO SAVED: reports\queue\Детальный Дебиторы Оксана (30).xlsx (from kz.holod@yandex.ru)
+2026-02-22 13:02:36, INFO Clean copy: reports\excel\clean\Детальный Дебиторы Оксана (30).xlsx.__clean.xlsx
+2026-02-22 13:02:36, INFO SUMMARY REPORT detected: Детальный_по_взаиморасчетам_с_контрагентами (30).xlsx (phrase: детальный_по_взаиморасчетам_с_контрагентами)
+2026-02-22 13:02:36, INFO SAVED: reports\queue\Детальный_по_взаиморасчетам_с_контрагентами (30).xlsx (from kz.holod@yandex.ru)
+2026-02-22 13:02:36, INFO Clean copy: reports\excel\clean\Детальный_по_взаиморасчетам_с_контрагентами (30).xlsx.__clean.xlsx
+2026-02-22 13:02:36, INFO SUMMARY REPORT detected: Остатки всем (60).xlsx (keyword: остатки)
+2026-02-22 13:02:36, INFO SAVED: reports\queue\Остатки всем (60).xlsx (from kz.holod@yandex.ru)
+2026-02-22 13:02:36, INFO Clean copy: reports\excel\clean\Остатки всем (60).xlsx.__clean.xlsx
+2026-02-22 13:02:36, INFO SUMMARY REPORT detected: Продажи (99).xlsx (keyword: продажи)
+2026-02-22 13:02:36, INFO SAVED: reports\queue\Продажи (99).xlsx (from kz.holod@yandex.ru)
+2026-02-22 13:02:36, INFO Clean copy: reports\excel\clean\Продажи (99).xlsx.__clean.xlsx
+2026-02-22 13:02:36, INFO SUMMARY REPORT detected: Валовая прибыль (101).xlsx (keyword: валовая)
+2026-02-22 13:02:36, INFO SAVED: reports\queue\Валовая прибыль (101).xlsx (from kz.holod@yandex.ru)
+2026-02-22 13:02:36, INFO Clean copy: reports\excel\clean\Валовая прибыль (101).xlsx.__clean.xlsx
+2026-02-22 13:02:36, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Алена (70).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-22 13:02:36, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (70).xlsx (from kz.holod@yandex.ru)
+2026-02-22 13:02:36, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (70).xlsx.__clean.xlsx
+2026-02-22 13:02:36, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (68).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-22 13:02:36, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (68).xlsx (from kz.holod@yandex.ru)
+2026-02-22 13:02:36, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (68).xlsx.__clean.xlsx
+2026-02-22 13:02:36, INFO MAIL flagged \Deleted, msg #b'1'
+2026-02-22 13:02:36, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами (94).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-22 13:02:36, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами (94).xlsx (from kz.holod@yandex.ru)
+2026-02-22 13:02:36, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами (94).xlsx.__clean.xlsx
+2026-02-22 13:02:36, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (66).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-22 13:02:36, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (66).xlsx (from kz.holod@yandex.ru)
+2026-02-22 13:02:36, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (66).xlsx.__clean.xlsx
+2026-02-22 13:02:36, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Магира (67).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-22 13:02:36, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (67).xlsx (from kz.holod@yandex.ru)
+2026-02-22 13:02:36, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (67).xlsx.__clean.xlsx
+2026-02-22 13:02:36, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (42).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-22 13:02:36, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (42).xlsx (from kz.holod@yandex.ru)
+2026-02-22 13:02:37, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (42).xlsx.__clean.xlsx
+2026-02-22 13:02:37, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (67).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-22 13:02:37, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (67).xlsx (from kz.holod@yandex.ru)
+2026-02-22 13:02:37, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (67).xlsx.__clean.xlsx
+2026-02-22 13:02:37, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Алена (69).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-22 13:02:37, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (69).xlsx (from kz.holod@yandex.ru)
+2026-02-22 13:02:37, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (69).xlsx.__clean.xlsx
+2026-02-22 13:02:37, INFO SUMMARY REPORT detected: Валовая прибыль (100).xlsx (keyword: валовая)
+2026-02-22 13:02:37, INFO SAVED: reports\queue\Валовая прибыль (100).xlsx (from kz.holod@yandex.ru)
+2026-02-22 13:02:37, INFO Clean copy: reports\excel\clean\Валовая прибыль (100).xlsx.__clean.xlsx
+2026-02-22 13:02:37, INFO SUMMARY REPORT detected: Продажи (98).xlsx (keyword: продажи)
+2026-02-22 13:02:37, INFO SAVED: reports\queue\Продажи (98).xlsx (from kz.holod@yandex.ru)
+2026-02-22 13:02:37, INFO Clean copy: reports\excel\clean\Продажи (98).xlsx.__clean.xlsx
+2026-02-22 13:02:37, INFO SUMMARY REPORT detected: Затраты с нарастающим (43).xlsx (keyword: затраты)
+2026-02-22 13:02:37, INFO SAVED: reports\queue\Затраты с нарастающим (43).xlsx (from kz.holod@yandex.ru)
+2026-02-22 13:02:37, INFO Clean copy: reports\excel\clean\Затраты с нарастающим (43).xlsx.__clean.xlsx
+2026-02-22 13:02:37, INFO SUMMARY REPORT detected: Ведомость по товарам на складах (43).xlsx (phrase: ведомость по товарам на складах)
+2026-02-22 13:02:37, INFO SAVED: reports\queue\Ведомость по товарам на складах (43).xlsx (from kz.holod@yandex.ru)
+2026-02-22 13:02:37, INFO Clean copy: reports\excel\clean\Ведомость по товарам на складах (43).xlsx.__clean.xlsx
+2026-02-22 13:02:37, INFO SUMMARY REPORT detected: Ведомость_по_партиям_товаров_на_складах (43).xlsx (keyword: ведомость)
+2026-02-22 13:02:37, INFO SAVED: reports\queue\Ведомость_по_партиям_товаров_на_складах (43).xlsx (from kz.holod@yandex.ru)
+2026-02-22 13:02:37, INFO Clean copy: reports\excel\clean\Ведомость_по_партиям_товаров_на_складах (43).xlsx.__clean.xlsx
+2026-02-22 13:02:37, INFO SUMMARY REPORT detected: Ведомость по денежным средствам (99).xlsx (keyword: ведомость)
+2026-02-22 13:02:37, INFO SAVED: reports\queue\Ведомость по денежным средствам (99).xlsx (from kz.holod@yandex.ru)
+2026-02-22 13:02:37, INFO Clean copy: reports\excel\clean\Ведомость по денежным средствам (99).xlsx.__clean.xlsx
+2026-02-22 13:02:37, INFO MAIL flagged \Deleted, msg #b'2'
+2026-02-22 13:02:37, INFO INBOX EXPUNGE OK
+2026-02-22 13:02:37, INFO TRASH skip Trash: cannot SELECT
+2026-02-22 13:02:37, INFO TRASH skip Корзина: cannot SELECT
+2026-02-22 13:02:37, INFO TRASH skip Deleted Items: cannot SELECT
+2026-02-22 13:02:37, INFO TRASH cleaned: INBOX.Trash
+2026-02-22 13:02:37, INFO CYCLE DONE: saved=2

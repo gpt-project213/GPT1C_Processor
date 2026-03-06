@@ -9,7 +9,6 @@ reports/
 archive/
 cache/
 
-*.log
 *.xlsx
 *.zip
 

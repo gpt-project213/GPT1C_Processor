@@ -1,0 +1,20 @@
+2026-02-17 10:19:59,498, INFO Лог-файл: E:\GPT1C_Processor_temp\logs\gross_parser_20260217_101959.log
+2026-02-17 10:19:59,499, INFO Файл: reports\excel\clean\Валовая прибыль (332).xlsx.__clean.xlsx
+2026-02-17 10:19:59,577, ERROR FAILED
+Traceback (most recent call last):
+  File "E:\GPT1C_Processor_temp\gross_parser.py", line 369, in main
+    out = build_gross_json(p)
+          ^^^^^^^^^^^^^^^^^^^
+  File "E:\GPT1C_Processor_temp\gross_parser.py", line 319, in build_gross_json
+    raw = read_excel_raw(xlsx)
+          ^^^^^^^^^^^^^^^^^^^^
+  File "E:\GPT1C_Processor_temp\gross_parser.py", line 140, in read_excel_raw
+    p = ensure_clean_xlsx(p, force_fix=True)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\GPT1C_Processor_temp\utils_excel.py", line 162, in ensure_clean_xlsx
+    _safe_replace(temp_path, clean)
+  File "E:\GPT1C_Processor_temp\utils_excel.py", line 122, in _safe_replace
+    src.replace(dst)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\pathlib.py", line 1188, in replace
+    os.replace(self, target)
+OSError: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\User\\AppData\\Local\\Temp\\tmpfa1l126g\\Валовая прибыль (332).xlsx.__clean.__tmp_clean.xlsx' -> 'E:\\GPT1C_Processor_temp\\reports\\excel\\Валовая прибыль (332).xlsx.__clean.xlsx.__clean.xlsx'

@@ -1,0 +1,128 @@
+2026-02-16 15:22:05, INFO ✅ json_read_success · file=roles.json; encoding=utf-8
+2026-02-16 15:22:05, INFO {"event": "json_read_success", "file": "roles.json", "encoding": "utf-8"}
+2026-02-16 15:22:05, INFO ✅ json_read_success · file=managers.json; encoding=utf-8
+2026-02-16 15:22:05, INFO {"event": "json_read_success", "file": "managers.json", "encoding": "utf-8"}
+2026-02-16 15:22:05, INFO {"event": "managers_normalized", "count": 4}
+2026-02-16 15:22:05, INFO 🤖 bot_starting · version=v9.4.9
+2026-02-16 15:22:05, INFO {"event": "bot_starting", "version": "v9.4.9"}
+2026-02-16 15:22:06, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-16 15:22:06, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-16 15:22:06, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-16 15:22:06, INFO ⏰ Настроен ежедневный джоб: проверка дней молчания в 14:00
+2026-02-16 15:22:06, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-16 15:22:06, INFO ⏰ Настроен ежедневный джоб: проверка дней молчания в 21:00
+2026-02-16 15:22:06, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-16 15:22:06, INFO 🧹 Настроен janitor: проверка очереди удаления каждые 3600 сек (60 мин)
+2026-02-16 15:22:06, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-16 15:22:06, INFO 🤖 Настроен обработчик очереди ИИ: интервал 120 сек
+2026-02-16 15:22:06, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-16 15:22:06, INFO 📊 Настроена ежедневная сводка админу в 23:00
+2026-02-16 15:22:06, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-16 15:22:06, INFO 🔄 Настроен сброс счётчика ИИ-генераций в 00:01
+2026-02-16 15:22:06, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-16 15:22:06, INFO 🤖 Настроена еженедельная AI генерация: понедельник 10:00
+2026-02-16 15:22:06, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-16 15:22:06, INFO 📊 Настроена еженедельная аналитика: понедельник 10:00
+2026-02-16 15:22:06, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-16 15:22:06, INFO 📦 Настроена краткая сводка остатков: ежедневно 09:00
+2026-02-16 15:22:06, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-16 15:22:06, INFO 💰 Настроена краткая сводка валовой: ежедневно 20:00
+2026-02-16 15:22:06, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-16 15:22:06, INFO 🛒 Настроена краткая сводка продаж: ежедневно 21:00
+2026-02-16 15:22:06, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-16 15:22:06, INFO 🧹 Настроена автоочистка файлов: логи 2д, AI 7д, HTML 30д, JSON 7д, Excel 14д | Запуск в 03:00
+2026-02-16 15:22:06, INFO 🗑️ Автоудаление сообщений через 24 часов
+2026-02-16 15:22:06, INFO 📡 bot_polling_started
+2026-02-16 15:22:06, INFO {"event": "bot_polling_started"}
+2026-02-16 15:22:06, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getMe "HTTP/1.1 200 OK"
+2026-02-16 15:22:08, INFO 🗂️ index_built · files=173; report_types=5; build_ms=2037.7
+2026-02-16 15:22:08, INFO {"event": "index_built", "files": 173, "report_types": 5, "build_ms": 2037.7}
+2026-02-16 15:22:08, INFO 🗂️ initial_index_built
+2026-02-16 15:22:08, INFO {"event": "initial_index_built"}
+2026-02-16 15:22:08, INFO ✅ json_read_success · file=deletion_queue.json; encoding=utf-8
+2026-02-16 15:22:08, INFO {"event": "json_read_success", "file": "deletion_queue.json", "encoding": "utf-8"}
+2026-02-16 15:22:09, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/deleteWebhook "HTTP/1.1 200 OK"
+2026-02-16 15:22:09, INFO Added job "pipeline" to job store "default"
+2026-02-16 15:22:09, INFO Added job "new_reports" to job store "default"
+2026-02-16 15:22:09, INFO Added job "silence_alerts_14h" to job store "default"
+2026-02-16 15:22:09, INFO Added job "silence_alerts_21h" to job store "default"
+2026-02-16 15:22:09, INFO Added job "janitor" to job store "default"
+2026-02-16 15:22:09, INFO Added job "ai_queue_processor" to job store "default"
+2026-02-16 15:22:09, INFO Added job "daily_summary" to job store "default"
+2026-02-16 15:22:09, INFO Added job "reset_ai_state" to job store "default"
+2026-02-16 15:22:09, INFO Added job "weekly_ai_generation" to job store "default"
+2026-02-16 15:22:09, INFO Added job "weekly_analytics" to job store "default"
+2026-02-16 15:22:09, INFO Added job "inventory_summary" to job store "default"
+2026-02-16 15:22:09, INFO Added job "gross_summary" to job store "default"
+2026-02-16 15:22:09, INFO Added job "sales_summary" to job store "default"
+2026-02-16 15:22:09, INFO Added job "cleanup_old_files" to job store "default"
+2026-02-16 15:22:09, INFO Scheduler started
+2026-02-16 15:22:09, INFO Application started
+2026-02-16 15:22:19, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-16 15:22:29, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-16 15:22:39, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-16 15:22:50, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-16 15:23:00, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-16 15:23:06, INFO Running job "pipeline (trigger: interval[0:10:00], next run at: 2026-02-16 10:33:06 UTC)" (scheduled at 2026-02-16 10:23:06.362232+00:00)
+2026-02-16 15:23:06, INFO 🔍 pipeline_cycle_start
+2026-02-16 15:23:06, INFO {"event": "pipeline_cycle_start"}
+2026-02-16 15:23:06, INFO ▶️ run_script_start · script=imap_fetcher.py; args=('--once',)
+2026-02-16 15:23:06, INFO {"event": "run_script_start", "script": "imap_fetcher.py", "args": ["--once"]}
+2026-02-16 15:23:07, INFO 📄 script_stdout · script=imap_fetcher.py; output=2026-02-16 15:23:06, INFO === imap_fetcher vv4.4.1 ===
+2026-02-16 15:23:06, INFO IMAP cfg: host=mail.minbarakat.kz port=993 ssl=True user=corp@minbarakat.kz pass_set=True tz=Asia/Almaty env=E:\GPT1C_Processor_temp\.env cfg=E:\GPT1C_Processor_temp\config\imap.json
+2026-02-16 15:23:06, INFO IMAP LOGIN OK (attempt 1/5)
+2026-02-16 15:23:07, INFO SEARCH found 0 msgs
+2026-02-16 15:23:07, INFO INBOX EXPUNGE OK
+2026-02-16 15:23:07, INFO TRASH skip Trash: cannot SELECT
+2026-02-16 15:23:07, INFO TRASH skip Корзина: cannot SELECT
+2026-02-16 15:23:07, INFO TRASH skip Deleted Items: cannot SELECT
+2026-02-16 15:23:07, INFO TRASH cleaned: INBOX.Trash
+2026-02-16 15:23:07, INFO CYCLE DONE: saved=0
+2026-02-16 15:23:07, INFO {"event": "script_stdout", "script": "imap_fetcher.py", "output": "2026-02-16 15:23:06, INFO === imap_fetcher vv4.4.1 ===\r\n2026-02-16 15:23:06, INFO IMAP cfg: host=mail.minbarakat.kz port=993 ssl=True user=corp@minbarakat.kz pass_set=True tz=Asia/Almaty env=E:\\GPT1C_Processor_temp\\.env cfg=E:\\GPT1C_Processor_temp\\config\\imap.json\r\n2026-02-16 15:23:06, INFO IMAP LOGIN OK (attempt 1/5)\r\n2026-02-16 15:23:07, INFO SEARCH found 0 msgs\r\n2026-02-16 15:23:07, INFO INBOX EXPUNGE OK\r\n2026-02-16 15:23:07, INFO TRASH skip Trash: cannot SELECT\r\n2026-02-16 15:23:07, INFO TRASH skip Корзина: cannot SELECT\r\n2026-02-16 15:23:07, INFO TRASH skip Deleted Items: cannot SELECT\r\n2026-02-16 15:23:07, INFO TRASH cleaned: INBOX.Trash\r\n2026-02-16 15:23:07, INFO CYCLE DONE: saved=0"}
+2026-02-16 15:23:07, INFO ✅ run_script_finish · script=imap_fetcher.py; return_code=0
+2026-02-16 15:23:07, INFO {"event": "run_script_finish", "script": "imap_fetcher.py", "return_code": 0}
+2026-02-16 15:23:07, INFO 🔬 queue_found_files · count=22
+2026-02-16 15:23:07, INFO {"event": "queue_found_files", "count": 22}
+2026-02-16 15:23:07, INFO ⏭📦 skip_non_debt_cash_batch · count=22; files=['Ведомость по денежным средствам (334).xlsx', 'Ведомость по денежным средствам (335).xlsx', 'Ведомость по денежным средствам (336).xlsx']
+2026-02-16 15:23:07, INFO {"event": "skip_non_debt_cash_batch", "count": 22, "files": ["Ведомость по денежным средствам (334).xlsx", "Ведомость по денежным средствам (335).xlsx", "Ведомость по денежным средствам (336).xlsx"]}
+2026-02-16 15:23:08, INFO 🗂️ index_built · files=173; report_types=5; build_ms=616.2
+2026-02-16 15:23:08, INFO {"event": "index_built", "files": 173, "report_types": 5, "build_ms": 616.2}
+2026-02-16 15:23:08, INFO 🔄 index_rebuilt_after_generation · files_processed=22
+2026-02-16 15:23:08, INFO {"event": "index_rebuilt_after_generation", "files_processed": 22}
+2026-02-16 15:23:08, INFO ✅ pipeline_cycle_finish
+2026-02-16 15:23:08, INFO {"event": "pipeline_cycle_finish"}
+2026-02-16 15:23:08, INFO Job "pipeline (trigger: interval[0:10:00], next run at: 2026-02-16 10:33:06 UTC)" executed successfully
+2026-02-16 15:23:10, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-16 15:23:20, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-16 15:23:30, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-16 15:23:40, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-16 15:23:51, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-16 15:24:01, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-16 15:24:06, INFO Running job "janitor (trigger: interval[1:00:00], next run at: 2026-02-16 11:24:06 UTC)" (scheduled at 2026-02-16 10:24:06.372839+00:00)
+2026-02-16 15:24:06, INFO 🧹 janitor_start
+2026-02-16 15:24:06, INFO {"event": "janitor_start"}
+2026-02-16 15:24:06, INFO ✅ json_read_success · file=deletion_queue.json; encoding=utf-8
+2026-02-16 15:24:06, INFO {"event": "json_read_success", "file": "deletion_queue.json", "encoding": "utf-8"}
+2026-02-16 15:24:06, INFO ✅ janitor_finish · processed=0
+2026-02-16 15:24:06, INFO {"event": "janitor_finish", "processed": 0}
+2026-02-16 15:24:06, INFO Job "janitor (trigger: interval[1:00:00], next run at: 2026-02-16 11:24:06 UTC)" executed successfully
+2026-02-16 15:24:11, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-16 15:24:21, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-16 15:24:31, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-16 15:24:41, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-16 15:24:51, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-16 15:25:01, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-16 15:25:06, INFO Running job "new_reports (trigger: interval[0:10:00], next run at: 2026-02-16 10:35:06 UTC)" (scheduled at 2026-02-16 10:25:06.364830+00:00)
+2026-02-16 15:25:06, INFO 🔔 notifier_start
+2026-02-16 15:25:06, INFO {"event": "notifier_start"}
+2026-02-16 15:25:06, INFO ✅ json_read_success · file=notify_state.json; encoding=utf-8
+2026-02-16 15:25:06, INFO {"event": "json_read_success", "file": "notify_state.json", "encoding": "utf-8"}
+2026-02-16 15:25:06, INFO ✅ json_read_success · file=notify_state.json; encoding=utf-8
+2026-02-16 15:25:06, INFO {"event": "json_read_success", "file": "notify_state.json", "encoding": "utf-8"}
+2026-02-16 15:25:06, INFO 🔔 notifier_finish · total_notifications=0; watermark_time=1771236306.3908157
+2026-02-16 15:25:06, INFO {"event": "notifier_finish", "total_notifications": 0, "watermark_time": 1771236306.3908157}
+2026-02-16 15:25:06, INFO Job "new_reports (trigger: interval[0:10:00], next run at: 2026-02-16 10:35:06 UTC)" executed successfully
+2026-02-16 15:25:07, INFO HTTP Request: POST https://api.telegram.org/bot7993913541:AAH8U9_NohsVX3ROKNKK-DvllTfk2ZD1ZyM/getUpdates "HTTP/1.1 200 OK"
+2026-02-16 15:25:07, INFO Application is stopping. This might take a moment.
+2026-02-16 15:25:07, INFO Scheduler has been shut down
+2026-02-16 15:25:07, INFO Application.stop() complete

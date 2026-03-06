@@ -1,0 +1,14 @@
+2026-02-19 08:49:20,875, INFO Лог-файл: C:\Users\User\Documents\GPT1C_Processor_temp\logs\inventory_cost_parser_20260219_134920.log
+2026-02-19 08:49:20,875, INFO Файл: C:\Users\User\Documents\GPT1C_Processor_temp\reports\excel\clean\Ведомость по товарам на складах (41).xlsx.__clean.xlsx
+2026-02-19 08:49:20,875, INFO Используем исходный (уже очищенный): Ведомость по товарам на складах (41).xlsx.__clean.xlsx
+2026-02-19 08:49:21,065, ERROR ❌ Ошибка
+Traceback (most recent call last):
+  File "C:\Users\User\Documents\GPT1C_Processor_temp\inventory_cost_parser.py", line 472, in main
+    paths = build_inventory_cost_report(p)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\Documents\GPT1C_Processor_temp\inventory_cost_parser.py", line 438, in build_inventory_cost_report
+    header_row = find_header_row(raw)
+                 ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\Documents\GPT1C_Processor_temp\inventory_cost_parser.py", line 129, in find_header_row
+    raise ValueError("Не удалось найти строку заголовков таблицы")
+ValueError: Не удалось найти строку заголовков таблицы

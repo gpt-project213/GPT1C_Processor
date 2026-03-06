@@ -1,0 +1,322 @@
+2026-02-28 17:46:14, INFO === imap_fetcher vv4.4.3 ===
+2026-02-28 17:46:14, INFO IMAP cfg: host=mail.minbarakat.kz port=993 ssl=True user=corp@minbarakat.kz pass_set=True tz=Asia/Almaty env=F:\GPT1C_Processor_analitic\.env cfg=F:\GPT1C_Processor_analitic\config\imap.json
+2026-02-28 17:46:14, INFO IMAP LOGIN OK (attempt 1/5)
+2026-02-28 17:46:14, INFO SEARCH found 10 msgs
+2026-02-28 17:46:15, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (267).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:15, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (267).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:15, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (267).xlsx.__clean.xlsx
+2026-02-28 17:46:15, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами (338).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:15, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами (338).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:15, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами (338).xlsx.__clean.xlsx
+2026-02-28 17:46:15, INFO SUMMARY REPORT detected: Ведомость по денежным средствам (351).xlsx (keyword: ведомость)
+2026-02-28 17:46:15, INFO SAVED: reports\queue\Ведомость по денежным средствам (351).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:15, ERROR Clean copy FAIL for Ведомость по денежным средствам (351).xlsx: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmpaakoi8h9\\Ведомость по денежным средствам (351).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Ведомость по денежным средствам (351).xlsx.__clean.xlsx'
+2026-02-28 17:46:15, INFO SUMMARY REPORT detected: Детальный Дебиторы Алена (103).xlsx (keyword: детальный)
+2026-02-28 17:46:15, INFO SAVED: reports\queue\Детальный Дебиторы Алена (103).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:15, INFO Clean copy: reports\excel\clean\Детальный Дебиторы Алена (103).xlsx.__clean.xlsx
+2026-02-28 17:46:15, INFO SUMMARY REPORT detected: Детальный Дебиторы Ергали (100).xlsx (keyword: детальный)
+2026-02-28 17:46:15, INFO SAVED: reports\queue\Детальный Дебиторы Ергали (100).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:15, INFO Clean copy: reports\excel\clean\Детальный Дебиторы Ергали (100).xlsx.__clean.xlsx
+2026-02-28 17:46:15, INFO SUMMARY REPORT detected: Детальный Дебиторы Магира (111).xlsx (keyword: детальный)
+2026-02-28 17:46:15, INFO SAVED: reports\queue\Детальный Дебиторы Магира (111).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:15, INFO Clean copy: reports\excel\clean\Детальный Дебиторы Магира (111).xlsx.__clean.xlsx
+2026-02-28 17:46:15, INFO SUMMARY REPORT detected: Детальный Дебиторы Оксана (107).xlsx (keyword: детальный)
+2026-02-28 17:46:15, INFO SAVED: reports\queue\Детальный Дебиторы Оксана (107).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:15, INFO Clean copy: reports\excel\clean\Детальный Дебиторы Оксана (107).xlsx.__clean.xlsx
+2026-02-28 17:46:15, INFO SUMMARY REPORT detected: Детальный_по_взаиморасчетам_с_контрагентами (95).xlsx (phrase: детальный_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:15, INFO SAVED: reports\queue\Детальный_по_взаиморасчетам_с_контрагентами (95).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:15, INFO Clean copy: reports\excel\clean\Детальный_по_взаиморасчетам_с_контрагентами (95).xlsx.__clean.xlsx
+2026-02-28 17:46:15, INFO SUMMARY REPORT detected: Затраты (50).xlsx (keyword: затраты)
+2026-02-28 17:46:15, INFO SAVED: reports\queue\Затраты (50).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:15, INFO Clean copy: reports\excel\clean\Затраты (50).xlsx.__clean.xlsx
+2026-02-28 17:46:15, INFO SUMMARY REPORT detected: Остатки всем (258).xlsx (keyword: остатки)
+2026-02-28 17:46:15, INFO SAVED: reports\queue\Остатки всем (258).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:15, INFO Clean copy: reports\excel\clean\Остатки всем (258).xlsx.__clean.xlsx
+2026-02-28 17:46:15, INFO SUMMARY REPORT detected: Продажи (365).xlsx (keyword: продажи)
+2026-02-28 17:46:15, INFO SAVED: reports\queue\Продажи (365).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:15, INFO Clean copy: reports\excel\clean\Продажи (365).xlsx.__clean.xlsx
+2026-02-28 17:46:15, INFO SUMMARY REPORT detected: Валовая прибыль (349).xlsx (keyword: валовая)
+2026-02-28 17:46:15, INFO SAVED: reports\queue\Валовая прибыль (349).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:15, INFO Clean copy: reports\excel\clean\Валовая прибыль (349).xlsx.__clean.xlsx
+2026-02-28 17:46:15, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Алена (266).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:15, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (266).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:15, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (266).xlsx.__clean.xlsx
+2026-02-28 17:46:15, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (267).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:15, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (267).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:15, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (267).xlsx.__clean.xlsx
+2026-02-28 17:46:15, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Магира (267).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:15, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (267).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:15, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (267).xlsx.__clean.xlsx
+2026-02-28 17:46:15, INFO MAIL flagged \Deleted, msg #b'1'
+2026-02-28 17:46:15, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами (337).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:15, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами (337).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:15, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами (337).xlsx.__clean.xlsx
+2026-02-28 17:46:15, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (266).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:15, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (266).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:15, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (266).xlsx.__clean.xlsx
+2026-02-28 17:46:15, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Магира (266).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:15, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (266).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:15, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (266).xlsx.__clean.xlsx
+2026-02-28 17:46:15, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (176).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:15, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (176).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:15, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (176).xlsx.__clean.xlsx
+2026-02-28 17:46:15, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (266).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:15, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (266).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:15, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (266).xlsx.__clean.xlsx
+2026-02-28 17:46:15, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Алена (265).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:15, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (265).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:15, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (265).xlsx.__clean.xlsx
+2026-02-28 17:46:15, INFO SUMMARY REPORT detected: Валовая прибыль (348).xlsx (keyword: валовая)
+2026-02-28 17:46:15, INFO SAVED: reports\queue\Валовая прибыль (348).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:15, INFO Clean copy: reports\excel\clean\Валовая прибыль (348).xlsx.__clean.xlsx
+2026-02-28 17:46:15, INFO SUMMARY REPORT detected: Продажи (364).xlsx (keyword: продажи)
+2026-02-28 17:46:15, INFO SAVED: reports\queue\Продажи (364).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:15, INFO Clean copy: reports\excel\clean\Продажи (364).xlsx.__clean.xlsx
+2026-02-28 17:46:15, INFO SUMMARY REPORT detected: Затраты с нарастающим (181).xlsx (keyword: затраты)
+2026-02-28 17:46:15, INFO SAVED: reports\queue\Затраты с нарастающим (181).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:15, INFO Clean copy: reports\excel\clean\Затраты с нарастающим (181).xlsx.__clean.xlsx
+2026-02-28 17:46:15, INFO SUMMARY REPORT detected: Ведомость по товарам на складах (182).xlsx (phrase: ведомость по товарам на складах)
+2026-02-28 17:46:15, INFO SAVED: reports\queue\Ведомость по товарам на складах (182).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Ведомость по товарам на складах (182).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Ведомость_по_партиям_товаров_на_складах (184).xlsx (keyword: ведомость)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Ведомость_по_партиям_товаров_на_складах (184).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Ведомость_по_партиям_товаров_на_складах (184).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Ведомость по денежным средствам (350).xlsx (keyword: ведомость)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Ведомость по денежным средствам (350).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, ERROR Clean copy FAIL for Ведомость по денежным средствам (350).xlsx: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmpulx6sps8\\Ведомость по денежным средствам (350).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Ведомость по денежным средствам (350).xlsx.__clean.xlsx'
+2026-02-28 17:46:16, INFO MAIL flagged \Deleted, msg #b'2'
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Продажи Магира (256).xlsx (keyword: продажи)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Продажи Магира (256).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Продажи Магира (256).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Продажи Оксана (246).xlsx (keyword: продажи)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Продажи Оксана (246).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Продажи Оксана (246).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Продажи Алена (238).xlsx (keyword: продажи)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Продажи Алена (238).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Продажи Алена (238).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Продажи Ергали (218).xlsx (keyword: продажи)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Продажи Ергали (218).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Продажи Ергали (218).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO MAIL flagged \Deleted, msg #b'3'
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Магира (265).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (265).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (265).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (265).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (265).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (265).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами (336).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами (336).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами (336).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Ведомость по денежным средствам (349).xlsx (keyword: ведомость)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Ведомость по денежным средствам (349).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, ERROR Clean copy FAIL for Ведомость по денежным средствам (349).xlsx: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmpk4ml7hjf\\Ведомость по денежным средствам (349).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Ведомость по денежным средствам (349).xlsx.__clean.xlsx'
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Детальный Дебиторы Алена (102).xlsx (keyword: детальный)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Детальный Дебиторы Алена (102).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Детальный Дебиторы Алена (102).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Детальный Дебиторы Ергали (99).xlsx (keyword: детальный)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Детальный Дебиторы Ергали (99).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Детальный Дебиторы Ергали (99).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Детальный Дебиторы Магира (110).xlsx (keyword: детальный)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Детальный Дебиторы Магира (110).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Детальный Дебиторы Магира (110).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Детальный Дебиторы Оксана (106).xlsx (keyword: детальный)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Детальный Дебиторы Оксана (106).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Детальный Дебиторы Оксана (106).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Детальный_по_взаиморасчетам_с_контрагентами (94).xlsx (phrase: детальный_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Детальный_по_взаиморасчетам_с_контрагентами (94).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Детальный_по_взаиморасчетам_с_контрагентами (94).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Затраты (49).xlsx (keyword: затраты)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Затраты (49).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Затраты (49).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Остатки всем (257).xlsx (keyword: остатки)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Остатки всем (257).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Остатки всем (257).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Продажи (363).xlsx (keyword: продажи)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Продажи (363).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Продажи (363).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Валовая прибыль (347).xlsx (keyword: валовая)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Валовая прибыль (347).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Валовая прибыль (347).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Алена (264).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (264).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (264).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (265).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:16, INFO ATTACH empty: Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (265).xlsx
+2026-02-28 17:46:16, INFO MAIL flagged \Deleted, msg #b'4'
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Ведомость по денежным средствам (348).xlsx (keyword: ведомость)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Ведомость по денежным средствам (348).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, ERROR Clean copy FAIL for Ведомость по денежным средствам (348).xlsx: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmp88jr5qdc\\Ведомость по денежным средствам (348).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Ведомость по денежным средствам (348).xlsx.__clean.xlsx'
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами (335).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами (335).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами (335).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (264).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (264).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (264).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Магира (264).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (264).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (264).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (175).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (175).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (175).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (264).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (264).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (264).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Алена (263).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (263).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (263).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Валовая прибыль (346).xlsx (keyword: валовая)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Валовая прибыль (346).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Валовая прибыль (346).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Продажи (362).xlsx (keyword: продажи)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Продажи (362).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Продажи (362).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Затраты с нарастающим (180).xlsx (keyword: затраты)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Затраты с нарастающим (180).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Затраты с нарастающим (180).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Ведомость по товарам на складах (181).xlsx (phrase: ведомость по товарам на складах)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Ведомость по товарам на складах (181).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Ведомость по товарам на складах (181).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Ведомость_по_партиям_товаров_на_складах (183).xlsx (keyword: ведомость)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Ведомость_по_партиям_товаров_на_складах (183).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Ведомость_по_партиям_товаров_на_складах (183).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO MAIL flagged \Deleted, msg #b'5'
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Валовая прибыль Ергали (30).xlsx (keyword: валовая)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Валовая прибыль Ергали (30).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Валовая прибыль Ергали (30).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Валовая прибыль Оксана (30).xlsx (keyword: валовая)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Валовая прибыль Оксана (30).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Валовая прибыль Оксана (30).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Валовая прибыль Магира (30).xlsx (keyword: валовая)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Валовая прибыль Магира (30).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Валовая прибыль Магира (30).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Продажи Алена (237).xlsx (keyword: продажи)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Продажи Алена (237).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Продажи Алена (237).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Продажи Ергали (217).xlsx (keyword: продажи)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Продажи Ергали (217).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Продажи Ергали (217).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Продажи Магира (255).xlsx (keyword: продажи)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Продажи Магира (255).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Продажи Магира (255).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Продажи Оксана (245).xlsx (keyword: продажи)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Продажи Оксана (245).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Продажи Оксана (245).xlsx.__clean.xlsx
+2026-02-28 17:46:16, INFO SUMMARY REPORT detected: Валовая прибыль Алена (32).xlsx (keyword: валовая)
+2026-02-28 17:46:16, INFO SAVED: reports\queue\Валовая прибыль Алена (32).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:16, INFO Clean copy: reports\excel\clean\Валовая прибыль Алена (32).xlsx.__clean.xlsx
+2026-02-28 17:46:17, INFO MAIL flagged \Deleted, msg #b'6'
+2026-02-28 17:46:17, INFO SUMMARY REPORT detected: Продажи Ергали (216).xlsx (keyword: продажи)
+2026-02-28 17:46:17, INFO SAVED: reports\queue\Продажи Ергали (216).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:17, ERROR Clean copy FAIL for Продажи Ергали (216).xlsx: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmpu42j9bok\\Продажи Ергали (216).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Продажи Ергали (216).xlsx.__clean.xlsx'
+2026-02-28 17:46:17, INFO SUMMARY REPORT detected: Продажи Магира (254).xlsx (keyword: продажи)
+2026-02-28 17:46:17, INFO SAVED: reports\queue\Продажи Магира (254).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:17, ERROR Clean copy FAIL for Продажи Магира (254).xlsx: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmpr3yq8e01\\Продажи Магира (254).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Продажи Магира (254).xlsx.__clean.xlsx'
+2026-02-28 17:46:17, INFO SUMMARY REPORT detected: Продажи Оксана (244).xlsx (keyword: продажи)
+2026-02-28 17:46:17, INFO SAVED: reports\queue\Продажи Оксана (244).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:17, ERROR Clean copy FAIL for Продажи Оксана (244).xlsx: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmphjbijo5c\\Продажи Оксана (244).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Продажи Оксана (244).xlsx.__clean.xlsx'
+2026-02-28 17:46:17, INFO SUMMARY REPORT detected: Продажи Алена (236).xlsx (keyword: продажи)
+2026-02-28 17:46:17, INFO SAVED: reports\queue\Продажи Алена (236).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:17, ERROR Clean copy FAIL for Продажи Алена (236).xlsx: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmpjlhwx9wl\\Продажи Алена (236).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Продажи Алена (236).xlsx.__clean.xlsx'
+2026-02-28 17:46:17, INFO MAIL flagged \Deleted, msg #b'7'
+2026-02-28 17:46:17, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Магира (263).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:17, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (263).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:17, ERROR Clean copy FAIL for Ведомость_по_взаиморасчетам_с_контрагентами_Магира (263).xlsx: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmp_q3xmjea\\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (263).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (263).xlsx.__clean.xlsx'
+2026-02-28 17:46:17, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (263).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:17, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (263).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:17, ERROR Clean copy FAIL for Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (263).xlsx: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmpou3qfo0r\\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (263).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (263).xlsx.__clean.xlsx'
+2026-02-28 17:46:17, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами (334).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:17, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами (334).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:17, ERROR Clean copy FAIL for Ведомость_по_взаиморасчетам_с_контрагентами (334).xlsx: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmplw4jj7mk\\Ведомость_по_взаиморасчетам_с_контрагентами (334).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Ведомость_по_взаиморасчетам_с_контрагентами (334).xlsx.__clean.xlsx'
+2026-02-28 17:46:17, INFO SUMMARY REPORT detected: Ведомость по денежным средствам (347).xlsx (keyword: ведомость)
+2026-02-28 17:46:17, INFO SAVED: reports\queue\Ведомость по денежным средствам (347).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:17, ERROR Clean copy FAIL for Ведомость по денежным средствам (347).xlsx: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmp20hbta4f\\Ведомость по денежным средствам (347).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Ведомость по денежным средствам (347).xlsx.__clean.xlsx'
+2026-02-28 17:46:17, INFO SUMMARY REPORT detected: Детальный Дебиторы Алена (101).xlsx (keyword: детальный)
+2026-02-28 17:46:17, INFO SAVED: reports\queue\Детальный Дебиторы Алена (101).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:17, ERROR Clean copy FAIL for Детальный Дебиторы Алена (101).xlsx: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmp_e4pu1ip\\Детальный Дебиторы Алена (101).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Детальный Дебиторы Алена (101).xlsx.__clean.xlsx'
+2026-02-28 17:46:17, INFO SUMMARY REPORT detected: Детальный Дебиторы Ергали (98).xlsx (keyword: детальный)
+2026-02-28 17:46:17, INFO SAVED: reports\queue\Детальный Дебиторы Ергали (98).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:17, ERROR Clean copy FAIL for Детальный Дебиторы Ергали (98).xlsx: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmp4x37xobi\\Детальный Дебиторы Ергали (98).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Детальный Дебиторы Ергали (98).xlsx.__clean.xlsx'
+2026-02-28 17:46:17, INFO SUMMARY REPORT detected: Детальный Дебиторы Магира (109).xlsx (keyword: детальный)
+2026-02-28 17:46:17, INFO SAVED: reports\queue\Детальный Дебиторы Магира (109).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:17, ERROR Clean copy FAIL for Детальный Дебиторы Магира (109).xlsx: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmpavk__87a\\Детальный Дебиторы Магира (109).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Детальный Дебиторы Магира (109).xlsx.__clean.xlsx'
+2026-02-28 17:46:17, INFO SUMMARY REPORT detected: Детальный Дебиторы Оксана (105).xlsx (keyword: детальный)
+2026-02-28 17:46:17, INFO SAVED: reports\queue\Детальный Дебиторы Оксана (105).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:17, ERROR Clean copy FAIL for Детальный Дебиторы Оксана (105).xlsx: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmpg9rhpflz\\Детальный Дебиторы Оксана (105).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Детальный Дебиторы Оксана (105).xlsx.__clean.xlsx'
+2026-02-28 17:46:17, INFO SUMMARY REPORT detected: Детальный_по_взаиморасчетам_с_контрагентами (93).xlsx (phrase: детальный_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:17, INFO SAVED: reports\queue\Детальный_по_взаиморасчетам_с_контрагентами (93).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:17, ERROR Clean copy FAIL for Детальный_по_взаиморасчетам_с_контрагентами (93).xlsx: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmp7ih_po97\\Детальный_по_взаиморасчетам_с_контрагентами (93).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Детальный_по_взаиморасчетам_с_контрагентами (93).xlsx.__clean.xlsx'
+2026-02-28 17:46:17, INFO SUMMARY REPORT detected: Затраты (48).xlsx (keyword: затраты)
+2026-02-28 17:46:17, INFO SAVED: reports\queue\Затраты (48).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:17, ERROR Clean copy FAIL for Затраты (48).xlsx: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmpp9ssrn9e\\Затраты (48).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Затраты (48).xlsx.__clean.xlsx'
+2026-02-28 17:46:17, INFO SUMMARY REPORT detected: Остатки всем (256).xlsx (keyword: остатки)
+2026-02-28 17:46:17, INFO SAVED: reports\queue\Остатки всем (256).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:17, ERROR Clean copy FAIL for Остатки всем (256).xlsx: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmp86c7r_fc\\Остатки всем (256).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Остатки всем (256).xlsx.__clean.xlsx'
+2026-02-28 17:46:17, INFO SUMMARY REPORT detected: Продажи (361).xlsx (keyword: продажи)
+2026-02-28 17:46:17, INFO SAVED: reports\queue\Продажи (361).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:17, ERROR Clean copy FAIL for Продажи (361).xlsx: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmprmuv4iri\\Продажи (361).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Продажи (361).xlsx.__clean.xlsx'
+2026-02-28 17:46:17, INFO SUMMARY REPORT detected: Валовая прибыль (345).xlsx (keyword: валовая)
+2026-02-28 17:46:17, INFO SAVED: reports\queue\Валовая прибыль (345).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:17, ERROR Clean copy FAIL for Валовая прибыль (345).xlsx: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmpk7kjtdgh\\Валовая прибыль (345).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Валовая прибыль (345).xlsx.__clean.xlsx'
+2026-02-28 17:46:17, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Алена (262).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:17, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (262).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:17, ERROR Clean copy FAIL for Ведомость_по_взаиморасчетам_с_контрагентами_Алена (262).xlsx: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmpmma5sz3j\\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (262).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (262).xlsx.__clean.xlsx'
+2026-02-28 17:46:17, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (263).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:17, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (263).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:17, ERROR Clean copy FAIL for Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (263).xlsx: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmpvtzyfsek\\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (263).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (263).xlsx.__clean.xlsx'
+2026-02-28 17:46:17, INFO MAIL flagged \Deleted, msg #b'8'
+2026-02-28 17:46:17, INFO SUMMARY REPORT detected: Ведомость по денежным средствам (346).xlsx (keyword: ведомость)
+2026-02-28 17:46:17, INFO SAVED: reports\queue\Ведомость по денежным средствам (346).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:17, ERROR Clean copy FAIL for Ведомость по денежным средствам (346).xlsx: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmpmekef_oz\\Ведомость по денежным средствам (346).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Ведомость по денежным средствам (346).xlsx.__clean.xlsx'
+2026-02-28 17:46:17, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами (333).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:17, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами (333).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:17, ERROR Clean copy FAIL for Ведомость_по_взаиморасчетам_с_контрагентами (333).xlsx: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmp_1cm444b\\Ведомость_по_взаиморасчетам_с_контрагентами (333).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Ведомость_по_взаиморасчетам_с_контрагентами (333).xlsx.__clean.xlsx'
+2026-02-28 17:46:17, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (262).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:17, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (262).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:17, ERROR Clean copy FAIL for Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (262).xlsx: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmpas0ineru\\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (262).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (262).xlsx.__clean.xlsx'
+2026-02-28 17:46:17, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Магира (262).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:17, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (262).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:17, ERROR Clean copy FAIL for Ведомость_по_взаиморасчетам_с_контрагентами_Магира (262).xlsx: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmpogqif0wz\\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (262).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (262).xlsx.__clean.xlsx'
+2026-02-28 17:46:17, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (174).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:17, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (174).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:17, ERROR Clean copy FAIL for Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (174).xlsx: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmpqatuaqe_\\Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (174).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (174).xlsx.__clean.xlsx'
+2026-02-28 17:46:17, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (262).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:17, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (262).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:17, ERROR Clean copy FAIL for Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (262).xlsx: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmpvh9yjb9v\\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (262).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (262).xlsx.__clean.xlsx'
+2026-02-28 17:46:17, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Алена (261).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-02-28 17:46:17, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (261).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:17, ERROR Clean copy FAIL for Ведомость_по_взаиморасчетам_с_контрагентами_Алена (261).xlsx: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmp8u5xcqo6\\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (261).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (261).xlsx.__clean.xlsx'
+2026-02-28 17:46:17, INFO SUMMARY REPORT detected: Валовая прибыль (344).xlsx (keyword: валовая)
+2026-02-28 17:46:17, INFO SAVED: reports\queue\Валовая прибыль (344).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:17, ERROR Clean copy FAIL for Валовая прибыль (344).xlsx: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmpb2us6hn6\\Валовая прибыль (344).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Валовая прибыль (344).xlsx.__clean.xlsx'
+2026-02-28 17:46:17, INFO SUMMARY REPORT detected: Продажи (360).xlsx (keyword: продажи)
+2026-02-28 17:46:17, INFO SAVED: reports\queue\Продажи (360).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:17, ERROR Clean copy FAIL for Продажи (360).xlsx: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmpx8l97avm\\Продажи (360).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Продажи (360).xlsx.__clean.xlsx'
+2026-02-28 17:46:17, INFO SUMMARY REPORT detected: Затраты с нарастающим (179).xlsx (keyword: затраты)
+2026-02-28 17:46:17, INFO SAVED: reports\queue\Затраты с нарастающим (179).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:17, ERROR Clean copy FAIL for Затраты с нарастающим (179).xlsx: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmpbzaocaso\\Затраты с нарастающим (179).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Затраты с нарастающим (179).xlsx.__clean.xlsx'
+2026-02-28 17:46:17, INFO SUMMARY REPORT detected: Ведомость по товарам на складах (180).xlsx (phrase: ведомость по товарам на складах)
+2026-02-28 17:46:17, INFO SAVED: reports\queue\Ведомость по товарам на складах (180).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:18, ERROR Clean copy FAIL for Ведомость по товарам на складах (180).xlsx: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmpa_u8iepq\\Ведомость по товарам на складах (180).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Ведомость по товарам на складах (180).xlsx.__clean.xlsx'
+2026-02-28 17:46:18, INFO SUMMARY REPORT detected: Ведомость_по_партиям_товаров_на_складах (182).xlsx (keyword: ведомость)
+2026-02-28 17:46:18, INFO SAVED: reports\queue\Ведомость_по_партиям_товаров_на_складах (182).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:18, ERROR Clean copy FAIL for Ведомость_по_партиям_товаров_на_складах (182).xlsx: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmp2b8g8x86\\Ведомость_по_партиям_товаров_на_складах (182).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Ведомость_по_партиям_товаров_на_складах (182).xlsx.__clean.xlsx'
+2026-02-28 17:46:18, INFO MAIL flagged \Deleted, msg #b'9'
+2026-02-28 17:46:18, INFO SUMMARY REPORT detected: Продажи Ергали (215).xlsx (keyword: продажи)
+2026-02-28 17:46:18, INFO SAVED: reports\queue\Продажи Ергали (215).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:18, INFO Clean copy: reports\excel\clean\Продажи Ергали (215).xlsx.__clean.xlsx
+2026-02-28 17:46:18, INFO SUMMARY REPORT detected: Продажи Алена (235).xlsx (keyword: продажи)
+2026-02-28 17:46:18, INFO SAVED: reports\queue\Продажи Алена (235).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:18, INFO Clean copy: reports\excel\clean\Продажи Алена (235).xlsx.__clean.xlsx
+2026-02-28 17:46:18, INFO SUMMARY REPORT detected: Продажи Оксана (243).xlsx (keyword: продажи)
+2026-02-28 17:46:18, INFO SAVED: reports\queue\Продажи Оксана (243).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:18, INFO Clean copy: reports\excel\clean\Продажи Оксана (243).xlsx.__clean.xlsx
+2026-02-28 17:46:18, INFO SUMMARY REPORT detected: Продажи Магира (253).xlsx (keyword: продажи)
+2026-02-28 17:46:18, INFO SAVED: reports\queue\Продажи Магира (253).xlsx (from kz.holod@yandex.ru)
+2026-02-28 17:46:18, INFO Clean copy: reports\excel\clean\Продажи Магира (253).xlsx.__clean.xlsx
+2026-02-28 17:46:18, INFO MAIL flagged \Deleted, msg #b'10'
+2026-02-28 17:46:18, INFO INBOX EXPUNGE OK
+2026-02-28 17:46:18, INFO TRASH skip Trash: cannot SELECT
+2026-02-28 17:46:18, INFO TRASH skip Корзина: cannot SELECT
+2026-02-28 17:46:18, INFO TRASH skip Deleted Items: cannot SELECT
+2026-02-28 17:46:18, INFO TRASH cleaned: INBOX.Trash
+2026-02-28 17:46:18, INFO CYCLE DONE: saved=10

@@ -1,0 +1,5 @@
+2026-03-01 15:42:41,603, INFO Лог-файл: F:\GPT1C_Processor_analitic\logs\sales_parser_20260301_154241.log
+2026-03-01 15:42:41,603, INFO Файл: reports\excel\processed\20260224224934_Продажи (100).xlsx
+2026-03-01 15:42:42,040, INFO JSON создан: F:\GPT1C_Processor_analitic\reports\json\sales_20260224224934_продажи_100_01022026_23022026.json
+2026-03-01 15:42:42,040, INFO Клиентов: 140, Выручка: 128172339.96 ₸
+2026-03-01 15:42:42,040, INFO OK: F:\GPT1C_Processor_analitic\reports\json\sales_20260224224934_продажи_100_01022026_23022026.json

@@ -1,0 +1,23 @@
+2026-03-05 10:53:53,254, INFO Лог-файл: E:\GPT1C_Processor_analitic\logs\sales_profitability_20260305_155353.log
+2026-03-05 10:53:53,254, INFO === Отчёт: Продажи + Рентабельность ===
+2026-03-05 10:53:53,257, WARNING Пропускаю (по товару): sales_продажи_по_товару_оксана_2xlsx__clean_февраль_2026.json
+2026-03-05 10:53:53,258, WARNING Пропускаю (по товару): sales_продажи_по_товару_магира_2xlsx__clean_февраль_2026.json
+2026-03-05 10:53:53,258, WARNING Пропускаю (по товару): sales_продажи_по_товару_ергали_2xlsx__clean_февраль_2026.json
+2026-03-05 10:53:53,298, WARNING Пропускаю (по товару): sales_продажи_по_товару_алена_2xlsx__clean_февраль_2026_.json
+2026-03-05 10:53:53,312, WARNING Пропускаю sales_продажи_алена_241xlsx__clean_5_марта_2026_г.json: клиентов < 3
+2026-03-05 10:53:53,313, WARNING Пропускаю sales_продажи_алена_239xlsx__clean_3_марта_2026_г.json: клиентов < 3
+2026-03-05 10:53:53,322, WARNING Пропускаю sales_продажи_ергали_218xlsx__clean_27_февраля_2026_г.json: клиентов < 3
+2026-03-05 10:53:53,323, WARNING Пропускаю sales_продажи_алена_238xlsx__clean_27_февраля_2026_г.json: клиентов < 3
+2026-03-05 10:53:53,327, INFO Выбран sales по max revenue: 171777171.36000013
+2026-03-05 10:53:53,329, INFO Загружаю gross: gross_валовая_прибыль_353xlsx__clean_01032026_04032026.json
+2026-03-05 10:53:53,330, INFO Построен справочник маржи: 43 товаров
+2026-03-05 10:53:53,336, INFO Анализ завершён:
+2026-03-05 10:53:53,336, INFO   - Клиентов: 146
+2026-03-05 10:53:53,336, INFO   - Товаров matched: 600
+2026-03-05 10:53:53,336, INFO   - Товаров unmatched: 686
+2026-03-05 10:53:53,336, INFO   - Товаров с низкой маржой: 145
+2026-03-05 10:53:53,367, INFO JSON отчёт: E:\GPT1C_Processor_analitic\reports\analytics\sales_profitability.json
+2026-03-05 10:53:53,473, INFO HTML отчёт: E:\GPT1C_Processor_analitic\reports\analytics\sales_profitability.html
+2026-03-05 10:53:53,473, INFO === ГОТОВО ===
+2026-03-05 10:53:53,474, INFO JSON: E:\GPT1C_Processor_analitic\reports\analytics\sales_profitability.json
+2026-03-05 10:53:53,474, INFO HTML: E:\GPT1C_Processor_analitic\reports\analytics\sales_profitability.html
