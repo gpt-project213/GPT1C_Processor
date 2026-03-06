@@ -1,9 +1,13 @@
 #!/usr/bin/env python
 # coding: utf-8
 r"""
-sales_report.py · v9.3.7 · 2025-09-18 (Asia/Almaty)
+sales_report.py · v9.3.8 · 2026-03-06 (Asia/Almaty)
 Улучшенная обработка метаданных и классификации строк
 Создано DeepSeek AI • Дипсик Аналитика
+FIX v9.3.8: Исправлены жёстко прописанные пути E:\reports\html и E:\logs
+  — заменены на ROOT-относительные пути (ROOT = папка скрипта).
+  — устраняет Bug #S1: HTML записывались в E:\reports\html вместо
+    E:\GPT1C_Processor_analitic\reports\html — бот их не видел.
 """
 
 from __future__ import annotations
@@ -31,8 +35,9 @@ def _pick_dir(options: List[Path]) -> Path:
             continue
     return options[-1]
 
-TPL = next((p for p in [Path(r"E:\templates"), ROOT / "templates"] if p.exists()), ROOT / "templates")
-OUT = _pick_dir([Path(r"E:\reports\html"), ROOT / "reports" / "html"])
+# v9.3.8: убраны жёсткие пути E:\templates и E:\reports\html — используем ROOT
+TPL = next((p for p in [ROOT / "templates"] if p.exists()), ROOT / "templates")
+OUT = _pick_dir([ROOT / "reports" / "html"])
 (OUT / "suspects").mkdir(parents=True, exist_ok=True)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s, %(levelname)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
@@ -41,9 +46,8 @@ LOG = logging.getLogger("sales_report")
 # ──────────────────────────────────────────────────────────────────────────────
 # Лог-файл
 def _ensure_file_logging():
-    log_dir = Path(r"E:\logs")
-    if not log_dir.exists():
-        log_dir = ROOT / "logs"
+    # v9.3.8: убран жёсткий путь E:\logs — используем ROOT / "logs"
+    log_dir = ROOT / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     ts = datetime.now(TZ).strftime("%Y%m%d_%H%M%S")
     log_path = log_dir / f"sales_{ts}.log"
