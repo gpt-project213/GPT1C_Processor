@@ -1,5 +1,5 @@
 ﻿{
-    "generated_at":  "2026-03-06 14:10:27",
+    "generated_at":  "2026-03-06 14:19:59",
     "timezone":  "Asia/Almaty",
     "repo":  {
                  "owner":  "gpt-project213",
@@ -9,8 +9,8 @@
                  "raw_base":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master"
              },
     "summary":  {
-                    "total_files":  67,
-                    "top_levels":  5
+                    "total_files":  74,
+                    "top_levels":  6
                 },
     "sections":  [
                      {
@@ -523,6 +523,75 @@
                                        "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/config/pattern_config.yaml",
                                        "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/config/pattern_config.yaml"
                                    }
+                     },
+                     {
+                         "section":  "logs",
+                         "count":  7,
+                         "files":  [
+                                       {
+                                           "path":  "logs/ai_generation_state.json",
+                                           "name":  "ai_generation_state.json",
+                                           "extension":  ".json",
+                                           "type":  "json",
+                                           "top_level":  "logs",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/logs/ai_generation_state.json",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/logs/ai_generation_state.json"
+                                       },
+                                       {
+                                           "path":  "logs/daily_activity.json",
+                                           "name":  "daily_activity.json",
+                                           "extension":  ".json",
+                                           "type":  "json",
+                                           "top_level":  "logs",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/logs/daily_activity.json",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/logs/daily_activity.json"
+                                       },
+                                       {
+                                           "path":  "logs/debug_expenses_trace.txt",
+                                           "name":  "debug_expenses_trace.txt",
+                                           "extension":  ".txt",
+                                           "type":  "txt",
+                                           "top_level":  "logs",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/logs/debug_expenses_trace.txt",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/logs/debug_expenses_trace.txt"
+                                       },
+                                       {
+                                           "path":  "logs/deletion_queue.json",
+                                           "name":  "deletion_queue.json",
+                                           "extension":  ".json",
+                                           "type":  "json",
+                                           "top_level":  "logs",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/logs/deletion_queue.json",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/logs/deletion_queue.json"
+                                       },
+                                       {
+                                           "path":  "logs/notify_state.json",
+                                           "name":  "notify_state.json",
+                                           "extension":  ".json",
+                                           "type":  "json",
+                                           "top_level":  "logs",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/logs/notify_state.json",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/logs/notify_state.json"
+                                       },
+                                       {
+                                           "path":  "logs/sales_notify_decade.json",
+                                           "name":  "sales_notify_decade.json",
+                                           "extension":  ".json",
+                                           "type":  "json",
+                                           "top_level":  "logs",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/logs/sales_notify_decade.json",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/logs/sales_notify_decade.json"
+                                       },
+                                       {
+                                           "path":  "logs/user_analytics.json",
+                                           "name":  "user_analytics.json",
+                                           "extension":  ".json",
+                                           "type":  "json",
+                                           "top_level":  "logs",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/logs/user_analytics.json",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/logs/user_analytics.json"
+                                       }
+                                   ]
                      },
                      {
                          "section":  "templates",
