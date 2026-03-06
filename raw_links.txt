@@ -1,13 +1,13 @@
-﻿# RAW links generated: 2026-03-06 10:33:12
+﻿# RAW links generated: 2026-03-06 10:43:14
 # Repo: https://github.com/gpt-project213/GPT1C_Processor
 # Branch: master
 
-https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/"/320/237/320/240/320/236/320/234/320/242_/320/224/320/233/320/257_/320/222/320/220/320/233/320/236/320/222/320/236/320/231.txt"
-https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/"/320/237/320/240/320/236/320/234/320/242_/320/224/320/233/320/257_/320/224/320/225/320/221/320/230/320/242/320/236/320/240/320/232/320/230.txt"
-https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/"/320/237/320/240/320/236/320/234/320/242_/320/224/320/233/320/257_/320/227/320/220/320/242/320/240/320/220/320/242.txt"
-https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/"/320/237/320/240/320/236/320/234/320/242_/320/224/320/233/320/257_/320/236/320/241/320/242/320/220/320/242/320/232/320/236/320/222.txt"
-https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/"/320/237/320/240/320/236/320/234/320/242_/320/224/320/233/320/257_/320/237/320/240/320/236/320/224/320/220/320/226.txt"
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/.gitignore
+https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Т╨Р╨Ы╨Ю╨Т╨Ю╨Щ.txt
+https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Ф╨Х╨С╨Ш╨в╨Ю╨а╨Ъ╨Ш.txt
+https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Ч╨Р╨в╨а╨Р╨в.txt
+https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Ю╨б╨в╨Р╨в╨Ъ╨Ю╨Т.txt
+https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Я╨а╨Ю╨Ф╨Р╨Ц.txt
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/ai_analyzer.py
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/analyze_debt_excel.py
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/bot/gross_summary.py
