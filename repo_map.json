@@ -1,5 +1,5 @@
 ﻿{
-    "generated_at":  "2026-03-06 10:43:15",
+    "generated_at":  "2026-03-06 11:04:09",
     "timezone":  "Asia/Almaty",
     "repo":  {
                  "owner":  "gpt-project213",
@@ -9,13 +9,13 @@
                  "raw_base":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master"
              },
     "summary":  {
-                    "total_files":  60,
+                    "total_files":  63,
                     "top_levels":  5
                 },
     "sections":  [
                      {
                          "section":  ".",
-                         "count":  40,
+                         "count":  43,
                          "files":  [
                                        {
                                            "path":  ".gitignore",
@@ -124,6 +124,15 @@
                                            "top_level":  ".",
                                            "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/debt_auto_report.py",
                                            "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/debt_auto_report.py"
+                                       },
+                                       {
+                                           "path":  "DEPENDENCY_MAP.md.txt",
+                                           "name":  "DEPENDENCY_MAP.md.txt",
+                                           "extension":  ".txt",
+                                           "type":  "txt",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/DEPENDENCY_MAP.md.txt",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/DEPENDENCY_MAP.md.txt"
                                        },
                                        {
                                            "path":  "dso_aging_report.py",
@@ -252,6 +261,15 @@
                                            "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/raw_links.txt"
                                        },
                                        {
+                                           "path":  "repo_map.json",
+                                           "name":  "repo_map.json",
+                                           "extension":  ".json",
+                                           "type":  "json",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/repo_map.json",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/repo_map.json"
+                                       },
+                                       {
                                            "path":  "requirements.txt",
                                            "name":  "requirements.txt",
                                            "extension":  ".txt",
@@ -349,6 +367,15 @@
                                            "top_level":  ".",
                                            "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/start_bot_watchdog.bat",
                                            "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/start_bot_watchdog.bat"
+                                       },
+                                       {
+                                           "path":  "STATUS.md",
+                                           "name":  "STATUS.md",
+                                           "extension":  ".md",
+                                           "type":  "md",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/STATUS.md",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/STATUS.md"
                                        },
                                        {
                                            "path":  "utils.py",
