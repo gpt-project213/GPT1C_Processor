@@ -79,7 +79,23 @@ function Exec-Git {
 }
 
 function Get-TrackedFiles {
-    return @(Exec-Git @("ls-files"))
+    $files = @(Exec-Git @("-c", "core.quotepath=false", "ls-files"))
+    $clean = @()
+
+    foreach ($f in $files) {
+        if ([string]::IsNullOrWhiteSpace($f)) { continue }
+
+        $s = [string]$f
+        $s = $s.Trim()
+
+        if ($s.StartsWith('"') -and $s.EndsWith('"') -and $s.Length -ge 2) {
+            $s = $s.Substring(1, $s.Length - 2)
+        }
+
+        $clean += $s
+    }
+
+    return $clean
 }
 
 function Check-SensitiveTracked {
@@ -125,7 +141,10 @@ function Update-RawLinks {
     $lines += ""
 
     foreach ($f in (Get-TrackedFiles | Sort-Object)) {
-        $path = $f -replace "\\", "/"
+        $path = ([string]$f).Trim() -replace "\\", "/"
+        if ($path.StartsWith('"') -and $path.EndsWith('"') -and $path.Length -ge 2) {
+            $path = $path.Substring(1, $path.Length - 2)
+        }
         $lines += "$baseRaw/$path"
     }
 
@@ -139,10 +158,24 @@ function Update-RepoMap {
     $items = @()
 
     foreach ($f in (Get-TrackedFiles | Sort-Object)) {
-        $path = $f -replace "\\", "/"
-        $name = [System.IO.Path]::GetFileName($path)
-        $ext = [System.IO.Path]::GetExtension($path)
-        $top = if ($path -match "/") { $path.Split("/")[0] } else { "." }
+        $path = ([string]$f).Trim() -replace "\\", "/"
+
+        if ($path.StartsWith('"') -and $path.EndsWith('"') -and $path.Length -ge 2) {
+            $path = $path.Substring(1, $path.Length - 2)
+        }
+
+        $parts = $path.Split("/")
+        $name = $parts[$parts.Length - 1]
+
+        $ext = ""
+        if ($name -match '\.') {
+            $dotIndex = $name.LastIndexOf(".")
+            if ($dotIndex -ge 0) {
+                $ext = $name.Substring($dotIndex)
+            }
+        }
+
+        $top = if ($path -match "/") { $parts[0] } else { "." }
         $type = if ([string]::IsNullOrWhiteSpace($ext)) { "other" } else { $ext.TrimStart(".").ToLower() }
 
         $items += [pscustomobject]@{
