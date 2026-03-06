@@ -1,265 +1,394 @@
-# tools/sync_project_to_github.ps1
-# v2.0.1 · 2026-03-06 (Asia/Almaty)
+# RUN:
+# powershell -ExecutionPolicy Bypass -File "E:\GPT1C_Processor_analitic\tools\sync_project_to_github.ps1"
+#
+# RUN WITH MESSAGE:
+# powershell -ExecutionPolicy Bypass -File "E:\GPT1C_Processor_analitic\tools\sync_project_to_github.ps1" -CommitMessage "update project status"
 
-[CmdletBinding()]
 param(
     [string]$ProjectRoot = "E:\GPT1C_Processor_analitic",
     [string]$Branch = "master",
-    [string]$CommitMessage = ""
+    [string]$CommitMessage = "",
+    [string]$RepoOwner = "gpt-project213",
+    [string]$RepoName = "GPT1C_Processor"
 )
 
 $ErrorActionPreference = "Stop"
 
-function Stop-WithError {
-    param([string]$Message)
-
-    Write-Host ""
-    Write-Host ("ERROR: " + $Message) -ForegroundColor Red
-
-    if ($script:LogFile) {
-        Add-Content -Path $script:LogFile -Value ("[{0}] ERROR: {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Message) -Encoding UTF8
+function Ensure-Dir {
+    param([string]$Path)
+    if (-not (Test-Path $Path)) {
+        New-Item -ItemType Directory -Path $Path -Force | Out-Null
     }
-
-    exit 1
 }
 
-function Write-Log {
-    param(
-        [string]$Message,
-        [string]$Color = "Gray"
-    )
-
+function Log {
+    param([string]$Message)
     $line = "[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Message
-    Write-Host $line -ForegroundColor $Color
-
+    Write-Host $line
     if ($script:LogFile) {
         Add-Content -Path $script:LogFile -Value $line -Encoding UTF8
     }
 }
 
-function Run-Git {
+function Fail {
+    param([string]$Message)
+    Log ("ERROR: " + $Message)
+    exit 1
+}
+
+function Set-Utf8 {
     param(
-        [Parameter(Mandatory = $true)][string[]]$Args,
-        [switch]$AllowNonZero
+        [string]$Path,
+        [string[]]$Lines
     )
+    $dir = Split-Path -Parent $Path
+    if ($dir) { Ensure-Dir $dir }
+    Set-Content -Path $Path -Value $Lines -Encoding UTF8
+}
 
-    $gitExe = (Get-Command git -ErrorAction Stop).Source
-    $argLine = ($Args | ForEach-Object {
-        if ($_ -match '\s|["]') {
-            '"' + ($_ -replace '"', '\"') + '"'
-        } else {
-            $_
-        }
-    }) -join ' '
+function Exec-Git {
+    param([string[]]$GitArgs)
 
-    $stdoutFile = [System.IO.Path]::GetTempFileName()
-    $stderrFile = [System.IO.Path]::GetTempFileName()
+    if (-not $GitArgs -or $GitArgs.Count -eq 0) {
+        throw "Exec-Git called with empty args"
+    }
+
+    $oldEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
 
     try {
-        $proc = Start-Process `
-            -FilePath $gitExe `
-            -ArgumentList $argLine `
-            -NoNewWindow `
-            -Wait `
-            -PassThru `
-            -RedirectStandardOutput $stdoutFile `
-            -RedirectStandardError $stderrFile
-
-        $stdout = @()
-        $stderr = @()
-
-        if (Test-Path $stdoutFile) {
-            $stdout = Get-Content -Path $stdoutFile -ErrorAction SilentlyContinue
-        }
-
-        if (Test-Path $stderrFile) {
-            $stderr = Get-Content -Path $stderrFile -ErrorAction SilentlyContinue
-        }
-
-        Add-Content -Path $script:LogFile -Value ("[{0}] CMD: git {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), ($Args -join " ")) -Encoding UTF8
-
-        foreach ($line in $stdout) {
-            Add-Content -Path $script:LogFile -Value ("    OUT: " + $line) -Encoding UTF8
-        }
-
-        foreach ($line in $stderr) {
-            Add-Content -Path $script:LogFile -Value ("    ERR: " + $line) -Encoding UTF8
-        }
-
-        if (-not $AllowNonZero -and $proc.ExitCode -ne 0) {
-            $message = "git " + ($Args -join " ") + " failed with exit code " + $proc.ExitCode
-            if ($stderr.Count -gt 0) {
-                $message += ". stderr: " + ($stderr -join " | ")
-            }
-            Stop-WithError $message
-        }
-
-        return [pscustomobject]@{
-            ExitCode = $proc.ExitCode
-            StdOut   = $stdout
-            StdErr   = $stderr
-            All      = @($stdout + $stderr)
-        }
+        $output = @(& git @GitArgs 2>&1)
+        $exitCode = $LASTEXITCODE
     }
     finally {
-        Remove-Item -Path $stdoutFile -ErrorAction SilentlyContinue -Force
-        Remove-Item -Path $stderrFile -ErrorAction SilentlyContinue -Force
+        $ErrorActionPreference = $oldEap
     }
+
+    if ($script:LogFile) {
+        Add-Content -Path $script:LogFile -Value ("    CMD: git " + ($GitArgs -join " ")) -Encoding UTF8
+        foreach ($x in $output) {
+            Add-Content -Path $script:LogFile -Value ("    OUT: " + [string]$x) -Encoding UTF8
+        }
+    }
+
+    if ($exitCode -ne 0) {
+        throw ("git " + ($GitArgs -join " ") + " failed: " + (($output | ForEach-Object { [string]$_ }) -join " | "))
+    }
+
+    return @($output | ForEach-Object { [string]$_ })
+}
+
+function Get-TrackedFiles {
+    return @(Exec-Git @("ls-files"))
+}
+
+function Check-SensitiveTracked {
+    $patterns = @(
+        '^\.(env)$',
+        '^config/(imap|roles|managers)\.json$',
+        '^logs/',
+        '^reports/',
+        '^archive/',
+        '^cache/',
+        '^reports_state\.json$',
+        '^ai_generation_state\.json$',
+        '^ai_generation_queue\.json$',
+        '^deletion_queue\.json$'
+    )
+
+    $bad = New-Object System.Collections.Generic.List[string]
+    $tracked = Get-TrackedFiles
+
+    foreach ($f in $tracked) {
+        foreach ($p in $patterns) {
+            if ($f -match $p) {
+                $bad.Add($f)
+                break
+            }
+        }
+    }
+
+    if ($bad.Count -gt 0) {
+        foreach ($x in ($bad | Sort-Object -Unique)) { Log ("BAD TRACKED: " + $x) }
+        Fail "Sensitive or runtime files are tracked by git"
+    }
+
+    Log "Sensitive/runtime tracked files: none"
+}
+
+function Update-RawLinks {
+    $baseRaw = "https://raw.githubusercontent.com/$RepoOwner/$RepoName/$Branch"
+    $lines = @()
+    $lines += "# RAW links generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+    $lines += "# Repo: https://github.com/$RepoOwner/$RepoName"
+    $lines += "# Branch: $Branch"
+    $lines += ""
+
+    foreach ($f in (Get-TrackedFiles | Sort-Object)) {
+        $path = $f -replace "\\", "/"
+        $lines += "$baseRaw/$path"
+    }
+
+    Set-Utf8 -Path (Join-Path $ProjectRoot "raw_links.txt") -Lines $lines
+    Log "Updated raw_links.txt"
+}
+
+function Update-RepoMap {
+    $repoUrl = "https://github.com/$RepoOwner/$RepoName"
+    $rawBase = "https://raw.githubusercontent.com/$RepoOwner/$RepoName/$Branch"
+    $items = @()
+
+    foreach ($f in (Get-TrackedFiles | Sort-Object)) {
+        $path = $f -replace "\\", "/"
+        $name = [System.IO.Path]::GetFileName($path)
+        $ext = [System.IO.Path]::GetExtension($path)
+        $top = if ($path -match "/") { $path.Split("/")[0] } else { "." }
+        $type = if ([string]::IsNullOrWhiteSpace($ext)) { "other" } else { $ext.TrimStart(".").ToLower() }
+
+        $items += [pscustomobject]@{
+            path       = $path
+            name       = $name
+            extension  = $ext
+            type       = $type
+            top_level  = $top
+            github_url = "$repoUrl/blob/$Branch/$path"
+            raw_url    = "$rawBase/$path"
+        }
+    }
+
+    $sections = $items | Group-Object top_level | Sort-Object Name | ForEach-Object {
+        [pscustomobject]@{
+            section = $_.Name
+            count   = $_.Count
+            files   = ($_.Group | Sort-Object path)
+        }
+    }
+
+    $result = [pscustomobject]@{
+        generated_at = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+        timezone     = "Asia/Almaty"
+        repo         = [pscustomobject]@{
+            owner      = $RepoOwner
+            name       = $RepoName
+            branch     = $Branch
+            github_url = $repoUrl
+            raw_base   = $rawBase
+        }
+        summary      = [pscustomobject]@{
+            total_files = @($items).Count
+            top_levels  = @($sections).Count
+        }
+        sections     = $sections
+    }
+
+    $json = $result | ConvertTo-Json -Depth 10
+    Set-Content -Path (Join-Path $ProjectRoot "repo_map.json") -Value $json -Encoding UTF8
+    Log "Updated repo_map.json"
+}
+
+function Update-Status {
+    $repoUrl = "https://github.com/$RepoOwner/$RepoName"
+    $rawBase = "https://raw.githubusercontent.com/$RepoOwner/$RepoName/$Branch"
+
+    $hasReadme = Test-Path (Join-Path $ProjectRoot "README.md")
+    $hasSecurity = Test-Path (Join-Path $ProjectRoot "SECURITY.md")
+    $hasEnvExample = Test-Path (Join-Path $ProjectRoot ".env.example")
+    $hasImapExample = Test-Path (Join-Path $ProjectRoot "config\imap.example.json")
+    $hasManagersExample = Test-Path (Join-Path $ProjectRoot "config\managers.example.json")
+    $hasRolesExample = Test-Path (Join-Path $ProjectRoot "config\roles.example.json")
+    $trackedCount = @(Get-TrackedFiles).Count
+
+    $gapLines = @()
+    if (-not $hasReadme) { $gapLines += "- README.md" }
+    if (-not $hasSecurity) { $gapLines += "- SECURITY.md" }
+    if (-not $hasEnvExample) { $gapLines += "- .env.example" }
+    if (-not $hasImapExample) { $gapLines += "- config/imap.example.json" }
+    if (-not $hasManagersExample) { $gapLines += "- config/managers.example.json" }
+    if (-not $hasRolesExample) { $gapLines += "- config/roles.example.json" }
+    if ($gapLines.Count -eq 0) { $gapLines += "- base audit layer is complete" }
+
+    $lines = @()
+    $lines += "# STATUS.md"
+    $lines += "Version: v$(Get-Date -Format 'yyyy-MM-dd')"
+    $lines += "Timezone: Asia/Almaty"
+    $lines += "Status: auto-updated by sync_project_to_github.ps1"
+    $lines += ""
+    $lines += "# GPT1C_Processor / AI 1C PRO - STATUS"
+    $lines += ""
+    $lines += "## 1. Project"
+    $lines += ""
+    $lines += "Local production project:"
+    $lines += ""
+    $lines += "E:\GPT1C_Processor_analitic"
+    $lines += ""
+    $lines += "GitHub repository:"
+    $lines += ""
+    $lines += $repoUrl
+    $lines += ""
+    $lines += "Branch:"
+    $lines += ""
+    $lines += $Branch
+    $lines += ""
+    $lines += "RAW base:"
+    $lines += ""
+    $lines += $rawBase
+    $lines += ""
+    $lines += "---"
+    $lines += ""
+    $lines += "## 2. Confirmed"
+    $lines += ""
+    $lines += "- production code is published to GitHub"
+    $lines += "- local GitHub sync works"
+    $lines += "- raw_links.txt generation is built in"
+    $lines += "- repo_map.json generation is built in"
+    $lines += "- STATUS.md generation is built in"
+    $lines += ""
+    $lines += "---"
+    $lines += ""
+    $lines += "## 3. Tracked files"
+    $lines += ""
+    $lines += "- tracked files count: $trackedCount"
+    $lines += ""
+    $lines += "---"
+    $lines += ""
+    $lines += "## 4. Current priority"
+    $lines += ""
+    $lines += "- opportunity loss analytics for debt silence greater than 15 days"
+    $lines += "- debt threshold greater than 10000 KZT"
+    $lines += "- margin = gross_profit / revenue"
+    $lines += "- monthly opportunity loss = debt * margin"
+    $lines += "- daily opportunity loss = (debt * margin) / 30"
+    $lines += ""
+    $lines += "---"
+    $lines += ""
+    $lines += "## 5. Audit layer gaps"
+    $lines += ""
+    $lines += $gapLines
+    $lines += ""
+    $lines += "---"
+    $lines += ""
+    $lines += "## 6. Purpose"
+    $lines += ""
+    $lines += "- short project status"
+    $lines += "- recovery point"
+    $lines += "- GitHub audit checkpoint"
+    $lines += "- current audit layer reference"
+    $lines += ""
+
+    Set-Utf8 -Path (Join-Path $ProjectRoot "STATUS.md") -Lines $lines
+    Log "Updated STATUS.md"
 }
 
 if (-not (Test-Path $ProjectRoot)) {
-    Write-Host "ERROR: Project root not found: $ProjectRoot" -ForegroundColor Red
+    Write-Host ("ERROR: ProjectRoot not found: " + $ProjectRoot)
     exit 1
 }
 
 $logsDir = Join-Path $ProjectRoot "logs"
-if (-not (Test-Path $logsDir)) {
-    New-Item -ItemType Directory -Path $logsDir -Force | Out-Null
-}
+Ensure-Dir $logsDir
+$script:LogFile = Join-Path $logsDir ("github_sync_{0}.log" -f (Get-Date -Format "yyyyMMdd_HHmmss"))
 
-$timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-$script:LogFile = Join-Path $logsDir ("github_sync_{0}.log" -f $timestamp)
-
-Write-Log "START GITHUB SYNC" "Cyan"
-Write-Log ("ProjectRoot = " + $ProjectRoot) "Cyan"
-Write-Log ("TargetBranch = " + $Branch) "Cyan"
+Log "START GITHUB SYNC"
+Log ("ProjectRoot = " + $ProjectRoot)
+Log ("TargetBranch = " + $Branch)
+Log ("Repo = " + $RepoOwner + "/" + $RepoName)
 
 Set-Location $ProjectRoot
-Write-Log ("CurrentDirectory = " + (Get-Location).Path) "Green"
 
 if (-not (Test-Path ".git")) {
-    Stop-WithError "No .git directory found. This is not a git repository."
+    Fail "This directory is not a git repository"
 }
 
-$repoRoot = ((Run-Git -Args @("rev-parse", "--show-toplevel")).StdOut -join "`n").Trim()
-if (-not $repoRoot) {
-    Stop-WithError "Cannot detect repository root."
-}
-Write-Log ("RepoRoot = " + $repoRoot) "Green"
+Log ("CurrentDirectory = " + (Get-Location).Path)
 
-$origin = ((Run-Git -Args @("remote", "get-url", "origin")).StdOut -join "`n").Trim()
-if (-not $origin) {
-    Stop-WithError "Remote origin not found."
-}
-Write-Log ("Origin = " + $origin) "Green"
-
-$currentBranch = ((Run-Git -Args @("rev-parse", "--abbrev-ref", "HEAD")).StdOut -join "`n").Trim()
-Write-Log ("CurrentBranch = " + $currentBranch) "Green"
+$currentBranch = ((Exec-Git @("rev-parse", "--abbrev-ref", "HEAD")) -join "`n").Trim()
+if (-not $currentBranch) { Fail "Cannot detect current branch" }
+Log ("CurrentBranch = " + $currentBranch)
 
 if ($currentBranch -ne $Branch) {
-    Stop-WithError ("Current branch '" + $currentBranch + "' does not match target branch '" + $Branch + "'.")
+    Fail ("Wrong branch. Expected: " + $Branch + "; Current: " + $currentBranch)
 }
 
-Write-Log "Checking tracked sensitive/runtime files..." "Cyan"
+$origin = ((Exec-Git @("remote", "get-url", "origin")) -join "`n").Trim()
+if (-not $origin) { Fail "Remote origin not found" }
+Log ("Origin = " + $origin)
 
-$patterns = @(
-    '^\.(env)$',
-    '^config/(imap|roles|managers)\.json$',
-    '^logs/',
-    '^reports/',
-    '^archive/',
-    '^cache/',
-    '^reports_state\.json$',
-    '^ai_generation_state\.json$',
-    '^ai_generation_queue\.json$',
-    '^deletion_queue\.json$'
-)
+Check-SensitiveTracked
 
-$trackedFiles = @((Run-Git -Args @("ls-files")).StdOut)
-$badTracked = New-Object System.Collections.Generic.List[string]
-
-foreach ($file in $trackedFiles) {
-    foreach ($pattern in $patterns) {
-        if ($file -match $pattern) {
-            $badTracked.Add($file)
-            break
-        }
-    }
-}
-
-if ($badTracked.Count -gt 0) {
-    Write-Log "Tracked sensitive/runtime files found:" "Yellow"
-    $badTracked | Sort-Object -Unique | ForEach-Object { Write-Log ("  " + $_) "Yellow" }
-    Stop-WithError "Sensitive or runtime files are tracked by git. Sync stopped."
-}
-
-Write-Log "Tracked sensitive/runtime files: none" "Green"
-
-Write-Log "Git status before sync:" "Cyan"
-$statusBefore = @((Run-Git -Args @("status", "--short")).StdOut)
+Log "Git status before pre-pull phase:"
+$statusBefore = @(Exec-Git @("status", "--short"))
 if ($statusBefore.Count -eq 0) {
-    Write-Log "Working tree is clean before sync." "Green"
+    Log "Working tree is clean before sync"
 } else {
-    foreach ($line in $statusBefore) {
-        Write-Log ("  " + $line) "Gray"
+    foreach ($x in $statusBefore) { Log ("  " + $x) }
+}
+
+$porcelain = @(Exec-Git @("status", "--porcelain"))
+if ($porcelain.Count -gt 0) {
+    Log "Local changes detected before pull. Staging"
+    Exec-Git @("add", ".") | Out-Null
+
+    $preStaged = @(Exec-Git @("diff", "--cached", "--name-only"))
+    if ($preStaged.Count -gt 0) {
+        foreach ($x in $preStaged) { Log ("  pre-pull: " + $x) }
+        $preMsg = "auto commit before pull " + (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+        Log ("PrePullCommitMessage = " + $preMsg)
+        Exec-Git @("commit", "-m", $preMsg) | Out-Null
+        Log "Pre-pull auto-commit created"
     }
+} else {
+    Log "No local changes before pull"
 }
 
-Write-Log "Running git pull --rebase..." "Cyan"
-$pullResult = Run-Git -Args @("pull", "--rebase", "origin", $Branch)
-foreach ($line in $pullResult.StdOut) {
-    Write-Log ("  " + $line) "Gray"
-}
-foreach ($line in $pullResult.StdErr) {
-    Write-Log ("  " + $line) "DarkGray"
-}
-Write-Log "Pull --rebase completed." "Green"
+Log "Running git pull --rebase"
+$pullOut = @(Exec-Git @("pull", "--rebase", "origin", $Branch))
+foreach ($x in $pullOut) { Log ("  " + $x) }
+Log "Pull --rebase completed"
 
-Write-Log "Staging changes with git add ." "Cyan"
-Run-Git -Args @("add", ".") | Out-Null
-Write-Log "git add completed." "Green"
+Update-RawLinks
+Update-RepoMap
+Update-Status
 
-$stagedFiles = @((Run-Git -Args @("diff", "--cached", "--name-only")).StdOut)
-if ($stagedFiles.Count -eq 0) {
-    Write-Log "No staged changes. Nothing to commit or push." "Yellow"
-    Write-Log ("LogFile = " + $script:LogFile) "Cyan"
+Log "Staging changes with git add ."
+Exec-Git @("add", ".") | Out-Null
+Log "git add completed"
+
+$staged = @(Exec-Git @("diff", "--cached", "--name-only"))
+if ($staged.Count -eq 0) {
+    Log "No staged changes after update. Nothing to commit or push"
+    Log ("LogFile = " + $script:LogFile)
     exit 0
 }
 
-Write-Log "Staged files:" "Cyan"
-foreach ($file in $stagedFiles) {
-    Write-Log ("  " + $file) "Gray"
-}
+Log "Staged files:"
+foreach ($x in $staged) { Log ("  " + $x) }
 
 if ([string]::IsNullOrWhiteSpace($CommitMessage)) {
-    if ($stagedFiles.Count -le 8) {
-        $shortList = ($stagedFiles -join ", ")
-        $CommitMessage = "sync: $shortList"
+    if ($staged.Count -le 8) {
+        $CommitMessage = "sync: " + ($staged -join ", ")
     } else {
-        $CommitMessage = "sync project updates ($($stagedFiles.Count) files)"
+        $CommitMessage = "sync project updates ($($staged.Count) files)"
     }
 }
 
-Write-Log ("CommitMessage = " + $CommitMessage) "Cyan"
+Log ("CommitMessage = " + $CommitMessage)
 
-Write-Log "Creating commit..." "Cyan"
-$commitResult = Run-Git -Args @("commit", "-m", $CommitMessage)
-foreach ($line in $commitResult.StdOut) {
-    Write-Log ("  " + $line) "Gray"
-}
-foreach ($line in $commitResult.StdErr) {
-    Write-Log ("  " + $line) "DarkGray"
-}
-Write-Log "Commit created." "Green"
+Log "Creating commit"
+$commitOut = @(Exec-Git @("commit", "-m", $CommitMessage))
+foreach ($x in $commitOut) { Log ("  " + $x) }
+Log "Commit created"
 
-Write-Log "Pushing to GitHub..." "Cyan"
-$pushResult = Run-Git -Args @("push", "origin", $Branch)
-foreach ($line in $pushResult.StdOut) {
-    Write-Log ("  " + $line) "Gray"
-}
-foreach ($line in $pushResult.StdErr) {
-    Write-Log ("  " + $line) "DarkGray"
-}
-Write-Log "Push completed." "Green"
+Log "Pushing to GitHub"
+$pushOut = @(Exec-Git @("push", "origin", $Branch))
+foreach ($x in $pushOut) { Log ("  " + $x) }
+Log "Push completed"
 
-$lastCommit = (((Run-Git -Args @("log", "-1", "--oneline")).StdOut) -join "`n").Trim()
-Write-Log ("LastCommit = " + $lastCommit) "Green"
+$lastCommit = ((Exec-Git @("log", "-1", "--oneline")) -join "`n").Trim()
+Log ("LastCommit = " + $lastCommit)
 
-Write-Log "SYNC SUMMARY" "Cyan"
-Write-Log ("SyncedFilesCount = " + $stagedFiles.Count) "Green"
-foreach ($file in $stagedFiles) {
-    Write-Log ("Synced: " + $file) "Green"
-}
+Log "SYNC SUMMARY"
+Log ("SyncedFilesCount = " + $staged.Count)
+foreach ($x in $staged) { Log ("Synced: " + $x) }
 
-Write-Log ("LogFile = " + $script:LogFile) "Cyan"
-Write-Log "DONE" "Cyan"
+Log ("LogFile = " + $script:LogFile)
+Log "DONE"
