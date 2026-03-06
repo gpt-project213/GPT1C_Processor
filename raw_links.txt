@@ -1,5 +1,5 @@
-﻿# RAW links generated: 2026-03-06 10:43:14
-# Repo: https://github.com/gpt-project213/GPT1C_Processor
+﻿# RAW links generated: 2026-03-06 11:04:08
+# Repository: https://github.com/gpt-project213/GPT1C_Processor
 # Branch: master
 
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/.gitignore
@@ -23,6 +23,7 @@ https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/CODE_IND
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/config.py
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/config/pattern_config.yaml
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/debt_auto_report.py
+https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/DEPENDENCY_MAP.md.txt
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/dso_aging_report.py
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/expenses_parser.py
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/expenses_report.py
@@ -37,6 +38,7 @@ https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/inventor
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/net_profit_report.py
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/PROJECT_CONTEXT.md
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/raw_links.txt
+https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/repo_map.json
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/requirements.txt
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/revenue_concentration_report.py
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/rfm_clients_report.py
@@ -48,6 +50,7 @@ https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/sales_pr
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/sales_report.py
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/send_tg.py
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/start_bot_watchdog.bat
+https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/STATUS.md
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/templates/base.html
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/templates/debt_auto.html
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/templates/gross.html

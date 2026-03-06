@@ -7,21 +7,13 @@ Status: auto-updated by sync_project_to_github.ps1
 
 ## 1. Project
 
-Local production project:
+Local production project: E:\GPT1C_Processor_analitic
 
-E:\GPT1C_Processor_analitic
+GitHub repository: https://github.com/gpt-project213/GPT1C_Processor
 
-GitHub repository:
+Branch: master
 
-https://github.com/gpt-project213/GPT1C_Processor
-
-Branch:
-
-master
-
-RAW base:
-
-https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master
+RAW base: https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master
 
 ---
 
@@ -32,12 +24,13 @@ https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master
 - raw_links.txt generation is built in
 - repo_map.json generation is built in
 - STATUS.md generation is built in
+- AI_CONTEXT.md generation is built in
 
 ---
 
 ## 3. Tracked files
 
-- tracked files count: 60
+- tracked files count: 63
 
 ---
 
@@ -59,6 +52,7 @@ https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master
 - config/imap.example.json
 - config/managers.example.json
 - config/roles.example.json
+- DEPENDENCY_MAP.md
 
 ---
 
