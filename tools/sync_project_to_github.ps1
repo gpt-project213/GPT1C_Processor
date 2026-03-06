@@ -601,6 +601,14 @@ $commitOut = @(Exec-Git @("commit", "-m", $CommitMessage))
 foreach ($x in $commitOut) { Log ("  " + $x) }
 Log "Commit created"
 
+Log "Запуск линтера путей..."
+$lintResult = & python check_hardcoded_paths.py 2>&1
+if ($LASTEXITCODE -ne 0) {
+    $lintResult | ForEach-Object { Log $_ }
+    Fail "Найдены жёсткие пути - push заблокирован. Исправь и повтори."
+}
+Log "Линтер: OK"
+
 Log "Pushing to GitHub"
 $pushOut = @(Exec-Git @("push", "origin", $Branch))
 foreach ($x in $pushOut) { Log ("  " + $x) }

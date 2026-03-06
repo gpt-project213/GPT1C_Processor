@@ -1,22 +1,31 @@
 # cleanup_cache.py — автоочистка кэша/отчётов (TTL и лимиты по объёму)
 # ТЗ: HTML/JSON/ИИ — 90 дней, общий объём ≤ 5 ГБ; Оригиналы XLSX — до 2 ГБ.
 # Логи: logs/cleanup_YYYYMMDD_HHMMSS.log
+#
+# v1.0.1 fix (06.03.2026): Все пути переведены на ROOT-relative (Path(__file__)).
+#   Было: Path("logs"), Path("reports/html") — зависели от CWD.
+#   Стало: ROOT / "logs", ROOT / "reports" / "html" — работают из любой директории.
 
 from __future__ import annotations
 import os, sys, argparse, logging
 from pathlib import Path
 from datetime import datetime, timedelta
 
+# ── Якорь проекта: папка, где лежит этот скрипт ──────────────────────────────
+ROOT = Path(__file__).resolve().parent
+
 DATEFMT = "%Y-%m-%d %H:%M:%S"
-LOGDIR = Path("logs"); LOGDIR.mkdir(parents=True, exist_ok=True)
+LOGDIR = ROOT / "logs"
+LOGDIR.mkdir(parents=True, exist_ok=True)
 now = datetime.now()
 logpath = LOGDIR / f"cleanup_{now.strftime('%Y%m%d_%H%M%S')}.log"
 logging.basicConfig(filename=str(logpath), level=logging.INFO,
                     format="%(asctime)s, %(levelname)s %(message)s", datefmt=DATEFMT)
 
 # директории и политики
-ARTIFACTS = [Path("reports/html"), Path("reports/json"), Path("reports/pdf"), Path("reports/ai")]
-XLSX_STORES = [Path("reports/excel"), Path("reports/queue")]
+ARTIFACTS  = [ROOT / "reports/html", ROOT / "reports/json",
+              ROOT / "reports/pdf",  ROOT / "reports/ai"]
+XLSX_STORES = [ROOT / "reports/excel", ROOT / "reports/queue"]
 
 def _env_int(name: str, default: int) -> int:
     try:
