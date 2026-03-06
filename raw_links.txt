@@ -1,4 +1,4 @@
-﻿# RAW links generated: 2026-03-06 11:04:08
+﻿# RAW links generated: 2026-03-06 11:10:06
 # Repository: https://github.com/gpt-project213/GPT1C_Processor
 # Branch: master
 
@@ -9,6 +9,7 @@ https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/╨Я╨
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Ю╨б╨в╨Р╨в╨Ъ╨Ю╨Т.txt
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Я╨а╨Ю╨Ф╨Р╨Ц.txt
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/ai_analyzer.py
+https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/AI_CONTEXT.md
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/analyze_debt_excel.py
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/bot/gross_summary.py
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/bot/inject_local.py
@@ -23,7 +24,7 @@ https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/CODE_IND
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/config.py
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/config/pattern_config.yaml
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/debt_auto_report.py
-https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/DEPENDENCY_MAP.md.txt
+https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/DEPENDENCY_MAP.md
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/dso_aging_report.py
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/expenses_parser.py
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/expenses_report.py
