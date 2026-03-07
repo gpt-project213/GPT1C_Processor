@@ -132,6 +132,32 @@ function Get-TrackedFiles {
     return $clean
 }
 
+function Unstage-LocalRuntimeFiles {
+    $runtimeFiles = @(
+        $script:LogFile,
+        (Join-Path $ProjectRoot "raw_links.txt"),
+        (Join-Path $ProjectRoot "repo_map.json"),
+        (Join-Path $ProjectRoot "AI_CONTEXT.md"),
+        (Join-Path $ProjectRoot "STATUS.md")
+    )
+
+    foreach ($file in $runtimeFiles) {
+        if (-not [string]::IsNullOrWhiteSpace($file)) {
+            $relative = Resolve-Path -LiteralPath $file -ErrorAction SilentlyContinue
+            if ($relative) {
+                # nothing here; handled below by path literal
+            }
+        }
+    }
+
+    $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+    $runtimeLogName = Split-Path -Leaf $script:LogFile
+
+    try {
+        & git reset --quiet -- $script:LogFile 2>$null | Out-Null
+    } catch {}
+}
+
 function Check-SensitiveTracked {
     $patterns = @(
         '^\.(env)$',
@@ -143,7 +169,8 @@ function Check-SensitiveTracked {
         '^reports_state\.json$',
         '^ai_generation_state\.json$',
         '^ai_generation_queue\.json$',
-        '^deletion_queue\.json$'
+        '^deletion_queue\.json$',
+        '^daily_activity\.json$'
     )
 
     $bad = New-Object System.Collections.Generic.List[string]
@@ -288,8 +315,6 @@ function Update-AiContext {
     $lines += ""
     $lines += "## How AI Should Read This Project"
     $lines += ""
-    $lines += "Read files in this exact order to minimize wasted context:"
-    $lines += ""
     $lines += "1. AI_CONTEXT.md"
     $lines += "2. STATUS.md"
     $lines += "3. DEPENDENCY_MAP.md"
@@ -299,50 +324,22 @@ function Update-AiContext {
     $lines += ""
     $lines += "---"
     $lines += ""
-    $lines += "## Architecture"
-    $lines += ""
-    $lines += "Layer 0: utils_common.py, send_tg.py, cleanup_cache.py, tools/"
-    $lines += "Layer 1: config.py"
-    $lines += "Layer 2: utils_excel.py, utils.py"
-    $lines += "Layer 3: *_parser.py"
-    $lines += "Layer 4: debt/sales/gross/inventory/expenses report generators"
-    $lines += "Layer 5: analytics modules"
-    $lines += "Layer 6: ai_analyzer.py"
-    $lines += "Layer 7: orchestrators"
-    $lines += "Layer 8: bot/send_reports.py and bot/*"
-    $lines += ""
-    $lines += "---"
-    $lines += ""
-    $lines += "## Entry Points"
-    $lines += ""
-    $lines += "- bot/send_reports.py"
-    $lines += "- run_pipeline_all_mp.py"
-    $lines += "- run_pipeline.py"
-    $lines += "- imap_fetcher.py"
-    $lines += "- run_new_reports_now.py"
-    $lines += ""
-    $lines += "---"
-    $lines += ""
     $lines += "## Parsers"
-    $lines += ""
     foreach ($f in $parsers) { $lines += "- $f" }
     $lines += ""
     $lines += "---"
     $lines += ""
     $lines += "## Bot Modules"
-    $lines += ""
     foreach ($f in $botFiles) { $lines += "- $f" }
     $lines += ""
     $lines += "---"
     $lines += ""
     $lines += "## HTML Templates"
-    $lines += ""
     foreach ($f in $templates) { $lines += "- $f" }
     $lines += ""
     $lines += "---"
     $lines += ""
     $lines += "## Prompt Files"
-    $lines += ""
     foreach ($f in $prompts) { $lines += "- $f" }
     $lines += ""
 
@@ -384,19 +381,12 @@ function Update-Status {
     $lines += "# GPT1C_Processor / AI 1C PRO - STATUS"
     $lines += ""
     $lines += "## 1. Project"
-    $lines += ""
     $lines += "Local production project: E:\GPT1C_Processor_analitic"
-    $lines += ""
     $lines += "GitHub repository: $repoUrl"
-    $lines += ""
     $lines += "Branch: $Branch"
-    $lines += ""
     $lines += "RAW base: $rawBase"
     $lines += ""
-    $lines += "---"
-    $lines += ""
     $lines += "## 2. Confirmed"
-    $lines += ""
     $lines += "- production code is published to GitHub"
     $lines += "- local GitHub sync works"
     $lines += "- raw_links.txt generation is built in"
@@ -404,37 +394,24 @@ function Update-Status {
     $lines += "- STATUS.md generation is built in"
     $lines += "- AI_CONTEXT.md generation is built in"
     $lines += ""
-    $lines += "---"
-    $lines += ""
     $lines += "## 3. Tracked files"
-    $lines += ""
     $lines += "- tracked files count: $trackedCount"
     $lines += ""
-    $lines += "---"
-    $lines += ""
     $lines += "## 4. Current priority"
-    $lines += ""
     $lines += "- opportunity loss analytics for debt silence greater than 15 days"
     $lines += "- debt threshold greater than 10000 KZT"
     $lines += "- margin = gross_profit / revenue"
     $lines += "- monthly opportunity loss = debt * margin"
     $lines += "- daily opportunity loss = (debt * margin) / 30"
     $lines += ""
-    $lines += "---"
-    $lines += ""
     $lines += "## 5. Audit layer gaps"
-    $lines += ""
     $lines += $gapLines
     $lines += ""
-    $lines += "---"
-    $lines += ""
     $lines += "## 6. Purpose"
-    $lines += ""
     $lines += "- short project status"
     $lines += "- recovery point"
     $lines += "- GitHub audit checkpoint"
     $lines += "- current audit layer reference"
-    $lines += ""
 
     Set-Utf8 -Path (Join-Path $ProjectRoot "STATUS.md") -Lines $lines
     Log "Updated STATUS.md"
@@ -475,9 +452,9 @@ if (-not (Test-Path $ProjectRoot)) {
     exit 1
 }
 
-$logsDir = Join-Path $ProjectRoot "logs"
-Ensure-Dir $logsDir
-$script:LogFile = Join-Path $logsDir ("github_sync_{0}.log" -f (Get-Date -Format "yyyyMMdd_HHmmss"))
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+Ensure-Dir $scriptDir
+$script:LogFile = Join-Path $scriptDir "sync_project_to_github.runtime.log.txt"
 
 Log "START GITHUB SYNC"
 Log ("ProjectRoot = " + $ProjectRoot)
@@ -518,6 +495,7 @@ $porcelain = @(Exec-Git @("status", "--porcelain"))
 if ($porcelain.Count -gt 0) {
     Log "Local changes detected before pull. Staging"
     Exec-Git @("add", ".") | Out-Null
+    try { & git reset --quiet -- $script:LogFile 2>$null | Out-Null } catch {}
 
     $preStaged = @(Exec-Git @("diff", "--cached", "--name-only"))
     if ($preStaged.Count -gt 0) {
@@ -544,12 +522,13 @@ Run-HardcodedPathsLinter
 
 Log "Staging changes with git add ."
 Exec-Git @("add", ".") | Out-Null
+try { & git reset --quiet -- $script:LogFile 2>$null | Out-Null } catch {}
 Log "git add completed"
 
 $staged = @(Exec-Git @("diff", "--cached", "--name-only"))
 if ($staged.Count -eq 0) {
     Log "No staged changes after update. Nothing to commit or push"
-    Log ("LogFile = " + $script:LogFile)
+    Log ("RuntimeLogFile = " + $script:LogFile)
     exit 0
 }
 
@@ -583,5 +562,5 @@ Log "SYNC SUMMARY"
 Log ("SyncedFilesCount = " + $staged.Count)
 foreach ($x in $staged) { Log ("Synced: " + $x) }
 
-Log ("LogFile = " + $script:LogFile)
+Log ("RuntimeLogFile = " + $script:LogFile)
 Log "DONE"

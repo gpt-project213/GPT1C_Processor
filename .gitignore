@@ -5,14 +5,27 @@
 .venv/
 __pycache__/
 
+logs/
 reports/
 archive/
 cache/
 
+*.log
 *.xlsx
 *.zip
+
+# allow sanitized public logs
+!logs_public/
+!logs_public/**
+!logs_public/**/*.log
+!logs_public/**/*.json
+!logs_public/**/*.txt
 
 config/imap.json
 config/roles.json
 config/managers.json
 reports_state.json
+ai_generation_state.json
+ai_generation_queue.json
+deletion_queue.json
+daily_activity.json
