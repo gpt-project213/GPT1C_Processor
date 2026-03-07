@@ -1,6 +1,0 @@
-2026-02-18 07:32:32,311, INFO Парсинг: Затраты (12) (2).xlsx.__clean.xlsx
-2026-02-18 07:32:32,520, INFO Период: 2026-02-17, тип: DAY (текстовый месяц)
-2026-02-18 07:32:32,520, INFO Таблица: start_row=7, name_col=1, amount_col=2
-2026-02-18 07:32:32,521, INFO Готово: subtotal=1, detail=2, total=14226.95, grand_total=14226.95
-2026-02-18 07:32:32,522, INFO JSON: reports\json\expenses_Затраты_12_2_xlsx___clean_20260217.json
-2026-02-18 07:32:32,522, INFO HTML: reports\html\expenses_Затраты_12_2_xlsx___clean_20260217.html

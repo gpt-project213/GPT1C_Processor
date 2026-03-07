@@ -1,8 +1,0 @@
-2026-02-28 19:01:29, INFO === imap_fetcher vv4.4.3 ===
-2026-02-28 19:01:29, INFO IMAP cfg: host=mail.minbarakat.kz port=993 ssl=True user=corp@minbarakat.kz pass_set=True tz=Asia/Almaty env=F:\GPT1C_Processor_analitic\.env cfg=F:\GPT1C_Processor_analitic\config\imap.json
-2026-02-28 19:01:29, ERROR IMAP connect/login failed (attempt 1/5): [Errno 11001] getaddrinfo failed
-2026-02-28 19:01:31, ERROR IMAP connect/login failed (attempt 2/5): [Errno 11001] getaddrinfo failed
-2026-02-28 19:01:35, ERROR IMAP connect/login failed (attempt 3/5): [Errno 11001] getaddrinfo failed
-2026-02-28 19:01:40, ERROR IMAP connect/login failed (attempt 4/5): [Errno 11001] getaddrinfo failed
-2026-02-28 19:01:45, ERROR IMAP connect/login failed (attempt 5/5): [Errno 11001] getaddrinfo failed
-2026-02-28 19:01:50, ERROR IMAP error: [Errno 11001] getaddrinfo failed
