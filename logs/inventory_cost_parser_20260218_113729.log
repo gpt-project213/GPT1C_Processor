@@ -1,5 +1,0 @@
-2026-02-18 06:37:29,267, INFO Лог-файл: C:\Users\User\Documents\GPT1C_Processor_temp\logs\inventory_cost_parser_20260218_113729.log
-2026-02-18 06:37:29,268, INFO Файл: C:\Users\User\Documents\GPT1C_Processor_temp\reports\excel\clean\Ведомость_по_партиям_товаров_на_складах (37).xlsx.__clean.xlsx
-2026-02-18 06:37:29,516, INFO JSON создан: C:\Users\User\Documents\GPT1C_Processor_temp\reports\json\inventory_cost_ведомость_по_партиям_товаров_на_складах_37xlsx__cl.json
-2026-02-18 06:37:29,518, INFO Товаров: 147, Количество: 45614.46, Стоимость: 92035768.04 ₸
-2026-02-18 06:37:29,518, INFO OK: C:\Users\User\Documents\GPT1C_Processor_temp\reports\json\inventory_cost_ведомость_по_партиям_товаров_на_складах_37xlsx__cl.json

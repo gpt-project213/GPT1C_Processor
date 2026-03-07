@@ -1,5 +1,0 @@
-2026-03-06 09:26:30,062, INFO Лог-файл: E:\GPT1C_Processor_analitic\logs\gross_parser_20260306_142630.log
-2026-03-06 09:26:30,062, INFO Файл: E:\GPT1C_Processor_analitic\reports\excel\clean\Валовая прибыль (355).xlsx.__clean.xlsx
-2026-03-06 09:26:30,250, INFO JSON создан: E:\GPT1C_Processor_analitic\reports\json\gross_валовая_прибыль_355xlsx__clean_01032026_05032026.json
-2026-03-06 09:26:30,250, INFO Товаров: 45, Выручка: 24657735.05 ₸, Прибыль: 2455491.14 ₸, Маржа: 9.96%
-2026-03-06 09:26:30,250, INFO OK: E:\GPT1C_Processor_analitic\reports\json\gross_валовая_прибыль_355xlsx__clean_01032026_05032026.json

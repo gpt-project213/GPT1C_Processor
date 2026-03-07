@@ -1,5 +1,0 @@
-2026-02-17 12:09:14,368, INFO Лог-файл: C:\Users\User\Documents\GPT1C_Processor_temp\logs\gross_parser_20260217_170914.log
-2026-02-17 12:09:14,369, INFO Файл: C:\Users\User\Documents\GPT1C_Processor_temp\reports\excel\clean\Валовая прибыль (92).xlsx.__clean.xlsx
-2026-02-17 12:09:14,579, INFO JSON создан: C:\Users\User\Documents\GPT1C_Processor_temp\reports\json\gross_валовая_прибыль_92xlsx__clean_01022026_13022026.json
-2026-02-17 12:09:14,579, INFO Товаров: 81, Выручка: 61122939.79 ₸, Прибыль: 6957467.10 ₸, Маржа: 11.38%
-2026-02-17 12:09:14,580, INFO OK: C:\Users\User\Documents\GPT1C_Processor_temp\reports\json\gross_валовая_прибыль_92xlsx__clean_01022026_13022026.json
