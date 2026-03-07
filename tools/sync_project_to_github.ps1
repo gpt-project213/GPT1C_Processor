@@ -1,109 +1,185 @@
-# RUN:
-# powershell -ExecutionPolicy Bypass -File "E:\GPT1C_Processor_analitic\tools\sync_project_to_github.ps1"
-#
-# RUN WITH MESSAGE:
-# powershell -ExecutionPolicy Bypass -File "E:\GPT1C_Processor_analitic\tools\sync_project_to_github.ps1" -CommitMessage "update project status"
+# ============================================================
+# sync_project_to_github.ps1
+# Version: v6.0.0
+# Date: 2026-03-07 (Asia/Almaty)
+# Safe GitHub synchronizer for GPT1C_Processor
+# ============================================================
 
 param(
     [string]$ProjectRoot = "E:\GPT1C_Processor_analitic",
     [string]$Branch = "master",
     [string]$CommitMessage = "",
     [string]$RepoOwner = "gpt-project213",
-    [string]$RepoName = "GPT1C_Processor"
+    [string]$RepoName = "GPT1C_Processor",
+
+    [switch]$RunSanitizer,
+    [switch]$SkipPull,
+    [switch]$SkipDependencyMap,
+    [switch]$SkipSecretScan,
+    [switch]$SkipHardcodedPathsLinter
 )
 
 $ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+
+# ------------------------------------------------------------
+# GLOBALS
+# ------------------------------------------------------------
+
+$script:ScriptPath = $MyInvocation.MyCommand.Path
+$script:ScriptDir  = Split-Path -Parent $script:ScriptPath
+$script:LogFile    = Join-Path $script:ScriptDir "sync_project_to_github.runtime.log.txt"
+
+# ------------------------------------------------------------
+# HELPERS
+# ------------------------------------------------------------
 
 function Ensure-Dir {
-    param([string]$Path)
-    if (-not (Test-Path $Path)) {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) {
         New-Item -ItemType Directory -Path $Path -Force | Out-Null
     }
 }
 
-function Log {
-    param([string]$Message)
-    $line = "[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Message
-    Write-Host $line
-    if ($script:LogFile) {
-        Add-Content -Path $script:LogFile -Value $line -Encoding UTF8
+function Get-AlmatyNowString {
+    try {
+        $tz = [System.TimeZoneInfo]::FindSystemTimeZoneById("Central Asia Standard Time")
+        $dt = [System.TimeZoneInfo]::ConvertTimeFromUtc([datetime]::UtcNow, $tz)
+        return $dt.ToString("yyyy-MM-dd HH:mm:ss")
     }
+    catch {
+        return (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+    }
+}
+
+function Write-Utf8NoBomFile {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)]$Content
+    )
+
+    $dir = Split-Path -Parent $Path
+    if ($dir) { Ensure-Dir $dir }
+
+    $text = if ($Content -is [System.Array]) {
+        ($Content -join [Environment]::NewLine)
+    }
+    else {
+        [string]$Content
+    }
+
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($Path, $text, $utf8NoBom)
+}
+
+function Append-Utf8NoBomLine {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Line
+    )
+
+    $dir = Split-Path -Parent $Path
+    if ($dir) { Ensure-Dir $dir }
+
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    $fs = [System.IO.File]::Open($Path, [System.IO.FileMode]::Append, [System.IO.FileAccess]::Write, [System.IO.FileShare]::ReadWrite)
+    try {
+        $sw = New-Object System.IO.StreamWriter($fs, $utf8NoBom)
+        try {
+            $sw.WriteLine($Line)
+        }
+        finally {
+            $sw.Dispose()
+        }
+    }
+    finally {
+        $fs.Dispose()
+    }
+}
+
+function Log {
+    param([Parameter(Mandatory = $true)][string]$Message)
+
+    $line = "[{0}] {1}" -f (Get-AlmatyNowString), $Message
+    Write-Host $line
+    Append-Utf8NoBomLine -Path $script:LogFile -Line $line
 }
 
 function Fail {
-    param([string]$Message)
-    Log ("ERROR: " + $Message)
+    param([Parameter(Mandatory = $true)][string]$Message)
+
+    Log "ERROR: $Message"
     exit 1
 }
 
-function Set-Utf8 {
-    param(
-        [string]$Path,
-        [string[]]$Lines
-    )
-    $dir = Split-Path -Parent $Path
-    if ($dir) { Ensure-Dir $dir }
-    Set-Content -Path $Path -Value $Lines -Encoding UTF8
+function Normalize-RelativePath {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $p = $Path.Trim()
+    $p = $p -replace "\\", "/"
+
+    if ($p.StartsWith("./")) {
+        $p = $p.Substring(2)
+    }
+
+    if ($p.StartsWith('"') -and $p.EndsWith('"') -and $p.Length -ge 2) {
+        $p = $p.Substring(1, $p.Length - 2)
+    }
+
+    return $p
 }
 
 function Exec-Git {
-    param([string[]]$GitArgs)
+    param([Parameter(Mandatory = $true)][string[]]$Args)
 
-    if (-not $GitArgs -or $GitArgs.Count -eq 0) {
-        throw "Exec-Git called with empty args"
-    }
+    $cmdLine = "git " + ($Args -join " ")
+    Log "CMD: $cmdLine"
 
     $oldEap = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
 
     try {
-        $output = @(& git @GitArgs 2>&1)
+        $output = @(& git @Args 2>&1)
         $exitCode = $LASTEXITCODE
     }
     finally {
         $ErrorActionPreference = $oldEap
     }
 
-    if ($script:LogFile) {
-        Add-Content -Path $script:LogFile -Value ("    CMD: git " + ($GitArgs -join " ")) -Encoding UTF8
-        foreach ($x in $output) {
-            Add-Content -Path $script:LogFile -Value ("    OUT: " + [string]$x) -Encoding UTF8
-        }
+    foreach ($line in $output) {
+        Log ("OUT: " + [string]$line)
     }
 
     if ($exitCode -ne 0) {
-        throw ("git " + ($GitArgs -join " ") + " failed: " + (($output | ForEach-Object { [string]$_ }) -join " | "))
+        throw ("Git failed ({0}): {1}" -f $exitCode, $cmdLine)
     }
 
     return @($output | ForEach-Object { [string]$_ })
 }
 
-function Exec-Python {
+function Exec-External {
     param(
-        [string]$PythonExe,
-        [string[]]$PyArgs
+        [Parameter(Mandatory = $true)][string]$Exe,
+        [Parameter(Mandatory = $true)][string[]]$Args
     )
 
-    if (-not $PyArgs -or $PyArgs.Count -eq 0) {
-        throw "Exec-Python called with empty args"
-    }
+    $cmdLine = $Exe + " " + ($Args -join " ")
+    Log "CMD: $cmdLine"
 
     $oldEap = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
 
     try {
-        $output = @(& $PythonExe @PyArgs 2>&1)
+        $output = @(& $Exe @Args 2>&1)
         $exitCode = $LASTEXITCODE
     }
     finally {
         $ErrorActionPreference = $oldEap
     }
 
-    if ($script:LogFile) {
-        Add-Content -Path $script:LogFile -Value ("    CMD: " + $PythonExe + " " + ($PyArgs -join " ")) -Encoding UTF8
-        foreach ($x in $output) {
-            Add-Content -Path $script:LogFile -Value ("    OUT: " + [string]$x) -Encoding UTF8
-        }
+    foreach ($line in $output) {
+        Log ("OUT: " + [string]$line)
     }
 
     return [pscustomobject]@{
@@ -114,54 +190,109 @@ function Exec-Python {
 
 function Get-TrackedFiles {
     $files = @(Exec-Git @("-c", "core.quotepath=false", "ls-files"))
-    $clean = @()
+    $clean = New-Object System.Collections.Generic.List[string]
 
     foreach ($f in $files) {
         if ([string]::IsNullOrWhiteSpace($f)) { continue }
-
-        $s = [string]$f
-        $s = $s.Trim()
-
-        if ($s.StartsWith('"') -and $s.EndsWith('"') -and $s.Length -ge 2) {
-            $s = $s.Substring(1, $s.Length - 2)
-        }
-
-        $clean += $s
+        $clean.Add((Normalize-RelativePath ([string]$f)))
     }
 
-    return $clean
+    return @($clean)
 }
 
-function Unstage-LocalRuntimeFiles {
-    $runtimeFiles = @(
-        $script:LogFile,
-        (Join-Path $ProjectRoot "raw_links.txt"),
-        (Join-Path $ProjectRoot "repo_map.json"),
-        (Join-Path $ProjectRoot "AI_CONTEXT.md"),
-        (Join-Path $ProjectRoot "STATUS.md")
-    )
+function Get-StagedFiles {
+    $files = @(Exec-Git @("-c", "core.quotepath=false", "diff", "--cached", "--name-only"))
+    $clean = New-Object System.Collections.Generic.List[string]
 
-    foreach ($file in $runtimeFiles) {
-        if (-not [string]::IsNullOrWhiteSpace($file)) {
-            $relative = Resolve-Path -LiteralPath $file -ErrorAction SilentlyContinue
-            if ($relative) {
-                # nothing here; handled below by path literal
+    foreach ($f in $files) {
+        if ([string]::IsNullOrWhiteSpace($f)) { continue }
+        $clean.Add((Normalize-RelativePath ([string]$f)))
+    }
+
+    return @($clean)
+}
+
+function Get-RepoRootRelative {
+    param([Parameter(Mandatory = $true)][string]$AbsolutePath)
+
+    $resolvedRoot = [System.IO.Path]::GetFullPath($ProjectRoot)
+    $resolvedFile = [System.IO.Path]::GetFullPath($AbsolutePath)
+
+    if (-not $resolvedFile.StartsWith($resolvedRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+        return $null
+    }
+
+    $rel = $resolvedFile.Substring($resolvedRoot.Length).TrimStart('\','/')
+    return (Normalize-RelativePath $rel)
+}
+
+function Git-Unstage-IfExists {
+    param([Parameter(Mandatory = $true)][string]$RelativePath)
+
+    try {
+        & git reset --quiet -- $RelativePath 2>$null | Out-Null
+    }
+    catch {
+    }
+}
+
+function Git-Unstage-ServiceFiles {
+    $serviceFiles = @(
+        (Get-RepoRootRelative $script:LogFile),
+        "raw_links.txt",
+        "repo_map.json",
+        "AI_CONTEXT.md",
+        "STATUS.md",
+        "DEPENDENCY_MAP.md"
+    ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique
+
+    foreach ($f in $serviceFiles) {
+        Git-Unstage-IfExists -RelativePath $f
+    }
+}
+
+# ------------------------------------------------------------
+# DIAGNOSTICS
+# ------------------------------------------------------------
+
+function Assert-GitIgnoreContains {
+    param([Parameter(Mandatory = $true)][string[]]$RequiredEntries)
+
+    $gitignorePath = Join-Path $ProjectRoot ".gitignore"
+    if (-not (Test-Path -LiteralPath $gitignorePath)) {
+        Fail ".gitignore not found"
+    }
+
+    $content = Get-Content -LiteralPath $gitignorePath -ErrorAction Stop
+    $missing = New-Object System.Collections.Generic.List[string]
+
+    foreach ($entry in $RequiredEntries) {
+        $found = $false
+        foreach ($line in $content) {
+            if ($line.Trim() -eq $entry.Trim()) {
+                $found = $true
+                break
             }
+        }
+        if (-not $found) {
+            $missing.Add($entry)
         }
     }
 
-    $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-    $runtimeLogName = Split-Path -Leaf $script:LogFile
+    if ($missing.Count -gt 0) {
+        foreach ($m in $missing) {
+            Log "MISSING .gitignore ENTRY: $m"
+        }
+        Fail ".gitignore is missing required runtime-ignore rules"
+    }
 
-    try {
-        & git reset --quiet -- $script:LogFile 2>$null | Out-Null
-    } catch {}
+    Log ".gitignore runtime rules are present"
 }
 
 function Check-SensitiveTracked {
     $patterns = @(
-        '^\.(env)$',
-        '^config/(imap|roles|managers)\.json$',
+        '^(?:\.env)$',
+        '^config/(?:imap|roles|managers)\.json$',
         '^logs/',
         '^reports/',
         '^archive/',
@@ -170,11 +301,12 @@ function Check-SensitiveTracked {
         '^ai_generation_state\.json$',
         '^ai_generation_queue\.json$',
         '^deletion_queue\.json$',
-        '^daily_activity\.json$'
+        '^daily_activity\.json$',
+        '^tools/sync_project_to_github\.runtime\.log\.txt$'
     )
 
-    $bad = New-Object System.Collections.Generic.List[string]
     $tracked = Get-TrackedFiles
+    $bad = New-Object System.Collections.Generic.List[string]
 
     foreach ($f in $tracked) {
         foreach ($p in $patterns) {
@@ -187,81 +319,139 @@ function Check-SensitiveTracked {
 
     if ($bad.Count -gt 0) {
         foreach ($x in ($bad | Sort-Object -Unique)) {
-            Log ("BAD TRACKED: " + $x)
+            Log "BAD TRACKED: $x"
         }
-        Fail "Sensitive or runtime files are tracked by git"
+        Fail "Sensitive/runtime files are tracked by git"
     }
 
     Log "Sensitive/runtime tracked files: none"
 }
 
+function Test-PathLikelyBinary {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $ext = [System.IO.Path]::GetExtension($Path).ToLowerInvariant()
+    $binaryExt = @(
+        ".png",".jpg",".jpeg",".gif",".bmp",".webp",".ico",
+        ".pdf",".zip",".7z",".rar",".xls",".xlsx",".xlsm",
+        ".doc",".docx",".ppt",".pptx",".exe",".dll",".pyd",
+        ".bin",".parquet",".feather",".sqlite",".db",".mp3",
+        ".mp4",".avi",".mov",".wav"
+    )
+
+    return $binaryExt -contains $ext
+}
+
+function Scan-StagedFilesForSecrets {
+    if ($SkipSecretScan) {
+        Log "Secret scan skipped by switch"
+        return
+    }
+
+    $staged = Get-StagedFiles
+    if ($staged.Count -eq 0) {
+        Log "No staged files for secret scan"
+        return
+    }
+
+    $secretPatterns = @(
+        '\b\d{8,12}:[A-Za-z0-9_-]{20,}\b',                                # Telegram token
+        '\bsk-[A-Za-z0-9]{10,}\b',                                        # generic API key
+        '(?i)\b(?:DEEPSEEK_API_KEY|OPENAI_API_KEY|TG_BOT_TOKEN|BOT_TOKEN|API_KEY|SECRET_KEY|PASSWORD|PASSWD|PWD|TOKEN)\s*[:=]\s*["'']?[^"''\s]+',
+        '(?i)\bBearer\s+[A-Za-z0-9\._\-]{16,}\b',
+        '(?i)\b(?:Authorization)\s*[:=]\s*["'']?Bearer\s+[A-Za-z0-9\._\-]{16,}\b'
+    )
+
+    $hits = New-Object System.Collections.Generic.List[string]
+
+    foreach ($rel in $staged) {
+        $full = Join-Path $ProjectRoot ($rel -replace '/', '\')
+        if (-not (Test-Path -LiteralPath $full)) { continue }
+        if (Test-PathLikelyBinary -Path $full) { continue }
+
+        $text = ""
+        try {
+            $text = Get-Content -LiteralPath $full -Raw -ErrorAction Stop
+        }
+        catch {
+            continue
+        }
+
+        foreach ($pattern in $secretPatterns) {
+            $m = [regex]::Matches($text, $pattern)
+            if ($m.Count -gt 0) {
+                $hits.Add($rel)
+                break
+            }
+        }
+    }
+
+    if ($hits.Count -gt 0) {
+        foreach ($x in ($hits | Sort-Object -Unique)) {
+            Log "SECRET SCAN HIT: $x"
+        }
+        Fail "Potential secret/token leak detected in staged files"
+    }
+
+    Log "Secret scan passed"
+}
+
+# ------------------------------------------------------------
+# GENERATED FILES
+# ------------------------------------------------------------
+
 function Update-RawLinks {
-    $baseRaw = "https://raw.githubusercontent.com/$RepoOwner/$RepoName/$Branch"
+    $base = "https://raw.githubusercontent.com/$RepoOwner/$RepoName/$Branch"
     $lines = @()
-    $lines += "# RAW links generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
-    $lines += "# Repository: https://github.com/$RepoOwner/$RepoName"
-    $lines += "# Branch: $Branch"
+    $lines += "# generated_at: $(Get-AlmatyNowString)"
+    $lines += "# timezone: Asia/Almaty"
+    $lines += "# repository: https://github.com/$RepoOwner/$RepoName"
+    $lines += "# branch: $Branch"
     $lines += ""
 
     foreach ($f in (Get-TrackedFiles | Sort-Object)) {
-        $path = ([string]$f).Trim() -replace "\\", "/"
-        if ($path.StartsWith('"') -and $path.EndsWith('"') -and $path.Length -ge 2) {
-            $path = $path.Substring(1, $path.Length - 2)
-        }
-        $lines += "$baseRaw/$path"
+        $lines += "$base/$f"
     }
 
-    Set-Utf8 -Path (Join-Path $ProjectRoot "raw_links.txt") -Lines $lines
+    Write-Utf8NoBomFile -Path (Join-Path $ProjectRoot "raw_links.txt") -Content $lines
     Log "Updated raw_links.txt"
 }
 
 function Update-RepoMap {
     $repoUrl = "https://github.com/$RepoOwner/$RepoName"
     $rawBase = "https://raw.githubusercontent.com/$RepoOwner/$RepoName/$Branch"
-    $items = @()
 
-    foreach ($f in (Get-TrackedFiles | Sort-Object)) {
-        $path = ([string]$f).Trim() -replace "\\", "/"
+    $items = foreach ($f in (Get-TrackedFiles | Sort-Object)) {
+        $name = Split-Path $f -Leaf
+        $ext = [System.IO.Path]::GetExtension($name)
+        $parts = $f.Split("/")
+        $top = if ($parts.Count -gt 1) { $parts[0] } else { "." }
+        $type = if ([string]::IsNullOrWhiteSpace($ext)) { "other" } else { $ext.TrimStart(".").ToLowerInvariant() }
 
-        if ($path.StartsWith('"') -and $path.EndsWith('"') -and $path.Length -ge 2) {
-            $path = $path.Substring(1, $path.Length - 2)
-        }
-
-        $parts = $path.Split("/")
-        $name = $parts[$parts.Length - 1]
-
-        $ext = ""
-        if ($name -match '\.') {
-            $dotIndex = $name.LastIndexOf(".")
-            if ($dotIndex -ge 0) {
-                $ext = $name.Substring($dotIndex)
-            }
-        }
-
-        $top = if ($path -match "/") { $parts[0] } else { "." }
-        $type = if ([string]::IsNullOrWhiteSpace($ext)) { "other" } else { $ext.TrimStart(".").ToLower() }
-
-        $items += [pscustomobject]@{
-            path       = $path
+        [pscustomobject]@{
+            path       = $f
             name       = $name
             extension  = $ext
             type       = $type
             top_level  = $top
-            github_url = "$repoUrl/blob/$Branch/$path"
-            raw_url    = "$rawBase/$path"
+            github_url = "$repoUrl/blob/$Branch/$f"
+            raw_url    = "$rawBase/$f"
         }
     }
 
-    $sections = $items | Group-Object top_level | Sort-Object Name | ForEach-Object {
-        [pscustomobject]@{
-            section = $_.Name
-            count   = $_.Count
-            files   = ($_.Group | Sort-Object path)
+    $sections = $items |
+        Group-Object top_level |
+        Sort-Object Name |
+        ForEach-Object {
+            [pscustomobject]@{
+                section = $_.Name
+                count   = $_.Count
+                files   = ($_.Group | Sort-Object path)
+            }
         }
-    }
 
     $result = [pscustomobject]@{
-        generated_at = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+        generated_at = (Get-AlmatyNowString)
         timezone     = "Asia/Almaty"
         repo         = [pscustomobject]@{
             owner      = $RepoOwner
@@ -277,73 +467,57 @@ function Update-RepoMap {
         sections     = $sections
     }
 
-    $json = $result | ConvertTo-Json -Depth 10
-    Set-Content -Path (Join-Path $ProjectRoot "repo_map.json") -Value $json -Encoding UTF8
+    $json = $result | ConvertTo-Json -Depth 12
+    Write-Utf8NoBomFile -Path (Join-Path $ProjectRoot "repo_map.json") -Content $json
     Log "Updated repo_map.json"
 }
 
-function Update-AiContext {
+function Update-AIContext {
     $repoUrl  = "https://github.com/$RepoOwner/$RepoName"
     $rawBase  = "https://raw.githubusercontent.com/$RepoOwner/$RepoName/$Branch"
-    $syncedAt = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $tracked  = Get-TrackedFiles
 
-    $tracked   = Get-TrackedFiles
-    $parsers   = @($tracked | Where-Object { $_ -match "_parser\.py$" } | Sort-Object)
-    $botFiles  = @($tracked | Where-Object { $_ -match "^bot/" } | Sort-Object)
-    $templates = @($tracked | Where-Object { $_ -match "^templates/" } | Sort-Object)
-    $prompts   = @($tracked | Where-Object { $_ -match "\.txt$" } | Sort-Object)
+    $parsers   = @($tracked | Where-Object { $_ -match '_parser\.py$|analyze_.*\.py$' } | Sort-Object)
+    $reports   = @($tracked | Where-Object { $_ -match '(?:^|/)(?:.*report.*\.py)$' } | Sort-Object)
+    $botFiles  = @($tracked | Where-Object { $_ -match '^bot/' } | Sort-Object)
+    $templates = @($tracked | Where-Object { $_ -match '^templates/' } | Sort-Object)
 
     $lines = @()
     $lines += "# AI_CONTEXT.md"
-    $lines += "<!-- AUTO-GENERATED by sync_project_to_github.ps1 - DO NOT EDIT MANUALLY -->"
-    $lines += "<!-- Updated: $syncedAt (Asia/Almaty) -->"
+    $lines += "<!-- AUTO-GENERATED. DO NOT EDIT MANUALLY -->"
     $lines += ""
-    $lines += "## Project"
+    $lines += "Generated: $(Get-AlmatyNowString) (Asia/Almaty)"
+    $lines += "Repository: $repoUrl"
+    $lines += "RAW base: $rawBase"
+    $lines += "Branch: $Branch"
     $lines += ""
-    $lines += "**GPT1C_Processor / AI 1C PRO**"
+    $lines += "## Purpose"
+    $lines += "GPT1C_Processor / AI 1C PRO - processing dirty 1C Excel exports into analytical HTML/JSON/PDF reports and Telegram delivery."
     $lines += ""
-    $lines += "Automated pipeline for processing 1C Excel exports (debt, sales, gross profit, inventory, expenses),"
-    $lines += "generating HTML/JSON/PDF analytics reports, and delivering them via Telegram bot with AI analysis."
-    $lines += ""
-    $lines += "- Repository: $repoUrl"
-    $lines += "- RAW base: $rawBase"
-    $lines += "- Branch: $Branch"
-    $lines += "- Timezone: Asia/Almaty"
-    $lines += "- Language: Python 3.11+"
-    $lines += ""
-    $lines += "---"
-    $lines += ""
-    $lines += "## How AI Should Read This Project"
-    $lines += ""
+    $lines += "## Reading order"
     $lines += "1. AI_CONTEXT.md"
     $lines += "2. STATUS.md"
     $lines += "3. DEPENDENCY_MAP.md"
     $lines += "4. repo_map.json"
     $lines += "5. raw_links.txt"
-    $lines += "6. Code: core layer, parsers, reports, bot"
-    $lines += ""
-    $lines += "---"
-    $lines += ""
-    $lines += "## Parsers"
-    foreach ($f in $parsers) { $lines += "- $f" }
-    $lines += ""
-    $lines += "---"
-    $lines += ""
-    $lines += "## Bot Modules"
-    foreach ($f in $botFiles) { $lines += "- $f" }
-    $lines += ""
-    $lines += "---"
-    $lines += ""
-    $lines += "## HTML Templates"
-    foreach ($f in $templates) { $lines += "- $f" }
-    $lines += ""
-    $lines += "---"
-    $lines += ""
-    $lines += "## Prompt Files"
-    foreach ($f in $prompts) { $lines += "- $f" }
     $lines += ""
 
-    Set-Utf8 -Path (Join-Path $ProjectRoot "AI_CONTEXT.md") -Lines $lines
+    $lines += "## Parsers"
+    if ($parsers.Count -eq 0) { $lines += "- none" } else { foreach ($x in $parsers) { $lines += "- $x" } }
+    $lines += ""
+
+    $lines += "## Report scripts"
+    if ($reports.Count -eq 0) { $lines += "- none" } else { foreach ($x in $reports) { $lines += "- $x" } }
+    $lines += ""
+
+    $lines += "## Bot files"
+    if ($botFiles.Count -eq 0) { $lines += "- none" } else { foreach ($x in $botFiles) { $lines += "- $x" } }
+    $lines += ""
+
+    $lines += "## Templates"
+    if ($templates.Count -eq 0) { $lines += "- none" } else { foreach ($x in $templates) { $lines += "- $x" } }
+
+    Write-Utf8NoBomFile -Path (Join-Path $ProjectRoot "AI_CONTEXT.md") -Content $lines
     Log "Updated AI_CONTEXT.md"
 }
 
@@ -351,216 +525,372 @@ function Update-Status {
     $repoUrl = "https://github.com/$RepoOwner/$RepoName"
     $rawBase = "https://raw.githubusercontent.com/$RepoOwner/$RepoName/$Branch"
 
-    $hasReadme          = Test-Path (Join-Path $ProjectRoot "README.md")
-    $hasSecurity        = Test-Path (Join-Path $ProjectRoot "SECURITY.md")
-    $hasEnvExample      = Test-Path (Join-Path $ProjectRoot ".env.example")
-    $hasImapExample     = Test-Path (Join-Path $ProjectRoot "config\imap.example.json")
-    $hasManagersExample = Test-Path (Join-Path $ProjectRoot "config\managers.example.json")
-    $hasRolesExample    = Test-Path (Join-Path $ProjectRoot "config\roles.example.json")
-    $hasAiContext       = Test-Path (Join-Path $ProjectRoot "AI_CONTEXT.md")
-    $hasDependencyMap   = Test-Path (Join-Path $ProjectRoot "DEPENDENCY_MAP.md")
-    $trackedCount       = @(Get-TrackedFiles).Count
+    $trackedCount = @(Get-TrackedFiles).Count
 
-    $gapLines = @()
-    if (-not $hasReadme)           { $gapLines += "- README.md" }
-    if (-not $hasSecurity)         { $gapLines += "- SECURITY.md" }
-    if (-not $hasEnvExample)       { $gapLines += "- .env.example" }
-    if (-not $hasImapExample)      { $gapLines += "- config/imap.example.json" }
-    if (-not $hasManagersExample)  { $gapLines += "- config/managers.example.json" }
-    if (-not $hasRolesExample)     { $gapLines += "- config/roles.example.json" }
-    if (-not $hasAiContext)        { $gapLines += "- AI_CONTEXT.md" }
-    if (-not $hasDependencyMap)    { $gapLines += "- DEPENDENCY_MAP.md" }
-    if ($gapLines.Count -eq 0)     { $gapLines += "- base audit layer is complete" }
+    $checks = [ordered]@{
+        "README.md"                  = (Test-Path (Join-Path $ProjectRoot "README.md"))
+        "SECURITY.md"                = (Test-Path (Join-Path $ProjectRoot "SECURITY.md"))
+        ".env.example"               = (Test-Path (Join-Path $ProjectRoot ".env.example"))
+        "config/imap.example.json"   = (Test-Path (Join-Path $ProjectRoot "config\imap.example.json"))
+        "config/managers.example.json" = (Test-Path (Join-Path $ProjectRoot "config\managers.example.json"))
+        "config/roles.example.json"  = (Test-Path (Join-Path $ProjectRoot "config\roles.example.json"))
+        "AI_CONTEXT.md"              = (Test-Path (Join-Path $ProjectRoot "AI_CONTEXT.md"))
+        "DEPENDENCY_MAP.md"          = (Test-Path (Join-Path $ProjectRoot "DEPENDENCY_MAP.md"))
+    }
 
     $lines = @()
     $lines += "# STATUS.md"
-    $lines += "Version: v$(Get-Date -Format 'yyyy-MM-dd')"
-    $lines += "Timezone: Asia/Almaty"
-    $lines += "Status: auto-updated by sync_project_to_github.ps1"
-    $lines += ""
-    $lines += "# GPT1C_Processor / AI 1C PRO - STATUS"
-    $lines += ""
-    $lines += "## 1. Project"
-    $lines += "Local production project: E:\GPT1C_Processor_analitic"
-    $lines += "GitHub repository: $repoUrl"
+    $lines += "Generated: $(Get-AlmatyNowString) (Asia/Almaty)"
+    $lines += "Repository: $repoUrl"
     $lines += "Branch: $Branch"
     $lines += "RAW base: $rawBase"
     $lines += ""
-    $lines += "## 2. Confirmed"
-    $lines += "- production code is published to GitHub"
-    $lines += "- local GitHub sync works"
-    $lines += "- raw_links.txt generation is built in"
-    $lines += "- repo_map.json generation is built in"
-    $lines += "- STATUS.md generation is built in"
-    $lines += "- AI_CONTEXT.md generation is built in"
-    $lines += ""
-    $lines += "## 3. Tracked files"
+    $lines += "## Status"
+    $lines += "- GitHub sync script is active"
     $lines += "- tracked files count: $trackedCount"
     $lines += ""
-    $lines += "## 4. Current priority"
-    $lines += "- opportunity loss analytics for debt silence greater than 15 days"
-    $lines += "- debt threshold greater than 10000 KZT"
-    $lines += "- margin = gross_profit / revenue"
-    $lines += "- monthly opportunity loss = debt * margin"
-    $lines += "- daily opportunity loss = (debt * margin) / 30"
-    $lines += ""
-    $lines += "## 5. Audit layer gaps"
-    $lines += $gapLines
-    $lines += ""
-    $lines += "## 6. Purpose"
-    $lines += "- short project status"
-    $lines += "- recovery point"
-    $lines += "- GitHub audit checkpoint"
-    $lines += "- current audit layer reference"
+    $lines += "## Audit"
+    foreach ($k in $checks.Keys) {
+        $state = if ($checks[$k]) { "OK" } else { "MISSING" }
+        $lines += "- $state :: $k"
+    }
 
-    Set-Utf8 -Path (Join-Path $ProjectRoot "STATUS.md") -Lines $lines
+    Write-Utf8NoBomFile -Path (Join-Path $ProjectRoot "STATUS.md") -Content $lines
     Log "Updated STATUS.md"
 }
 
+function Update-DependencyMap {
+    if ($SkipDependencyMap) {
+        Log "Dependency map skipped by switch"
+        return
+    }
+
+    $pyFiles = Get-ChildItem -Path $ProjectRoot -Recurse -File -Filter *.py -ErrorAction Stop |
+        Where-Object {
+            $_.FullName -notmatch '\\\.venv\\' -and
+            $_.FullName -notmatch '\\venv\\' -and
+            $_.FullName -notmatch '\\__pycache__\\' -and
+            $_.FullName -notmatch '\\archive\\' -and
+            $_.FullName -notmatch '\\cache\\' -and
+            $_.FullName -notmatch '\\reports\\' -and
+            $_.FullName -notmatch '\\logs\\'
+        } |
+        Sort-Object FullName
+
+    $rows = New-Object System.Collections.Generic.List[object]
+
+    foreach ($file in $pyFiles) {
+        $rel = Get-RepoRootRelative -AbsolutePath $file.FullName
+        if (-not $rel) { continue }
+
+        $text = ""
+        try {
+            $text = Get-Content -LiteralPath $file.FullName -Raw -ErrorAction Stop
+        }
+        catch {
+            continue
+        }
+
+        $imports = New-Object System.Collections.Generic.List[string]
+
+        $rx1 = [regex]'(?m)^\s*import\s+([A-Za-z0-9_\. ,]+)'
+        foreach ($m in $rx1.Matches($text)) {
+            $raw = $m.Groups[1].Value.Split(",")
+            foreach ($item in $raw) {
+                $name = $item.Trim()
+                if ($name -match '\s+as\s+') {
+                    $name = ($name -split '\s+as\s+')[0].Trim()
+                }
+                if (-not [string]::IsNullOrWhiteSpace($name)) {
+                    $imports.Add($name)
+                }
+            }
+        }
+
+        $rx2 = [regex]'(?m)^\s*from\s+([A-Za-z0-9_\.]+)\s+import\s+'
+        foreach ($m in $rx2.Matches($text)) {
+            $name = $m.Groups[1].Value.Trim()
+            if (-not [string]::IsNullOrWhiteSpace($name)) {
+                $imports.Add($name)
+            }
+        }
+
+        $rows.Add([pscustomobject]@{
+            file    = $rel
+            imports = @($imports | Sort-Object -Unique)
+        })
+    }
+
+    $lines = @()
+    $lines += "# DEPENDENCY_MAP.md"
+    $lines += "Generated: $(Get-AlmatyNowString) (Asia/Almaty)"
+    $lines += ""
+    $lines += "## Python import map"
+    $lines += ""
+
+    foreach ($row in ($rows | Sort-Object file)) {
+        $lines += "### $($row.file)"
+        if ($row.imports.Count -eq 0) {
+            $lines += "- no imports detected"
+        }
+        else {
+            foreach ($imp in $row.imports) {
+                $lines += "- $imp"
+            }
+        }
+        $lines += ""
+    }
+
+    Write-Utf8NoBomFile -Path (Join-Path $ProjectRoot "DEPENDENCY_MAP.md") -Content $lines
+    Log "Updated DEPENDENCY_MAP.md"
+}
+
+# ------------------------------------------------------------
+# OPTIONAL TASKS
+# ------------------------------------------------------------
+
 function Run-HardcodedPathsLinter {
+    if ($SkipHardcodedPathsLinter) {
+        Log "Hardcoded-paths linter skipped by switch"
+        return
+    }
+
     $lintScript = Join-Path $ProjectRoot "check_hardcoded_paths.py"
-    if (-not (Test-Path $lintScript)) {
+    if (-not (Test-Path -LiteralPath $lintScript)) {
         Log "Hardcoded-paths linter not found, skip"
         return
     }
 
     $pythonExe = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
-    if (-not (Test-Path $pythonExe)) {
+    if (-not (Test-Path -LiteralPath $pythonExe)) {
         $pythonExe = "python"
     }
 
     Log "Running hardcoded-paths linter"
-    $lintResult = Exec-Python -PythonExe $pythonExe -PyArgs @("-X", "utf8", $lintScript)
+    $result = Exec-External -Exe $pythonExe -Args @("-X", "utf8", $lintScript)
 
-    foreach ($line in $lintResult.Output) {
-        Log ("  LINT: " + $line)
-    }
-
-    if ($lintResult.ExitCode -ne 0) {
-        Fail ("check_hardcoded_paths.py failed with exit code " + $lintResult.ExitCode)
+    if ($result.ExitCode -ne 0) {
+        Fail "check_hardcoded_paths.py failed"
     }
 
     Log "Hardcoded-paths linter completed"
 }
 
-# -----------------------------------------------------------------------
-# MAIN
-# -----------------------------------------------------------------------
-
-if (-not (Test-Path $ProjectRoot)) {
-    Write-Host ("ERROR: ProjectRoot not found: " + $ProjectRoot)
-    exit 1
-}
-
-$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-Ensure-Dir $scriptDir
-$script:LogFile = Join-Path $scriptDir "sync_project_to_github.runtime.log.txt"
-
-Log "START GITHUB SYNC"
-Log ("ProjectRoot = " + $ProjectRoot)
-Log ("TargetBranch = " + $Branch)
-Log ("Repo = " + $RepoOwner + "/" + $RepoName)
-
-Set-Location $ProjectRoot
-
-if (-not (Test-Path ".git")) {
-    Fail "This directory is not a git repository"
-}
-
-Log ("CurrentDirectory = " + (Get-Location).Path)
-
-$currentBranch = ((Exec-Git @("rev-parse", "--abbrev-ref", "HEAD")) -join "`n").Trim()
-if (-not $currentBranch) { Fail "Cannot detect current branch" }
-Log ("CurrentBranch = " + $currentBranch)
-
-if ($currentBranch -ne $Branch) {
-    Fail ("Wrong branch. Expected: " + $Branch + "; Current: " + $currentBranch)
-}
-
-$origin = ((Exec-Git @("remote", "get-url", "origin")) -join "`n").Trim()
-if (-not $origin) { Fail "Remote origin not found" }
-Log ("Origin = " + $origin)
-
-Check-SensitiveTracked
-
-Log "Git status before pre-pull phase:"
-$statusBefore = @(Exec-Git @("status", "--short"))
-if ($statusBefore.Count -eq 0) {
-    Log "Working tree is clean before sync"
-} else {
-    foreach ($x in $statusBefore) { Log ("  " + $x) }
-}
-
-$porcelain = @(Exec-Git @("status", "--porcelain"))
-if ($porcelain.Count -gt 0) {
-    Log "Local changes detected before pull. Staging"
-    Exec-Git @("add", ".") | Out-Null
-    try { & git reset --quiet -- $script:LogFile 2>$null | Out-Null } catch {}
-
-    $preStaged = @(Exec-Git @("diff", "--cached", "--name-only"))
-    if ($preStaged.Count -gt 0) {
-        foreach ($x in $preStaged) { Log ("  pre-pull: " + $x) }
-        $preMsg = "auto commit before pull " + (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
-        Log ("PrePullCommitMessage = " + $preMsg)
-        Exec-Git @("commit", "-m", $preMsg) | Out-Null
-        Log "Pre-pull auto-commit created"
+function Run-OptionalSanitizer {
+    if (-not $RunSanitizer) {
+        Log "Sanitizer skipped"
+        return
     }
-} else {
-    Log "No local changes before pull"
+
+    $sanitizer = Join-Path $script:ScriptDir "sanitize_logs_for_github.ps1"
+    if (-not (Test-Path -LiteralPath $sanitizer)) {
+        Log "sanitize_logs_for_github.ps1 not found, skip"
+        return
+    }
+
+    Log "Running sanitize_logs_for_github.ps1"
+    $result = Exec-External -Exe "powershell" -Args @(
+        "-ExecutionPolicy", "Bypass",
+        "-File", $sanitizer,
+        "-ProjectRoot", $ProjectRoot
+    )
+
+    if ($result.ExitCode -ne 0) {
+        Fail "sanitize_logs_for_github.ps1 failed"
+    }
+
+    Log "Sanitizer completed"
 }
 
-Log "Running git pull --rebase"
-$pullOut = @(Exec-Git @("pull", "--rebase", "origin", $Branch))
-foreach ($x in $pullOut) { Log ("  " + $x) }
-Log "Pull --rebase completed"
+# ------------------------------------------------------------
+# MAIN
+# ------------------------------------------------------------
 
-Update-RawLinks
-Update-RepoMap
-Update-AiContext
-Update-Status
-Run-HardcodedPathsLinter
+try {
+    if (-not (Test-Path -LiteralPath $ProjectRoot)) {
+        Fail "ProjectRoot not found: $ProjectRoot"
+    }
 
-Log "Staging changes with git add ."
-Exec-Git @("add", ".") | Out-Null
-try { & git reset --quiet -- $script:LogFile 2>$null | Out-Null } catch {}
-Log "git add completed"
+    Ensure-Dir $script:ScriptDir
 
-$staged = @(Exec-Git @("diff", "--cached", "--name-only"))
-if ($staged.Count -eq 0) {
-    Log "No staged changes after update. Nothing to commit or push"
-    Log ("RuntimeLogFile = " + $script:LogFile)
+    Log "START GITHUB SYNC"
+    Log "ProjectRoot = $ProjectRoot"
+    Log "TargetBranch = $Branch"
+    Log "Repo = $RepoOwner/$RepoName"
+    Log "RuntimeLogFile = $script:LogFile"
+
+    Set-Location $ProjectRoot
+
+    if (-not (Test-Path -LiteralPath ".git")) {
+        Fail "This directory is not a git repository"
+    }
+
+    $currentDir = (Get-Location).Path
+    Log "CurrentDirectory = $currentDir"
+
+    $currentBranch = ((Exec-Git @("rev-parse", "--abbrev-ref", "HEAD")) -join "`n").Trim()
+    if ([string]::IsNullOrWhiteSpace($currentBranch)) {
+        Fail "Cannot detect current branch"
+    }
+
+    Log "CurrentBranch = $currentBranch"
+
+    if ($currentBranch -ne $Branch) {
+        Fail "Wrong branch. Expected: $Branch; current: $currentBranch"
+    }
+
+    $origin = ((Exec-Git @("remote", "get-url", "origin")) -join "`n").Trim()
+    if ([string]::IsNullOrWhiteSpace($origin)) {
+        Fail "Remote origin not found"
+    }
+    Log "Origin = $origin"
+
+    Assert-GitIgnoreContains -RequiredEntries @(
+        ".env",
+        "logs/",
+        "reports/",
+        "cache/",
+        "archive/",
+        "tools/sync_project_to_github.runtime.log.txt"
+    )
+
+    Check-SensitiveTracked
+
+    Log "Git status before pre-pull phase"
+    $statusBefore = @(Exec-Git @("status", "--short"))
+    if ($statusBefore.Count -eq 0) {
+        Log "Working tree is clean before sync"
+    }
+    else {
+        foreach ($line in $statusBefore) {
+            Log "STATUS: $line"
+        }
+    }
+
+    # --------------------------------------------------------
+    # PRE-PULL AUTO-COMMIT
+    # --------------------------------------------------------
+
+    $porcelain = @(Exec-Git @("status", "--porcelain"))
+    if ($porcelain.Count -gt 0) {
+        Log "Local changes detected before pull"
+
+        Exec-Git @("add", ".") | Out-Null
+        Git-Unstage-ServiceFiles
+
+        $preStaged = Get-StagedFiles
+        if ($preStaged.Count -gt 0) {
+            foreach ($f in $preStaged) {
+                Log "PRE-PULL STAGED: $f"
+            }
+
+            Scan-StagedFilesForSecrets
+
+            $preMsg = "auto commit before pull $(Get-AlmatyNowString)"
+            Log "PrePullCommitMessage = $preMsg"
+            Exec-Git @("commit", "-m", $preMsg) | Out-Null
+            Log "Pre-pull auto-commit created"
+        }
+        else {
+            Log "Only runtime/service files changed before pull; no pre-pull commit needed"
+        }
+    }
+    else {
+        Log "No local changes before pull"
+    }
+
+    # --------------------------------------------------------
+    # PULL
+    # --------------------------------------------------------
+
+    if (-not $SkipPull) {
+        Log "Running git pull --rebase"
+        try {
+            Exec-Git @("pull", "--rebase", "origin", $Branch) | Out-Null
+            Log "Pull --rebase completed"
+        }
+        catch {
+            Log "REBASE FAILURE DETECTED"
+            Log "MANUAL ACTION REQUIRED: resolve conflicts, then run:"
+            Log "  git rebase --continue"
+            Log "or abort:"
+            Log "  git rebase --abort"
+            throw
+        }
+    }
+    else {
+        Log "Pull skipped by switch"
+    }
+
+    # --------------------------------------------------------
+    # GENERATED META
+    # --------------------------------------------------------
+
+    Update-RawLinks
+    Update-RepoMap
+    Update-AIContext
+    Update-Status
+    Update-DependencyMap
+    Run-HardcodedPathsLinter
+    Run-OptionalSanitizer
+
+    # --------------------------------------------------------
+    # FINAL ADD / COMMIT / PUSH
+    # --------------------------------------------------------
+
+    Log "Staging changes with git add ."
+    Exec-Git @("add", ".") | Out-Null
+    Git-Unstage-ServiceFiles
+    Log "git add completed"
+
+    $staged = Get-StagedFiles
+    if ($staged.Count -eq 0) {
+        Log "No staged changes after update. Nothing to commit or push"
+        Log "DONE"
+        exit 0
+    }
+
+    foreach ($f in $staged) {
+        Log "FINAL STAGED: $f"
+    }
+
+    Scan-StagedFilesForSecrets
+
+    if ([string]::IsNullOrWhiteSpace($CommitMessage)) {
+        if ($staged.Count -le 8) {
+            $CommitMessage = "sync: " + ($staged -join ", ")
+        }
+        else {
+            $CommitMessage = "sync project updates ($($staged.Count) files)"
+        }
+    }
+
+    Log "CommitMessage = $CommitMessage"
+
+    Exec-Git @("commit", "-m", $CommitMessage) | Out-Null
+    Log "Commit created"
+
+    Exec-Git @("push", "origin", $Branch) | Out-Null
+    Log "Push completed"
+
+    $lastCommit = ((Exec-Git @("log", "-1", "--oneline")) -join "`n").Trim()
+    Log "LastCommit = $lastCommit"
+
+    Log "SYNC SUMMARY"
+    Log "SyncedFilesCount = $($staged.Count)"
+    foreach ($f in $staged) {
+        Log "Synced: $f"
+    }
+
+    Log "DONE"
     exit 0
 }
-
-Log "Staged files:"
-foreach ($x in $staged) { Log ("  " + $x) }
-
-if ([string]::IsNullOrWhiteSpace($CommitMessage)) {
-    if ($staged.Count -le 8) {
-        $CommitMessage = "sync: " + ($staged -join ", ")
-    } else {
-        $CommitMessage = "sync project updates ($($staged.Count) files)"
+catch {
+    $msg = $_.Exception.Message
+    if ([string]::IsNullOrWhiteSpace($msg)) {
+        $msg = [string]$_
     }
+
+    Log "FATAL: $msg"
+    exit 1
 }
-
-Log ("CommitMessage = " + $CommitMessage)
-
-Log "Creating commit"
-$commitOut = @(Exec-Git @("commit", "-m", $CommitMessage))
-foreach ($x in $commitOut) { Log ("  " + $x) }
-Log "Commit created"
-
-Log "Pushing to GitHub"
-$pushOut = @(Exec-Git @("push", "origin", $Branch))
-foreach ($x in $pushOut) { Log ("  " + $x) }
-Log "Push completed"
-
-$lastCommit = ((Exec-Git @("log", "-1", "--oneline")) -join "`n").Trim()
-Log ("LastCommit = " + $lastCommit)
-
-Log "SYNC SUMMARY"
-Log ("SyncedFilesCount = " + $staged.Count)
-foreach ($x in $staged) { Log ("Synced: " + $x) }
-
-Log ("RuntimeLogFile = " + $script:LogFile)
-Log "DONE"
