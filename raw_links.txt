@@ -1,6 +1,7 @@
-﻿# RAW links generated: 2026-03-07 10:39:42
-# Repository: https://github.com/gpt-project213/GPT1C_Processor
-# Branch: master
+# generated_at: 2026-03-07 12:01:30
+# timezone: Asia/Almaty
+# repository: https://github.com/gpt-project213/GPT1C_Processor
+# branch: master
 
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/.gitignore
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Т╨Р╨Ы╨Ю╨Т╨Ю╨Щ.txt
