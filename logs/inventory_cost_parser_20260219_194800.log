@@ -1,0 +1,14 @@
+2026-02-19 14:48:00,257, INFO Лог-файл: C:\Users\user\Documents\GPT1C_Processor_temp\logs\inventory_cost_parser_20260219_194800.log
+2026-02-19 14:48:00,259, INFO Файл: C:\Users\user\Documents\GPT1C_Processor_temp\reports\excel\clean\Ведомость_по_партиям_товаров_на_складах (42).xlsx.__clean.xlsx
+2026-02-19 14:48:00,259, INFO Используем исходный (уже очищенный): Ведомость_по_партиям_товаров_на_складах (42).xlsx.__clean.xlsx
+2026-02-19 14:48:00,456, INFO Найдена строка заголовков на индексе 9
+2026-02-19 14:48:00,456, INFO Заголовок таблицы на строке 9
+2026-02-19 14:48:00,472, INFO Найдена строка итогов на индексе 169
+2026-02-19 14:48:00,472, INFO Диапазон данных: строки 10–167
+2026-02-19 14:48:00,472, INFO Всего собрано строк: 124
+2026-02-19 14:48:00,472, INFO Количество совпадает: 70260.672
+2026-02-19 14:48:00,472, INFO Стоимость совпадает: 97102600.98
+2026-02-19 14:48:00,472, INFO JSON сохранён: C:\Users\user\Documents\GPT1C_Processor_temp\reports\json\inventory_cost_ведомость_по_партиям_товаров_на_складах_42xlsx__cl.json
+2026-02-19 14:48:00,472, INFO HTML сохранён: C:\Users\user\Documents\GPT1C_Processor_temp\reports\html\inventory_cost_ведомость_по_партиям_товаров_на_складах_42xlsx__cl.html
+2026-02-19 14:48:00,472, INFO ✅ JSON: C:\Users\user\Documents\GPT1C_Processor_temp\reports\json\inventory_cost_ведомость_по_партиям_товаров_на_складах_42xlsx__cl.json
+2026-02-19 14:48:00,472, INFO ✅ HTML: C:\Users\user\Documents\GPT1C_Processor_temp\reports\html\inventory_cost_ведомость_по_партиям_товаров_на_складах_42xlsx__cl.html

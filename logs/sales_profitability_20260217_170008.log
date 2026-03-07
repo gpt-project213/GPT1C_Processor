@@ -1,0 +1,16 @@
+2026-02-17 17:00:08,021, INFO Лог-файл: C:\Users\User\Documents\GPT1C_Processor_temp\logs\sales_profitability_20260217_170008.log
+2026-02-17 17:00:08,021, INFO === Отчёт: Продажи + Рентабельность ===
+2026-02-17 17:00:08,024, WARNING Пропускаю (по товару): sales_продажи_по_товару_алена_14xlsx__clean_январь_2026_.json
+2026-02-17 17:00:08,029, INFO Загружаю sales: sales_продажи_алена_234xlsx__clean_9_февраля_2026_г.json
+2026-02-17 17:00:08,032, INFO Загружаю gross: gross_валовая_прибыль_91xlsx__clean_13_февраля_2026_г.json
+2026-02-17 17:00:08,038, INFO Построен справочник маржи: 37 товаров
+2026-02-17 17:00:08,038, INFO Анализ завершён:
+2026-02-17 17:00:08,038, INFO   - Клиентов: 3
+2026-02-17 17:00:08,038, INFO   - Товаров matched: 14
+2026-02-17 17:00:08,038, INFO   - Товаров unmatched: 13
+2026-02-17 17:00:08,038, INFO   - Товаров с низкой маржой: 3
+2026-02-17 17:00:08,040, INFO JSON отчёт: C:\Users\User\Documents\GPT1C_Processor_temp\reports\analytics\sales_profitability.json
+2026-02-17 17:00:08,041, INFO HTML отчёт: C:\Users\User\Documents\GPT1C_Processor_temp\reports\analytics\sales_profitability.html
+2026-02-17 17:00:08,041, INFO === ГОТОВО ===
+2026-02-17 17:00:08,042, INFO JSON: C:\Users\User\Documents\GPT1C_Processor_temp\reports\analytics\sales_profitability.json
+2026-02-17 17:00:08,042, INFO HTML: C:\Users\User\Documents\GPT1C_Processor_temp\reports\analytics\sales_profitability.html

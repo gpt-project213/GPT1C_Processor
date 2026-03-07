@@ -1,0 +1,23 @@
+2026-03-01 17:25:08, INFO === imap_fetcher vv4.4.3 ===
+2026-03-01 17:25:08, INFO IMAP cfg: host=mail.minbarakat.kz port=993 ssl=True user=corp@minbarakat.kz pass_set=True tz=Asia/Almaty env=F:\GPT1C_Processor_analitic\.env cfg=F:\GPT1C_Processor_analitic\config\imap.json
+2026-03-01 17:25:09, INFO IMAP LOGIN OK (attempt 1/5)
+2026-03-01 17:25:09, INFO SEARCH found 1 msgs
+2026-03-01 17:25:09, INFO SUMMARY REPORT detected: Продажи Магира (256).xlsx (keyword: продажи)
+2026-03-01 17:25:09, INFO SAVED: reports\queue\Продажи Магира (256).xlsx (from kz.holod@yandex.ru)
+2026-03-01 17:25:09, INFO Clean copy: reports\excel\clean\Продажи Магира (256).xlsx.__clean.xlsx
+2026-03-01 17:25:09, INFO SUMMARY REPORT detected: Продажи Оксана (246).xlsx (keyword: продажи)
+2026-03-01 17:25:09, INFO SAVED: reports\queue\Продажи Оксана (246).xlsx (from kz.holod@yandex.ru)
+2026-03-01 17:25:09, INFO Clean copy: reports\excel\clean\Продажи Оксана (246).xlsx.__clean.xlsx
+2026-03-01 17:25:09, INFO SUMMARY REPORT detected: Продажи Алена (238).xlsx (keyword: продажи)
+2026-03-01 17:25:09, INFO SAVED: reports\queue\Продажи Алена (238).xlsx (from kz.holod@yandex.ru)
+2026-03-01 17:25:09, INFO Clean copy: reports\excel\clean\Продажи Алена (238).xlsx.__clean.xlsx
+2026-03-01 17:25:09, INFO SUMMARY REPORT detected: Продажи Ергали (218).xlsx (keyword: продажи)
+2026-03-01 17:25:09, INFO SAVED: reports\queue\Продажи Ергали (218).xlsx (from kz.holod@yandex.ru)
+2026-03-01 17:25:09, INFO Clean copy: reports\excel\clean\Продажи Ергали (218).xlsx.__clean.xlsx
+2026-03-01 17:25:09, INFO MAIL flagged \Deleted, msg #b'1'
+2026-03-01 17:25:09, INFO INBOX EXPUNGE OK
+2026-03-01 17:25:09, INFO TRASH skip Trash: cannot SELECT
+2026-03-01 17:25:09, INFO TRASH skip Корзина: cannot SELECT
+2026-03-01 17:25:09, INFO TRASH skip Deleted Items: cannot SELECT
+2026-03-01 17:25:09, INFO TRASH cleaned: INBOX.Trash
+2026-03-01 17:25:09, INFO CYCLE DONE: saved=1

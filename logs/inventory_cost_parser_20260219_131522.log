@@ -1,0 +1,13 @@
+2026-02-19 13:15:22,184, INFO Лог-файл: C:\Users\User\Documents\GPT1C_Processor_temp\logs\inventory_cost_parser_20260219_131522.log
+2026-02-19 13:15:22,184, INFO Файл: reports\excel\clean\Ведомость_по_партиям_товаров_на_складах (41).xlsx.__clean.xlsx
+2026-02-19 13:15:22,184, INFO Используем исходный (уже очищенный): Ведомость_по_партиям_товаров_на_складах (41).xlsx.__clean.xlsx
+2026-02-19 13:15:22,374, INFO Найдена строка заголовков на индексе 9
+2026-02-19 13:15:22,396, INFO Заголовок таблицы на строке 9
+2026-02-19 13:15:22,406, INFO Найдена строка итогов на индексе 165
+2026-02-19 13:15:22,406, INFO Диапазон данных: строки 10–163
+2026-02-19 13:15:22,422, WARNING Расхождение в количестве: рассчитано 109174.856, в Excel 54587.428
+2026-02-19 13:15:22,422, WARNING Расхождение в стоимости: рассчитано 150271269.20, в Excel 75135634.60
+2026-02-19 13:15:22,422, INFO JSON сохранён: C:\Users\User\Documents\GPT1C_Processor_temp\reports\json\inventory_cost_ведомость_по_партиям_товаров_на_складах_41xlsx__cl.json
+2026-02-19 13:15:22,422, INFO HTML сохранён: C:\Users\User\Documents\GPT1C_Processor_temp\reports\html\inventory_cost_ведомость_по_партиям_товаров_на_складах_41xlsx__cl.html
+2026-02-19 13:15:22,422, INFO ✅ JSON: C:\Users\User\Documents\GPT1C_Processor_temp\reports\json\inventory_cost_ведомость_по_партиям_товаров_на_складах_41xlsx__cl.json
+2026-02-19 13:15:22,422, INFO ✅ HTML: C:\Users\User\Documents\GPT1C_Processor_temp\reports\html\inventory_cost_ведомость_по_партиям_товаров_на_складах_41xlsx__cl.html

@@ -1,0 +1,5 @@
+2026-03-01 15:43:07,903, INFO Лог-файл: F:\GPT1C_Processor_analitic\logs\sales_parser_20260301_154307.log
+2026-03-01 15:43:07,903, INFO Файл: reports\excel\processed\20260227110342_Продажи Алена (237).xlsx
+2026-03-01 15:43:08,139, INFO JSON создан: F:\GPT1C_Processor_analitic\reports\json\sales_20260227110342_продажи_алена_237_11022026_20022026.json
+2026-03-01 15:43:08,139, INFO Клиентов: 9, Выручка: 18535304.72 ₸
+2026-03-01 15:43:08,139, INFO OK: F:\GPT1C_Processor_analitic\reports\json\sales_20260227110342_продажи_алена_237_11022026_20022026.json

@@ -1,0 +1,8 @@
+2026-02-22 12:49:37, INFO === imap_fetcher vv4.4.3 ===
+2026-02-22 12:49:37, INFO IMAP cfg: host=mail.minbarakat.kz port=993 ssl=True user=corp@minbarakat.kz pass_set=True tz=Asia/Almaty env=C:\Users\user\Documents\GPT1C_Processor_analitic\.env cfg=C:\Users\user\Documents\GPT1C_Processor_analitic\config\imap.json
+2026-02-22 12:49:39, ERROR IMAP connect/login failed (attempt 1/5): b'[AUTHENTICATIONFAILED] Authentication failed.'
+2026-02-22 12:49:47, ERROR IMAP connect/login failed (attempt 2/5): b'[AUTHENTICATIONFAILED] Authentication failed.'
+2026-02-22 12:49:57, ERROR IMAP connect/login failed (attempt 3/5): b'[AUTHENTICATIONFAILED] Authentication failed.'
+2026-02-22 12:50:04, ERROR IMAP connect/login failed (attempt 4/5): b'[AUTHENTICATIONFAILED] Authentication failed.'
+2026-02-22 12:50:11, ERROR IMAP connect/login failed (attempt 5/5): b'[AUTHENTICATIONFAILED] Authentication failed.'
+2026-02-22 12:50:16, ERROR IMAP error: b'[AUTHENTICATIONFAILED] Authentication failed.'

@@ -1,0 +1,5 @@
+2026-03-01 15:42:06,837, INFO Лог-файл: F:\GPT1C_Processor_analitic\logs\sales_parser_20260301_154206.log
+2026-03-01 15:42:06,837, INFO Файл: reports\excel\clean\Продажи Оксана (245).xlsx.__clean.xlsx
+2026-03-01 15:42:07,073, INFO JSON создан: F:\GPT1C_Processor_analitic\reports\json\sales_продажи_оксана_245xlsx__clean_11022026_20022026.json
+2026-03-01 15:42:07,073, INFO Клиентов: 53, Выручка: 5761695.27 ₸
+2026-03-01 15:42:07,073, INFO OK: F:\GPT1C_Processor_analitic\reports\json\sales_продажи_оксана_245xlsx__clean_11022026_20022026.json

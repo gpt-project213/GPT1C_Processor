@@ -1,0 +1,10 @@
+2026-03-01 15:43:02,034, INFO Лог-файл: F:\GPT1C_Processor_analitic\logs\sales_parser_20260301_154302.log
+2026-03-01 15:43:02,035, INFO Файл: reports\excel\processed\20260227104627_Продажи Магира (256).xlsx
+2026-03-01 15:43:02,239, INFO JSON создан: F:\GPT1C_Processor_analitic\reports\json\sales_20260227104627_продажи_магира_256_27_февраля_2026_.json
+2026-03-01 15:43:02,239, INFO Клиентов: 4, Выручка: 1472376.55 ₸
+2026-03-01 15:43:02,240, INFO OK: F:\GPT1C_Processor_analitic\reports\json\sales_20260227104627_продажи_магира_256_27_февраля_2026_.json
+2026-03-01 15:43:02,935, INFO Лог-файл: F:\GPT1C_Processor_analitic\logs\sales_parser_20260301_154302.log
+2026-03-01 15:43:02,935, INFO Файл: reports\excel\processed\20260227104629_Продажи Оксана (246).xlsx
+2026-03-01 15:43:03,143, INFO JSON создан: F:\GPT1C_Processor_analitic\reports\json\sales_20260227104629_продажи_оксана_246_27_февраля_2026_.json
+2026-03-01 15:43:03,143, INFO Клиентов: 5, Выручка: 253874.20 ₸
+2026-03-01 15:43:03,144, INFO OK: F:\GPT1C_Processor_analitic\reports\json\sales_20260227104629_продажи_оксана_246_27_февраля_2026_.json

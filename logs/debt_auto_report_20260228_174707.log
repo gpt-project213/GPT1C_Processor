@@ -1,0 +1,32 @@
+2026-02-28 17:47:07, INFO Обработка файла: Детальный Дебиторы Ергали (98).xlsx
+2026-02-28 17:47:07, ERROR Ошибка при обработке: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmp1426w4fc\\Детальный Дебиторы Ергали (98).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Детальный Дебиторы Ергали (98).xlsx.__clean.xlsx'
+Traceback (most recent call last):
+  File "F:\GPT1C_Processor_analitic\debt_auto_report.py", line 679, in main
+    build_report(args.xlsx, force=force); return 0
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GPT1C_Processor_analitic\debt_auto_report.py", line 637, in build_report
+    clean = ensure_clean_xlsx(src, force_fix=True)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GPT1C_Processor_analitic\utils_excel.py", line 208, in ensure_clean_xlsx
+    _safe_replace(temp_path, clean)
+  File "F:\GPT1C_Processor_analitic\utils_excel.py", line 149, in _safe_replace
+    src.replace(dst)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\pathlib.py", line 1188, in replace
+    os.replace(self, target)
+OSError: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmp1426w4fc\\Детальный Дебиторы Ергали (98).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Детальный Дебиторы Ергали (98).xlsx.__clean.xlsx'
+2026-02-28 17:47:07, INFO Обработка файла: Детальный Дебиторы Ергали (99).xlsx
+2026-02-28 17:47:07, ERROR Ошибка при обработке: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmpb5083a14\\Детальный Дебиторы Ергали (99).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Детальный Дебиторы Ергали (99).xlsx.__clean.xlsx'
+Traceback (most recent call last):
+  File "F:\GPT1C_Processor_analitic\debt_auto_report.py", line 679, in main
+    build_report(args.xlsx, force=force); return 0
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GPT1C_Processor_analitic\debt_auto_report.py", line 637, in build_report
+    clean = ensure_clean_xlsx(src, force_fix=True)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\GPT1C_Processor_analitic\utils_excel.py", line 208, in ensure_clean_xlsx
+    _safe_replace(temp_path, clean)
+  File "F:\GPT1C_Processor_analitic\utils_excel.py", line 149, in _safe_replace
+    src.replace(dst)
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\pathlib.py", line 1188, in replace
+    os.replace(self, target)
+OSError: [WinError 17] Системе не удается переместить файл на другой диск: 'C:\\Users\\user\\AppData\\Local\\Temp\\tmpb5083a14\\Детальный Дебиторы Ергали (99).__tmp_clean.xlsx' -> 'F:\\GPT1C_Processor_analitic\\reports\\excel\\Детальный Дебиторы Ергали (99).xlsx.__clean.xlsx'
