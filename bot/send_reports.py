@@ -1,5 +1,5 @@
-# v. 9.4.31 / 05.03.2026 - Menu Anchor System (меню всегда внизу) - Принудительная отправка отчётов (force) + новые пороги зон дебиторки
-# ИЗМЕНЕНИЯ v9.4.31 / 05.03.2026 — ПОЛНЫЙ АУДИТ (ZIP):
+# v. 9.4.32 / 09.03.2026 - Fix bugs: #INV-1, #MENU-SILENCE, #AI-MENU, упущенная прибыль → еженедельно (пятница 14:05)
+# ИЗМЕНЕНИЯ v9.4.32 / 09.03.2026:
 # - ИСПРАВЛЕНО Bug B1: weekly_ai_generation использовал неопределённую переменную
 #   managers_to_process → заменено на get_managers_list() (NameError при каждом запуске)
 # - ИСПРАВЛЕНО Bug B2: handle_extended_with_ai передавал неопределённую переменную
@@ -3080,9 +3080,10 @@ async def check_and_send_silence_alerts(context=None):
 
 async def send_opportunity_loss_report(context=None):
     """
-    v9.4.26: Считает и рассылает отчёт 'Упущенная прибыль'.
+    v9.4.32: Считает и рассылает отчёт 'Упущенная прибыль'.
 
-    Вызывается в 14:05 и 21:05 (5 мин после silence_alerts).
+    Вызывается автоматически: пятница 14:05 (еженедельно).
+    Принудительно: кнопка force|oploss в меню аналитики (любой день).
 
     - Admin  → сводная таблица по всем менеджерам
     - Subadmin → сводка по себе + подчинённым
@@ -3090,6 +3091,12 @@ async def send_opportunity_loss_report(context=None):
     """
     if not _OPPORTUNITY_LOSS_AVAILABLE:
         logger.warning("⚠️ opportunity_loss модуль не загружен — пропуск")
+        return
+
+    # v9.4.32: Еженедельный автозапуск — только по пятницам (4 = пятница)
+    # Принудительная отправка (кнопка force|oploss) идёт через force_report_to_user напрямую
+    if datetime.now(TZ).weekday() != 4:
+        logger.info("💸 opportunity_loss: сегодня не пятница — пропуск автозапуска")
         return
 
     logger.info("💸 Расчёт упущенной прибыли...")
@@ -4230,15 +4237,17 @@ async def post_init(app: Application):
                 for mgrs in rtype.values()
             ) if _index_cache else 0
             
+            _is_friday = datetime.now(TZ).weekday() == 4
+            _oploss_line = "\n· 14:05 — упущ. прибыль" if _is_friday else ""
             admin_msg = (
-                f"🟢 МИН БАРАҚАТ · БОТ ЗАПУЩЕН\n"
+                f"🟢 БОТ ЗАПУЩЕН\n"
                 f"📅 {now_str} | {__VERSION__}\n"
                 f"\n"
                 f"📊 Отчётов в базе: {report_count}\n"
                 f"\n"
                 f"⏰ Расписание сегодня:\n"
                 f"· 09:00 — остатки\n"
-                f"· 14:00 — молчание + упущ. прибыль\n"
+                f"· 14:00 — молчание{_oploss_line}\n"
                 f"· 20:00 — валовая\n"
                 f"· 21:00 — продажи + молчание\n"
                 f"· 22:00 — аналитика\n"
@@ -4254,7 +4263,7 @@ async def post_init(app: Application):
 
     # Команда: менеджеры и subadmin — мотивирующее, без технических деталей
     team_msg = (
-        f"🟢 МИН БАРАҚАТ · Система запущена\n"
+        f"🟢 Система запущена\n"
         f"📅 {datetime.now(TZ).strftime('%d.%m.%Y %H:%M')} | {__VERSION__}\n"
         f"\n"
         f"Данные актуальны. Отчёты доступны в меню.\n"
@@ -4772,19 +4781,14 @@ def main():
         )
         logger.info("⏰ Настроен ежедневный джоб: проверка дней молчания в 21:00")
 
-        # v9.4.26: Упущенная прибыль — через 5 мин после silence_alerts
+        # v9.4.32: Упущенная прибыль — еженедельно в пятницу 14:05 (было: ежедневно 14:05 и 21:05)
         if _OPPORTUNITY_LOSS_AVAILABLE:
             job_queue.run_daily(
                 send_opportunity_loss_report,
                 time=dt_time(14, 5, tzinfo=TZ),
-                name="opportunity_loss_14h"
+                name="opportunity_loss_weekly"
             )
-            job_queue.run_daily(
-                send_opportunity_loss_report,
-                time=dt_time(21, 5, tzinfo=TZ),
-                name="opportunity_loss_21h"
-            )
-            logger.info("💸 Настроен ежедневный джоб: упущенная прибыль в 14:05 и 21:05")
+            logger.info("💸 Настроен еженедельный джоб: упущенная прибыль по пятницам 14:05")
         else:
             logger.warning("⚠️ opportunity_loss не загружен — джобы 14:05/21:05 не запущены")
         

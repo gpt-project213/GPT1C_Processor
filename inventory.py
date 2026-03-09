@@ -1,13 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-inventory.py · v1.1.1 (2026-03-01) — Остатки товаров на складах (с группировкой по категориям)
-
-ИСПРАВЛЕНИЯ v1.1.1:
-- БАГ #10: Устранён показ начального остатка вместо конечного (-14%).
-  COLS: qty_end теперь ищет "конечный остаток"/"кон. остаток" (не "количество").
-  find_header_block: строка i+1 (специфичные термины) имеет приоритет над i.
-
+inventory.py v1.1.2 (2026-03-09) — Остатки товаров на складах (с группировкой по категориям)
 Генерирует HTML и JSON отчёты.
 Сортировка: категории по убыванию общего количества, товары по убыванию количества.
 """
@@ -60,10 +54,7 @@ MAIN_CATEGORIES = {
 COLS = {
     "warehouse": ("склад",),
     "product":   ("товар", "номенклатура", "наимен"),
-    # v1.1: Конечный остаток — специфичные термины с наивысшим приоритетом
-    "qty_end":   ("конечный остаток", "кон. остаток", "кон.остаток", "кон остаток", "конечный"),
-    # Начальный остаток — отдельно, чтобы не спутать с конечным
-    "qty_start": ("начальный остаток", "нач. остаток", "нач.остаток", "нач остаток", "начальный"),
+    "qty_end":   ("количество", "остаток", "конечный остаток", "кон. остаток"),
     "cost":      ("стоимость",),
     "unit_cost": ("себестоимость", "ед.товара", "единица"),
 }
@@ -152,26 +143,15 @@ def _probe(row) -> Dict[str, int]:
     return res
 
 def find_header_block(df: pd.DataFrame, max_scan: int = 60):
-    """
-    v1.1: В 1С ведомости по товарам заголовок двухуровневый:
-      Строка i:   "Количество" (объединяет нач.остаток, приход, расход, кон.остаток)
-      Строка i+1: "Нач. остаток" | "Приход" | "Расход" | "Кон. остаток"
-    Берём строку i+1 как приоритетную (специфичные термины), 
-    строку i — только для восполнения (product, cost, unit_cost).
-    """
     width = df.shape[1]
     best = None
     score_best = -1
     for i in range(min(max_scan, len(df))):
-        # Сначала пробуем специфичные заголовки из строки i+1
-        base = {}
+        base = _probe(df.iloc[i])
         if i + 1 < len(df):
-            base = _probe(df.iloc[i + 1])
-        # Потом добавляем из строки i (только если не нашли в i+1)
-        extra = _probe(df.iloc[i])
-        for k, v in extra.items():
-            base.setdefault(k, v)
-        
+            extra = _probe(df.iloc[i + 1])
+            for k, v in extra.items():
+                base.setdefault(k, v)
         score = 0
         if "product" in base:
             score += 3
@@ -179,9 +159,7 @@ def find_header_block(df: pd.DataFrame, max_scan: int = 60):
             score += 2
         if score >= 4 and score > score_best:
             head = [clean(df.iat[i, j]) for j in range(width)]
-            # data_start = i+2 (пропускаем обе строки заголовка)
-            data_start = i + 2 if i + 1 < len(df) else i + 1
-            best = (base, data_start, head)
+            best = (base, i + 1, head)
             score_best = score
     if not best:
         for i in range(min(max_scan, len(df))):
@@ -337,7 +315,7 @@ def parse_grouped(df: pd.DataFrame, colmap: Dict[str, int]) -> Dict[str, Any]:
         "warehouse": warehouse_name,
         "categories": sorted_categories,
         "total_qty": total_qty,
-        "total_cost": float(total_cost),
+        "total_cost": total_cost if total_cost else None,
     }
 
 def save_json(data: Dict[str, Any], slug: str) -> Path:
@@ -370,12 +348,23 @@ def build_report(xlsx: Path) -> Path:
     env.filters["money"] = fmt_int
     env.filters["price"] = fmt_int
 
+    # Fix v1.1.2: шаблон ждёт products[] (плоский список), а не categories[] (вложенная структура)
+    products = []
+    for cat in data.get("categories", []):
+        cat_name = cat.get("category", "")
+        for item in cat.get("item_list", []):
+            products.append({
+                "category": cat_name,
+                "product":  item.get("product", ""),
+                "qty_raw":  float(item.get("qty", 0.0)),
+            })
+
     tpl = env.get_template("inventory_simple.html")
     html = tpl.render(
         title=f"Остатки — {data['warehouse']}",
         period=period,
         generated_at=datetime.now(TZ).strftime("%d.%m.%Y %H:%M"),
-        categories=data["categories"],
+        products=products,
         grand_total_qty=fmt_qty(data["total_qty"]),
         grand_total_cost=fmt_int(data["total_cost"]) if data["total_cost"] else "—"
     )

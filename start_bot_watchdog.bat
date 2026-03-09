@@ -3,10 +3,10 @@
 :: GPT1C OtchetBot Ч Watchdog STABLE
 :: ============================================================
 
-cd /d C:\Users\User\Documents\GPT1C_Processor_analitic
+cd /d E:\GPT1C_Processor_analitic
 
 :: путь к python venv
-set PYTHON=C:\Users\User\Documents\GPT1C_Processor_analitic\.venv\Scripts\python.exe
+set PYTHON=E:\GPT1C_Processor_analitic\.venv\Scripts\python.exe
 
 :: ¬ј∆Ќќ Ч путь к боту
 set SCRIPT=bot\send_reports.py
