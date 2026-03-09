@@ -175,7 +175,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.31/05.03.2026"
+__VERSION__ = "v9.4.32/09.03.2026"
 
 from datetime import datetime, time as dt_time
 from zoneinfo import ZoneInfo
@@ -2234,7 +2234,6 @@ def kb_debt_menu(user_role: str) -> InlineKeyboardMarkup:
     rows = [
         [InlineKeyboardButton("📊 Простой", callback_data="submenu|DEBT_SIMPLE")],
         [InlineKeyboardButton("📈 Детальный", callback_data="submenu|DEBT_EXTENDED")],
-        [InlineKeyboardButton("🤖 ИИ анализ", callback_data="ai_type|DEBT")],  # v9.4.29: сразу DEBT
     ]
     if user_role == "admin":
         rows.append([InlineKeyboardButton("📋 Сводный", callback_data="direct|DEBT_SIMPLE|summary")])
@@ -2245,7 +2244,6 @@ def kb_debt_menu_manager(my_name: str) -> InlineKeyboardMarkup:
     rows = [
         [InlineKeyboardButton("📊 Простой", callback_data=f"direct|DEBT_SIMPLE|{my_name}")],
         [InlineKeyboardButton("📈 Детальный", callback_data=f"direct|DEBT_EXTENDED|{my_name}")],
-        [InlineKeyboardButton("🤖 ИИ анализ", callback_data="ai_type|DEBT")],  # v9.4.29: сразу DEBT
         [InlineKeyboardButton("⬅️ Назад", callback_data="back_main")],
     ]
     return InlineKeyboardMarkup(rows)
@@ -3047,6 +3045,7 @@ async def check_and_send_silence_alerts(context=None):
                     msg = await context.bot.send_message(chat_id=chat_id, text=message, parse_mode=None)
                     schedule_message_deletion(chat_id, msg.message_id, msg.date.timestamp(), delay_hours=24)
                     logger.info(f"✅ Уведомление отправлено субадмину {manager} (свои: {total_silent}, подшефные: {'есть' if has_subordinate_alerts else 'нет'})")
+                    await send_main_menu(context, chat_id, get_user_role(chat_id))  # Fix #MENU-SILENCE
                 except Exception as e:
                     logger.error(f"❌ Ошибка отправки {manager}: {e}")
         else:
@@ -3056,6 +3055,7 @@ async def check_and_send_silence_alerts(context=None):
                     msg = await context.bot.send_message(chat_id=chat_id, text=message, parse_mode=None)
                     schedule_message_deletion(chat_id, msg.message_id, msg.date.timestamp(), delay_hours=24)
                     logger.info(f"✅ Уведомление отправлено: {manager} ({total_silent} клиентов)")
+                    await send_main_menu(context, chat_id, get_user_role(chat_id))  # Fix #MENU-SILENCE
                 except Exception as e:
                     logger.error(f"❌ Ошибка отправки {manager}: {e}")
     
@@ -3067,6 +3067,7 @@ async def check_and_send_silence_alerts(context=None):
                 msg = await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=admin_summary, parse_mode=None)
                 schedule_message_deletion(ADMIN_CHAT_ID, msg.message_id, msg.date.timestamp(), delay_hours=24)
                 logger.info(f"✅ Детальная сводка отправлена админу")
+                await send_main_menu(context, ADMIN_CHAT_ID, "admin")  # Fix #MENU-SILENCE
             else:
                 logger.warning("⚠️ ADMIN_CHAT_ID не установлен")
         except Exception as e:
@@ -3122,6 +3123,7 @@ async def send_opportunity_loss_report(context=None):
             )
             schedule_message_deletion(ADMIN_CHAT_ID, msg.message_id, msg.date.timestamp(), delay_hours=24)
             logger.info("✅ opportunity_loss: сводка отправлена admin")
+            await send_main_menu(context, ADMIN_CHAT_ID, "admin")  # Fix #MENU-SILENCE
         except Exception as e:
             logger.error(f"❌ opportunity_loss: ошибка отправки admin: {e}")
     elif ADMIN_CHAT_ID and not all_data:
@@ -3164,6 +3166,7 @@ async def send_opportunity_loss_report(context=None):
             )
             schedule_message_deletion(chat_id, msg.message_id, msg.date.timestamp(), delay_hours=24)
             logger.info(f"✅ opportunity_loss: отправлено {manager} (chat_id={chat_id})")
+            await send_main_menu(context, chat_id, get_user_role(chat_id))  # Fix #MENU-SILENCE
         except Exception as e:
             logger.error(f"❌ opportunity_loss: ошибка отправки {manager}: {e}")
 
@@ -4396,6 +4399,7 @@ async def cmd_analytics(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("👥 RFM-клиенты",            callback_data="analytics|rfm")],
             [InlineKeyboardButton("🎯 Концентрация выручки",   callback_data="analytics|concentration")],
             [InlineKeyboardButton("💳 DSO+Aging",              callback_data="analytics|dso")],
+            [InlineKeyboardButton("🤖 ИИ анализ",             callback_data="ai_type_menu")],  # Fix #AI-MENU
             [InlineKeyboardButton("🔄 Обновить аналитику",     callback_data="analytics|refresh")],
             *force_buttons,
             [InlineKeyboardButton("🔙 Главное меню",           callback_data="back_main")],

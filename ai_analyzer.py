@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-AI Analyzer v9.4.17 - Генерация ИИ-анализа по типу отчёта
+AI Analyzer v9.4.18 - Генерация ИИ-анализа по типу отчёта
+Fix #AI-1: AI_MAX_INPUT_CHARS 80000 → 15000 (экономия ~96% токенов)
 Полная интеграция с .env настройками
 Поддержка типов: DEBT, SALES, GROSS, INVENTORY, EXPENSES
 Поддержка провайдеров: OpenAI (GPT) и DeepSeek
@@ -25,7 +26,7 @@ from openai import OpenAI
 from dotenv import load_dotenv
 
 # Версия
-VERSION = "v9.4.17"
+VERSION = "v9.4.18"
 
 # Поддерживаемые типы отчётов
 REPORT_TYPES = ("DEBT", "SALES", "GROSS", "INVENTORY", "EXPENSES")
@@ -66,7 +67,7 @@ PROMPT_PATHS = {
 
 AI_TEMPERATURE = float(os.getenv("AI_TEMPERATURE", "1.0"))
 AI_MAX_TOKENS = int(os.getenv("AI_MAX_TOKENS", "1500"))
-AI_MAX_INPUT_CHARS = int(os.getenv("AI_MAX_INPUT_CHARS", "80000"))
+AI_MAX_INPUT_CHARS = int(os.getenv("AI_MAX_INPUT_CHARS", "15000"))  # Fix #AI-1: было 80000 (~3.8M токенов/мес → ~130K)
 AI_SAVE_ALWAYS = os.getenv("AI_SAVE_ALWAYS", "true").lower() == "true"
 
 # Telegram отправка (для обратной совместимости)
