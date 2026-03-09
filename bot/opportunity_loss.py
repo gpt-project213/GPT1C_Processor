@@ -1,7 +1,8 @@
 """
-opportunity_loss.py · v1.5.0 (28.02.2026)
+opportunity_loss.py · v1.5.1 (09.03.2026)
 ──────────────────────────────────────────────────────────────────────────────
-Модуль "Упущенная прибыль" — считает потенциальные потери по должникам.
+Fix #OPLOSS-1: _find_latest_gross_html больше не берёт чужой gross файл как
+fallback — возвращает None, _get_manager_margin использует DEFAULT_MARGIN_PCT.
 
 Формула: loss = долг × маржа_менеджера (% последнего gross отчёта)
 
@@ -59,7 +60,8 @@ def _fmt_pct(pct: float) -> str:
 def _find_latest_gross_html(html_dir: Path, manager_name: str) -> Optional[Path]:
     """
     Ищет последний файл *{manager_name}*_gross_sum.html в html_dir.
-    Если менеджер не найден — берёт любой последний gross_sum.html.
+    Fix #OPLOSS-1: если файл менеджера не найден — возвращает None.
+    Использование чужого gross файла давало неверную маржу для расчёта упущенной прибыли.
     Сортировка по mtime (быстро, не парсим HTML).
     """
     # Пытаемся найти по имени менеджера
@@ -71,16 +73,11 @@ def _find_latest_gross_html(html_dir: Path, manager_name: str) -> Optional[Path]
     if candidates:
         return max(candidates, key=lambda p: p.stat().st_mtime)
 
-    # Fallback: любой gross_sum.html
-    all_gross = list(html_dir.glob("*_gross_sum.html"))
-    if all_gross:
-        logger.warning(
-            f"opportunity_loss: gross HTML для '{manager_name}' не найден, "
-            f"используется общий файл"
-        )
-        return max(all_gross, key=lambda p: p.stat().st_mtime)
-
-    logger.warning(f"opportunity_loss: нет gross HTML файлов в {html_dir}")
+    # Fix #OPLOSS-1: НЕ берём чужой файл — возвращаем None, используется DEFAULT_MARGIN_PCT
+    logger.warning(
+        f"opportunity_loss: gross HTML для '{manager_name}' не найден, "
+        f"используется маржа по умолчанию ({DEFAULT_MARGIN_PCT}%)"
+    )
     return None
 
 

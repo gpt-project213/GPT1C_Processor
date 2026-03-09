@@ -1,33 +1,32 @@
 """
-utils_common.py · baseline 2025-08-29
-──────────────────────────────────────────────────────────────
-Лёгкие утилиты без тяжёлых зависимостей.
+utils_common.py · v1.0.0 (09.03.2026)
+──────────────────────────────────────────────────────────────────────────────
+Общие утилиты для аналитических модулей GPT1C_Processor.
+
+Содержит функции, которые ранее дублировались между модулями:
+  - normalize_client_name  (была в revenue_concentration_report.py)
+
+Fix #RC-1: вынесено из revenue_concentration_report.py,
+           доступно для импорта в dso_aging_report.py и других модулях.
 """
-
 from __future__ import annotations
-import re, unicodedata
-from typing import Any
 
-NBSP       = "\u00A0"
-THIN_NBSP  = "\u202F"
-_SPACES_RE = re.compile(f"[{NBSP}{THIN_NBSP}\\s]+")
+import re
 
-def clean_number(value: Any) -> str:
-    """
-    '800 123,50'  → '800123.50'
-    NBSP/тонкие NBSP/обычные пробелы → удалить; запятую → точку.
-    """
-    s = str(value)
-    s = _SPACES_RE.sub("", s)
-    return s.replace(",", ".").strip()
+__VERSION__ = "1.0.0"
 
-def slugify_safe(text: str, allow_dot: bool = False) -> str:
-    """
-    'Продажи Оксана (38).xlsx'  → 'prodazhi_oksana_38'
-    """
-    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
-    text = re.sub(r"[^\w\-.]" if allow_dot else r"[^\w\-]", "_", text.lower())
-    text = re.sub(r"__+", "_", text).strip("_")
-    return text[:255]      # безопасная длина для Windows/FAT
 
-__all__ = ["clean_number", "slugify_safe"]
+def normalize_client_name(name: str) -> str:
+    """
+    Нормализует имя клиента для дедупликации при мёрже нескольких JSON.
+    Убирает префиксы менеджера, скобки, спецсимволы, схлопывает пробелы.
+
+    Примеры:
+      «О ТД Асем (холодильник № 4)» → «тд асем холодильник 4»
+      «М ИП Иванов»                 → «ип иванов»
+    """
+    s = str(name).lower().strip()
+    s = re.sub(r"^[оаемOАЕМ]\s+", "", s)   # убираем префикс менеджера
+    s = re.sub(r"[^\w\s]", " ", s)          # убираем спецсимволы
+    s = re.sub(r"\s+", " ", s)              # схлопываем пробелы
+    return s.strip()

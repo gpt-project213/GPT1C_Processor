@@ -1,8 +1,11 @@
 """
 Модуль для генерации кратких сводок по остаткам
 
-Версия: 1.1
-Дата: 22.02.2026
+Версия: 1.2
+Дата: 09.03.2026
+Изменения v1.2:
+  - Fix #INV-1: исправлен glob-паттерн inventory_simple_*.html → inventory_*.html
+    (inventory.py генерирует файлы как inventory_{slug}.html без _simple_ в имени)
 Изменения v1.1:
   - get_latest_inventory_report() сортирует по периоду данных из HTML (не по mtime)
   - Добавлен _parse_period_date_from_html() — лёгкий парсер даты
@@ -178,7 +181,7 @@ class InventorySummary:
         """
         v1.1: Находит отчёт остатков с НОВЕЙШИМ ПЕРИОДОМ ДАННЫХ (не mtime).
         """
-        pattern = "inventory_simple_*.html"
+        pattern = "inventory_*.html"
         matching_files = list(reports_dir.glob(pattern))
         
         if not matching_files:
