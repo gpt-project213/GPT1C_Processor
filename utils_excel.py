@@ -2,7 +2,12 @@
 # -*- coding: utf-8 -*-
 """
 utils_excel.py
-version: v2.3.3 (2026-03-01)
+version: v2.3.4 (2026-03-09)
+
+ИЗМЕНЕНИЯ v2.3.4:
+• XLS support: если бухгалтер прислал .xls вместо .xlsx — конвертируем через xlrd+pandas
+  до начала любой обработки. Все парсеры по-прежнему получают чистый .xlsx.
+  Требует: pip install xlrd
 
 ИЗМЕНЕНИЯ v2.3.3:
 • Bug #15 fix: _safe_replace теперь обрабатывает WinError 17 (cross-drive move C: → F:).
@@ -55,7 +60,7 @@ import pandas as pd
 import config
 from config import EXCEL_CLEAN_DIR, QUEUE_DIR, setup_logging
 
-__VERSION__ = "utils_excel.py v2.3.1 — 2026-02-18"
+__VERSION__ = "utils_excel.py v2.3.4 — 2026-03-09"
 log = setup_logging("utils_excel", level=logging.INFO)
 
 # ── XML константы ─────────────────────────────────────────────
@@ -213,8 +218,23 @@ def ensure_clean_xlsx(path: Union[str, Path], out_path: Optional[Union[str, Path
         log.info("Файл уже очищен, возвращаем как есть → %s", src.name)
         return src
 
-    if not src.exists() or src.suffix.lower() != ".xlsx":
+    if not src.exists() or src.suffix.lower() not in (".xlsx", ".xls"):
         raise FileNotFoundError(src)
+
+    # v2.3.4: конвертация .xls → .xlsx до обработки
+    if src.suffix.lower() == ".xls":
+        try:
+            import xlrd  # noqa: F401
+        except ImportError as exc:
+            raise ImportError(
+                "Для чтения .xls файлов требуется xlrd: pip install xlrd"
+            ) from exc
+        xls_converted = src.with_suffix(".xlsx")
+        log.info("XLS → XLSX конвертация: %s", src.name)
+        df_xls = pd.read_excel(src, header=None, dtype=str, engine="xlrd")
+        df_xls.to_excel(xls_converted, index=False, header=False, engine="openpyxl")
+        log.info("Конвертирован: %s", xls_converted.name)
+        src = xls_converted.resolve()
 
     EXCEL_CLEAN_DIR.mkdir(parents=True, exist_ok=True)
 
