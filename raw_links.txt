@@ -1,4 +1,4 @@
-﻿# RAW links generated: 2026-03-09 15:03:26
+﻿# RAW links generated: 2026-03-10 08:14:42
 # Repository: https://github.com/gpt-project213/GPT1C_Processor
 # Branch: master
 
@@ -3637,6 +3637,7 @@ https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/logs_pub
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/net_profit_report.py
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/Project status.MD
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/PROJECT_CONTEXT.md
+https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/raw_links тАФ ╨║╨╛╨┐╨╕╤П.txt
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/raw_links.txt
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/repo_map.json
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/requirements.txt
