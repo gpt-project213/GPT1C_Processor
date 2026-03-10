@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find \"E:/GPT1C_Processor_analitic/reports/excel\" -name \"*.work\" 2>/dev/null | wc -l && echo \"---stuck .work files:\" && find \"E:/GPT1C_Processor_analitic/reports/excel\" -name \"*.work\" 2>/dev/null)"
+    ]
+  }
+}

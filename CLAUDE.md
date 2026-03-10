@@ -128,3 +128,112 @@ Russian-language prompts for AI analysis live in root-level `.txt` files:
 | M1 | `bot/send_reports.py` | Bare `except:` → `except (ValueError, AttributeError):` on `ADMIN_SUMMARY_TIME` parse |
 | M2 | `expenses_parser.py` | Default timezone `"Asia/Qyzylorda"` → `"Asia/Almaty"` |
 | L1 | `bot/inventory_summary.py:_parse_period_date_from_html` | Each `datetime()` call now individually guarded with `try/except ValueError` |
+## Repository Navigation Rules
+
+When working in this repository, always use this order:
+
+1. Read `CLAUDE.md`
+2. Read `repo_map.json`
+3. Read `CODE_INDEX.md`
+4. Read `DEPENDENCY_MAP.md`
+5. Read `PROJECT_CONTEXT.md`
+6. Only then open the exact Python files required for the task
+
+Rules:
+- Do not broadly rescan the repository if the index files already identify the relevant modules.
+- Use `repo_map.json` as the primary file map.
+- Use `CODE_INDEX.md` as the human-readable module index.
+- Use `DEPENDENCY_MAP.md` to understand module relationships before editing.
+- Use `PROJECT_CONTEXT.md` for business rules and architectural constraints.
+- Prefer minimal targeted reads over full-project scans.
+- Before making edits, identify the exact files affected and explain why they are the minimal patch surface.
+- Do not refactor unrelated files.
+# Operational Rules for Claude Code
+
+These rules override default Claude behavior when working in this repository.
+
+## 1. Editing Safety Rules
+
+When modifying code:
+
+- Never refactor unrelated modules.
+- Never change public interfaces unless required for a specific bug fix.
+- Prefer **minimal patch surface**.
+- Always explain the root cause before editing.
+- Show the patch diff before finalizing edits.
+
+Order of work:
+
+1. Explain root cause
+2. Identify exact files affected
+3. Apply minimal patch
+4. Validate syntax
+5. Summarize changes
+
+Never introduce architectural changes unless explicitly requested.
+
+---
+
+## 2. Repository Navigation Strategy
+
+Always follow this navigation order:
+
+1. `CLAUDE.md`
+2. `repo_map.json`
+3. `CODE_INDEX.md`
+4. `DEPENDENCY_MAP.md`
+5. `PROJECT_CONTEXT.md`
+
+Only after reading these files should Claude open Python modules.
+
+Avoid scanning the entire repository unless absolutely necessary.
+
+Prefer targeted file reads.
+
+---
+
+## 3. Pipeline Safety Rules
+
+The Excel processing pipeline must follow strict lifecycle rules.
+
+File lifecycle:
+
+queue/file.xlsx
+→ claim
+queue/file.xlsx.work
+→ processing
+reports/html + reports/json
+→ success
+reports/excel/processed/file.xlsx
+
+Never:
+
+- delete queue files directly
+- rename files outside claim/release logic
+- bypass `_move_to_processed()`
+
+All pipeline operations must be atomic.
+
+---
+
+## 4. Concurrency Rules
+
+`run_pipeline_all_mp.py` runs in multi-process mode.
+
+Therefore:
+
+- File operations must be atomic
+- Any filesystem access must tolerate race conditions
+- `FileNotFoundError` must never crash the pipeline loop
+- Queue iteration must be defensive
+
+Never assume a file still exists after reading directory listings.
+
+---
+
+## 5. Timezone Rules
+
+All timestamps must use:
+
+```python
+ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
