@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-inventory.py v1.1.2 (2026-03-09) — Остатки товаров на складах (с группировкой по категориям)
+inventory.py v1.1.3 (2026-03-10) — Остатки товаров на складах (с группировкой по категориям)
 Генерирует HTML и JSON отчёты.
 Сортировка: категории по убыванию общего количества, товары по убыванию количества.
 """
@@ -152,6 +152,14 @@ def find_header_block(df: pd.DataFrame, max_scan: int = 60):
             extra = _probe(df.iloc[i + 1])
             for k, v in extra.items():
                 base.setdefault(k, v)
+            # Fix v1.1.3: составные заголовки — "Кон." как отдельная ячейка в строке i+1
+            if "qty_end" not in base:
+                row2 = df.iloc[i + 1]
+                for j in range(width):
+                    cell = clean(row2.iat[j]).lower()
+                    if cell in ("кон", "кон.") or cell.startswith("кон. "):
+                        base["qty_end"] = j
+                        break
         score = 0
         if "product" in base:
             score += 3
