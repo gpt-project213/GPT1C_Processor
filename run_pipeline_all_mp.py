@@ -1,5 +1,6 @@
-# run_pipeline_all_mp.py · v1.5.1 · Asia/Almaty · 2026-03-10
+# run_pipeline_all_mp.py · v1.5.2 · Asia/Almaty · 2026-03-10
 # Оркестратор всех типов отчётов: DEBT / SALES / GROSS / INVENTORY / EXPENSE
+# Fix P-002: datetime.now() → datetime.now(ZoneInfo(...)) в _move_to_processed (naive datetime)
 # Fix P-001: исправлен импорт expenses_parser — реальное имя функции вместо build_report
 #            импорт: parse_expenses_file (возвращает Path к HTML); вызов с явным out_root=PRJ
 # Fix #PIPE-1: добавлен тип EXPENSE (RE_EXPENSE_NAME, _classify_by_content, process_expenses_file)
@@ -171,7 +172,7 @@ def _move_to_processed(work: Path, original_name: str) -> None:
     if not work.exists():
         return
     try:
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        ts = datetime.now(ZoneInfo(os.getenv("TZ", "Asia/Almaty"))).strftime("%Y%m%d_%H%M%S")
         dst = PROCESSED_DIR / f"{original_name}__{ts}"
         shutil.move(str(work), str(dst))
     except Exception as e:

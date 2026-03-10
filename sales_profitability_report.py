@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-sales_profitability_report.py · v1.0.2 (2026-03-10)
+sales_profitability_report.py · v1.0.3 (2026-03-10)
+Fix P-004: удалён unreachable code после return None в load_latest_sales (строки 153-168)
 ────────────────────────────────────────────────────────────────────
 Отчёт "Продажи + Рентабельность"
 
@@ -49,7 +50,7 @@ logging.basicConfig(
 )
 LOG = logging.getLogger("sales_profitability")
 
-__VERSION__ = "1.0.2"
+__VERSION__ = "1.0.3"
 NBSP = "\u202f"
 
 # Пороги маржи
@@ -148,22 +149,6 @@ def load_latest_sales() -> Optional[Dict[str, Any]]:
         LOG.info("Выбран sales по max revenue: %s", best.get("total_revenue"))
         return best
 
-    LOG.error("Нет подходящего sales JSON")
-    return None
-    for path in files:
-        if "товару" in path.name.lower():
-            LOG.warning("Пропускаю (по товару): %s", path.name)
-            continue
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if len(data.get("clients", [])) < 3:
-                LOG.warning("Пропускаю %s: клиентов < 3", path.name)
-                continue
-            LOG.info("Загружаю sales: %s", path.name)
-            return data
-        except Exception as e:
-            LOG.warning("Ошибка чтения %s: %s", path.name, e)
     LOG.error("Нет подходящего sales JSON")
     return None
 

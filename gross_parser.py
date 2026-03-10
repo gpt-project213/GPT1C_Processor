@@ -1,9 +1,12 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-gross_parser.py · v1.0.2 (2026-03-10)
+gross_parser.py · v1.0.3 (2026-03-10)
 ────────────────────────────────────────────────────────────────────
 Парсер отчётов "Валовая прибыль" из 1С в JSON формат.
+
+ИСПРАВЛЕНИЯ v1.0.3:
+- Fix P-003: metadata["timezone"] "Asia/Qyzylorda" → "Asia/Almaty"
 
 ИСПРАВЛЕНИЯ v1.0.2:
 - TZ timezone(timedelta(hours=5)) → ZoneInfo("Asia/Almaty") (Bug TZ)
@@ -70,7 +73,7 @@ logging.basicConfig(
 )
 LOG = logging.getLogger("gross_parser")
 
-__VERSION__ = "1.0.2"
+__VERSION__ = "1.0.3"
 
 NBSP = "\u202f"
 
@@ -341,7 +344,7 @@ def build_gross_json(xlsx: Path) -> Path:
         "metadata": {
             "version": __VERSION__,
             "parsed_at": datetime.now(TZ).strftime("%Y-%m-%d %H:%M:%S"),
-            "timezone": "Asia/Qyzylorda"
+            "timezone": "Asia/Almaty"
         }
     }
     
