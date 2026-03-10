@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-revenue_concentration_report.py · v1.1.2 (06.03.2026)
+revenue_concentration_report.py · v1.1.4 (2026-03-10)
 FIX: Bug #RC1 - добавлена normalize_client_name (NameError при каждом запуске)
+Fix P-016: _mtime() helper — p.stat().st_mtime обёрнут в try/except (FileNotFoundError, OSError)
 ────────────────────────────────────────────────────────────────────
 Отчёт "Концентрация выручки"
 
@@ -45,8 +46,14 @@ LOGS.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("concentration")
 
-__VERSION__ = "1.1.3"
+__VERSION__ = "1.1.4"
 NBSP = "\u202f"
+
+def _mtime(p: Path) -> float:
+    try:
+        return p.stat().st_mtime
+    except (FileNotFoundError, OSError):
+        return 0.0
 
 # ──────────────────────────────────────────────────────────────────
 from utils_common import normalize_client_name  # Fix #RC-1: вынесено в utils_common.py
@@ -58,7 +65,7 @@ def load_all_jsons_merged(pattern: str, min_clients: int = 0, skip_keywords: lis
     1. Раньше брался только один JSON → только один менеджер в отчёте
     2. Каждый client помечается "_manager" из поля JSON → без prefix-guessing
     """
-    files = sorted(JSON_DIR.glob(pattern), key=lambda p: p.stat().st_mtime, reverse=True)
+    files = sorted(JSON_DIR.glob(pattern), key=_mtime, reverse=True)
     if not files:
         LOG.error(f"Нет JSON файлов по паттерну: {pattern}")
         return None

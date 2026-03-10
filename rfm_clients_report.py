@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-rfm_clients_report.py · v1.1.3 (2026-03-10)
+rfm_clients_report.py · v1.1.4 (2026-03-10)
 ────────────────────────────────────────────────────────────────────
 Отчёт "RFM-сегментация клиентов"
 
@@ -28,6 +28,7 @@ M = Monetary (на какую сумму)
 
 Доступ: Admin + Managers (свои)
 
+v1.1.4: Fix P-016: _mtime() helper — p.stat().st_mtime обёрнут в try/except (FileNotFoundError, OSError)
 v1.1.3: Fix P-006: добавлен load_dotenv() — TZ теперь читается из .env
 v1.1.2: TZ timezone(timedelta(hours=5)) → ZoneInfo("Asia/Almaty") (Bug TZ)
 """
@@ -57,8 +58,14 @@ LOGS.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("rfm")
 
-__VERSION__ = "1.1.3"
+__VERSION__ = "1.1.4"
 NBSP = "\u202f"
+
+def _mtime(p: Path) -> float:
+    try:
+        return p.stat().st_mtime
+    except (FileNotFoundError, OSError):
+        return 0.0
 
 # ──────────────────────────────────────────────────────────────────
 def load_all_jsons_merged(pattern: str, min_clients: int = 0, skip_keywords: list = None) -> Optional[Dict[str, Any]]:
@@ -69,7 +76,7 @@ def load_all_jsons_merged(pattern: str, min_clients: int = 0, skip_keywords: lis
     1. Раньше брался только один JSON → только один менеджер в отчёте
     2. Каждый client помечается "_manager" из поля JSON → без prefix-guessing
     """
-    files = sorted(JSON_DIR.glob(pattern), key=lambda p: p.stat().st_mtime, reverse=True)
+    files = sorted(JSON_DIR.glob(pattern), key=_mtime, reverse=True)
     if not files:
         LOG.error(f"Нет JSON файлов по паттерну: {pattern}")
         return None
