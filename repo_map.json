@@ -1,5 +1,5 @@
 ﻿{
-    "generated_at":  "2026-03-10 10:13:07",
+    "generated_at":  "2026-03-10 20:19:35",
     "timezone":  "Asia/Almaty",
     "repo":  {
                  "owner":  "gpt-project213",
@@ -9,13 +9,13 @@
                  "raw_base":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master"
              },
     "summary":  {
-                    "total_files":  3669,
-                    "top_levels":  7
+                    "total_files":  3666,
+                    "top_levels":  6
                 },
     "sections":  [
                      {
                          "section":  ".",
-                         "count":  48,
+                         "count":  47,
                          "files":  [
                                        {
                                            "path":  ".gitignore",
@@ -288,15 +288,6 @@
                                            "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/PROJECT_CONTEXT.md"
                                        },
                                        {
-                                           "path":  "raw_links тАФ ╨║╨╛╨┐╨╕╤П.txt",
-                                           "name":  "raw_links тАФ ╨║╨╛╨┐╨╕╤П.txt",
-                                           "extension":  ".txt",
-                                           "type":  "txt",
-                                           "top_level":  ".",
-                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/raw_links тАФ ╨║╨╛╨┐╨╕╤П.txt",
-                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/raw_links тАФ ╨║╨╛╨┐╨╕╤П.txt"
-                                       },
-                                       {
                                            "path":  "raw_links.txt",
                                            "name":  "raw_links.txt",
                                            "extension":  ".txt",
@@ -448,30 +439,6 @@
                                            "top_level":  ".",
                                            "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/utils_excel.py",
                                            "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/utils_excel.py"
-                                       }
-                                   ]
-                     },
-                     {
-                         "section":  ".claude",
-                         "count":  2,
-                         "files":  [
-                                       {
-                                           "path":  ".claude/scheduled_tasks.lock",
-                                           "name":  "scheduled_tasks.lock",
-                                           "extension":  ".lock",
-                                           "type":  "lock",
-                                           "top_level":  ".claude",
-                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/.claude/scheduled_tasks.lock",
-                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/.claude/scheduled_tasks.lock"
-                                       },
-                                       {
-                                           "path":  ".claude/settings.local.json",
-                                           "name":  "settings.local.json",
-                                           "extension":  ".json",
-                                           "type":  "json",
-                                           "top_level":  ".claude",
-                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/.claude/settings.local.json",
-                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/.claude/settings.local.json"
                                        }
                                    ]
                      },
