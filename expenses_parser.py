@@ -72,7 +72,7 @@ class UnifiedExpensesParser:
     Основной класс парсера.
     """
 
-    def __init__(self, out_root: Optional[Path] = None, timezone: str = "Asia/Qyzylorda"):
+    def __init__(self, out_root: Optional[Path] = None, timezone: str = "Asia/Almaty"):
         self.out_root = Path(out_root) if out_root else Path.cwd()
         self.timezone = timezone
 

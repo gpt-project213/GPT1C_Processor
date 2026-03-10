@@ -53,7 +53,8 @@ def _log(msg: str, *, err: bool = False, extra: Dict[str, Any] | None = None) ->
     line = f"{_now()} {'ERROR' if err else 'INFO'} {msg}"
     print(line)
     try:
-        (LOGS_DIR / "run_pipeline_all_mp.log").open("a", encoding="utf-8").write(line + "\n")
+        with (LOGS_DIR / "run_pipeline_all_mp.log").open("a", encoding="utf-8") as _f:
+            _f.write(line + "\n")
     except Exception:
         pass
 
@@ -158,19 +159,21 @@ def _cleanup_active(active_copy: Path) -> None:
     except Exception:
         pass
 
-def _move_to_processed(original_name: str) -> None:
+def _move_to_processed(work: Path, original_name: str) -> None:
     """
-    Перемещает исходник (без .work) из очереди в processed/, если ещё существует.
+    Перемещает .work файл в processed/ под оригинальным именем + временна́я метка.
+    Fix #1: раньше искал queue/foo.xlsx, которого уже нет (переименован в foo.xlsx.work).
+    Теперь принимает work-путь напрямую и перемещает его.
     """
-    src = QUEUE_DIR / original_name
     PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
-    if src.exists():
-        try:
-            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-            dst = PROCESSED_DIR / f"{original_name}__{ts}"
-            shutil.move(str(src), str(dst))
-        except Exception as e:
-            _log(f"[FS] move to processed failed: {original_name}: {e}", err=False)
+    if not work.exists():
+        return
+    try:
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        dst = PROCESSED_DIR / f"{original_name}__{ts}"
+        shutil.move(str(work), str(dst))
+    except Exception as e:
+        _log(f"[FS] move to processed failed: {original_name}: {e}", err=False)
 # ─────────────────────────────────────────────────────────────────────
 # Пик содержимого для эвристик (до 50 строк/ячеек)
 def _peek_excel_text(path: Path, max_rows: int = 50) -> str:
@@ -384,9 +387,16 @@ def process_expenses_file(work: Path) -> List[Path]:  # Fix #PIPE-1
 # ─────────────────────────────────────────────────────────────────────
 # Основной цикл
 def _iter_queue() -> List[Path]:
-    """Список *.xlsx из очереди (без *.work)."""
-    files = sorted([p for p in QUEUE_DIR.glob("*.xlsx") if not p.name.endswith(".work")], key=lambda p: p.stat().st_mtime)
-    return files
+    """Список *.xlsx из очереди (без *.work).
+    Fix #6: p.stat() обёрнут в try/except — файл может быть захвачен (.work)
+    между glob() и stat(), что роняло весь цикл с FileNotFoundError."""
+    def _mtime(p: Path) -> float:
+        try:
+            return p.stat().st_mtime
+        except FileNotFoundError:
+            return 0.0
+    candidates = [p for p in QUEUE_DIR.glob("*.xlsx") if not p.name.endswith(".work")]
+    return sorted(candidates, key=_mtime)
 
 def _process_one(src: Path) -> Tuple[str, List[Path]]:
     """
@@ -413,8 +423,8 @@ def _process_one(src: Path) -> Tuple[str, List[Path]]:
             # SKIP или неизвестный тип — не обрабатываем
             _log(f"[SKIP] {src.name} (route={routed_to})")
             outs = []
-        # перенос исходника в processed, если ещё лежит исходный
-        _move_to_processed(src.name)
+        # перенос .work файла в processed/
+        _move_to_processed(work, src.name)
         return (routed_to, outs)
     finally:
         _release(work)

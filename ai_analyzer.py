@@ -195,15 +195,25 @@ def extract_manager_from_data(data: dict) -> str:
     return "Unknown"
 
 
+def _load_manager_names() -> list:
+    """Читает имена менеджеров из config/managers.json. Fallback: пустой список."""
+    cfg = ROOT_DIR / "config" / "managers.json"
+    try:
+        with open(cfg, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return list(data.keys())
+    except Exception:
+        return []
+
+
 def extract_manager_from_filename(path: str) -> str:
-    """Извлекает имя менеджера из имени файла (запасной вариант)"""
+    """Извлекает имя менеджера из имени файла (запасной вариант).
+    Читает список менеджеров из config/managers.json, не из хардкода."""
     filename = Path(path).name.lower()
-    
-    managers = ["алена", "оксана", "магира", "ергали"]
+    managers = _load_manager_names()
     for manager in managers:
-        if manager in filename:
-            return manager.title()
-    
+        if manager.lower() in filename:
+            return manager
     return "Unknown"
 
 
@@ -236,8 +246,14 @@ def analyze(path: str, chat_id: str, send_mode: bool = False, report_type: str =
     
     # Ограничение размера входных данных
     if len(data_str) > AI_MAX_INPUT_CHARS:
+        truncated = data_str[:AI_MAX_INPUT_CHARS]
+        # Обрезаем до последнего переноса строки, чтобы не рвать JSON-значение посередине.
+        # json.dumps с indent=2 ставит каждое значение на отдельную строку.
+        last_nl = truncated.rfind('\n')
+        if last_nl > AI_MAX_INPUT_CHARS // 2:
+            truncated = truncated[:last_nl]
+        data_str = truncated + "\n... [данные обрезаны]"
         print(f"⚠️ Данные обрезаны: {len(data_str)} → {AI_MAX_INPUT_CHARS} символов")
-        data_str = data_str[:AI_MAX_INPUT_CHARS]
     
     # Определяем менеджера
     manager = extract_manager_from_data(data)

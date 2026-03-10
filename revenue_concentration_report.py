@@ -23,13 +23,18 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from pathlib import Path
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Dict, List, Any, Optional
 from collections import defaultdict
 
+from dotenv import load_dotenv
+load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env", encoding="utf-8-sig", override=True)
+
 # ──────────────────────────────────────────────────────────────────
-TZ = timezone(timedelta(hours=5))
+TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 ROOT = Path(__file__).resolve().parent
 JSON_DIR = ROOT / "reports" / "json"
 ANALYTICS_DIR = ROOT / "reports" / "analytics"

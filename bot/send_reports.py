@@ -278,7 +278,7 @@ ADMIN_SUMMARY_TIME_STR = os.getenv("ADMIN_SUMMARY_TIME", "23:00")
 try:
     hour, minute = map(int, ADMIN_SUMMARY_TIME_STR.split(":"))
     ADMIN_SUMMARY_TIME = dt_time(hour, minute, tzinfo=TZ)
-except:
+except (ValueError, AttributeError):
     ADMIN_SUMMARY_TIME = dt_time(23, 0, tzinfo=TZ)
 
 
