@@ -1,5 +1,5 @@
 ﻿{
-    "generated_at":  "2026-03-09 15:03:37",
+    "generated_at":  "2026-03-10 08:14:54",
     "timezone":  "Asia/Almaty",
     "repo":  {
                  "owner":  "gpt-project213",
@@ -9,13 +9,13 @@
                  "raw_base":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master"
              },
     "summary":  {
-                    "total_files":  3665,
+                    "total_files":  3666,
                     "top_levels":  6
                 },
     "sections":  [
                      {
                          "section":  ".",
-                         "count":  46,
+                         "count":  47,
                          "files":  [
                                        {
                                            "path":  ".gitignore",
@@ -277,6 +277,15 @@
                                            "top_level":  ".",
                                            "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/PROJECT_CONTEXT.md",
                                            "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/PROJECT_CONTEXT.md"
+                                       },
+                                       {
+                                           "path":  "raw_links тАФ ╨║╨╛╨┐╨╕╤П.txt",
+                                           "name":  "raw_links тАФ ╨║╨╛╨┐╨╕╤П.txt",
+                                           "extension":  ".txt",
+                                           "type":  "txt",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/raw_links тАФ ╨║╨╛╨┐╨╕╤П.txt",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/raw_links тАФ ╨║╨╛╨┐╨╕╤П.txt"
                                        },
                                        {
                                            "path":  "raw_links.txt",
