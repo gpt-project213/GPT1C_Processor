@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-config.py · v3.6 · 2025-09-08
+config.py · v3.6.1 · 2026-03-10
 
 Совместимость с вашим кодом:
 • utils_excel.py → EXCEL_CLEAN_DIR, QUEUE_DIR, setup_logging
@@ -55,13 +55,6 @@ MANAGERS_JSON: Path     = CONFIG_DIR / "managers.json"
 MANAGERS_YAML: Path     = CONFIG_DIR / "managers.yaml"          # опционально
 PATTERN_YAML: Path      = CONFIG_DIR / "pattern_config.yaml"     # опционально
 
-TOOLS_WKHTMLTOPDF_DIR: Path = ROOT / "tools" / "wkhtmltopdf" / "bin"
-WKHTMLTOPDF_BIN: Optional[str] = (
-    os.getenv("WKHTMLTOPDF_BIN")
-    or (str(TOOLS_WKHTMLTOPDF_DIR / "wkhtmltopdf.exe")
-        if (TOOLS_WKHTMLTOPDF_DIR / "wkhtmltopdf.exe").exists()
-        else None)
-)
 
 def ensure_dirs() -> None:
     for p in (REPORTS_DIR, HTML_DIR, JSON_DIR, PDF_DIR, EXCEL_CLEAN_DIR, QUEUE_DIR, LOGS_DIR, CACHE_DIR, CONFIG_DIR):
@@ -178,4 +171,3 @@ AI_MODEL: str          = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 DEEPSEEK_API_KEY: str  = os.getenv("DEEPSEEK_API_KEY", "") or ""
 OPENAI_API_KEY: str    = os.getenv("OPENAI_API_KEY", "") or ""
 AI_PROMPT_PATH: str    = os.getenv("AI_PROMPT_PATH", "ПРОМТ ДЛЯ ДЕБИТОРКИ.txt")
-PDF_AUTO: bool         = os.getenv("PDF_AUTO", "true").lower() == "true"

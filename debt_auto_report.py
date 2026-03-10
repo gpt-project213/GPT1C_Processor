@@ -1,11 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 r"""
-debt_auto_report.py · v2.7 · 2025-09-03
+debt_auto_report.py · v2.7.2 · 2026-03-10
 Правки: simple → убраны «Отгрузка/Оплата» во «Все клиенты»; extended → агрегаты в шапку,
 Δ (увеличение/уменьшение), сортировка «Движения» по убыванию closing, техданные без «Клиентов».
 
 Совместимость: Python 3.11+/3.12
+
+v2.7.2: Удалён "Арман" из INTERNAL_UNITS_MAP (уволен)
+        Удалён захардкоженный fallback-список менеджеров (line 403)
+        Деdup money(): удалена локальная функция, импорт из utils.py
 """
 
 from __future__ import annotations
@@ -25,9 +29,10 @@ from zoneinfo import ZoneInfo
 # Внешние модули проекта
 import config
 from utils_excel import ensure_clean_xlsx
+from utils import money
 from analyze_debt_excel import parse_debt_report
 
-__VERSION__ = "debt_auto=v2.7.1"
+__VERSION__ = "debt_auto=v2.7.2"
 NBSP = "\u202f"
 
 log = getattr(config, "setup_logging", lambda name: logging.getLogger(name))("debt_auto_report")
@@ -56,17 +61,7 @@ INTERNAL_UNITS_MAP: dict[str, list[str]] = {
     "Оксана": ["Оксана ОПТ"],
     "Алена":  ["Алена ОПТ"],
     "Ергали": ["Ергали ОПТ"],
-    "Арман":  ["Арман ОПТ"],
 }
-
-def money(x: float | int | None) -> str:
-    if x is None or (isinstance(x, float) and pd.isna(x)):
-        return "0,00"
-    try:
-        s = f"{float(x):,.2f}"
-    except Exception:
-        return "0,00"
-    return s.replace(",", NBSP).replace(".", ",")
 
 def slugify(s: str) -> str:
     s = str(s or "").strip().lower()
@@ -400,7 +395,7 @@ def _extract_header_info(xlsx: Path) -> Tuple[str, str, List[str]]:
         log.warning("Ошибка чтения шапки Excel: %s", e)
 
     if manager == "—":
-        all_mgrs = _manager_names_from_config() or ["Алена", "Оксана", "Магира", "Ергали", "Арман"]
+        all_mgrs = _manager_names_from_config() or []
         name_low = xlsx.name.lower()
         for nm in sorted(all_mgrs, key=len, reverse=True):
             if nm.lower() in name_low:

@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 # coding: utf-8
 r"""
-sales_report.py · v9.3.8 · 2026-03-06 (Asia/Almaty)
+sales_report.py · v9.3.9 · 2026-03-10 (Asia/Almaty)
 Улучшенная обработка метаданных и классификации строк
 Создано DeepSeek AI • Дипсик Аналитика
+FIX v9.3.9: TZ timezone(timedelta(hours=5)) → ZoneInfo("Asia/Almaty") (Bug TZ)
 FIX v9.3.8: Исправлены жёстко прописанные пути E:\reports\html и E:\logs
   — заменены на ROOT-относительные пути (ROOT = папка скрипта).
   — устраняет Bug #S1: HTML записывались в E:\reports\html вместо
@@ -14,7 +15,8 @@ from __future__ import annotations
 
 import math, re, logging, argparse, html as _html
 from pathlib import Path
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Dict, List, Tuple, Any, Optional
 from utils_excel import ensure_clean_xlsx
 
@@ -23,7 +25,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Пути / окружение
-TZ = timezone(timedelta(hours=5))  # Asia/Almaty
+TZ = ZoneInfo("Asia/Almaty")
 ROOT = Path(__file__).resolve().parent
 
 def _pick_dir(options: List[Path]) -> Path:

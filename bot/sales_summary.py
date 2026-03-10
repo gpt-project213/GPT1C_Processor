@@ -1,8 +1,9 @@
 """
 Модуль для генерации кратких сводок по продажам
 
-Версия: 1.3 (27.02.2026)
+Версия: 1.3.1 (2026-03-10)
 ─────────────────────────────────────────────────
+v1.3.1: bare except: → except (ValueError, TypeError): в parse_sales_html (Bug S6)
 v1.3: load_all_managers_json сравнивает периоды по ДАТАМ, не по строкам
   - _normalize_period_dates() — парсит любой формат периода в (start, end)
   - Нечувствительно к пробелам, разделителям ("11.02-20.02" = "11.02 - 20.02")
@@ -200,7 +201,7 @@ class SalesSummary:
                         clients_str = parts[1].split('\n')[0].strip()
                         try:
                             clients_count = int(clients_str)
-                        except:
+                        except (ValueError, TypeError):
                             pass
                 
                 # Итого (расч.): 6 173 090

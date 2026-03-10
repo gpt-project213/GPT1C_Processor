@@ -2,6 +2,7 @@
 # coding: utf-8
 """
 inventory_cost_parser.py — Парсер отчёта "Ведомость по партиям товаров на складах" (с себестоимостью)
+Версия 1.6.6 (2026-03-10) — TZ timezone(timedelta(hours=5)) → ZoneInfo("Asia/Almaty") (Bug TZ)
 Версия 1.6.5 — исправлен пропуск строки "Оптовый" по колонке товара.
 """
 
@@ -13,7 +14,8 @@ import re
 import logging
 import argparse
 from pathlib import Path
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Dict, List, Any, Optional
 
 import pandas as pd
@@ -23,7 +25,7 @@ try:
 except ImportError:
     ensure_clean_xlsx = None
 
-TZ = timezone(timedelta(hours=5))
+TZ = ZoneInfo("Asia/Almaty")
 ROOT = Path(__file__).resolve().parent
 JSON_OUT = ROOT / "reports" / "json"
 HTML_OUT = ROOT / "reports" / "html"
@@ -39,7 +41,7 @@ logging.basicConfig(
 )
 LOG = logging.getLogger("inventory_cost_parser")
 
-__VERSION__ = "1.6.5"
+__VERSION__ = "1.6.6"
 NBSP = "\u202f"
 
 # Регулярные выражения

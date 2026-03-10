@@ -1,12 +1,14 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-run_pipeline.py · v2.2 · Asia/Almaty
+run_pipeline.py · v2.2.1 · Asia/Almaty
 
 Изменения относительно v2.1:
 • [BEHAVIOR] Пайплайн больше НЕ отправляет ничего в Telegram по умолчанию.
 • [ENV] Добавлен флаг PIPELINE_TG_SEND=true/false (по умолчанию false).
 • [LOG] Явно логируем подавление отправки (pipeline_tg_suppressed).
+
+v2.2.1: TZ timezone(timedelta(hours=5)) → ZoneInfo("Asia/Almaty") (Bug TZ)
 """
 
 from __future__ import annotations
@@ -16,7 +18,8 @@ import sys
 import shutil
 import traceback
 import subprocess
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from importlib import import_module
 
@@ -27,7 +30,7 @@ try:
 except Exception:
     pass
 
-TZ = timezone(timedelta(hours=5))  # Asia/Almaty
+TZ = ZoneInfo("Asia/Almaty")
 
 ROOT = Path(__file__).resolve().parent
 LOG_DIR         = ROOT / "logs"

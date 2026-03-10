@@ -1,9 +1,12 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-gross_parser.py · v1.0.1 (2026-02-09)
+gross_parser.py · v1.0.2 (2026-03-10)
 ────────────────────────────────────────────────────────────────────
 Парсер отчётов "Валовая прибыль" из 1С в JSON формат.
+
+ИСПРАВЛЕНИЯ v1.0.2:
+- TZ timezone(timedelta(hours=5)) → ZoneInfo("Asia/Almaty") (Bug TZ)
 
 ИСПРАВЛЕНИЯ v1.0.1:
 - Фильтрация служебной строки "Номенклатура"
@@ -40,7 +43,8 @@ import re
 import logging
 import argparse
 from pathlib import Path
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Dict, List, Any, Optional
 
 import pandas as pd
@@ -52,7 +56,7 @@ except ImportError:
 
 # ──────────────────────────────────────────────────────────────────
 # Настройки
-TZ = timezone(timedelta(hours=5))
+TZ = ZoneInfo("Asia/Almaty")
 ROOT = Path(__file__).resolve().parent
 JSON_OUT = ROOT / "reports" / "json"
 LOGS = ROOT / "logs"
@@ -66,7 +70,7 @@ logging.basicConfig(
 )
 LOG = logging.getLogger("gross_parser")
 
-__VERSION__ = "1.0.1"
+__VERSION__ = "1.0.2"
 
 NBSP = "\u202f"
 
