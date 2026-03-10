@@ -1,4 +1,4 @@
-﻿# RAW links generated: 2026-03-10 20:19:24
+﻿# RAW links generated: 2026-03-10 23:25:06
 # Repository: https://github.com/gpt-project213/GPT1C_Processor
 # Branch: master
 
@@ -11,6 +11,7 @@ https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/╨Я╨
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/ai_analyzer.py
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/AI_CONTEXT.md
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/analyze_debt_excel.py
+https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/audit_task.md
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/bot/gross_summary.py
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/bot/inject_local.py
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/bot/inventory_summary.py

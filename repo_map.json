@@ -1,5 +1,5 @@
 ﻿{
-    "generated_at":  "2026-03-10 20:19:35",
+    "generated_at":  "2026-03-10 23:25:19",
     "timezone":  "Asia/Almaty",
     "repo":  {
                  "owner":  "gpt-project213",
@@ -9,13 +9,13 @@
                  "raw_base":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master"
              },
     "summary":  {
-                    "total_files":  3666,
+                    "total_files":  3667,
                     "top_levels":  6
                 },
     "sections":  [
                      {
                          "section":  ".",
-                         "count":  47,
+                         "count":  48,
                          "files":  [
                                        {
                                            "path":  ".gitignore",
@@ -97,6 +97,15 @@
                                            "top_level":  ".",
                                            "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/analyze_debt_excel.py",
                                            "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/analyze_debt_excel.py"
+                                       },
+                                       {
+                                           "path":  "audit_task.md",
+                                           "name":  "audit_task.md",
+                                           "extension":  ".md",
+                                           "type":  "md",
+                                           "top_level":  ".",
+                                           "github_url":  "https://github.com/gpt-project213/GPT1C_Processor/blob/master/audit_task.md",
+                                           "raw_url":  "https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/audit_task.md"
                                        },
                                        {
                                            "path":  "check_hardcoded_paths.py",
