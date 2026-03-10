@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-dso_aging_report.py · v1.1.0 (06.03.2026)
+dso_aging_report.py · v1.1.1 (2026-03-10)
 FIX #DSO-1: период из JSON, не /30
 FIX #DSO-2: aging из days_silence, не синтетика
 FIX #DSO-3: sales по периоду, не по max revenue
+Fix P-016: _mtime() helper — p.stat().st_mtime обёрнут в try/except (FileNotFoundError, OSError)
 ────────────────────────────────────────────────────────────────────
 Отчёт "DSO + Aging дебиторки"
 
@@ -51,12 +52,18 @@ LOGS.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("dso")
 
-__VERSION__ = "1.1.0"
+__VERSION__ = "1.1.1"
 NBSP = "\u202f"
+
+def _mtime(p: Path) -> float:
+    try:
+        return p.stat().st_mtime
+    except (FileNotFoundError, OSError):
+        return 0.0
 
 # ──────────────────────────────────────────────────────────────────
 def load_latest_json(pattern: str, skip_keywords: list = None, min_clients: int = 0) -> Optional[Dict[str, Any]]:
-    files = sorted(JSON_DIR.glob(pattern), key=lambda p: p.stat().st_mtime, reverse=True)
+    files = sorted(JSON_DIR.glob(pattern), key=_mtime, reverse=True)
     if not files:
         return None
     for path in files:
