@@ -1,5 +1,7 @@
-# run_pipeline_all_mp.py · v1.5 · Asia/Almaty · 09.03.2026
+# run_pipeline_all_mp.py · v1.5.1 · Asia/Almaty · 2026-03-10
 # Оркестратор всех типов отчётов: DEBT / SALES / GROSS / INVENTORY / EXPENSE
+# Fix P-001: исправлен импорт expenses_parser — реальное имя функции вместо build_report
+#            импорт: parse_expenses_file (возвращает Path к HTML); вызов с явным out_root=PRJ
 # Fix #PIPE-1: добавлен тип EXPENSE (RE_EXPENSE_NAME, _classify_by_content, process_expenses_file)
 # Fix #PIPE-1: else-ветка в _process_one теперь SKIP вместо fallback на DEBT
 # - Берёт файлы из reports/queue
@@ -99,7 +101,7 @@ except Exception as e:
     _log(f"[IMPORT] inventory not available (skip INVENTORY): {e}")
 
 try:
-    from expenses_parser import build_report as build_expenses_report  # -> Path
+    from expenses_parser import parse_expenses_file as build_expenses_report  # -> Path
 except Exception as e:
     build_expenses_report = None  # type: ignore
     _log(f"[IMPORT] expenses_parser not available (skip EXPENSE): {e}")
@@ -371,7 +373,7 @@ def process_expenses_file(work: Path) -> List[Path]:  # Fix #PIPE-1
         _log(f"[EXPENSE] skip (source vanished during copy): {work.name}")
         return outs
     try:
-        res = build_expenses_report(a)  # type: ignore
+        res = build_expenses_report(a, PRJ)  # type: ignore  # P-001: out_root=PRJ явно
         new = _coerce_path(res)
         if new:
             outs.extend(new)
