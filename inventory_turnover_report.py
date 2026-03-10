@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-inventory_turnover_report.py · v1.1.3 (2026-03-10)
+inventory_turnover_report.py · v1.1.4 (2026-03-10)
 ────────────────────────────────────────────────────────────────────
 Отчёт "Мертвый запас + Оборачиваемость"
 
@@ -19,19 +19,24 @@ inventory_turnover_report.py · v1.1.3 (2026-03-10)
 
 Доступ: ТОЛЬКО Admin
 
+v1.1.4: Fix P-008: добавлен load_dotenv() — TZ теперь читается из .env
 v1.1.3: TZ timezone(timedelta(hours=5)) → ZoneInfo("Asia/Almaty") (Bug TZ)
 """
 from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from pathlib import Path
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from typing import Dict, List, Any, Optional
+from dotenv import load_dotenv
 
-TZ = ZoneInfo("Asia/Almaty")
+load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env", encoding="utf-8-sig", override=True)
+
+TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 ROOT = Path(__file__).resolve().parent
 JSON_DIR = ROOT / "reports" / "json"
 ANALYTICS_DIR = ROOT / "reports" / "analytics"
@@ -42,7 +47,7 @@ LOGS.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("turnover")
 
-__VERSION__ = "1.1.3"
+__VERSION__ = "1.1.4"
 NBSP = "\u202f"
 
 

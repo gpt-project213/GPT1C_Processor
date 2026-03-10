@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-net_profit_report.py · v1.2.5 (2026-03-10)
+net_profit_report.py · v1.2.6 (2026-03-10)
 ────────────────────────────────────────────────────────────────────
 Отчёт "Чистая прибыль" = Валовая - Расходы
 
@@ -21,20 +21,25 @@ v1.2.0: Исправлен мэтчинг MTD vs DAY
 
 Доступ: ТОЛЬКО Admin
 
+v1.2.6: Fix P-007: добавлен load_dotenv() — TZ теперь читается из .env
 v1.2.5: TZ timezone(timedelta(hours=5)) → ZoneInfo("Asia/Almaty") (Bug TZ)
 """
 from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from pathlib import Path
 from datetime import datetime, date
 from zoneinfo import ZoneInfo
 from typing import Dict, List, Any, Optional, Tuple
+from dotenv import load_dotenv
+
+load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env", encoding="utf-8-sig", override=True)
 
 # ──────────────────────────────────────────────────────────────────
-TZ = ZoneInfo("Asia/Almaty")
+TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 ROOT = Path(__file__).resolve().parent
 JSON_DIR = ROOT / "reports" / "json"
 ANALYTICS_DIR = ROOT / "reports" / "analytics"
@@ -50,7 +55,7 @@ LOGS.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("net_profit")
 
-__VERSION__ = "1.2.5"
+__VERSION__ = "1.2.6"
 NBSP = "\u202f"
 
 MONTHS_RU = {

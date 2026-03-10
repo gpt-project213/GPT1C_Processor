@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-sales_profitability_report.py · v1.0.3 (2026-03-10)
+sales_profitability_report.py · v1.0.4 (2026-03-10)
+Fix P-009: добавлен load_dotenv() — TZ теперь читается из .env
 Fix P-004: удалён unreachable code после return None в load_latest_sales (строки 153-168)
 ────────────────────────────────────────────────────────────────────
 Отчёт "Продажи + Рентабельность"
@@ -25,6 +26,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 import logging
 from pathlib import Path
@@ -32,10 +34,13 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from typing import Dict, List, Any, Optional
 from collections import defaultdict
+from dotenv import load_dotenv
+
+load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env", encoding="utf-8-sig", override=True)
 
 # ──────────────────────────────────────────────────────────────────
 # Настройки
-TZ = ZoneInfo("Asia/Almaty")
+TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 ROOT = Path(__file__).resolve().parent
 JSON_DIR = ROOT / "reports" / "json"
 ANALYTICS_DIR = ROOT / "reports" / "analytics"
@@ -50,7 +55,7 @@ logging.basicConfig(
 )
 LOG = logging.getLogger("sales_profitability")
 
-__VERSION__ = "1.0.3"
+__VERSION__ = "1.0.4"
 NBSP = "\u202f"
 
 # Пороги маржи
