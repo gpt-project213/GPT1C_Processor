@@ -1,18 +1,21 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-tools/txt_to_html.py · v1.0 · Asia/Almaty
+tools/txt_to_html.py · v1.0.1 · Asia/Almaty
 Конвертирует текстовый отчёт ИИ (.txt/.json) в аккуратный HTML и возвращает путь.
+v1.0.1: TZ timezone(timedelta(hours=5)) → ZoneInfo("Asia/Almaty") (Bug TZ)
+        OUT_DIR: relative path → absolute (Bug M6)
 """
 
 from __future__ import annotations
 import json, re, html as _html
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Union
 
-TZ = timezone(timedelta(hours=5))          # Asia/Almaty
-OUT_DIR = Path("reports/html")             # итоговая папка
+TZ = ZoneInfo("Asia/Almaty")
+OUT_DIR = Path(__file__).resolve().parent.parent / "reports" / "html"
 
 _CSS = """
 body{margin:0;font-family:Consolas,monospace,Menlo,Monaco,monospace;background:#fff;color:#111}

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-rfm_clients_report.py · v1.1.1 (26.02.2026)
+rfm_clients_report.py · v1.1.2 (2026-03-10)
 ────────────────────────────────────────────────────────────────────
 Отчёт "RFM-сегментация клиентов"
 
@@ -27,18 +27,21 @@ M = Monetary (на какую сумму)
 - 👋 Уходящие (редко + мало)
 
 Доступ: Admin + Managers (свои)
+
+v1.1.2: TZ timezone(timedelta(hours=5)) → ZoneInfo("Asia/Almaty") (Bug TZ)
 """
 from __future__ import annotations
 
 import json
 import logging
 from pathlib import Path
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Dict, List, Any, Optional
 from collections import defaultdict
 
 # ──────────────────────────────────────────────────────────────────
-TZ = timezone(timedelta(hours=5))
+TZ = ZoneInfo("Asia/Almaty")
 ROOT = Path(__file__).resolve().parent
 JSON_DIR = ROOT / "reports" / "json"
 ANALYTICS_DIR = ROOT / "reports" / "analytics"
@@ -49,7 +52,7 @@ LOGS.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("rfm")
 
-__VERSION__ = "1.1.1"
+__VERSION__ = "1.1.2"
 NBSP = "\u202f"
 
 # ──────────────────────────────────────────────────────────────────

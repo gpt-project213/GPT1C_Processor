@@ -1,3 +1,4 @@
+# v. 9.4.33 / 2026-03-10 - Fix: bare except: → except (ValueError, OverflowError) в _parse_period_date (Bug S5)
 # v. 9.4.32 / 09.03.2026 - Fix bugs: #INV-1, #MENU-SILENCE, #AI-MENU, упущенная прибыль → еженедельно (пятница 14:05)
 # ИЗМЕНЕНИЯ v9.4.32 / 09.03.2026:
 # - ИСПРАВЛЕНО Bug B1: weekly_ai_generation использовал неопределённую переменную
@@ -1981,9 +1982,9 @@ def _parse_period_to_date(period_str: str) -> datetime:
         day, month, year = int(m.group(4)), int(m.group(5)), int(m.group(6))
         try:
             return datetime(year, month, day, tzinfo=TZ)
-        except:
+        except (ValueError, OverflowError):
             pass
-    
+
     # Паттерн: одна дата DD.MM.YYYY
     single_pattern = r'(\d{1,2})[./](\d{1,2})[./](\d{4})'
     m = re.search(single_pattern, period_str)
@@ -1991,7 +1992,7 @@ def _parse_period_to_date(period_str: str) -> datetime:
         day, month, year = int(m.group(1)), int(m.group(2)), int(m.group(3))
         try:
             return datetime(year, month, day, tzinfo=TZ)
-        except:
+        except (ValueError, OverflowError):
             pass
     
     # Паттерн: "февраль 2026", "january 2026"
@@ -2012,7 +2013,7 @@ def _parse_period_to_date(period_str: str) -> datetime:
             if mname in lower:
                 try:
                     return datetime(year, mnum, 1, tzinfo=TZ)
-                except:
+                except (ValueError, OverflowError):
                     pass
     
     # Не удалось распарсить

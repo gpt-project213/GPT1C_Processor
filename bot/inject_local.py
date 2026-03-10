@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-inject_local.py · v1.0.0 (2026-02-19)
+inject_local.py · v1.0.1 (2026-03-10)
 ──────────────────────────────────────────────────────
 ТЕСТОВЫЙ ИНЖЕКТОР: замена imap_fetcher для локального тестирования.
 
@@ -18,6 +18,8 @@ inject_local.py · v1.0.0 (2026-02-19)
     # 3. Или запусти вручную:
     python inject_local.py
 
+v1.0.1: TZ timezone(timedelta(hours=5)) → ZoneInfo("Asia/Almaty") (Bug TZ)
+
 КЛЮЧИ:
     --inbox PATH    папка с входящими Excel (по умолч: test_inbox/)
     --once          режим однократного запуска (совместим с pipeline)
@@ -31,10 +33,11 @@ import argparse
 import logging
 import shutil
 import sys
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from pathlib import Path
 
-TZ = timezone(timedelta(hours=5))
+TZ = ZoneInfo("Asia/Almaty")
 ROOT = Path(__file__).resolve().parent
 
 QUEUE_DIR = ROOT / "reports" / "queue"
@@ -51,7 +54,7 @@ logging.basicConfig(
 )
 LOG = logging.getLogger("inject_local")
 
-__VERSION__ = "v1.0.0"
+__VERSION__ = "v1.0.1"
 
 
 def get_clean_xlsx():

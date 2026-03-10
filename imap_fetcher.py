@@ -2,7 +2,7 @@
 # coding: utf-8
 """
 imap_fetcher.py
-Version: v4.4.3 (2026-02-18, Asia/Almaty) - ИСПРАВЛЕН ВЫЗОВ utils_excel
+Version: v4.4.4 (2026-03-10, Asia/Almaty) - ИСПРАВЛЕН ВЫЗОВ utils_excel
 
 Назначение:
 - Разовый цикл IMAP: скачать вложения .xlsx/.xls из белого списка отправителей,
@@ -78,9 +78,6 @@ logger.setLevel(logging.INFO)
 _ts = datetime.now(TZ).strftime("%Y%m%d_%H%M%S")
 _file_handler = logging.FileHandler(LOGS / f"email_{_ts}.log", encoding="utf-8")
 _stream_handler = logging.StreamHandler(sys.stdout)
-
-from datetime import datetime  # уже импортирован вверху файла
-from zoneinfo import ZoneInfo  # уже импортирован вверху файла
 
 class AlmatyFormatter(logging.Formatter):
     def formatTime(self, record, datefmt=None):

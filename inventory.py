@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-inventory.py v1.1.3 (2026-03-10) — Остатки товаров на складах (с группировкой по категориям)
+inventory.py v1.1.4 (2026-03-10) — Остатки товаров на складах (с группировкой по категориям)
 Генерирует HTML и JSON отчёты.
 Сортировка: категории по убыванию общего количества, товары по убыванию количества.
+Fix v1.1.4: TZ timezone(timedelta(hours=5)) → ZoneInfo("Asia/Almaty") (Bug TZ)
 """
 
 from __future__ import annotations
@@ -13,7 +14,8 @@ import json
 import logging
 import argparse
 from pathlib import Path
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Dict, List, Any, Optional
 
 import pandas as pd
@@ -24,7 +26,7 @@ try:
 except ImportError:
     ensure_clean_xlsx = None
 
-TZ = timezone(timedelta(hours=5))
+TZ = ZoneInfo("Asia/Almaty")
 ROOT = Path(__file__).resolve().parent
 TEMPLATES = ROOT / "templates"
 OUT_HTML = ROOT / "reports" / "html"

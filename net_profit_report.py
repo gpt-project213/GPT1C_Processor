@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-net_profit_report.py · v1.2.4 (22.02.2026)
+net_profit_report.py · v1.2.5 (2026-03-10)
 ────────────────────────────────────────────────────────────────────
 Отчёт "Чистая прибыль" = Валовая - Расходы
 
@@ -20,6 +20,8 @@ v1.2.0: Исправлен мэтчинг MTD vs DAY
 - reports/analytics/net_profit_mtd_<date>.html   ← ЗА ПЕРИОД
 
 Доступ: ТОЛЬКО Admin
+
+v1.2.5: TZ timezone(timedelta(hours=5)) → ZoneInfo("Asia/Almaty") (Bug TZ)
 """
 from __future__ import annotations
 
@@ -27,11 +29,12 @@ import json
 import logging
 import re
 from pathlib import Path
-from datetime import datetime, timezone, timedelta, date
+from datetime import datetime, date
+from zoneinfo import ZoneInfo
 from typing import Dict, List, Any, Optional, Tuple
 
 # ──────────────────────────────────────────────────────────────────
-TZ = timezone(timedelta(hours=5))
+TZ = ZoneInfo("Asia/Almaty")
 ROOT = Path(__file__).resolve().parent
 JSON_DIR = ROOT / "reports" / "json"
 ANALYTICS_DIR = ROOT / "reports" / "analytics"
@@ -47,7 +50,7 @@ LOGS.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("net_profit")
 
-__VERSION__ = "1.2.3"
+__VERSION__ = "1.2.5"
 NBSP = "\u202f"
 
 MONTHS_RU = {

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-sales_profitability_report.py · v1.0.1 (2026-02-09)
+sales_profitability_report.py · v1.0.2 (2026-03-10)
 ────────────────────────────────────────────────────────────────────
 Отчёт "Продажи + Рентабельность"
 
@@ -27,13 +27,14 @@ import math
 import re
 import logging
 from pathlib import Path
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Dict, List, Any, Optional
 from collections import defaultdict
 
 # ──────────────────────────────────────────────────────────────────
 # Настройки
-TZ = timezone(timedelta(hours=5))
+TZ = ZoneInfo("Asia/Almaty")
 ROOT = Path(__file__).resolve().parent
 JSON_DIR = ROOT / "reports" / "json"
 ANALYTICS_DIR = ROOT / "reports" / "analytics"
@@ -48,7 +49,7 @@ logging.basicConfig(
 )
 LOG = logging.getLogger("sales_profitability")
 
-__VERSION__ = "1.0.0"
+__VERSION__ = "1.0.2"
 NBSP = "\u202f"
 
 # Пороги маржи

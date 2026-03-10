@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-inventory_turnover_report.py · v1.1.2 (2026-02-19)
+inventory_turnover_report.py · v1.1.3 (2026-03-10)
 ────────────────────────────────────────────────────────────────────
 Отчёт "Мертвый запас + Оборачиваемость"
 
@@ -18,6 +18,8 @@ inventory_turnover_report.py · v1.1.2 (2026-02-19)
 - Оборачиваемость товаров
 
 Доступ: ТОЛЬКО Admin
+
+v1.1.3: TZ timezone(timedelta(hours=5)) → ZoneInfo("Asia/Almaty") (Bug TZ)
 """
 from __future__ import annotations
 
@@ -25,10 +27,11 @@ import json
 import logging
 import re
 from pathlib import Path
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Dict, List, Any, Optional
 
-TZ = timezone(timedelta(hours=5))
+TZ = ZoneInfo("Asia/Almaty")
 ROOT = Path(__file__).resolve().parent
 JSON_DIR = ROOT / "reports" / "json"
 ANALYTICS_DIR = ROOT / "reports" / "analytics"
@@ -39,7 +42,7 @@ LOGS.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("turnover")
 
-__VERSION__ = "1.1.0"
+__VERSION__ = "1.1.3"
 NBSP = "\u202f"
 
 
