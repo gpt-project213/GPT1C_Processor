@@ -64,17 +64,26 @@ class InventorySummary:
                     period_str
                 )
                 if range_m:
-                    return datetime(int(range_m.group(6)), int(range_m.group(5)), int(range_m.group(4)))
+                    try:
+                        return datetime(int(range_m.group(6)), int(range_m.group(5)), int(range_m.group(4)))
+                    except ValueError:
+                        pass
                 # Одна дата DD.MM.YYYY
                 date_m = re.search(r'(\d{1,2})[./](\d{1,2})[./](\d{4})', period_str)
                 if date_m:
-                    return datetime(int(date_m.group(3)), int(date_m.group(2)), int(date_m.group(1)))
+                    try:
+                        return datetime(int(date_m.group(3)), int(date_m.group(2)), int(date_m.group(1)))
+                    except ValueError:
+                        pass
                 # Русские месяцы: DD месяц YYYY
                 ru_m = re.search(r'(\d{1,2})\s+([а-яё]+)\s+(\d{4})', period_str.lower())
                 if ru_m:
                     month = _MONTHS_RU.get(ru_m.group(2))
                     if month:
-                        return datetime(int(ru_m.group(3)), month, int(ru_m.group(1)))
+                        try:
+                            return datetime(int(ru_m.group(3)), month, int(ru_m.group(1)))
+                        except ValueError:
+                            pass
         except Exception as e:
             logger.debug(f"_parse_period_date_from_html({path.name}): {e}")
         # Fallback: mtime
