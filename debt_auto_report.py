@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 r"""
-debt_auto_report.py · v2.7.2 · 2026-03-10
+debt_auto_report.py · v2.7.3 · 2026-03-10
 Правки: simple → убраны «Отгрузка/Оплата» во «Все клиенты»; extended → агрегаты в шапку,
 Δ (увеличение/уменьшение), сортировка «Движения» по убыванию closing, техданные без «Клиентов».
 
 Совместимость: Python 3.11+/3.12
 
+v2.7.3: Fix P-005: удалены дублированные RE_DATE_CELL и RE_MANAGER_FILTER (строки 55-56)
 v2.7.2: Удалён "Арман" из INTERNAL_UNITS_MAP (уволен)
         Удалён захардкоженный fallback-список менеджеров (line 403)
         Деdup money(): удалена локальная функция, импорт из utils.py
@@ -32,7 +33,7 @@ from utils_excel import ensure_clean_xlsx
 from utils import money
 from analyze_debt_excel import parse_debt_report
 
-__VERSION__ = "debt_auto=v2.7.2"
+__VERSION__ = "debt_auto=v2.7.3"
 NBSP = "\u202f"
 
 log = getattr(config, "setup_logging", lambda name: logging.getLogger(name))("debt_auto_report")
@@ -50,8 +51,6 @@ RE_META_CELL  = re.compile(r"(показатели|группировк|отбо
 RE_TOTAL_CELL = re.compile(r"(итогова|итог|^покупатели$|покупатели\s*-\s*работники)", re.I)
 RE_LEVEL_CELL = re.compile(r"\bитог\b", re.I)
 RE_DOT_SUFFIX = re.compile(r"\.\d+$")
-RE_DATE_CELL  = re.compile(r"^\s*\d{2}\.\d{2}\.\d{4}\s*$")
-RE_MANAGER_FILTER = re.compile(r"контрагент\s+в\s+группе\s+из\s+списка\s*\(([^)]+)\)", re.I)
 RE_DATE_CELL  = re.compile(r"^\s*\d{2}\.\d{2}\.\d{4}\s*$")
 RE_MANAGER_FILTER = re.compile(r"контрагент\s+в\s+группе\s+из\s+списка\s*\(([^)]+)\)", re.I)
 
