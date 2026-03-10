@@ -1,7 +1,9 @@
-﻿# RAW links generated: 2026-03-10 08:14:42
+﻿# RAW links generated: 2026-03-10 10:12:43
 # Repository: https://github.com/gpt-project213/GPT1C_Processor
 # Branch: master
 
+https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/.claude/scheduled_tasks.lock
+https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/.claude/settings.local.json
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/.gitignore
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Т╨Р╨Ы╨Ю╨Т╨Ю╨Щ.txt
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/╨Я╨а╨Ю╨Ь╨в_╨Ф╨Ы╨п_╨Ф╨Х╨С╨Ш╨в╨Ю╨а╨Ъ╨Ш.txt
@@ -20,6 +22,7 @@ https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/bot/send
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/bot/silence_alerts.py
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/bot/user_tracker.py
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/check_hardcoded_paths.py
+https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/CLAUDE.md
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/cleanup_cache.py
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/CODE_INDEX.md
 https://raw.githubusercontent.com/gpt-project213/GPT1C_Processor/master/config.py
