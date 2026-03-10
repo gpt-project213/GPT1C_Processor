@@ -72,10 +72,12 @@ bot/send_reports.py (APScheduler):
 ## Key Conventions
 
 - **Paths**: always use `config.py` constants (`HTML_DIR`, `JSON_DIR`, `PDF_DIR`, `QUEUE_DIR`, etc.) — never hardcode paths.
-- **Logging**: logs go to `logs/<module>_YYYYMMDD_HHMMSS.log`; format: `"%(asctime)s, %(levelname)s %(message)s"`.
+- **Logging**: logs go to `logs/<module>_YYYYMMDD_HHMMSS.log`; format: `"%(asctime)s, %(levelname)s %(message)s"`. Always use `with open(...)` — never `.open(...).write(...)` without a context manager.
 - **Report footer**: `"Сформировано: DD.MM.YYYY HH:MM (Asia/Almaty) | Версия: …"`.
-- **Queue claiming**: files in `reports/queue/` are claimed by renaming `*.xlsx → *.xlsx.work` to prevent double-processing.
+- **Queue claiming**: files in `reports/queue/` are claimed by renaming `*.xlsx → *.xlsx.work`. After processing, the `.work` file is moved to `reports/excel/processed/` via `_move_to_processed(work, src.name)` — pass the `work` Path, not the original name (the original no longer exists in the queue at that point).
 - **Report routing**: `run_pipeline_all_mp.py` classifies files by filename regex first, then by peeking at the first ~50 rows of content. Routing patterns are in `config/pattern_config.yaml`.
+- **Timezone**: always use `ZoneInfo(os.getenv("TZ", "Asia/Almaty"))` — never `timezone(timedelta(hours=5))`. Layer 5 analytics files (`dso_aging_report.py`, `revenue_concentration_report.py`, etc.) are standalone and must call `load_dotenv()` themselves before reading `TZ`.
+- **Manager list**: `config/managers.json` is the single source of truth for manager names. Never hardcode manager names in application logic — read from that file at runtime.
 
 ## Configuration Files
 
@@ -113,8 +115,16 @@ Russian-language prompts for AI analysis live in root-level `.txt` files:
 - `ПРОМТ_ДЛЯ_ОСТАТКОВ.txt` (inventory)
 - `ПРОМТ_ДЛЯ_ПРОДАЖ.txt` (sales)
 
-## Known Issues (Current Priorities)
+## Fixed Bugs (commit 2841476, 2026-03-10)
 
-- `bot/inventory_summary.py` — pattern mismatch bug
-- `dso_aging_report.py` — synthetic aging uses hardcoded `/30`
-- `revenue_concentration_report.py` — `normalize_client_name` issue
+| ID | File | Fix |
+|----|------|-----|
+| C1 | `run_pipeline_all_mp.py:_move_to_processed` | Was looking for `queue/foo.xlsx` (already renamed to `.work`); now receives the `work: Path` directly and moves it to `processed/` |
+| C2 | `run_pipeline_all_mp.py:_log` | File handle leaked on every call; fixed with `with open(...)` |
+| C3 | `ai_analyzer.py:analyze` | JSON truncated mid-token; now trims to last `\n` before the char limit and appends `[данные обрезаны]` |
+| H1 | `dso_aging_report.py`, `revenue_concentration_report.py` | `timezone(timedelta(hours=5))` → `ZoneInfo(os.getenv("TZ", "Asia/Almaty"))` + `load_dotenv()` |
+| H2 | `ai_analyzer.py:extract_manager_from_filename` | Hardcoded name list → reads `config/managers.json` at call time via `_load_manager_names()` |
+| H3 | `run_pipeline_all_mp.py:_iter_queue` | `p.stat().st_mtime` TOCTOU crash → wrapped in `try/except FileNotFoundError` returning `0.0` |
+| M1 | `bot/send_reports.py` | Bare `except:` → `except (ValueError, AttributeError):` on `ADMIN_SUMMARY_TIME` parse |
+| M2 | `expenses_parser.py` | Default timezone `"Asia/Qyzylorda"` → `"Asia/Almaty"` |
+| L1 | `bot/inventory_summary.py:_parse_period_date_from_html` | Each `datetime()` call now individually guarded with `try/except ValueError` |
