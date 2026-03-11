@@ -206,7 +206,8 @@ class SilenceAlert:
             logger.error(f"Ошибка при парсинге {html_path}: {e}", exc_info=True)
             return []
     
-    def categorize_by_silence(self, clients_data: List[Dict]) -> Dict[str, List[Dict]]:
+    def categorize_by_silence(self, clients_data: List[Dict],
+                              historical_map: Optional[Dict[str, int]] = None) -> Dict[str, List[Dict]]:
         """
         v1.4: Группирует клиентов по критичности дней молчания.
         Учитываются только клиенты с долгом >= MIN_DEBT_AMOUNT.
@@ -265,8 +266,16 @@ class SilenceAlert:
                 categorized['warning'].append(dict(client, partial_payment=is_fake_payment))
             elif is_fake_payment or is_large_partial:
                 # days < 7: либо нет заказов + платит (имитация),
-                # либо крупный долг >= 100K + оплата (не гасится полностью)
-                categorized['partial_payment'].append(dict(client, partial_payment=True))
+                # либо крупный долг >= 100K + оплата (не гасится полностью).
+                # Ищем исторические дни молчания в предыдущем отчёте:
+                # показываем "оплачено (N дн)" — сколько дней клиент числился
+                # молчащим до того, как оплата сбросила счётчик в 1С.
+                hist_days = (historical_map or {}).get(client['client']) if historical_map else None
+                categorized['partial_payment'].append(dict(
+                    client,
+                    partial_payment=True,
+                    historical_days=hist_days,  # None если нет предыдущего отчёта
+                ))
             # else: days < 7, маленький долг или нет оплаты → пропускаем
 
         return categorized
@@ -335,16 +344,19 @@ class SilenceAlert:
             msg_lines.append(f"  💰 Сумма: {self.format_amount(total_warning_debt)} ₸")
             msg_lines.append("")
 
-        # v1.3: блок частичных оплат — клиенты с долгом, по которым была оплата,
-        # но задолженность не закрыта (долг > 0).
+        # v1.4: блок частичных оплат.
+        # "оплачено (N дн)" — N берётся из предыдущего отчёта (historical_days):
+        # показывает сколько дней числился молчащим ДО того, как оплата сбросила счётчик.
         if categorized.get('partial_payment'):
             msg_lines.append("💛 ЧАСТИЧНАЯ ОПЛАТА (долг не закрыт):")
             total_partial_debt = 0.0
             for client in categorized['partial_payment'][:5]:
                 paid_str = client.get('paid_str', '') or self.format_amount(client.get('paid_amount', 0))
+                hist = client.get('historical_days')
+                paid_label = f"оплачено ({hist} дн)" if hist else "оплачено"
                 msg_lines.append(
                     f"  • {client['client']} — долг: {client['debt_str']}, "
-                    f"оплачено: {paid_str} ({client['silence_days']} дн)"
+                    f"{paid_label}: {paid_str} ({client['silence_days']} дн)"
                 )
                 total_partial_debt += client['debt']
 
@@ -510,7 +522,7 @@ class SilenceAlert:
                 msg_lines.append("")
                 total_overall_debt += warning_debt_total
 
-            # v1.3: блок частичных оплат
+            # v1.4: блок частичных оплат
             if partial_count > 0:
                 msg_lines.append("💛 ЧАСТИЧНАЯ ОПЛАТА (долг не закрыт):")
                 partial_debt_total = 0.0
@@ -518,9 +530,11 @@ class SilenceAlert:
                 show_count = min(10, partial_count)
                 for client in categorized['partial_payment'][:show_count]:
                     paid_str = client.get('paid_str', '') or self.format_amount(client.get('paid_amount', 0))
+                    hist = client.get('historical_days')
+                    paid_label = f"оплачено ({hist} дн)" if hist else "оплачено"
                     msg_lines.append(
                         f"  • {client['client']} — долг: {client['debt_str']}, "
-                        f"оплачено: {paid_str} ({client['silence_days']} дн)"
+                        f"{paid_label}: {paid_str} ({client['silence_days']} дн)"
                     )
                     partial_debt_total += client['debt']
 
@@ -551,54 +565,96 @@ class SilenceAlert:
         """Форматирует сумму с пробелами между тысячами"""
         return f"{amount:,.2f}".replace(',', ' ').replace('.', ',')
     
-    def get_latest_debt_report(self, reports_dir: Path, manager_name: str) -> Optional[Path]:
+    # ──────────────────────────────────────────────────────────────────────
+    # Вспомогательный метод сортировки файлов отчётов по периоду
+    # ──────────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _period_sort_key(p: Path, date_str: str) -> tuple:
+        """Возвращает (year, month, day) конечной даты периода для сортировки."""
+        m = re.search(
+            r'(\d{1,2})[./](\d{1,2})[./](\d{4})\s*[-–—]\s*(\d{1,2})[./](\d{1,2})[./](\d{4})',
+            date_str
+        )
+        if m:
+            try:
+                return (int(m.group(6)), int(m.group(5)), int(m.group(4)))
+            except Exception:
+                pass
+        m2 = re.search(r'(\d{1,2})[./](\d{1,2})[./](\d{4})', date_str)
+        if m2:
+            try:
+                return (int(m2.group(3)), int(m2.group(2)), int(m2.group(1)))
+            except Exception:
+                pass
+        MONTHS = {"января":1,"февраля":2,"марта":3,"апреля":4,"мая":5,"июня":6,
+                  "июля":7,"августа":8,"сентября":9,"октября":10,"ноября":11,"декабря":12}
+        m3 = re.search(r'(\d{1,2})\s+([а-яё]+)\s+(\d{4})', date_str.lower())
+        if m3:
+            mon = MONTHS.get(m3.group(2))
+            if mon:
+                try:
+                    return (int(m3.group(3)), mon, int(m3.group(1)))
+                except Exception:
+                    pass
+        return (0, 0, p.stat().st_mtime)
+
+    def _get_all_debt_reports(self, reports_dir: Path, manager_name: str) -> List[Path]:
         """
-        v1.1: Находит отчёт дебиторки с наиболее свежим ПЕРИОДОМ ДАННЫХ.
-        Сортирует по дате из HTML (не по mtime файла).
+        Возвращает все файлы дебиторки менеджера, отсортированные
+        по периоду данных (старые → новые).
         """
         pattern = f"debt_ext_Детальный_Дебиторы_{manager_name}*.html"
-        matching_files = list(reports_dir.glob(pattern))
+        files = list(reports_dir.glob(pattern))
+        if not files:
+            files = list(reports_dir.glob(f"debt_ext*{manager_name}*.html"))
+        if not files:
+            return []
+        return sorted(files, key=lambda p: (
+            self._period_sort_key(p, self.parse_report_date(p)),
+            p.stat().st_mtime
+        ))
 
-        if not matching_files:
-            pattern2 = f"debt_ext*{manager_name}*.html"
-            matching_files = list(reports_dir.glob(pattern2))
-
-        if not matching_files:
+    def get_latest_debt_report(self, reports_dir: Path, manager_name: str) -> Optional[Path]:
+        """
+        v1.4: Находит отчёт дебиторки с наиболее свежим периодом данных.
+        Делегирует _get_all_debt_reports и берёт последний элемент.
+        """
+        files = self._get_all_debt_reports(reports_dir, manager_name)
+        if not files:
             logger.warning(f"Не найдены отчёты дебиторки для {manager_name}")
             return None
-
-        def _get_period_date(p: Path) -> tuple:
-            date_str = self.parse_report_date(p)
-            # Сортируем по конечной дате диапазона
-            m = re.search(r'(\d{1,2})[./](\d{1,2})[./](\d{4})\s*[-–—]\s*(\d{1,2})[./](\d{1,2})[./](\d{4})', date_str)
-            if m:
-                try:
-                    return (int(m.group(6)), int(m.group(5)), int(m.group(4)))
-                except Exception:
-                    pass
-            m2 = re.search(r'(\d{1,2})[./](\d{1,2})[./](\d{4})', date_str)
-            if m2:
-                try:
-                    return (int(m2.group(3)), int(m2.group(2)), int(m2.group(1)))
-                except Exception:
-                    pass
-            # Русский формат
-            MONTHS = {"января":1,"февраля":2,"марта":3,"апреля":4,"мая":5,"июня":6,
-                      "июля":7,"августа":8,"сентября":9,"октября":10,"ноября":11,"декабря":12}
-            m3 = re.search(r'(\d{1,2})\s+([а-яё]+)\s+(\d{4})', date_str.lower())
-            if m3:
-                mon = MONTHS.get(m3.group(2))
-                if mon:
-                    try:
-                        return (int(m3.group(3)), mon, int(m3.group(1)))
-                    except Exception:
-                        pass
-            return (0, 0, 0)
-
-        latest = max(matching_files, key=lambda p: (_get_period_date(p), p.stat().st_mtime))
-        date_str = self.parse_report_date(latest)
-        logger.info(f"📄 Найден отчёт для {manager_name}: {latest.name} (период={date_str})")
+        latest = files[-1]
+        logger.info(f"📄 Найден отчёт для {manager_name}: {latest.name} "
+                    f"(период={self.parse_report_date(latest)})")
         return latest
+
+    def get_prev_debt_report(self, reports_dir: Path, manager_name: str) -> Optional[Path]:
+        """
+        v1.4: Возвращает предпоследний файл дебиторки менеджера.
+        Используется для восстановления исторических дней молчания
+        клиентов, у которых счётчик был сброшен оплатой.
+        """
+        files = self._get_all_debt_reports(reports_dir, manager_name)
+        if len(files) < 2:
+            return None
+        prev = files[-2]
+        logger.debug(f"📄 Предыдущий отчёт для {manager_name}: {prev.name}")
+        return prev
+
+    def build_historical_silence_map(self, html_path: Path) -> Dict[str, int]:
+        """
+        v1.4: Парсит предыдущий HTML-файл и возвращает словарь
+        {client_name: days_silence} для всех клиентов с days > 0.
+        Используется для отображения "оплачено (N дн)" в partial_payment:
+        показывает, сколько дней клиент числился молчащим до оплаты.
+        """
+        try:
+            clients = self.parse_html_silence_days(html_path)
+            return {c['client']: c['silence_days'] for c in clients if c['silence_days'] > 0}
+        except Exception as e:
+            logger.warning(f"build_historical_silence_map: не удалось прочитать {html_path.name}: {e}")
+            return {}
 
 
 if __name__ == "__main__":

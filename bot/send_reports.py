@@ -3019,7 +3019,10 @@ async def check_and_send_silence_alerts(context=None):
             if not clients_data:
                 logger.warning(f"⚠️ Не удалось распарсить данные для {manager}")
                 continue
-            categorized = alert.categorize_by_silence(clients_data)
+            # v1.4: исторические дни молчания из предыдущего файла
+            prev_report = alert.get_prev_debt_report(reports_dir, manager)
+            hist_map = alert.build_historical_silence_map(prev_report) if prev_report else {}
+            categorized = alert.categorize_by_silence(clients_data, historical_map=hist_map)
             all_managers_data[manager] = categorized
             manager_dates[manager] = alert.parse_report_date(latest_report)  # v9.4.23
             total_silent = (len(categorized['critical']) + len(categorized['alarm']) + len(categorized['warning']))
@@ -3269,7 +3272,10 @@ async def force_report_to_user(report_type: str, chat_id: int, context) -> str:
                 clients = alert.parse_html_silence_days(latest)
                 if not clients:
                     continue
-                all_managers_data[mgr] = alert.categorize_by_silence(clients)
+                # v1.4: исторические дни молчания из предыдущего файла
+                prev = alert.get_prev_debt_report(HTML_DIR, mgr)
+                hist_map = alert.build_historical_silence_map(prev) if prev else {}
+                all_managers_data[mgr] = alert.categorize_by_silence(clients, historical_map=hist_map)
                 manager_dates[mgr]     = alert.parse_report_date(latest) or ""
 
             if not all_managers_data:
