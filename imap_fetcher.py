@@ -206,19 +206,45 @@ def _load_env_and_cfg() -> Dict:
 def _set_log_level(debug: int) -> None:
     logger.setLevel(_trace_level(debug))
 
+def _fix_mojibake(s: str) -> str:
+    """
+    Исправляет «мойку» (mojibake): UTF-8 байты, декодированные как CP1251.
+
+    Пример: «РіРѕРґ» (UTF-8 `год` прочитанный как CP1251) → «год».
+
+    Алгоритм: re-encode строки как CP1251 и decode обратно как UTF-8.
+    Если оба шага проходят без ошибок — результат, иначе исходная строка.
+    """
+    try:
+        fixed = s.encode("cp1251").decode("utf-8")
+        return fixed
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return s
+
+
 def _decode_h(value) -> str:
+    """
+    Декодирует заголовок email (Subject, From, filename и т.п.)
+    с поддержкой RFC 2047, а также исправлением мойки CP1251/UTF-8.
+    """
     if not value:
         return ""
     parts = decode_header(value)
     out = ""
     for s, enc in parts:
         if isinstance(s, bytes):
-            try:
-                out += s.decode(enc or "utf-8", errors="ignore")
-            except Exception:
-                out += s.decode("utf-8", errors="ignore")
+            # Пробуем: заданная кодировка → UTF-8 → CP1251 → ignore
+            decoded = None
+            for charset in filter(None, [enc, "utf-8", "cp1251"]):
+                try:
+                    decoded = s.decode(charset)
+                    break
+                except (UnicodeDecodeError, LookupError):
+                    continue
+            out += decoded if decoded is not None else s.decode("utf-8", errors="replace")
         else:
-            out += s
+            # str: может быть мойка (UTF-8 байты, декодированные как CP1251)
+            out += _fix_mojibake(s)
     return out
 
 def _sender_from(msg) -> str:

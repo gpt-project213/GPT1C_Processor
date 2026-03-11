@@ -348,6 +348,49 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# ──────────────────────────────────────────────────────────────
+# Константа лимита Telegram и async-хелпер для длинных сообщений
+# ──────────────────────────────────────────────────────────────
+TG_MAX_MSG = 4000  # чуть меньше 4096 — запас на переносы
+
+
+async def _tg_send_long(context, chat_id: int, text: str,
+                        parse_mode=None, delay_hours: int = 24) -> None:
+    """
+    Отправляет текст в Telegram, разбивая его на части <= TG_MAX_MSG символов.
+    Разбивка выполняется по строкам (\\n), чтобы не рвать слова.
+    Каждое сообщение ставится в очередь на автоудаление (delay_hours).
+    """
+    if not text:
+        return
+
+    chunks: list[str] = []
+    current: list[str] = []
+    current_len = 0
+
+    for line in text.splitlines(keepends=True):
+        if current_len + len(line) > TG_MAX_MSG and current:
+            chunks.append("".join(current))
+            current = []
+            current_len = 0
+        current.append(line)
+        current_len += len(line)
+
+    if current:
+        chunks.append("".join(current))
+
+    for i, chunk in enumerate(chunks, 1):
+        if not chunk.strip():
+            continue
+        try:
+            msg = await context.bot.send_message(
+                chat_id=chat_id, text=chunk, parse_mode=parse_mode
+            )
+            schedule_message_deletion(
+                chat_id, msg.message_id, msg.date.timestamp(), delay_hours=delay_hours
+            )
+        except Exception as e:
+            logger.error("_tg_send_long: chunk %d/%d chat_id=%s: %s", i, len(chunks), chat_id, e)
 
 
 # ──────────────────────────────────────────────────────────────
@@ -3043,8 +3086,7 @@ async def check_and_send_silence_alerts(context=None):
             
             if context:
                 try:
-                    msg = await context.bot.send_message(chat_id=chat_id, text=message, parse_mode=None)
-                    schedule_message_deletion(chat_id, msg.message_id, msg.date.timestamp(), delay_hours=24)
+                    await _tg_send_long(context, chat_id, message, parse_mode=None, delay_hours=24)
                     logger.info(f"✅ Уведомление отправлено субадмину {manager} (свои: {total_silent}, подшефные: {'есть' if has_subordinate_alerts else 'нет'})")
                     await send_main_menu(context, chat_id, get_user_role(chat_id))  # Fix #MENU-SILENCE
                 except Exception as e:
@@ -3053,8 +3095,7 @@ async def check_and_send_silence_alerts(context=None):
             message = alert.format_manager_alert(manager, categorized, report_date=report_date)
             if message and context:
                 try:
-                    msg = await context.bot.send_message(chat_id=chat_id, text=message, parse_mode=None)
-                    schedule_message_deletion(chat_id, msg.message_id, msg.date.timestamp(), delay_hours=24)
+                    await _tg_send_long(context, chat_id, message, parse_mode=None, delay_hours=24)
                     logger.info(f"✅ Уведомление отправлено: {manager} ({total_silent} клиентов)")
                     await send_main_menu(context, chat_id, get_user_role(chat_id))  # Fix #MENU-SILENCE
                 except Exception as e:
@@ -3065,8 +3106,7 @@ async def check_and_send_silence_alerts(context=None):
             # Детальная сводка для админа (с именами клиентов)
             admin_summary = alert.format_admin_detailed(all_managers_data, manager_dates=manager_dates)  # v9.4.23
             if ADMIN_CHAT_ID:
-                msg = await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=admin_summary, parse_mode=None)
-                schedule_message_deletion(ADMIN_CHAT_ID, msg.message_id, msg.date.timestamp(), delay_hours=24)
+                await _tg_send_long(context, ADMIN_CHAT_ID, admin_summary, parse_mode=None, delay_hours=24)
                 logger.info(f"✅ Детальная сводка отправлена админу")
                 await send_main_menu(context, ADMIN_CHAT_ID, "admin")  # Fix #MENU-SILENCE
             else:
@@ -3359,11 +3399,8 @@ async def force_report_to_user(report_type: str, chat_id: int, context) -> str:
         else:
             return f"❓ Неизвестный тип отчёта: {report_type}"
 
-        # ── Отправка ──────────────────────────────────────────────────────────
-        msg = await context.bot.send_message(
-            chat_id=chat_id, text=msg_text, parse_mode=None
-        )
-        schedule_message_deletion(chat_id, msg.message_id, msg.date.timestamp(), delay_hours=24)
+        # ── Отправка (с разбивкой на чанки — сообщение может превышать 4096 символов)
+        await _tg_send_long(context, chat_id, msg_text, parse_mode=None, delay_hours=24)
         logger.info(f"✅ force_report: {label} отправлен chat_id={chat_id}")
         return f"✅ {label} отправлен"
 
@@ -3957,6 +3994,8 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.answer(status, show_alert=False)
         except Exception:
             pass
+        # Возвращаем меню той директории, из которой пришёл запрос
+        await send_main_menu(context, chat_id, user_role)
         return
 
     if data.startswith("expenses|"):
