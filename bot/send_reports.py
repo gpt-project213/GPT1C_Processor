@@ -768,7 +768,7 @@ def get_managers_list() -> List[str]:
     if MANAGERS_MAP and isinstance(MANAGERS_MAP, dict):
         # Исключаем только Минай (системный аккаунт)
         return sorted([k for k in MANAGERS_MAP.keys() if k != "Минай"])
-    return sorted(["Алена", "Оксана", "Магира", "Ергали"])
+    return []
 
 def get_my_manager_name(chat_id: int) -> Optional[str]:
     for manager, m_chat_id in (MANAGERS_MAP or {}).items():

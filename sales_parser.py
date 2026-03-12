@@ -124,13 +124,8 @@ def _load_manager_aliases() -> list[tuple[str, str]]:
     except Exception as e:
         LOG.warning("Не удалось прочитать managers.json: %s — используется fallback", e)
 
-    # Жёсткий fallback (актуальный состав без уволенных)
-    return [
-        ("алена", "Алена"),
-        ("оксана", "Оксана"),
-        ("магира", "Магира"),
-        ("ергали", "Ергали"),
-    ]
+    LOG.warning("managers.json недоступен — определение менеджера по имени файла отключено")
+    return []
 
 def _manager_from_filename(xlsx_path: Path | None) -> Optional[str]:
     if not xlsx_path:
