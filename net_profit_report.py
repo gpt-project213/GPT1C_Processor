@@ -30,6 +30,7 @@ import json
 import logging
 import os
 import re
+import sys
 from pathlib import Path
 from datetime import datetime, date
 from zoneinfo import ZoneInfo
@@ -314,10 +315,10 @@ def generate_report():
 
     if not all_gross:
         LOG.error("Не найдены данные валовой прибыли (gross_*.json)")
-        exit(1)
+        return
     if not all_expenses:
         LOG.error("Не найдены данные расходов (expenses_*.json)")
-        exit(1)
+        return
 
     LOG.info(f"Найдено gross: {len(all_gross)}, expenses: {len(all_expenses)}")
 
@@ -380,7 +381,7 @@ def generate_report():
     LOG.info(f"\n{'='*60}")
     LOG.info(f"ИТОГО: сгенерировано {generated} отчёт(а/ов)")
     if generated == 0:
-        exit(1)
+        raise RuntimeError("No reports generated")
 
 
 if __name__ == "__main__":
@@ -388,4 +389,4 @@ if __name__ == "__main__":
         generate_report()
     except Exception as e:
         LOG.error(f"Ошибка: {e}", exc_info=True)
-        exit(1)
+        sys.exit(1)
