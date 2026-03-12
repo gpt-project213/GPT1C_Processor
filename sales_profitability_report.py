@@ -184,13 +184,13 @@ def build_margin_dict(gross_data: Dict[str, Any]) -> Dict[str, Dict[str, float]]
     """
     margin_dict = {}
     for product in gross_data.get("products", []):
-        name = product["product"]
+        name = product.get("product", "")
         key = normalize_product_name(name)
         margin_dict[key] = {
-            "margin_pct": product["margin_pct"],
-            "revenue": product["revenue"],
-            "cost": product["cost"],
-            "profit": product["profit"],
+            "margin_pct": product.get("margin_pct", 0),
+            "revenue": product.get("revenue", 0),
+            "cost": product.get("cost", 0),
+            "profit": product.get("profit", 0),
             "original_name": name
         }
     
@@ -211,18 +211,18 @@ def analyze_sales_with_profitability(sales_data: Dict[str, Any],
     low_margin_items = []  # Список товаров с низкой маржой
     
     for client_data in sales_data.get("clients", []):
-        client_name = client_data["client"]
-        client_total = client_data["total"]
+        client_name = client_data.get("client", "")
+        client_total = client_data.get("total", 0)
         
         products_with_margin = []
         client_revenue_with_margin = 0.0
         client_profit = 0.0
         
-        for product in client_data["products"]:
-            prod_name = product["product"]
-            prod_sum = product["sum"]
-            prod_qty = product["qty"]
-            prod_price = product["price"]
+        for product in client_data.get("products", []):
+            prod_name = product.get("product", "")
+            prod_sum = product.get("sum", 0)
+            prod_qty = product.get("qty", 0)
+            prod_price = product.get("price", 0)
             
             # JOIN по нормализованному названию
             key = normalize_product_name(prod_name)

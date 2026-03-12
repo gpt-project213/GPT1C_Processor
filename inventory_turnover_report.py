@@ -205,7 +205,7 @@ def generate_report() -> None:
     total_frozen = 0.0
 
     for product in all_products:
-        prod_name = product["product"]
+        prod_name = product.get("product", "")
         prod_normalized = normalize_product(prod_name)
 
         qty = product.get("qty", product.get("quantity", 0.0))

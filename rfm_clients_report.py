@@ -236,8 +236,8 @@ def generate_report():
     total_revenue = sales_data.get("total_revenue", 0.0)
     
     for client_data in sales_data.get("clients", []):
-        client_name    = client_data["client"]
-        client_revenue = client_data["total"]
+        client_name    = client_data.get("client", "")
+        client_revenue = client_data.get("total", 0)
         # v1.1.2: если _manager пустой или "Не определён" — падаем к prefix-guess
         _mgr_tag = (client_data.get("_manager") or "").strip()
         if _mgr_tag and _mgr_tag not in ("Не определён", "Неизвестно"):
