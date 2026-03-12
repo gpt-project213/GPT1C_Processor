@@ -382,7 +382,7 @@ def _ints_in_text(s: str) -> List[int]:
     out=[]
     for n in raw:
         try: out.append(int(re.sub(r"[^\d-]", "", n)))
-        except Exception: pass
+        except (ValueError, TypeError): pass
     return out
 
 def extract_excel_total_from_meta(raw: pd.DataFrame, data_start: int, data_end: int, calc_total_i: int) -> Tuple[Optional[int], str]:

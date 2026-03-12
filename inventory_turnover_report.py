@@ -111,7 +111,7 @@ def load_sales_products_merged() -> Dict[str, float]:
                 best_period = period
                 LOG.info("load_sales_products_merged: эталонный период-файл %s (period=%s)", path.name[:50], period)
                 break
-        except Exception:
+        except (OSError, json.JSONDecodeError):
             pass
 
     # Шаг 2: нет период-файлов — берём самый свежий дневной
@@ -125,7 +125,7 @@ def load_sales_products_merged() -> Dict[str, float]:
                 best_period = d.get("period", "")
                 LOG.info("load_sales_products_merged: нет период-файлов, используем дневной %s", path.name[:50])
                 break
-            except Exception:
+            except (OSError, json.JSONDecodeError):
                 pass
 
     sales_dict: Dict[str, float] = {}
@@ -214,7 +214,7 @@ def generate_report() -> None:
         if (not total_cost) and ("unit_cost" in product):
             try:
                 total_cost = float(product.get("unit_cost") or 0.0) * float(qty or 0.0)
-            except Exception:
+            except (ValueError, TypeError):
                 total_cost = total_cost
 
         has_sales = prod_normalized in sales_dict
