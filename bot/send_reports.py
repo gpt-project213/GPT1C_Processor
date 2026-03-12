@@ -431,6 +431,94 @@ async def send_main_menu(context: "ContextTypes.DEFAULT_TYPE", chat_id: int, use
         # не падаем: меню не критично
         pass
 
+
+# ── Возврат в родительский раздел после отправки отчёта ──────────────────
+# Маппинг: код раздела → callback_data родительского меню
+_SECTION_PARENT: dict[str, str] = {
+    "DEBT_SIMPLE":    "menu_debt",
+    "DEBT_EXTENDED":  "menu_debt",
+    "SALES_SIMPLE":   "menu_sales",
+    "SALES_EXTENDED": "menu_sales",
+    "GROSS_PCT":      "menu_gross",
+    "GROSS_SUM":      "menu_gross",
+    "EXPENSES":       "menu_expenses",
+    "EXPENSES_PERIOD":"menu_expenses",
+    "EXPENSES_DAY":   "menu_expenses",
+}
+
+async def send_section_back(
+    context: "ContextTypes.DEFAULT_TYPE",
+    chat_id: int,
+    user_role: str,
+    section: str,
+    text: str = "✅ *Отчёт отправлен!*\n\n📋 Выберите раздел:",
+) -> None:
+    """
+    После отправки отчёта возвращает пользователя в РОДИТЕЛЬСКИЙ РАЗДЕЛ
+    (Дебиторка → меню Дебиторки, Продажи → меню Продаж, и т.д.).
+    Если раздел без подменю (Остатки) — показывает главное меню.
+    """
+    my_name = get_my_manager_name(chat_id)
+    parent_cb = _SECTION_PARENT.get(section)
+
+    if parent_cb == "menu_debt":
+        if user_role == "manager":
+            kb = kb_debt_menu_manager(my_name or "Unknown")
+        else:
+            kb = kb_debt_menu(user_role)
+        back_text = text.replace("📋 Выберите раздел:", "📊 *Дебиторка* — выберите тип:")
+    elif parent_cb == "menu_sales":
+        if user_role == "manager":
+            kb = kb_sales_menu_manager(my_name or "Unknown")
+        else:
+            kb = kb_sales_menu(user_role)
+        back_text = text.replace("📋 Выберите раздел:", "🛒 *Продажи* — выберите тип:")
+    elif parent_cb == "menu_gross":
+        kb = kb_gross_menu(user_role)
+        back_text = text.replace("📋 Выберите раздел:", "💰 *Валовая прибыль* — выберите тип:")
+    elif parent_cb == "menu_expenses":
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("💸 Затраты за день", callback_data="expenses|day")],
+            [InlineKeyboardButton("🗓️ Затраты за период", callback_data="expenses|period")],
+            [InlineKeyboardButton("🔙 Главное меню", callback_data="back_main")],
+        ])
+        back_text = text.replace("📋 Выберите раздел:", "💸 *Затраты* — выберите тип:")
+    else:
+        # Для Остатков и прочего — возвращаем на главное меню
+        await send_main_menu(context, chat_id, user_role, text=text)
+        return
+
+    await hide_main_menu(context, chat_id)
+    try:
+        msg = await context.bot.send_message(
+            chat_id=chat_id, text=back_text, reply_markup=kb, parse_mode="Markdown"
+        )
+        _menu_set(chat_id, msg.message_id)
+    except Exception:
+        pass
+
+
+async def send_analytics_menu(
+    context: "ContextTypes.DEFAULT_TYPE",
+    chat_id: int,
+    user_role: str,
+    text: str = "✅ *Отчёт отправлен!*\n\n📈 *АНАЛИТИКА* — выберите отчёт:",
+) -> None:
+    """После отправки аналитического отчёта возвращает в меню аналитики."""
+    # Клавиатура строится в _build_analytics_kb, см. cmd_analytics
+    kb = _build_analytics_kb(user_role, chat_id)
+    if not kb:
+        await send_main_menu(context, chat_id, user_role)
+        return
+    await hide_main_menu(context, chat_id)
+    try:
+        msg = await context.bot.send_message(
+            chat_id=chat_id, text=text, reply_markup=kb, parse_mode="Markdown"
+        )
+        _menu_set(chat_id, msg.message_id)
+    except Exception:
+        pass
+
 # ── v9.4.21: Фильтр чувствительных данных в логах ──────────────────────────
 class SensitiveDataFilter(logging.Filter):
     """
@@ -2510,12 +2598,13 @@ async def send_with_acl(section: str, intended_mgr: str,
             # v9.4.7.1: Логируем успешную доставку
             log_user_delivery(chat_id, section, True)
             
-            # v2.0: Отправляем новое меню внизу (как в DEMO)
-            await asyncio.sleep(0.3)  # Небольшая пауза для лучшего UX
+            # v9.4.33: Возвращаем в РОДИТЕЛЬСКИЙ РАЗДЕЛ (не на главное меню)
+            await asyncio.sleep(0.3)
             try:
-                await send_main_menu(context, chat_id, user_role, text="✅ *Отчёт отправлен!*\n\n📋 Выберите раздел:")
+                await send_section_back(context, chat_id, user_role, section,
+                                        text="✅ *Отчёт отправлен!*\n\n📋 Выберите раздел:")
             except Exception as e:
-                logger.error(f"Ошибка отправки меню: {e}")
+                logger.error(f"Ошибка отправки меню раздела: {e}")
             
             return
         except RetryAfter as e:
@@ -4421,12 +4510,8 @@ async def weekly_analytics_wrapper(context: ContextTypes.DEFAULT_TYPE):
     """v9.4.16: Ежедневный запуск (было: только по понедельникам)"""
     await weekly_analytics_job(context)
 
-async def cmd_analytics(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Меню аналитики"""
-    chat_id = update.effective_chat.id if update.effective_chat else update.callback_query.message.chat_id
-    user_role = get_user_role(chat_id)
-
-    # Кнопки принудительной отправки (v9.4.27) — для всех ролей
+def _build_analytics_kb(user_role: str, chat_id: int = 0) -> Optional[InlineKeyboardMarkup]:
+    """Строит клавиатуру меню аналитики в зависимости от роли пользователя."""
     force_buttons = [
         [
             InlineKeyboardButton("🔔 Дебиторка сейчас",    callback_data="force|silence"),
@@ -4440,39 +4525,50 @@ async def cmd_analytics(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("📦 Остатки сейчас",      callback_data="force|inventory"),
         ],
     ]
-
     if user_role == "admin":
-        kb = InlineKeyboardMarkup([
+        return InlineKeyboardMarkup([
             [InlineKeyboardButton("📊 Продажи+Рентабельность", callback_data="analytics|sales_profit")],
             [InlineKeyboardButton("💰 Чистая прибыль",         callback_data="analytics|net_profit_submenu")],
             [InlineKeyboardButton("📦 Мертвый запас",          callback_data="analytics|turnover")],
             [InlineKeyboardButton("👥 RFM-клиенты",            callback_data="analytics|rfm")],
             [InlineKeyboardButton("🎯 Концентрация выручки",   callback_data="analytics|concentration")],
             [InlineKeyboardButton("💳 DSO+Aging",              callback_data="analytics|dso")],
-            [InlineKeyboardButton("🤖 ИИ анализ",             callback_data="ai_type_menu")],  # Fix #AI-MENU
+            [InlineKeyboardButton("🤖 ИИ анализ",             callback_data="ai_type_menu")],
             [InlineKeyboardButton("🔄 Обновить аналитику",     callback_data="analytics|refresh")],
             *force_buttons,
             [InlineKeyboardButton("🔙 Главное меню",           callback_data="back_main")],
         ])
-        text = "📈 *АНАЛИТИКА*\n\nВыберите отчёт или получите данные прямо сейчас:"
     elif user_role == "subadmin":
-        kb = InlineKeyboardMarkup([
+        return InlineKeyboardMarkup([
             [InlineKeyboardButton("💳 DSO+Aging", callback_data="analytics|dso")],
             *force_buttons,
             [InlineKeyboardButton("🔙 Главное меню", callback_data="back_main")],
         ])
-        text = "📈 *АНАЛИТИКА*\n\nОтчёты супервайзера:"
     elif user_role == "manager":
-        kb = InlineKeyboardMarkup([
+        return InlineKeyboardMarkup([
             [InlineKeyboardButton("📊 Продажи+Рентабельность", callback_data="analytics|sales_profit")],
             [InlineKeyboardButton("👥 RFM-клиенты",            callback_data="analytics|rfm")],
             [InlineKeyboardButton("🎯 Концентрация",           callback_data="analytics|concentration")],
             *force_buttons,
             [InlineKeyboardButton("🔙 Главное меню",           callback_data="back_main")],
         ])
-        text = "📈 *АНАЛИТИКА*\n\nВаши отчёты:"
-    else:
+    return None
+
+
+async def cmd_analytics(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Меню аналитики"""
+    chat_id = update.effective_chat.id if update.effective_chat else update.callback_query.message.chat_id
+    user_role = get_user_role(chat_id)
+    kb = _build_analytics_kb(user_role, chat_id)
+    if not kb:
         return
+
+    role_text = {
+        "admin":    "📈 *АНАЛИТИКА*\n\nВыберите отчёт или получите данные прямо сейчас:",
+        "subadmin": "📈 *АНАЛИТИКА*\n\nОтчёты супервайзера:",
+        "manager":  "📈 *АНАЛИТИКА*\n\nВаши отчёты:",
+    }
+    text = role_text.get(user_role, "📈 *АНАЛИТИКА*")
 
     if update.message:
         await update.message.reply_text(text, reply_markup=kb, parse_mode="Markdown")
@@ -4728,9 +4824,9 @@ async def handle_analytics(update: Update, context: ContextTypes.DEFAULT_TYPE, d
             logger.error(f"Ошибка отправки analytics {file_path.name}: {e}")
     
     log_event("analytics_sent", report_type=report_type, files_count=sent_count, chat_id=chat_id)
-    # v9.4.16: Меню после отправки аналитики
+    # v9.4.33: Возвращаем в меню АНАЛИТИКИ (не на главное)
     try:
-        await send_main_menu(context, chat_id, user_role, text="📋 Выберите раздел:")
+        await send_analytics_menu(context, chat_id, user_role)
     except Exception:
         pass
 
