@@ -10,6 +10,9 @@ from __future__ import annotations
 import os, sys, argparse, logging
 from pathlib import Path
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 
 # ── Якорь проекта: папка, где лежит этот скрипт ──────────────────────────────
 ROOT = Path(__file__).resolve().parent
@@ -17,7 +20,7 @@ ROOT = Path(__file__).resolve().parent
 DATEFMT = "%Y-%m-%d %H:%M:%S"
 LOGDIR = ROOT / "logs"
 LOGDIR.mkdir(parents=True, exist_ok=True)
-now = datetime.now()
+now = datetime.now(TZ)
 logpath = LOGDIR / f"cleanup_{now.strftime('%Y%m%d_%H%M%S')}.log"
 logging.basicConfig(filename=str(logpath), level=logging.INFO,
                     format="%(asctime)s, %(levelname)s %(message)s", datefmt=DATEFMT)
@@ -36,7 +39,7 @@ def _mtime(p: Path) -> float:
 def _env_int(name: str, default: int) -> int:
     try:
         return int(os.getenv(name, "").strip() or default)
-    except Exception:
+    except (ValueError, TypeError):
         return default
 
 def _gb_to_bytes(gb: int) -> int:
@@ -61,7 +64,7 @@ def total_size(files):
     for f in files:
         try:
             s += f.stat().st_size
-        except Exception:
+        except (FileNotFoundError, OSError):
             pass
     return s
 
@@ -69,17 +72,18 @@ def purge_older_than(files, cutoff, dry_run=False):
     removed = []
     for f in files:
         try:
-            if datetime.fromtimestamp(f.stat().st_mtime) < cutoff:
-                removed.append(f)
-        except Exception:
+            mtime = f.stat().st_mtime
+        except (FileNotFoundError, OSError):
             continue
+        if datetime.fromtimestamp(mtime, tz=TZ) < cutoff:
+            removed.append(f)
     removed.sort(key=_mtime)
     for f in removed:
         logging.info("TTL REMOVE: %s", f)
         if not dry_run:
             try:
                 f.unlink(missing_ok=True)
-            except Exception as e:
+            except OSError as e:
                 logging.warning("TTL remove failed: %s (%s)", f, e)
     return len(removed)
 
@@ -98,7 +102,7 @@ def purge_over_cap(files, cap_bytes, dry_run=False):
                 f.unlink(missing_ok=True)
             current -= sz
             removed += 1
-        except Exception as e:
+        except OSError as e:
             logging.warning("CAP remove failed: %s (%s)", f, e)
     return removed
 
@@ -108,7 +112,7 @@ def main(argv):
     ap.add_argument("--ttl-days", type=int, default=TTL_DAYS)
     args = ap.parse_args(argv)
 
-    cutoff = datetime.now() - timedelta(days=args.ttl_days)
+    cutoff = datetime.now(TZ) - timedelta(days=args.ttl_days)
     art_files = ls_files(ARTIFACTS)
     xlsx_files = ls_files(XLSX_STORES)
 

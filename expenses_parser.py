@@ -461,7 +461,7 @@ class UnifiedExpensesParser:
         """Генерирует уникальный идентификатор для файлов отчёта."""
         base_name = file_path.stem
         # берём дату начала периода или текущую
-        date_part = (data.get("period_start") or datetime.now().strftime("%Y-%m-%d")).replace("-", "")
+        date_part = (data.get("period_start") or self._now_tz().strftime("%Y-%m-%d")).replace("-", "")
         clean_name = re.sub(r"[^\w\-]+", "_", base_name).strip("_")
         return f"{clean_name}_{date_part}"
 

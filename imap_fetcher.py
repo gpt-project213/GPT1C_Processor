@@ -434,7 +434,8 @@ def _search_since(M: imaplib.IMAP4, since: Optional[str]) -> List[bytes]:
         raise RuntimeError("Cannot SELECT INBOX")
     if since:
         dt = datetime.strptime(since, "%Y-%m-%d")
-        imap_date = dt.strftime("%d-%b-%Y")
+        _MONTHS_IMAP = ("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
+        imap_date = f"{dt.day:02d}-{_MONTHS_IMAP[dt.month-1]}-{dt.year}"
         criteria = f'(SINCE {imap_date})'
     else:
         criteria = "ALL"
