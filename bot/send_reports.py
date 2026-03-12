@@ -4084,8 +4084,8 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.answer(status, show_alert=False)
         except Exception:
             pass
-        # Возвращаем меню той директории, из которой пришёл запрос
-        await send_main_menu(context, chat_id, user_role)
+        # v9.4.33: Возвращаем в меню АНАЛИТИКИ (кнопки force находятся в аналитике)
+        await send_analytics_menu(context, chat_id, user_role, text="✅ Готово!\n\n📈 *АНАЛИТИКА* — выберите:")
         return
 
     if data.startswith("expenses|"):

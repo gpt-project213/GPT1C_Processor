@@ -69,6 +69,87 @@ def load_latest_json(pattern: str, skip_keywords: list = None) -> Optional[Dict[
     return None
 
 
+def _is_period_range(period_str: str) -> bool:
+    """Период-диапазон если содержит ' - ' или '–' между датами."""
+    return bool(re.search(r'\d{2}\.\d{2}\.\d{4}\s*[-–]\s*\d{2}\.\d{2}\.\d{4}', period_str or ""))
+
+
+def load_sales_products_merged() -> Dict[str, float]:
+    """
+    Строит справочник {нормализованное_имя_товара: сумма_продаж}.
+
+    Алгоритм:
+    1. Ищем свежайший ПЕРИОД (multi-day) файл среди индивидуальных менеджерских
+       файлов (manager ≠ "Не определён"). Период-файлы имеют coverage за месяц
+       и содержат реальные товарные позиции.
+    2. Если нет период-файлов — берём самые свежие дневные файлы.
+    3. Объединяем продукты из всех файлов с совпадающим периодом.
+
+    Проблема сводных файлов: в их «products» хранятся адреса клиентов,
+    а не товарные позиции → мёртвый запас был ложно завышен.
+    """
+    _SKIP_MANAGERS = {"", "не определён", "неизвестно"}
+    files = sorted(JSON_DIR.glob("sales_*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+
+    # Шаг 1: ищем свежайший ПЕРИОД-файл среди индивидуальных
+    best_period: Optional[str] = None
+    for path in files:
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                d = json.load(f)
+            if (d.get("manager") or "").strip().lower() in _SKIP_MANAGERS:
+                continue
+            period = d.get("period", "")
+            if _is_period_range(period):
+                best_period = period
+                LOG.info("load_sales_products_merged: эталонный период-файл %s (period=%s)", path.name[:50], period)
+                break
+        except Exception:
+            pass
+
+    # Шаг 2: нет период-файлов — берём самый свежий дневной
+    if best_period is None:
+        for path in files:
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    d = json.load(f)
+                if (d.get("manager") or "").strip().lower() in _SKIP_MANAGERS:
+                    continue
+                best_period = d.get("period", "")
+                LOG.info("load_sales_products_merged: нет период-файлов, используем дневной %s", path.name[:50])
+                break
+            except Exception:
+                pass
+
+    sales_dict: Dict[str, float] = {}
+    if best_period is None:
+        LOG.warning("load_sales_products_merged: нет индивидуальных файлов")
+        return sales_dict
+
+    # Шаг 3: мёржим все файлы с совпадающим периодом
+    loaded = 0
+    for path in files:
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                d = json.load(f)
+            if (d.get("manager") or "").strip().lower() in _SKIP_MANAGERS:
+                continue
+            if d.get("period", "") != best_period:
+                continue
+            for c in d.get("clients", []):
+                for p in c.get("products", []):
+                    key = normalize_product(p.get("product", ""))
+                    if key:
+                        sales_dict[key] = sales_dict.get(key, 0.0) + float(p.get("sum", 0) or 0)
+            loaded += 1
+            LOG.info("load_sales_products_merged: +%s", path.name[:50])
+        except Exception as e:
+            LOG.warning("load_sales_products_merged: ошибка %s: %s", path.name, e)
+
+    LOG.info("load_sales_products_merged: итого=%d файлов, уникальных товаров=%d", loaded, len(sales_dict))
+    return sales_dict
+
+
 def fmt_money(x: float) -> str:
     return f"{float(x):,.0f}".replace(",", NBSP) + " ₸"
 
@@ -88,18 +169,15 @@ def generate_report() -> None:
 
     # Загрузка
     inventory_data = load_latest_json("inventory_*.json")
-    sales_data = load_latest_json("sales_*.json", skip_keywords=["товару"])
-
-    if not inventory_data or not sales_data:
-        LOG.error("Недостаточно данных")
+    if not inventory_data:
+        LOG.error("Недостаточно данных: нет inventory JSON")
         return
 
-    # Создать справочник продаж
-    sales_dict = {}
-    for client in sales_data.get("clients", []):
-        for product in client.get("products", []):
-            prod_name = normalize_product(product["product"])
-            sales_dict[prod_name] = sales_dict.get(prod_name, 0.0) + product["sum"]
+    # Справочник продаж — из индивидуальных файлов менеджеров (не сводного)
+    # Сводный файл хранит в "products" имена клиентов, а не названия товаров
+    sales_dict = load_sales_products_merged()
+    if not sales_dict:
+        LOG.warning("sales_dict пуст — мёртвый запас будет завышен")
 
     # Собрать плоский список товаров из возможных форматов JSON:
     # - inventory.py сохраняет: {"categories": [{"item_list": [{product, qty, cost}, ...]}]}
