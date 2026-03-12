@@ -32,7 +32,13 @@ if not LOG.handlers:
     sh = logging.StreamHandler(); sh.setFormatter(fmt); LOG.addHandler(sh)
 
 ENV = Environment(loader=FileSystemLoader(str(TPL_DIR)), autoescape=select_autoescape(["html","xml"]))
-TPL = ENV.get_template("gross_percent.html")
+_TPL = None
+
+def _get_tpl():
+    global _TPL
+    if _TPL is None:
+        _TPL = ENV.get_template("gross_percent.html")
+    return _TPL
 
 NBSP = "\u202f"
 TOTAL_RE   = re.compile(r"^(итог|итого|всего|total)\b", re.I)
@@ -367,7 +373,7 @@ def build_gross_report_percent(xlsx: str | Path) -> Optional[Path]:
 
     out = OUT_DIR / out_name
 
-    html = TPL.render(**ctx)
+    html = _get_tpl().render(**ctx)
     out.write_text(html, encoding="utf-8")
     LOG.info("Процентный отчёт сохранён: %s", out)
     return out

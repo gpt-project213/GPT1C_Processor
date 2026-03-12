@@ -128,8 +128,15 @@ def _read_yaml(p: Path) -> Dict[str, Any]:
 # ── Менеджеры и синонимы ──────────────────────────────────────
 def _load_managers_json() -> Dict[str, Optional[int]]:
     if not MANAGERS_JSON.exists():
-        raise FileNotFoundError(f"config/managers.json is missing at {MANAGERS_JSON}")
-    raw = json.loads(MANAGERS_JSON.read_text(encoding="utf-8")) or {}
+        import logging as _log
+        _log.getLogger("config").warning("managers.json not found at %s", MANAGERS_JSON)
+        return {}
+    try:
+        raw = json.loads(MANAGERS_JSON.read_text(encoding="utf-8")) or {}
+    except (json.JSONDecodeError, OSError) as e:
+        import logging as _log
+        _log.getLogger("config").error("managers.json read error: %s", e)
+        return {}
     result: Dict[str, Optional[int]] = {}
     if isinstance(raw, dict):
         for name, val in raw.items():
