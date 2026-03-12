@@ -231,8 +231,7 @@ def analyze(path: str, chat_id: str, send_mode: bool = False, report_type: str =
     # Проверка файла
     json_path = Path(path)
     if not json_path.exists():
-        print(f"❌ Ошибка: Файл не найден: {path}")
-        sys.exit(1)
+        raise FileNotFoundError(f"Файл не найден: {path}")
     
     # Загрузка данных
     try:
@@ -241,8 +240,7 @@ def analyze(path: str, chat_id: str, send_mode: bool = False, report_type: str =
         data_str = json.dumps(data, ensure_ascii=False, indent=2)
         print(f"✅ Данные загружены: {len(data_str)} символов")
     except Exception as e:
-        print(f"❌ Ошибка чтения JSON: {e}")
-        sys.exit(1)
+        raise RuntimeError(f"Ошибка чтения JSON: {e}") from e
     
     # Ограничение размера входных данных
     if len(data_str) > AI_MAX_INPUT_CHARS:
@@ -287,8 +285,7 @@ def analyze(path: str, chat_id: str, send_mode: bool = False, report_type: str =
     try:
         client, model = get_ai_client()
     except ValueError as e:
-        print(f"❌ Ошибка конфигурации: {e}")
-        sys.exit(1)
+        raise RuntimeError(f"Ошибка конфигурации: {e}") from e
     
     # Параметры генерации
     print(f"🌡️ Temperature: {AI_TEMPERATURE}")
@@ -321,8 +318,7 @@ def analyze(path: str, chat_id: str, send_mode: bool = False, report_type: str =
                   f"completion: {response.usage.completion_tokens})")
         
     except Exception as e:
-        print(f"❌ Ошибка API: {e}")
-        sys.exit(1)
+        raise RuntimeError(f"Ошибка API: {e}") from e
     
     # Сохранение результата
     if AI_SAVE_ALWAYS or send_mode:
@@ -338,8 +334,7 @@ def analyze(path: str, chat_id: str, send_mode: bool = False, report_type: str =
             print(f"AI saved: {output_file}")  # Для парсинга в send_reports.py
             
         except Exception as e:
-            print(f"❌ Ошибка сохранения: {e}")
-            sys.exit(1)
+            raise RuntimeError(f"Ошибка сохранения: {e}") from e
     
     # Отправка в Telegram (если требуется)
     if send_mode:
@@ -411,7 +406,11 @@ def main(argv=None):
         global AI_TG_SEND_HTML
         AI_TG_SEND_HTML = True
     
-    analyze(args.path, args.chat_id, send_mode=args.send, report_type=args.type)
+    try:
+        analyze(args.path, args.chat_id, send_mode=args.send, report_type=args.type)
+    except Exception as e:
+        print(f"❌ {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
