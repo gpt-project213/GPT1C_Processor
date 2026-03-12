@@ -189,8 +189,8 @@ def generate_report():
     managers_data = defaultdict(lambda: {"clients": [], "total": 0.0})
     
     for client_data in sales_data.get("clients", []):
-        client_name    = client_data["client"]
-        client_revenue = client_data["total"]
+        client_name    = client_data.get("client", "")
+        client_revenue = client_data.get("total", 0)
         # v1.1.1: берём _manager из JSON — надёжнее prefix-guessing
         manager = client_data.get("_manager") or get_manager_from_client(client_name)
         if not manager:
