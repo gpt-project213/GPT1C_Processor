@@ -10,6 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Tuple, Optional
+import html as _html
 import logging, re
 from zoneinfo import ZoneInfo
 from utils_excel import ensure_clean_xlsx
@@ -344,7 +345,7 @@ def build_gross_report(xlsx: str | Path) -> Optional[Path]:
     top = tmp.sort_values(cols["gp"], ascending=False).head(TOP_N)
     top_tbl = [
         {"#": i+1,
-         "product": str(r[pcol]),
+         "product": _html.escape(str(r[pcol])),
          "sale": r[cols["sale"]],
          "cost": r[cols["cost"]],
          "gp": r[cols["gp"]],
@@ -381,7 +382,7 @@ def build_gross_report(xlsx: str | Path) -> Optional[Path]:
                  '<thead><tr><th>#</th><th>Товар</th><th>Выручка</th><th>Себестоимость</th><th>Валовая прибыль</th><th>%</th></tr></thead><tbody>']
         for i, r in rows.iterrows():
             parts.append(
-                f"<tr><td>{i+1}</td><td>{r[pcol]}</td>"
+                f"<tr><td>{i+1}</td><td>{_html.escape(str(r[pcol]))}</td>"
                 f"<td>{_fmt_money(float(r[cols['sale']]))}</td>"
                 f"<td>{_fmt_money(float(r[cols['cost']]))}</td>"
                 f"<td>{_fmt_money(float(r[cols['gp']]))}</td>"

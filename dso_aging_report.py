@@ -387,6 +387,7 @@ def generate_report():
                 <td>{i}</td>
                 <td>{client['name']}</td>
                 <td style="text-align:right;color:#dc3545;font-weight:600">{fmt_money(client['debt'])}</td>
+                <td style="text-align:right">{client.get('days', 0)}</td>
             </tr>"""
         
         html = f"""<!DOCTYPE html>

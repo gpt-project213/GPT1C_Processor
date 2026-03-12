@@ -164,6 +164,7 @@ import sys
 import re
 import json
 import time
+import html as _html
 import asyncio
 import logging
 import shutil
@@ -303,7 +304,7 @@ def txt_to_html(txt_path: Path, html_path: Path):
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Анализ ИИ - {txt_path.stem}</title>
+    <title>Анализ ИИ - {_html.escape(str(txt_path.stem))}</title>
     <style>
         body {{ 
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -328,7 +329,7 @@ def txt_to_html(txt_path: Path, html_path: Path):
     </style>
 </head>
 <body>
-    <pre>{content}</pre>
+    <pre>{_html.escape(content)}</pre>
 </body>
 </html>"""
         html_path.write_text(html_content, encoding='utf-8')
@@ -577,8 +578,13 @@ class SensitiveDataFilter(logging.Filter):
 
     def filter(self, record: logging.LogRecord) -> bool:
         if self._MASK_RULES:
+            if record.args:
+                try:
+                    record.msg = str(record.msg) % record.args
+                except (TypeError, ValueError):
+                    record.msg = str(record.msg)
+                record.args = None
             record.msg = self._apply(str(record.msg))
-            record.args = None  # аргументы уже не нужны
         return True
 
     @classmethod
@@ -1223,8 +1229,13 @@ async def process_ai_generation_queue(context: ContextTypes.DEFAULT_TYPE):
         queue_data = _load_ai_generation_queue()
         
         if queue_data.get("processing"):
-            log_event("ai_queue_busy")
-            return
+            started = queue_data.get("processing_started", 0)
+            if time.time() - started < 600:
+                log_event("ai_queue_busy")
+                return
+            log_event("ai_queue_stale_reset", stale_seconds=int(time.time() - started))
+            queue_data["processing"] = False
+            _save_ai_generation_queue(queue_data)
         
         queue = queue_data.get("queue", [])
         if not queue:
@@ -1254,6 +1265,7 @@ async def process_ai_generation_queue(context: ContextTypes.DEFAULT_TYPE):
             return
         
         queue_data["processing"] = True
+        queue_data["processing_started"] = time.time()
         queue_data["queue"] = queue
         _save_ai_generation_queue(queue_data)
         
@@ -2988,13 +3000,14 @@ async def pipeline_task(context: ContextTypes.DEFAULT_TYPE):
                 if script_executed and script_rc == 0:
                     processed_files += 1
                 
-                if file_path.exists():
+                if script_executed and script_rc == 0 and file_path.exists():
                     processed_path = PROCESSED_DIR / f"{datetime.now(TZ).strftime('%Y%m%d%H%M%S')}_{file_path.name}"
                     shutil.move(file_path, processed_path)
                     log_event("file_processed", original=file_path.name, moved_to=processed_path.name)
-                else:
-                    # Оригинал мог быть удалён на этапе ensure_clean_xlsx (нормально для 1С-файлов).
+                elif not file_path.exists():
                     log_event("queue_file_already_removed", file=file_path.name, level="INFO")
+                elif script_executed and script_rc != 0:
+                    log_event("file_kept_for_retry", file=file_path.name, rc=script_rc, level="WARNING")
             except Exception as e:
                 import traceback
                 full_traceback = traceback.format_exc()
@@ -5171,7 +5184,11 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
     elif text == "🛒 Продажи":
         if user_role == "manager":
             my_name = get_my_manager_name(chat_id)
-            await handle_direct(update, context, f"direct|SALES_SIMPLE|{my_name}")
+            if my_name:
+                scopes = user_scopes(chat_id)
+                await handle_report_request("SALES_SIMPLE", my_name, chat_id, context, user_role, scopes)
+            else:
+                await update.message.reply_text("⛔ Менеджер не найден")
         else:
             kb = kb_sales_menu(user_role)
             msg = "🛒 *Продажи*" + "\n\n" + "Выберите тип отчёта:"
@@ -5189,7 +5206,8 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
             await update.message.reply_text("⛔ Доступ запрещён")
     
     elif text == "📦 Остатки":
-        await handle_direct(update, context, "direct|INVENTORY_SIMPLE|general")
+        scopes = user_scopes(chat_id)
+        await handle_report_request("INVENTORY_SIMPLE", "Сводный отчёт", chat_id, context, user_role, scopes)
     
     elif text == "📈 Аналитика":
         if user_role in ("admin", "subadmin"):
@@ -5198,7 +5216,12 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
             await update.message.reply_text("⛔ Доступ запрещён")
     
     elif text == "🗄️ Архив":
-        await handle_archive(update, context, "archive|root")
+        scopes = user_scopes(chat_id)
+        await update.message.reply_text(
+            "🗄️ **Архив отчётов**\n\nВыберите менеджера:",
+            reply_markup=kb_archive_managers(scopes),
+            parse_mode="Markdown"
+        )
 
 
 def main():
