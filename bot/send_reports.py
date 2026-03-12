@@ -1500,25 +1500,21 @@ async def send_inventory_summary(context: ContextTypes.DEFAULT_TYPE):
 
 
 async def send_sales_summary(context: ContextTypes.DEFAULT_TYPE):
-    """v9.4.10: Краткая сводка продаж ТОЛЬКО АДМИНУ (21:00) — по расписанию"""
+    """v9.4.32: Краткая сводка продаж ТОЛЬКО АДМИНУ (21:00) — агрегация ВСЕХ менеджеров из JSON."""
     if not SalesSummary:
         logger.error("SalesSummary не импортирован")
         return
-    
+
     log_event("sales_summary_start")
-    
     try:
-        summary = SalesSummary()
-        
-        # v9.4.10: Только админу (убрана рассылка менеджерам)
-        latest_html = summary.get_latest_sales_report(HTML_DIR)
-        if not latest_html:
+        summary      = SalesSummary()
+        known_mgrs   = set(m.lower() for m in get_managers_list())
+        message      = summary.build_admin_sales_summary(JSON_DIR, known_managers=known_mgrs)
+
+        if not message:
             log_event("sales_summary_no_file")
             return
-        
-        data = summary.parse_sales_html(latest_html)
-        message = summary.format_summary(data)
-        
+
         if ADMIN_CHAT_ID:
             try:
                 msg = await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=message)
@@ -1526,9 +1522,8 @@ async def send_sales_summary(context: ContextTypes.DEFAULT_TYPE):
                 log_event("sales_summary_sent", manager="Admin")
             except Exception as e:
                 log_event("sales_summary_error", manager="Admin", error=str(e))
-        
+
         log_event("sales_summary_finish")
-        
     except Exception as e:
         log_event("sales_summary_error", error=str(e))
 
@@ -3338,11 +3333,11 @@ async def force_report_to_user(report_type: str, chat_id: int, context) -> str:
                 return "🛒 Модуль SalesSummary не загружен."
             summary = SalesSummary()
             if role == "admin":
-                latest_html = summary.get_latest_sales_report(HTML_DIR)
-                if not latest_html:
+                # v9.4.32: агрегация ВСЕХ менеджеров из JSON, не одного HTML
+                known_mgrs = set(m.lower() for m in get_managers_list())
+                msg_text   = summary.build_admin_sales_summary(JSON_DIR, known_managers=known_mgrs)
+                if not msg_text:
                     return "🛒 Нет данных продаж."
-                data = summary.parse_sales_html(latest_html)
-                msg_text = summary.format_summary(data)
             else:
                 # Ищем последний JSON для этого менеджера
                 import json as _json

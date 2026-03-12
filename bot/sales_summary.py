@@ -394,6 +394,72 @@ class SalesSummary:
         logger.info(f"📄 Найден отчёт продаж: {latest.name} (период={pd})")
         return latest
 
+    def get_latest_sales_period_from_json(self, json_dir: Path,
+                                          known_managers: Optional[set] = None) -> Optional[str]:
+        """
+        v1.4: Находит период последних продаж из JSON-файлов.
+        Используется для агрегации данных всех менеджеров в одном кратком отчёте.
+        Возвращает строку периода (напр. "12 марта 2026 г.") или None.
+        """
+        best_period: Optional[str] = None
+        best_date:   date_type     = date_type.min
+
+        for path in sorted(json_dir.glob("sales_*.json"),
+                           key=lambda p: p.stat().st_mtime, reverse=True):
+            if "товар" in path.name.lower():
+                continue
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                mgr = (data.get("manager") or "").strip()
+                # Игнорируем сводные файлы без конкретного менеджера
+                if mgr in ("", "Не определён", "Неизвестно"):
+                    continue
+                if known_managers and mgr.lower() not in known_managers:
+                    continue
+                period_str = (data.get("period") or "").strip()
+                if not period_str:
+                    continue
+                d = _period_to_date(period_str)
+                if d > best_date:
+                    best_date   = d
+                    best_period = period_str
+            except Exception:
+                pass
+
+        if best_period:
+            logger.info(f"📅 Последний период продаж из JSON: {best_period}")
+        return best_period
+
+    def build_admin_sales_summary(self, json_dir: Path,
+                                  known_managers: Optional[set] = None) -> Optional[str]:
+        """
+        v1.4: Строит краткую сводку для ADMIN агрегируя ВСЕ менеджеров за последний период.
+        Заменяет get_latest_sales_report + parse_sales_html + format_summary для admin.
+        """
+        period = self.get_latest_sales_period_from_json(json_dir, known_managers)
+        if not period:
+            logger.warning("build_admin_sales_summary: период не определён")
+            return None
+
+        all_managers = self.load_all_managers_json(json_dir, period)
+        if known_managers:
+            all_managers = [m for m in all_managers
+                            if m["manager"].lower() in known_managers]
+        if not all_managers:
+            logger.warning(f"build_admin_sales_summary: нет данных менеджеров за {period}")
+            return None
+
+        # Строим data-заглушку для format_admin_pipeline
+        total_clients = sum(len(m.get("clients", [])) for m in all_managers)
+        data = {
+            "date":          period,
+            "total_amount":  sum(m["total_revenue"] for m in all_managers),
+            "clients_count": total_clients,
+            "clients":       [],
+        }
+        return self.format_admin_pipeline(data, all_managers)
+
 
     # ── v1.2: Pipeline-методы ──────────────────────────────────────────────────
 

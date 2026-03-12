@@ -81,7 +81,10 @@ def load_all_jsons_merged(pattern: str, min_clients: int = 0, skip_keywords: lis
         LOG.error(f"Нет JSON файлов по паттерну: {pattern}")
         return None
 
-    # Шаг 1: эталонный период — самый свежий подходящий файл
+    # Шаг 1: эталонный период — самый свежий файл КОНКРЕТНОГО менеджера.
+    # Сводные файлы (manager = "" / "Не определён") пропускаем: в них нет менеджера
+    # по определению (Excel-источник не содержит поле менеджера).
+    _SKIP_MANAGERS = {"", "не определён", "неизвестно"}
     reference_period = None
     reference_data   = None
     reference_path   = None
@@ -92,6 +95,10 @@ def load_all_jsons_merged(pattern: str, min_clients: int = 0, skip_keywords: lis
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
+            mgr = (data.get("manager") or "").strip().lower()
+            if mgr in _SKIP_MANAGERS:
+                LOG.debug(f"Пропускаю сводный файл (нет менеджера): {path.name}")
+                continue
             if len(data.get("clients", [])) < min_clients:
                 LOG.warning(f"Пропускаю {path.name}: клиентов={len(data.get('clients',[]))} < {min_clients}")
                 continue
@@ -108,15 +115,22 @@ def load_all_jsons_merged(pattern: str, min_clients: int = 0, skip_keywords: lis
         return None
 
     # Шаг 2: тегируем клиентов эталонного файла полем _manager
+    # Если файл сводный ("Не определён"), не перетираем тег — prefix-guess сработает позже
     ref_manager    = reference_data.get("manager", "")
+    _ref_mgr_valid = ref_manager and ref_manager not in ("Не определён", "Неизвестно")
     merged_clients = []
     for c in reference_data.get("clients", []):
-        c["_manager"] = ref_manager
+        if _ref_mgr_valid:
+            c["_manager"] = ref_manager
+        elif not c.get("_manager"):
+            c["_manager"] = ""   # оставляем пустым → prefix-guess в generate_report
         merged_clients.append(c)
     merged_revenue = reference_data.get("total_revenue", 0.0)
     loaded_files   = 1
 
-    # Шаг 3: добираем все остальные файлы того же периода
+    # Шаг 3: добираем все остальные файлы того же периода.
+    # Сводные файлы пропускаем — в них нет менеджера, prefix-guess ненадёжен
+    # при смешанных данных (один клиент у двух менеджеров).
     for path in files:
         if path == reference_path:
             continue
@@ -125,13 +139,16 @@ def load_all_jsons_merged(pattern: str, min_clients: int = 0, skip_keywords: lis
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
+            mgr = (data.get("manager") or "").strip()
+            if mgr.lower() in _SKIP_MANAGERS:
+                LOG.debug(f"Пропускаю сводный при добавлении: {path.name}")
+                continue
             if data.get("period", "") != reference_period:
                 LOG.info(f"Пропускаю {path.name}: period '{data.get('period','')}' ≠ '{reference_period}'")
                 continue
             clients = data.get("clients", [])
             if len(clients) < min_clients:
                 continue
-            mgr = data.get("manager", "")
             for c in clients:
                 c["_manager"] = mgr
             merged_clients.extend(clients)
@@ -220,10 +237,12 @@ def generate_report():
     for client_data in sales_data.get("clients", []):
         client_name    = client_data["client"]
         client_revenue = client_data["total"]
-        # v1.1.1: _manager из JSON — надёжнее чем prefix-guess по имени клиента
-        manager = client_data.get("_manager") or get_manager_from_client(client_name)
-        if not manager:
-            manager = "Неизвестно"
+        # v1.1.2: если _manager пустой или "Не определён" — падаем к prefix-guess
+        _mgr_tag = (client_data.get("_manager") or "").strip()
+        if _mgr_tag and _mgr_tag not in ("Не определён", "Неизвестно"):
+            manager = _mgr_tag
+        else:
+            manager = get_manager_from_client(client_name) or "Неизвестно"
 
         segment = segment_client(client_revenue, total_revenue)
         
