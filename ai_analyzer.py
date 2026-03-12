@@ -202,7 +202,7 @@ def _load_manager_names() -> list:
         with open(cfg, "r", encoding="utf-8") as f:
             data = json.load(f)
         return list(data.keys())
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         return []
 
 
