@@ -157,12 +157,8 @@ def _safe_replace(src: Path, dst: Path, attempts: int = 10, delay: float = 0.25)
     """
     import shutil  # stdlib, всегда доступен
 
-    # Предварительно удаляем dst если существует
-    try:
-        if dst.exists():
-            dst.unlink()
-    except Exception as e:
-        log.warning("Удаление %s перед заменой: %s", dst, e)
+    # os.replace() атомарно перезаписывает dst — предварительное удаление НЕ нужно
+    # (ранее dst.unlink() перед replace мог уничтожить dst при провале всех попыток)
 
     for _i in range(1, attempts + 1):
         try:

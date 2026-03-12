@@ -14,6 +14,7 @@ v1.1.0 (2026-02-19): добавлен module-level parse_file() для pipeline 
 """
 
 import argparse
+import html as _html
 import json
 import logging
 import re
@@ -490,7 +491,7 @@ class UnifiedExpensesParser:
             top5_rows += f"""
             <tr>
                 <td>{i}</td>
-                <td>{item.get('category', '')}</td>
+                <td>{_html.escape(str(item.get('category', '')))}</td>
                 <td class="amount">{self._format_money(item.get('amount'))} ₸</td>
             </tr>"""
 
@@ -499,8 +500,8 @@ class UnifiedExpensesParser:
         for row in data.get("rows", []):
             is_sub = row.get("is_subtotal", False)
             cls = "subtotal" if is_sub else ""
-            sub = row.get("subdivision", "")
-            cat = row.get("category", "")
+            sub = _html.escape(str(row.get("subdivision", "")))
+            cat = _html.escape(str(row.get("category", "")))
             details_rows += f"""
             <tr class="{cls}">
                 <td>{sub}</td>
@@ -602,8 +603,8 @@ class UnifiedExpensesParser:
     <div class="header">
         <div style="font-size:20px; font-weight:800;">📊 Затраты (расходы)</div>
         <div class="meta">
-            <div><b>Источник:</b> {data.get('source_file','')}</div>
-            <div><b>Период:</b> {data.get('period','—')}</div>
+            <div><b>Источник:</b> {_html.escape(str(data.get('source_file','')))}</div>
+            <div><b>Период:</b> {_html.escape(str(data.get('period','—')))}</div>
             <div><b>Тип отчёта:</b> <span class="badge type-{rt}">{data.get('report_type','')}</span></div>
         </div>
     </div>

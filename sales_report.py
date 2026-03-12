@@ -844,7 +844,7 @@ def write_suspects_html(env: Environment, suspects: List[Dict[str,Any]], stem: s
         "<html><head><meta charset='utf-8'><title>Suspects</title>",
         "<style>body{font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif} table{border-collapse:collapse;width:100%} td,th{border:1px solid #ddd;padding:6px} tr:nth-child(even){background:#fafafa} .num{text-align:right}</style>",
         "</head><body>",
-        f"<h2>Подозрительные строки — {stem}.xlsx</h2>",
+        f"<h2>Подозрительные строки — {_html.escape(str(stem))}.xlsx</h2>",
         "<table><tr><th>#</th><th>Строка</th><th>Товар/Клиент</th><th class='num'>Сумма</th><th>Причина</th></tr>"
     ]
     for k, s in enumerate(suspects, 1):

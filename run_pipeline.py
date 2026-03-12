@@ -105,7 +105,10 @@ def imap_cycle_once() -> None:
 
 def process_queue() -> None:
     ok = fail = 0
-    files = sorted(QUEUE_DIR.glob("*.[xX][lL][sS]*"))
+    files = sorted(
+        p for p in QUEUE_DIR.glob("*.[xX][lL][sS]*")
+        if not p.name.endswith(".work")
+    )
     if not files:
         _log("QUEUE is empty")
 

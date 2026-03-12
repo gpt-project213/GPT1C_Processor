@@ -537,12 +537,20 @@ def process_extended_report(clean_xlsx: Path, src_name: str) -> Dict[str, Any]:
                    for b in blocks_sorted[:15] if (b.closing or 0.0) > 0]
 
     # Все клиенты (+ days_silence)
+    def _calc_silence(b_last_date, p_min, p_max):
+        ref = b_last_date if (b_last_date is not None and not pd.isna(b_last_date)) else p_min
+        if p_max is None or ref is None or pd.isna(ref) or pd.isna(p_max):
+            return None
+        try:
+            return max(0, (p_max - ref).days)
+        except Exception:
+            return None
+
     all_rows = [{
         "client": b.client, "client_slug": slugify(b.client),
         "debt": b.closing or 0.0, "opening": b.opening or 0.0,
         "debit": b.sum_debit, "credit": b.sum_credit, "movements": len(b.movements),
-        "days_silence": (max(0, (period_max - (b.last_date or period_min)).days)
-                         if (period_max is not None and (b.last_date or period_min) is not None) else None),
+        "days_silence": _calc_silence(b.last_date, period_min, period_max),
     } for b in blocks_sorted]
 
     # Движения: отсортировать клиентов в каждой подгруппе по убыванию closing

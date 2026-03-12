@@ -120,16 +120,17 @@ RE_EXPENSE_NAME = re.compile(r"(затрат|расход|expense|costs?)", re.I
 # Утилиты ФС
 def _claim(src: Path) -> Optional[Path]:
     """
-    Переименовывает файл очереди -> .work, чтобы единовременно обрабатывал только один воркер.
+    Атомарно переименовывает файл очереди -> .work (mutex).
+    rename() сам бросит исключение если файла нет — без TOCTOU gap.
     """
-    if not src.exists():
-        return None
     work = src.with_suffix(src.suffix + ".work")
     try:
         src.rename(work)
         return work
+    except FileNotFoundError:
+        return None
     except Exception as e:
-        _log(f"[CLAIM] fail {src.name}: {e}", err=False)
+        _log(f"[CLAIM] fail {src.name}: {e}", err=True)
         return None
 
 def _release(work: Path) -> None:
@@ -162,21 +163,22 @@ def _cleanup_active(active_copy: Path) -> None:
     except Exception:
         pass
 
-def _move_to_processed(work: Path, original_name: str) -> None:
+def _move_to_processed(work: Path, original_name: str) -> bool:
     """
     Перемещает .work файл в processed/ под оригинальным именем + временна́я метка.
-    Fix #1: раньше искал queue/foo.xlsx, которого уже нет (переименован в foo.xlsx.work).
-    Теперь принимает work-путь напрямую и перемещает его.
+    Возвращает True при успехе, False при ошибке (файл остаётся как .work).
     """
     PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     if not work.exists():
-        return
+        return False
     try:
         ts = datetime.now(ZoneInfo(os.getenv("TZ", "Asia/Almaty"))).strftime("%Y%m%d_%H%M%S")
         dst = PROCESSED_DIR / f"{original_name}__{ts}"
         shutil.move(str(work), str(dst))
+        return True
     except Exception as e:
-        _log(f"[FS] move to processed failed: {original_name}: {e}", err=False)
+        _log(f"[FS] move to processed FAILED: {original_name}: {e}", err=True)
+        return False
 # ─────────────────────────────────────────────────────────────────────
 # Пик содержимого для эвристик (до 50 строк/ячеек)
 def _peek_excel_text(path: Path, max_rows: int = 50) -> str:
@@ -411,6 +413,7 @@ def _process_one(src: Path) -> Tuple[str, List[Path]]:
         return ("SKIP", [])
     routed_to = _route_file(work)
     _json_event("ROUTING", file=src.name, to=routed_to)
+    moved = False
     try:
         if routed_to == "DEBT":
             outs = process_debt_file(work)
@@ -423,14 +426,18 @@ def _process_one(src: Path) -> Tuple[str, List[Path]]:
         elif routed_to == "EXPENSE":  # Fix #PIPE-1
             outs = process_expenses_file(work)
         else:
-            # SKIP или неизвестный тип — не обрабатываем
             _log(f"[SKIP] {src.name} (route={routed_to})")
             outs = []
-        # перенос .work файла в processed/
-        _move_to_processed(work, src.name)
+        moved = _move_to_processed(work, src.name)
         return (routed_to, outs)
+    except Exception as e:
+        _log(f"[PROCESS] FAIL {src.name}: {e}", err=True)
+        return (routed_to, [])
     finally:
-        _release(work)
+        if moved:
+            _release(work)
+        elif work.exists():
+            _log(f"[FS] {work.name} preserved in queue for retry")
 
 def _imap_once() -> None:
     """
