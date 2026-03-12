@@ -51,8 +51,15 @@ __VERSION__ = "1.1.4"
 NBSP = "\u202f"
 
 
+def _mtime(p: Path) -> float:
+    try:
+        return p.stat().st_mtime
+    except (FileNotFoundError, OSError):
+        return 0.0
+
+
 def load_latest_json(pattern: str, skip_keywords: list = None) -> Optional[Dict[str, Any]]:
-    files = sorted(JSON_DIR.glob(pattern), key=lambda p: p.stat().st_mtime, reverse=True)
+    files = sorted(JSON_DIR.glob(pattern), key=_mtime, reverse=True)
     if not files:
         LOG.error(f"Не найдены файлы {pattern}")
         return None
@@ -89,7 +96,7 @@ def load_sales_products_merged() -> Dict[str, float]:
     а не товарные позиции → мёртвый запас был ложно завышен.
     """
     _SKIP_MANAGERS = {"", "не определён", "неизвестно"}
-    files = sorted(JSON_DIR.glob("sales_*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    files = sorted(JSON_DIR.glob("sales_*.json"), key=_mtime, reverse=True)
 
     # Шаг 1: ищем свежайший ПЕРИОД-файл среди индивидуальных
     best_period: Optional[str] = None
