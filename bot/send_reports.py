@@ -742,11 +742,11 @@ def _admins_set() -> set[int]:
     admins = ROLES.get("admins") or []
     for x in admins:
         try: out.add(int(x))
-        except: pass
+        except (ValueError, TypeError): pass
     env_admin = os.getenv("ADMIN_CHAT_ID")
     if env_admin:
         try: out.add(int(env_admin))
-        except: pass
+        except (ValueError, TypeError): pass
     return out
 ADMINS = _admins_set()
 def is_admin(chat_id: int) -> bool:
@@ -1478,11 +1478,7 @@ async def send_weekly_ai_to_recipients(results: list, context):
     from telegram import InputFile
     
     admin_chat_id = int(os.getenv("ADMIN_CHAT_ID", "0"))
-    
-    SUBADMIN_NAME = "Алена"
-    SUBADMIN_CHAT_ID = MANAGERS_MAP.get(SUBADMIN_NAME)
-    SUBADMIN_SCOPE = ["Магира", "Оксана"]
-    
+
     # 1. Каждому менеджеру его AI
     for r in results:
         manager = r['manager']
@@ -1508,8 +1504,16 @@ async def send_weekly_ai_to_recipients(results: list, context):
         except Exception as e:
             log_event("weekly_ai_send_error", manager=manager, error=str(e))
     
-    # 2. Алене подшефных (свой она уже получила выше)
-    if SUBADMIN_CHAT_ID:
+    # 2. Субадминам — подшефные (из roles.json)
+    subadmin_scopes = ROLES.get("subadmin_scopes", {})
+    for sa_chat_str, scope_list in subadmin_scopes.items():
+        try:
+            sa_chat_id = int(sa_chat_str)
+        except (ValueError, TypeError):
+            continue
+        if not isinstance(scope_list, list):
+            continue
+        sa_name = get_my_manager_name(sa_chat_id) or sa_chat_str
         try:
             msg_lines = [
                 "📊 ЕЖЕНЕДЕЛЬНАЯ AI СВОДКА",
@@ -1517,34 +1521,33 @@ async def send_weekly_ai_to_recipients(results: list, context):
                 "",
                 "Ваши отчеты + подшефные:"
             ]
-            
+
             for r in results:
-                if r['manager'] == SUBADMIN_NAME or r['manager'] in SUBADMIN_SCOPE:
+                if r['manager'] == sa_name or r['manager'] in scope_list:
                     msg_lines.append(f"  ✅ {r['manager']} ({r['elapsed']:.1f} сек)")
-            
+
             await context.bot.send_message(
-                chat_id=SUBADMIN_CHAT_ID,
+                chat_id=sa_chat_id,
                 text="\n".join(msg_lines)
             )
-            
-            # Файлы подшефных
+
             for r in results:
-                if r['manager'] in SUBADMIN_SCOPE:
+                if r['manager'] in scope_list:
                     caption = f"🤖 AI Анализ подшефного: {r['manager']}"
-                    
+
                     with open(r['file'], 'rb') as f:
                         await context.bot.send_document(
-                            chat_id=SUBADMIN_CHAT_ID,
+                            chat_id=sa_chat_id,
                             document=InputFile(f, filename=r['file'].name),
                             caption=caption
                         )
-                    
+
                     await asyncio.sleep(1)
-            
-            log_event("weekly_ai_sent_to_subadmin", manager=SUBADMIN_NAME)
-            
+
+            log_event("weekly_ai_sent_to_subadmin", manager=sa_name)
+
         except Exception as e:
-            log_event("weekly_ai_subadmin_error", error=str(e))
+            log_event("weekly_ai_subadmin_error", subadmin=sa_name, error=str(e))
     
     # 3. Админу ВСЕ
     if admin_chat_id:
