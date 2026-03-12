@@ -27,6 +27,12 @@ ARTIFACTS  = [ROOT / "reports/html", ROOT / "reports/json",
               ROOT / "reports/pdf",  ROOT / "reports/ai"]
 XLSX_STORES = [ROOT / "reports/excel", ROOT / "reports/queue"]
 
+def _mtime(p: Path) -> float:
+    try:
+        return p.stat().st_mtime
+    except (FileNotFoundError, OSError):
+        return 0.0
+
 def _env_int(name: str, default: int) -> int:
     try:
         return int(os.getenv(name, "").strip() or default)
@@ -67,7 +73,7 @@ def purge_older_than(files, cutoff, dry_run=False):
                 removed.append(f)
         except Exception:
             continue
-    removed.sort(key=lambda p: p.stat().st_mtime)
+    removed.sort(key=_mtime)
     for f in removed:
         logging.info("TTL REMOVE: %s", f)
         if not dry_run:
@@ -79,7 +85,7 @@ def purge_older_than(files, cutoff, dry_run=False):
 
 def purge_over_cap(files, cap_bytes, dry_run=False):
     files = [f for f in files if f.exists()]
-    files.sort(key=lambda p: p.stat().st_mtime)  # старые сначала
+    files.sort(key=_mtime)  # старые сначала
     current = total_size(files)
     removed = 0
     for f in files:

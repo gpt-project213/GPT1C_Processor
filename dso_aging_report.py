@@ -119,7 +119,7 @@ def load_best_sales_json(min_clients: int = 3,
     2. Fallback: файл с max(revenue) — логируем предупреждение
     """
     import re as _re
-    files = sorted(JSON_DIR.glob("sales_*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    files = sorted(JSON_DIR.glob("sales_*.json"), key=_mtime, reverse=True)
     d_min = _parse_period_date(debt_period_min or "")
     d_max = _parse_period_date(debt_period_max or "")
 

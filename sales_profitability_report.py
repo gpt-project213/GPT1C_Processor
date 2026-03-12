@@ -58,6 +58,13 @@ LOG = logging.getLogger("sales_profitability")
 __VERSION__ = "1.0.4"
 NBSP = "\u202f"
 
+
+def _mtime(p: Path) -> float:
+    try:
+        return p.stat().st_mtime
+    except (FileNotFoundError, OSError):
+        return 0.0
+
 # Пороги маржи
 MARGIN_LOSS = 0.0        # < 0% = убыток
 MARGIN_CRITICAL = 5.0    # < 5% = критично
@@ -125,7 +132,7 @@ def calculate_price_adjustment(current_margin: float, target_margin: float = 10.
 # Загрузка JSON
 def load_latest_sales() -> Optional[Dict[str, Any]]:
     """Загрузить sales JSON с МАКСИМАЛЬНОЙ выручкой (устраняет выбор мелкого менеджера по mtime)."""
-    files = sorted(JSON_DIR.glob("sales_*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    files = sorted(JSON_DIR.glob("sales_*.json"), key=_mtime, reverse=True)
     if not files:
         LOG.error("Не найдены файлы sales_*.json")
         return None
@@ -159,7 +166,7 @@ def load_latest_sales() -> Optional[Dict[str, Any]]:
 
 def load_latest_gross() -> Optional[Dict[str, Any]]:
     """Загрузить последний gross JSON"""
-    files = sorted(JSON_DIR.glob("gross_*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    files = sorted(JSON_DIR.glob("gross_*.json"), key=_mtime, reverse=True)
     if not files:
         LOG.error("Не найдены файлы gross_*.json")
         return None

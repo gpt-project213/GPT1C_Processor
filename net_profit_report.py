@@ -58,6 +58,13 @@ LOG = logging.getLogger("net_profit")
 __VERSION__ = "1.2.6"
 NBSP = "\u202f"
 
+
+def _mtime(p: Path) -> float:
+    try:
+        return p.stat().st_mtime
+    except (FileNotFoundError, OSError):
+        return 0.0
+
 MONTHS_RU = {
     "января": 1, "февраля": 2, "марта": 3, "апреля": 4,
     "мая": 5, "июня": 6, "июля": 7, "августа": 8,
@@ -111,14 +118,14 @@ def extract_period_from_json(data: Dict[str, Any]) -> str:
 
 def load_all_jsons(pattern: str) -> List[Dict[str, Any]]:
     """Загрузить все JSON по паттерну, отсортированные по mtime (новые первые)."""
-    files = sorted(JSON_DIR.glob(pattern), key=lambda p: p.stat().st_mtime, reverse=True)
+    files = sorted(JSON_DIR.glob(pattern), key=_mtime, reverse=True)
     result = []
     for path in files:
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             data["__source_path__"] = str(path)
-            data["__mtime__"] = path.stat().st_mtime
+            data["__mtime__"] = _mtime(path)
             result.append(data)
         except Exception as e:
             LOG.warning(f"Ошибка чтения {path.name}: {e}")
