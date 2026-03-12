@@ -127,7 +127,7 @@ def load_all_jsons_merged(pattern: str, min_clients: int = 0, skip_keywords: lis
                 LOG.info(f"Пропускаю {path.name}: period '{data.get('period','')}' ≠ '{reference_period}'")
                 continue
             clients = data.get("clients", [])
-            if len(clients) < min_clients:
+            if len(clients) < 1:   # порог мёржа = 1, не min_clients
                 continue
             for c in clients:
                 c["_manager"] = mgr

@@ -70,11 +70,12 @@ def _mtime(p: Path) -> float:
 # ──────────────────────────────────────────────────────────────────
 def load_all_jsons_merged(pattern: str, min_clients: int = 0, skip_keywords: list = None) -> Optional[Dict[str, Any]]:
     """
-    v1.1.1: Загружает ВСЕ sales JSON за один период и мёржит клиентов.
+    v1.1.5: Загружает ВСЕ sales JSON за один период и мёржит клиентов.
 
-    Исправляет два бага:
-    1. Раньше брался только один JSON → только один менеджер в отчёте
-    2. Каждый client помечается "_manager" из поля JSON → без prefix-guessing
+    Правило min_clients:
+    - Для выбора ЭТАЛОНА (шаг 1): применяется как есть (≥ min_clients)
+    - Для МЁРЖА (шаг 3): всегда min=1, чтобы менеджеры с малым числом клиентов
+      в дневных файлах (Алена=1, Ергали=2) не пропадали из отчёта.
     """
     files = sorted(JSON_DIR.glob(pattern), key=_mtime, reverse=True)
     if not files:
@@ -147,7 +148,7 @@ def load_all_jsons_merged(pattern: str, min_clients: int = 0, skip_keywords: lis
                 LOG.info(f"Пропускаю {path.name}: period '{data.get('period','')}' ≠ '{reference_period}'")
                 continue
             clients = data.get("clients", [])
-            if len(clients) < min_clients:
+            if len(clients) < 1:   # порог мёржа = 1, не min_clients
                 continue
             for c in clients:
                 c["_manager"] = mgr
