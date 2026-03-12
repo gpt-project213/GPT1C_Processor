@@ -70,6 +70,10 @@ def load_all_jsons_merged(pattern: str, min_clients: int = 0, skip_keywords: lis
         LOG.error(f"Нет JSON файлов по паттерну: {pattern}")
         return None
 
+    # Сводные файлы (без реального менеджера) пропускаем.
+    # В сводном Excel менеджер отсутствует — это норма, не баг.
+    _SKIP_MANAGERS = {"", "не определён", "неизвестно"}
+
     reference_period = None
     reference_data   = None
     reference_path   = None
@@ -80,6 +84,10 @@ def load_all_jsons_merged(pattern: str, min_clients: int = 0, skip_keywords: lis
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
+            mgr = (data.get("manager") or "").strip().lower()
+            if mgr in _SKIP_MANAGERS:
+                LOG.debug(f"Пропускаю сводный файл (нет менеджера): {path.name}")
+                continue
             if len(data.get("clients", [])) < min_clients:
                 LOG.warning(f"Пропускаю {path.name}: клиентов={len(data.get('clients',[]))} < {min_clients}")
                 continue
@@ -111,13 +119,16 @@ def load_all_jsons_merged(pattern: str, min_clients: int = 0, skip_keywords: lis
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
+            mgr = (data.get("manager") or "").strip()
+            if mgr.lower() in _SKIP_MANAGERS:
+                LOG.debug(f"Пропускаю сводный при добавлении: {path.name}")
+                continue
             if data.get("period", "") != reference_period:
                 LOG.info(f"Пропускаю {path.name}: period '{data.get('period','')}' ≠ '{reference_period}'")
                 continue
             clients = data.get("clients", [])
             if len(clients) < min_clients:
                 continue
-            mgr = data.get("manager", "")
             for c in clients:
                 c["_manager"] = mgr
             merged_clients.extend(clients)
