@@ -601,15 +601,36 @@ class SilenceAlert:
 
     def _get_all_debt_reports(self, reports_dir: Path, manager_name: str) -> List[Path]:
         """
-        Возвращает все файлы дебиторки менеджера, отсортированные
-        по периоду данных (старые → новые).
+        Возвращает все файлы типа 'Детальный Дебиторы' для менеджера,
+        отсортированные по периоду данных (старые → новые).
+
+        Намеренно ограничивается только этим типом отчёта — не смешивает
+        с 'Ведомость по взаиморасчетам' и другими форматами, у которых
+        другая HTML-структура и другие номера в имени файла.
         """
-        pattern = f"debt_ext_Детальный_Дебиторы_{manager_name}*.html"
-        files = list(reports_dir.glob(pattern))
+        # Ищем с пробелами и с подчёркиваниями — 1С генерирует оба варианта
+        seen: dict = {}
+        for pattern in [
+            f"debt_ext_Детальный Дебиторы {manager_name}*.html",
+            f"debt_ext_Детальный_Дебиторы_{manager_name}*.html",
+            f"debt_ext_Детальный Дебиторы_{manager_name}*.html",
+            f"debt_ext_Детальный_Дебиторы {manager_name}*.html",
+        ]:
+            for f in reports_dir.glob(pattern):
+                seen[f.name] = f
+
+        files = list(seen.values())
+
         if not files:
-            files = list(reports_dir.glob(f"debt_ext*{manager_name}*.html"))
+            # Резерв: берём только файлы с "детальный" в имени
+            files = [
+                f for f in reports_dir.glob(f"debt_ext*{manager_name}*.html")
+                if "детальный" in f.name.lower()
+            ]
+
         if not files:
             return []
+
         return sorted(files, key=lambda p: (
             self._period_sort_key(p, self.parse_report_date(p)),
             p.stat().st_mtime
