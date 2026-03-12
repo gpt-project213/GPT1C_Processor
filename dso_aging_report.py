@@ -161,34 +161,106 @@ def load_best_sales_json(min_clients: int = 3,
             return data
     return None
 
-def load_best_debt_json() -> Optional[Dict[str, Any]]:
-    """Сначала ищет debt_*.json (simple), иначе берёт debt_ext_*.json и упрощает до формата debt_*"""
-    debt = load_latest_json("debt_*.json")
-    if debt:
-        return debt
-    ext = load_latest_json("debt_ext_*.json")
-    if not ext:
-        return None
-    # debt_ext хранит clients в расширенном виде — оставляем client/debt
-    simple = {
-        "clients": [],
-        "total_debt": (ext.get("aggregates") or {}).get("close"),
-        "period_min": ext.get("period_min"),
-        "period_max": ext.get("period_max"),
-        "manager": ext.get("manager"),
-        "__source_ext_json__": ext.get("__source_path__") if isinstance(ext, dict) else None,
-    }
+def _ext_to_simple_clients(ext: dict) -> list:
+    """Конвертирует clients из debt_ext формата в упрощённый."""
+    result = []
     for c in (ext.get("clients") or []):
         if not isinstance(c, dict):
             continue
-        simple["clients"].append({
-            "client": c.get("client"),
-            "debt": c.get("debt", c.get("closing")),
+        result.append({
+            "client":  c.get("client"),
+            "debt":    c.get("debt", c.get("closing")),
             "opening": c.get("opening"),
-            "debit": c.get("debit"),
-            "credit": c.get("credit"),
+            "debit":   c.get("debit"),
+            "credit":  c.get("credit"),
+            "days_silence": c.get("days_silence"),
         })
-    return simple
+    return result
+
+
+def load_best_debt_json() -> Optional[Dict[str, Any]]:
+    """
+    Мёржит ВСЕ debt_ext_*.json файлы с наиболее свежим period_max.
+
+    Проблема: при одинаковом mtime load_latest_json возвращал только ОДИН
+    файл (напр. только Оксану), и DSO генерировался только для одного менеджера.
+    Теперь берём все файлы, у которых period_max = макс. period_max по архиву,
+    и объединяем клиентов из всех — DSO покрывает всех менеджеров.
+    """
+    files = sorted(JSON_DIR.glob("debt_ext_*.json"), key=_mtime, reverse=True)
+    if not files:
+        LOG.error("Нет debt_ext_*.json файлов")
+        return None
+
+    # Шаг 1: определяем самый свежий period_max (сравниваем как даты, не строки)
+    best_period_max      = None
+    best_period_max_date = None
+    for path in files:
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+            pmax = data.get("period_max") or ""
+            if not pmax:
+                continue
+            pmax_date = _parse_period_date(pmax)
+            if pmax_date is None:
+                continue
+            if best_period_max_date is None or pmax_date > best_period_max_date:
+                best_period_max      = pmax
+                best_period_max_date = pmax_date
+        except Exception as e:
+            LOG.warning("load_best_debt_json: ошибка чтения %s: %s", path.name, e)
+
+    if not best_period_max:
+        LOG.warning("load_best_debt_json: не удалось определить period_max, беру первый файл")
+        try:
+            with open(files[0], "r", encoding="utf-8") as fh:
+                ext = json.load(fh)
+            return {"clients": _ext_to_simple_clients(ext),
+                    "total_debt": (ext.get("aggregates") or {}).get("close"),
+                    "period_min": ext.get("period_min"),
+                    "period_max": ext.get("period_max"),
+                    "manager": ext.get("manager")}
+        except Exception:
+            return None
+
+    # Шаг 2: мёржим всех клиентов из файлов с этим period_max
+    merged_clients: list = []
+    merged_total   = 0.0
+    ref_period_min = None
+    loaded = 0
+    seen_clients: set = set()
+
+    for path in files:
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+            if data.get("period_max") != best_period_max:
+                continue
+            clients = _ext_to_simple_clients(data)
+            for c in clients:
+                key = (c.get("client") or "").strip().lower()
+                if key and key not in seen_clients:
+                    seen_clients.add(key)
+                    merged_clients.append(c)
+            total = (data.get("aggregates") or {}).get("close") or 0.0
+            merged_total += float(total)
+            if ref_period_min is None:
+                ref_period_min = data.get("period_min")
+            loaded += 1
+            LOG.info("load_best_debt_json: добавляю %s (period %s - %s, %d клиентов)",
+                     path.name, data.get("period_min"), data.get("period_max"), len(clients))
+        except Exception as e:
+            LOG.warning("load_best_debt_json: ошибка %s: %s", path.name, e)
+
+    LOG.info("load_best_debt_json: итого файлов=%d клиентов=%d period_max=%s",
+             loaded, len(merged_clients), best_period_max)
+    return {
+        "clients":    merged_clients,
+        "total_debt": merged_total,
+        "period_min": ref_period_min,
+        "period_max": best_period_max,
+    }
 
 def fmt_money(x: float) -> str:
     return f"{float(x):,.0f}".replace(",", NBSP) + " ₸"
