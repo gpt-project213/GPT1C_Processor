@@ -505,11 +505,28 @@ async def send_analytics_menu(
     text: str = "✅ *Отчёт отправлен!*\n\n📈 *АНАЛИТИКА* — выберите отчёт:",
 ) -> None:
     """После отправки аналитического отчёта возвращает в меню аналитики."""
-    # Клавиатура строится в _build_analytics_kb, см. cmd_analytics
     kb = _build_analytics_kb(user_role, chat_id)
     if not kb:
         await send_main_menu(context, chat_id, user_role)
         return
+    await hide_main_menu(context, chat_id)
+    try:
+        msg = await context.bot.send_message(
+            chat_id=chat_id, text=text, reply_markup=kb, parse_mode="Markdown"
+        )
+        _menu_set(chat_id, msg.message_id)
+    except Exception:
+        pass
+
+
+async def send_notify_menu(
+    context: "ContextTypes.DEFAULT_TYPE",
+    chat_id: int,
+    user_role: str,
+    text: str = "✅ *Готово!*\n\n🔔 *Уведомления сейчас* — выберите:",
+) -> None:
+    """После отправки уведомления 'сейчас' возвращает в раздел уведомлений."""
+    kb = kb_notify_menu(user_role)
     await hide_main_menu(context, chat_id)
     try:
         msg = await context.bot.send_message(
@@ -2332,9 +2349,10 @@ def kb_main(user_role: str, chat_id: int = 0) -> InlineKeyboardMarkup:
             [InlineKeyboardButton("🛒 Продажи", callback_data="menu_sales")],
             [InlineKeyboardButton("💰 Валовая", callback_data="menu_gross")],
             [InlineKeyboardButton("💸 Затраты", callback_data="menu_expenses")],
-            [InlineKeyboardButton("📈 АНАЛИТИКА", callback_data="menu_analytics")],  # 🆕 v9.4.9
+            [InlineKeyboardButton("📈 АНАЛИТИКА", callback_data="menu_analytics")],
+            [InlineKeyboardButton("🔔 Уведомления сейчас", callback_data="menu_notify")],
             [InlineKeyboardButton("🗄️ Архив", callback_data="archive|root")],
-            [InlineKeyboardButton("📈 Статистика", callback_data="show_stats")],  # v2.0
+            [InlineKeyboardButton("📈 Статистика", callback_data="show_stats")],
         ]
     elif user_role == "subadmin":
         rows = [
@@ -2343,7 +2361,8 @@ def kb_main(user_role: str, chat_id: int = 0) -> InlineKeyboardMarkup:
             [InlineKeyboardButton("🛒 Продажи", callback_data="menu_sales")],
             [InlineKeyboardButton("💰 Валовая", callback_data="submenu|GROSS_PCT")],
             [InlineKeyboardButton("💸 Затраты", callback_data="menu_expenses")],
-            [InlineKeyboardButton("📈 АНАЛИТИКА", callback_data="menu_analytics")],  # 🆕 v9.4.9
+            [InlineKeyboardButton("📈 АНАЛИТИКА", callback_data="menu_analytics")],
+            [InlineKeyboardButton("🔔 Уведомления сейчас", callback_data="menu_notify")],
             [InlineKeyboardButton("🗄️ Архив", callback_data="archive|root")],
         ]
     else:  # manager
@@ -2420,6 +2439,27 @@ def kb_choose_manager_new(action: str, scopes: List[str]) -> InlineKeyboardMarku
 
 def kb_open_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[InlineKeyboardButton("📱 Открыть меню", callback_data="back_main")]])
+
+
+def kb_notify_menu(user_role: str) -> InlineKeyboardMarkup:
+    """Раздел 'Уведомления сейчас' — принудительная отправка кратких сводок."""
+    rows: list = []
+    if user_role in ("admin", "subadmin"):
+        rows += [
+            [InlineKeyboardButton("🔔 Дебиторка сейчас",  callback_data="force|silence"),
+             InlineKeyboardButton("💸 Упущ. прибыль",     callback_data="force|oploss")],
+        ]
+    rows += [
+        [InlineKeyboardButton("🛒 Продажи сейчас",    callback_data="force|sales"),
+         InlineKeyboardButton("💰 Валовая сейчас",    callback_data="force|gross")],
+        [InlineKeyboardButton("📦 Остатки сейчас",    callback_data="force|inventory")],
+    ]
+    if user_role == "admin":
+        rows += [
+            [InlineKeyboardButton("💰 Чистая прибыль сейчас", callback_data="force|net_profit")],
+        ]
+    rows.append([InlineKeyboardButton("⬅️ Главное меню", callback_data="back_main")])
+    return InlineKeyboardMarkup(rows)
 
 # v9.4.28 ───────────────────────────────────────────────────
 def kb_ai_type_menu(user_role: str) -> InlineKeyboardMarkup:
@@ -3318,6 +3358,7 @@ FORCE_REPORT_TYPES = {
     "sales":     "🛒 Продажи",
     "gross":     "💰 Валовая",
     "inventory": "📦 Остатки",
+    "net_profit": "💰 Чистая прибыль",
 }
 
 async def force_report_to_user(report_type: str, chat_id: int, context) -> str:
@@ -3485,6 +3526,31 @@ async def force_report_to_user(report_type: str, chat_id: int, context) -> str:
                 return "📦 Нет данных остатков."
             data = summary.parse_inventory_html(latest_html)
             msg_text = summary.format_summary(data)
+
+        # ── ЧИСТАЯ ПРИБЫЛЬ (net_profit) ───────────────────────────────────────
+        elif report_type == "net_profit":
+            if role != "admin":
+                return "⛔ Чистая прибыль доступна только администратору."
+            # Ищем свежайший net_profit HTML (день или период)
+            np_files: List[Path] = []
+            for subdir in ["net_profit_day", "net_profit_mtd", ""]:
+                search = ANALYTICS_DIR / subdir if subdir else ANALYTICS_DIR
+                np_files += list(search.glob("net_profit*.html"))
+            if not np_files:
+                return "💰 Нет файлов чистой прибыли."
+            np_latest = max(np_files, key=lambda p: p.stat().st_mtime)
+            try:
+                with np_latest.open("rb") as fh:
+                    await context.bot.send_document(
+                        chat_id=chat_id,
+                        document=InputFile(fh, filename=np_latest.name),
+                        caption=f"💰 Чистая прибыль\n📄 {np_latest.name}",
+                        protect_content=True,
+                    )
+            except Exception as _e:
+                return f"💰 Ошибка отправки: {_e}"
+            logger.info(f"✅ force_report: net_profit отправлен chat_id={chat_id}")
+            return "✅ Чистая прибыль отправлена"
 
         else:
             return f"❓ Неизвестный тип отчёта: {report_type}"
@@ -4076,6 +4142,18 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # v9.4.27: Принудительная отправка отчёта
+    if data == "menu_notify":
+        kb = kb_notify_menu(user_role)
+        text_notify = "🔔 *Уведомления сейчас*\n\nВыберите отчёт для немедленной отправки:"
+        if hasattr(q, "message") and q.message:
+            try:
+                await _safe_edit_text(q.message, text_notify, reply_markup=kb, parse_mode="Markdown")
+            except Exception:
+                await send_notify_menu(context, chat_id, user_role, text=text_notify)
+        else:
+            await send_notify_menu(context, chat_id, user_role, text=text_notify)
+        return
+
     if data.startswith("force|"):
         report_type = data.split("|", 1)[1]
         await q.answer("⏳ Формирую отчёт...")
@@ -4084,8 +4162,8 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.answer(status, show_alert=False)
         except Exception:
             pass
-        # v9.4.33: Возвращаем в меню АНАЛИТИКИ (кнопки force находятся в аналитике)
-        await send_analytics_menu(context, chat_id, user_role, text="✅ Готово!\n\n📈 *АНАЛИТИКА* — выберите:")
+        # v9.4.33: Возвращаем в раздел УВЕДОМЛЕНИЙ (не в аналитику и не в главное)
+        await send_notify_menu(context, chat_id, user_role)
         return
 
     if data.startswith("expenses|"):
@@ -4511,37 +4589,22 @@ async def weekly_analytics_wrapper(context: ContextTypes.DEFAULT_TYPE):
     await weekly_analytics_job(context)
 
 def _build_analytics_kb(user_role: str, chat_id: int = 0) -> Optional[InlineKeyboardMarkup]:
-    """Строит клавиатуру меню аналитики в зависимости от роли пользователя."""
-    force_buttons = [
-        [
-            InlineKeyboardButton("🔔 Дебиторка сейчас",    callback_data="force|silence"),
-            InlineKeyboardButton("💸 Упущ. прибыль",       callback_data="force|oploss"),
-        ],
-        [
-            InlineKeyboardButton("🛒 Продажи сейчас",      callback_data="force|sales"),
-            InlineKeyboardButton("💰 Валовая сейчас",      callback_data="force|gross"),
-        ],
-        [
-            InlineKeyboardButton("📦 Остатки сейчас",      callback_data="force|inventory"),
-        ],
-    ]
+    """Строит клавиатуру меню аналитики — только HTML-отчёты, без force-кнопок."""
     if user_role == "admin":
         return InlineKeyboardMarkup([
             [InlineKeyboardButton("📊 Продажи+Рентабельность", callback_data="analytics|sales_profit")],
             [InlineKeyboardButton("💰 Чистая прибыль",         callback_data="analytics|net_profit_submenu")],
-            [InlineKeyboardButton("📦 Мертвый запас",          callback_data="analytics|turnover")],
+            [InlineKeyboardButton("📦 Мёртвый запас",          callback_data="analytics|turnover")],
             [InlineKeyboardButton("👥 RFM-клиенты",            callback_data="analytics|rfm")],
             [InlineKeyboardButton("🎯 Концентрация выручки",   callback_data="analytics|concentration")],
             [InlineKeyboardButton("💳 DSO+Aging",              callback_data="analytics|dso")],
             [InlineKeyboardButton("🤖 ИИ анализ",             callback_data="ai_type_menu")],
             [InlineKeyboardButton("🔄 Обновить аналитику",     callback_data="analytics|refresh")],
-            *force_buttons,
             [InlineKeyboardButton("🔙 Главное меню",           callback_data="back_main")],
         ])
     elif user_role == "subadmin":
         return InlineKeyboardMarkup([
             [InlineKeyboardButton("💳 DSO+Aging", callback_data="analytics|dso")],
-            *force_buttons,
             [InlineKeyboardButton("🔙 Главное меню", callback_data="back_main")],
         ])
     elif user_role == "manager":
@@ -4549,7 +4612,6 @@ def _build_analytics_kb(user_role: str, chat_id: int = 0) -> Optional[InlineKeyb
             [InlineKeyboardButton("📊 Продажи+Рентабельность", callback_data="analytics|sales_profit")],
             [InlineKeyboardButton("👥 RFM-клиенты",            callback_data="analytics|rfm")],
             [InlineKeyboardButton("🎯 Концентрация",           callback_data="analytics|concentration")],
-            *force_buttons,
             [InlineKeyboardButton("🔙 Главное меню",           callback_data="back_main")],
         ])
     return None
