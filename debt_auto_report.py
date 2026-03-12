@@ -54,13 +54,12 @@ RE_DOT_SUFFIX = re.compile(r"\.\d+$")
 RE_DATE_CELL  = re.compile(r"^\s*\d{2}\.\d{2}\.\d{4}\s*$")
 RE_MANAGER_FILTER = re.compile(r"контрагент\s+в\s+группе\s+из\s+списка\s*\(([^)]+)\)", re.I)
 
-# ВНУТРЕННИЕ ПОДРАЗДЕЛЕНИЯ ПО МЕНЕДЖЕРАМ (дополняйте при необходимости)
-INTERNAL_UNITS_MAP: dict[str, list[str]] = {
-    "Магира": ["Магира ОПТ"],
-    "Оксана": ["Оксана ОПТ"],
-    "Алена":  ["Алена ОПТ"],
-    "Ергали": ["Ергали ОПТ"],
-}
+def _build_internal_units_map() -> dict[str, list[str]]:
+    """Динамически строит маппинг менеджер → [ОПТ подразделение] из managers.json."""
+    from config import get_manager_names
+    return {name: [f"{name} ОПТ"] for name in get_manager_names()}
+
+INTERNAL_UNITS_MAP: dict[str, list[str]] = _build_internal_units_map()
 
 def slugify(s: str) -> str:
     s = str(s or "").strip().lower()

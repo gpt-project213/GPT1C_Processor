@@ -8,8 +8,10 @@ bot/user_tracker.py
 
 import json
 import logging
+import os
 from pathlib import Path
 from datetime import datetime
+from tempfile import NamedTemporaryFile
 from zoneinfo import ZoneInfo
 from typing import Dict, Any
 
@@ -31,13 +33,22 @@ def _load_analytics() -> Dict[str, Any]:
         return {"users": {}, "actions": []}
 
 def _save_analytics(data: Dict[str, Any]):
-    """Сохраняет данные аналитики в JSON"""
+    """Атомарно сохраняет данные аналитики в JSON через tmp + replace."""
+    tmp = None
     try:
         ANALYTICS_FILE.parent.mkdir(parents=True, exist_ok=True)
-        with open(ANALYTICS_FILE, 'w', encoding='utf-8') as f:
+        with NamedTemporaryFile("w", delete=False, encoding="utf-8",
+                                dir=ANALYTICS_FILE.parent, suffix=".tmp") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
+            tmp = f.name
+        os.replace(tmp, ANALYTICS_FILE)
     except Exception as e:
         logger.error(f"Ошибка сохранения аналитики: {e}")
+        if tmp:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
 
 def track_user(user_id: int, first_name: str, username: str = None):
     """
