@@ -52,7 +52,7 @@ def _bool_env(name: str, default: bool) -> bool:
 def _int_env(name: str, default: int) -> int:
     try:
         return int(os.getenv(name, "").strip() or default)
-    except Exception:
+    except (ValueError, TypeError):
         return default
 
 AI_TG_SPLIT   = _bool_env("AI_TG_SPLIT", True)

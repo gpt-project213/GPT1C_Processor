@@ -29,13 +29,13 @@ def _period_to_date(period_str: str) -> date_type:
     if m:
         try:
             return date_type(int(m.group(6)), int(m.group(5)), int(m.group(4)))
-        except Exception:
+        except (ValueError, TypeError):
             pass
     m = re.match(r'(\d{1,2})[./](\d{1,2})[./](\d{4})', s)
     if m:
         try:
             return date_type(int(m.group(3)), int(m.group(2)), int(m.group(1)))
-        except Exception:
+        except (ValueError, TypeError):
             pass
     m = re.match(r'(\d{1,2})\s+([а-яё]+)\s+(\d{4})', s.lower())
     if m:
@@ -43,7 +43,7 @@ def _period_to_date(period_str: str) -> date_type:
         if mon:
             try:
                 return date_type(int(m.group(3)), mon, int(m.group(1)))
-            except Exception:
+            except (ValueError, TypeError):
                 pass
     return date_type.min
 
