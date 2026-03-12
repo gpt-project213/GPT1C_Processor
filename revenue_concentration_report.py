@@ -163,16 +163,8 @@ def fmt_money(x: float) -> str:
     return f"{float(x):,.0f}".replace(",", NBSP) + " ₸"
 
 def get_manager_from_client(client_name: str) -> str:
-    client_upper = client_name.upper()
-    if client_upper.startswith("О "):
-        return "Оксана"
-    elif client_upper.startswith("М "):
-        return "Магира"
-    elif client_upper.startswith("Е "):
-        return "Ергали"
-    elif client_upper.startswith("А "):
-        return "Алена"
-    return "Неизвестно"
+    from config import get_manager_by_client_prefix
+    return get_manager_by_client_prefix(client_name)
 
 # ──────────────────────────────────────────────────────────────────
 def generate_report():

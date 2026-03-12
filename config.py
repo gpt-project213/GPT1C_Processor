@@ -159,6 +159,35 @@ MANAGERS_CFG: Dict[str, Any] = {
     "synonyms": _yaml_extra.get("synonyms") or {},
 }
 
+_SYSTEM_MANAGER_NAMES: frozenset = frozenset(
+    n.strip().lower() for n in os.getenv("SYSTEM_MANAGERS", "Минай").split(",") if n.strip()
+)
+
+_PREFIX_MAP: Dict[str, str] = {}
+for _name in _json_mgr:
+    _n = _name.strip()
+    if _n.lower() in _SYSTEM_MANAGER_NAMES or not _n:
+        continue
+    _letter = _n[0].upper()
+    _PREFIX_MAP.setdefault(_letter, _n)
+
+
+def get_manager_by_client_prefix(client_name: str) -> str:
+    """Маппинг клиента на менеджера по первой букве (соглашение 1С)."""
+    if not client_name or not client_name.strip():
+        return "Неизвестно"
+    letter = client_name.strip()[0].upper()
+    return _PREFIX_MAP.get(letter, "Неизвестно")
+
+
+def get_manager_names(*, exclude_system: bool = True) -> list[str]:
+    """Список имён менеджеров из managers.json."""
+    return [
+        n for n in _json_mgr
+        if not exclude_system or n.strip().lower() not in _SYSTEM_MANAGER_NAMES
+    ]
+
+
 # ── pattern_config.yaml (опционально) ─────────────────────────
 def load_pattern_config() -> Dict[str, Any]:
     cfg = _read_yaml(PATTERN_YAML)
