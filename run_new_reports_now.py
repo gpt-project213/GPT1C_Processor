@@ -1,4 +1,4 @@
-﻿import os, time, json
+import os, time, json
 from pathlib import Path
 from datetime import datetime
 import asyncio
@@ -19,7 +19,7 @@ async def main():
     try:
         if Path(NOTIFY_STATE_PATH).exists():
             Path(NOTIFY_STATE_PATH).unlink()
-    except Exception:
+    except OSError:
         pass
 
     watermark_time = time.time() - (SCAN_INTERVAL_MIN * 60 * 2)
@@ -44,7 +44,7 @@ async def main():
             # админу
             if ADMIN_CHAT_ID:
                 notifications.setdefault(ADMIN_CHAT_ID, []).append(f"📊 {manager}: {file.name}")
-        except Exception:
+        except (OSError, ValueError, KeyError, AttributeError, TypeError):
             continue
 
     sent_total = 0
