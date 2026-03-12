@@ -117,7 +117,7 @@ def main(argv=None):
     if hasattr(_sys.stdout, "reconfigure"):
         try:
             _sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-        except Exception:
+        except (OSError, ValueError):
             pass
 
     ap = argparse.ArgumentParser(description="Линтер жёстких путей")

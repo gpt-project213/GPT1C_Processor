@@ -80,7 +80,7 @@ def to_float(x: Any) -> float:
     try:
         v = float(s)
         return -v if neg else v
-    except Exception:
+    except (ValueError, TypeError):
         return float("nan")
 
 def slugify(text: str) -> str:
