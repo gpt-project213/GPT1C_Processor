@@ -2457,6 +2457,7 @@ def kb_notify_menu(user_role: str) -> InlineKeyboardMarkup:
     if user_role == "admin":
         rows += [
             [InlineKeyboardButton("💰 Чистая прибыль сейчас", callback_data="force|net_profit")],
+            [InlineKeyboardButton("📊 Рейтинг менеджеров",    callback_data="force|ranking")],
         ]
     rows.append([InlineKeyboardButton("⬅️ Главное меню", callback_data="back_main")])
     return InlineKeyboardMarkup(rows)
@@ -3353,12 +3354,13 @@ async def send_opportunity_loss_report(context=None):
 # ─────────────────────────────────────────────────────────────────
 
 FORCE_REPORT_TYPES = {
-    "silence":   "🔔 Дебиторка",
-    "oploss":    "💸 Упущенная прибыль",
-    "sales":     "🛒 Продажи",
-    "gross":     "💰 Валовая",
-    "inventory": "📦 Остатки",
+    "silence":    "🔔 Дебиторка",
+    "oploss":     "💸 Упущенная прибыль",
+    "sales":      "🛒 Продажи",
+    "gross":      "💰 Валовая",
+    "inventory":  "📦 Остатки",
     "net_profit": "💰 Чистая прибыль",
+    "ranking":    "📊 Рейтинг менеджеров",  # C9
 }
 
 async def force_report_to_user(report_type: str, chat_id: int, context) -> str:
@@ -3587,6 +3589,14 @@ async def force_report_to_user(report_type: str, chat_id: int, context) -> str:
             if not parts:
                 return "💰 Нет файлов чистой прибыли."
             msg_text = "\n\n".join(parts)
+
+        # ── РЕЙТИНГ МЕНЕДЖЕРОВ (C9) ───────────────────────────────────────────
+        elif report_type == "ranking":
+            if role != "admin":
+                return "⛔ Рейтинг менеджеров доступен только администратору."
+            msg_text = _build_manager_ranking(JSON_DIR, ANALYTICS_DIR)
+            if not msg_text:
+                return "📊 Нет данных для рейтинга менеджеров."
 
         else:
             return f"❓ Неизвестный тип отчёта: {report_type}"
@@ -4544,6 +4554,210 @@ async def post_init(app: Application):
 # 🆕 v9.4.9: БЛОК АНАЛИТИКИ
 # ═══════════════════════════════════════════════════════════════
 
+def _check_net_profit_negative(analytics_dir: Path) -> Optional[str]:
+    """
+    C1: Парсит последний net_profit_day HTML.
+    Возвращает алёрт если чистая прибыль отрицательная, иначе None.
+    """
+    import re as _re
+    try:
+        search = analytics_dir / "net_profit_day"
+        if not search.exists():
+            return None
+        files = sorted(search.glob("net_profit*.html"),
+                       key=lambda p: p.stat().st_mtime, reverse=True)
+        if not files:
+            return None
+        raw   = files[0].read_text(encoding="utf-8")
+        clean = _re.sub(r'<style[^>]*>.*?</style>', ' ', raw, flags=_re.S)
+        clean = _re.sub(r'<script[^>]*>.*?</script>', ' ', clean, flags=_re.S)
+        clean = _re.sub(r'<[^>]+>', ' ', clean)
+        clean = _re.sub(r'\s+', ' ', clean).strip()
+        # Ищем строку «Чистая прибыль  -123 456 ₸»
+        m = _re.search(r'Чистая прибыль\s+([\-\−\d\s\u202f,]+₸)', clean, _re.I)
+        if not m:
+            return None
+        val_str = m.group(1).strip()
+        if not (val_str.startswith('-') or val_str.startswith('\u2212')):
+            return None  # прибыль положительная — всё ок
+        dm      = _re.search(r'(\d{2}\.\d{2}\.\d{4})', clean)
+        date_s  = dm.group(1) if dm else "?"
+        return (
+            f"🚨 *ВНИМАНИЕ: Чистая прибыль в минусе*\n\n"
+            f"📅 За день: {date_s}\n"
+            f"❌ {val_str}\n\n"
+            f"Проверьте расходы, валовую прибыль, затраты."
+        )
+    except Exception:
+        return None
+
+
+def _build_manager_ranking(json_dir: Path, analytics_dir: Path) -> Optional[str]:
+    """
+    C9: Строит таблицу-рейтинг менеджеров по трём показателям:
+      • Продажи (выручка)  — из sales_*.json
+      • Дебиторка (долг)   — из debt_ext_*.json
+      • DSO (оценка)       — долг / (выручка / 30)
+    Возвращает строку для Telegram или None если данных нет.
+    """
+    import re as _re
+
+    # ── 1. Продажи по менеджерам ──────────────────────────────────────────────
+    sales_by_mgr: dict = {}  # name → revenue
+    sales_clients: dict = {}  # name → count
+    best_sales_date = None
+    best_sales_period = ""
+    try:
+        files = sorted(json_dir.glob("sales_*.json"),
+                       key=lambda p: p.stat().st_mtime, reverse=True)
+        # Находим лучший период
+        from datetime import date as _date
+        for path in files:
+            if "товар" in path.name.lower():
+                continue
+            with open(path, encoding="utf-8") as fh:
+                d = json.load(fh)
+            mgr = (d.get("manager") or "").strip()
+            if mgr in ("", "Не определён", "Неизвестно") or len(mgr) < 2:
+                continue
+            ps = (d.get("period") or "").strip()
+            if not ps:
+                continue
+            # Простой парсер: берём последнюю дату из строки периода
+            dm2 = _re.findall(r'(\d{1,2})[./](\d{1,2})[./](\d{4})', ps)
+            if dm2:
+                dd, mm, yyyy = dm2[-1]
+                try:
+                    pd = _date(int(yyyy), int(mm), int(dd))
+                    if best_sales_date is None or pd > best_sales_date:
+                        best_sales_date   = pd
+                        best_sales_period = ps
+                except Exception:
+                    pass
+        # Загружаем данные за лучший период
+        if best_sales_period:
+            for path in files:
+                if "товар" in path.name.lower():
+                    continue
+                with open(path, encoding="utf-8") as fh:
+                    d = json.load(fh)
+                mgr = (d.get("manager") or "").strip()
+                if mgr in ("", "Не определён", "Неизвестно") or len(mgr) < 2:
+                    continue
+                if (d.get("period") or "").strip() != best_sales_period:
+                    # Нечёткое сравнение по дате
+                    ps2 = (d.get("period") or "").strip()
+                    dm3 = _re.findall(r'(\d{1,2})[./](\d{1,2})[./](\d{4})', ps2)
+                    if not dm3:
+                        continue
+                    dd2, mm2, yyyy2 = dm3[-1]
+                    try:
+                        pd2 = _date(int(yyyy2), int(mm2), int(dd2))
+                        if pd2 != best_sales_date:
+                            continue
+                    except Exception:
+                        continue
+                rev = float(d.get("total_revenue", 0))
+                cnt = len(d.get("clients", []))
+                sales_by_mgr[mgr]  = sales_by_mgr.get(mgr, 0.0) + rev
+                sales_clients[mgr] = sales_clients.get(mgr, 0) + cnt
+    except Exception:
+        pass
+
+    # ── 2. Дебиторка по менеджерам ────────────────────────────────────────────
+    debt_by_mgr: dict = {}   # name → closing debt
+    debt_date = ""
+    try:
+        dfiles = sorted(json_dir.glob("debt_ext_*.json"),
+                        key=lambda p: p.stat().st_mtime, reverse=True)
+        # Находим свежий period_max
+        best_d = None
+        best_dstr = ""
+        for path in dfiles:
+            with open(path, encoding="utf-8") as fh:
+                d = json.load(fh)
+            pmax = (d.get("period_max") or "").strip()
+            dm2 = _re.findall(r'(\d{1,2})[./](\d{1,2})[./](\d{4})', pmax)
+            if dm2:
+                dd, mm, yyyy = dm2[-1]
+                try:
+                    from datetime import date as _date2
+                    pd = _date2(int(yyyy), int(mm), int(dd))
+                    if best_d is None or pd > best_d:
+                        best_d    = pd
+                        best_dstr = pmax
+                except Exception:
+                    pass
+        # Суммируем долг каждого менеджера
+        for path in dfiles:
+            with open(path, encoding="utf-8") as fh:
+                d = json.load(fh)
+            pmax = (d.get("period_max") or "").strip()
+            if pmax != best_dstr:
+                continue
+            mgr = (d.get("manager") or "").strip()
+            if not mgr or mgr in ("Не определён", "Неизвестно") or len(mgr) < 2:
+                continue
+            agg_close = float((d.get("aggregates") or {}).get("close", 0) or 0)
+            if agg_close <= 0:
+                continue  # пропускаем кредитовые/сводные записи
+            debt_by_mgr[mgr] = debt_by_mgr.get(mgr, 0.0) + agg_close
+            debt_date = best_dstr
+    except Exception:
+        pass
+
+    if not sales_by_mgr and not debt_by_mgr:
+        return None
+
+    # ── 3. Форматирование таблицы ─────────────────────────────────────────────
+    all_mgrs = sorted(
+        set(list(sales_by_mgr.keys()) + list(debt_by_mgr.keys()))
+    )
+    # Сортируем по выручке desc
+    all_mgrs.sort(key=lambda n: sales_by_mgr.get(n, 0), reverse=True)
+
+    SEP    = "─" * 34
+    lines  = ["📊 *РЕЙТИНГ МЕНЕДЖЕРОВ*"]
+    if best_sales_period:
+        lines.append(f"🛒 Продажи: {best_sales_period}")
+    if debt_date:
+        lines.append(f"💳 Долг на: {debt_date}")
+    lines.append(SEP)
+
+    medals = ["🥇", "🥈", "🥉"]
+
+    def _fmt(v: float) -> str:
+        if v >= 1_000_000:
+            return f"{v/1_000_000:.1f}М"
+        if v >= 1_000:
+            return f"{v/1_000:.0f}К"
+        return f"{v:.0f}"
+
+    for i, mgr in enumerate(all_mgrs):
+        rev   = sales_by_mgr.get(mgr, 0.0)
+        debt  = debt_by_mgr.get(mgr, 0.0)
+        cnt   = sales_clients.get(mgr, 0)
+        medal = medals[i] if i < 3 else "  "
+        # DSO ≈ долг / (выручка / 30)
+        dso_s = ""
+        if rev > 0 and debt > 0:
+            dso = debt / (rev / 30)
+            dso_s = f"  DSO≈{dso:.0f}д"
+        rev_s  = f"💰{_fmt(rev)}" if rev > 0 else "—"
+        debt_s = f"💳{_fmt(debt)}" if debt > 0 else "—"
+        lines.append(f"{medal} {mgr:<9}  {rev_s}  {debt_s}{dso_s}")
+        if cnt > 0:
+            lines[-1] += f"  ({cnt}кл)"
+
+    lines.append(SEP)
+    total_rev  = sum(sales_by_mgr.values())
+    total_debt = sum(debt_by_mgr.values())
+    if total_rev > 0:
+        lines.append(f"ИТОГО:  💰{_fmt(total_rev)}  💳{_fmt(total_debt)}")
+
+    return "\n".join(lines)
+
+
 async def weekly_analytics_job(context):
     """v9.4.26: Генерация аналитических отчётов + уведомление admin/subadmin + alert если нет expenses"""
     log_event("weekly_analytics_start")
@@ -4587,6 +4801,15 @@ async def weekly_analytics_job(context):
                     await bot.send_message(ADMIN_CHAT_ID, msg, parse_mode="Markdown")
                 except Exception as notify_err:
                     log_event("analytics_notify_error", chat_id=ADMIN_CHAT_ID, error=str(notify_err), level="WARNING")
+
+                # C1: Alert если чистая прибыль отрицательная (по данным последнего отчёта)
+                np_neg_alert = _check_net_profit_negative(ANALYTICS_DIR)
+                if np_neg_alert:
+                    try:
+                        await bot.send_message(ADMIN_CHAT_ID, np_neg_alert, parse_mode="Markdown")
+                        log_event("net_profit_negative_alert_sent")
+                    except Exception as _e:
+                        log_event("net_profit_negative_alert_error", error=str(_e), level="WARNING")
 
                 # v9.4.26 Task G: alert если net_profit_report не смог рассчитать
                 if net_profit_failed:

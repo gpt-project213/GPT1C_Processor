@@ -1,8 +1,11 @@
 """
 Модуль для генерации кратких сводок по продажам
 
-Версия: 1.3.1 (2026-03-10)
+Версия: 1.5 (2026-03-12)
 ─────────────────────────────────────────────────
+v1.5: C4 — тренд неделя-к-неделе в build_admin_sales_summary
+  - get_all_periods_sorted() — список всех периодов по убыванию даты
+  - build_admin_sales_summary() — дополняется строкой «vs пред.»
 v1.3.1: bare except: → except (ValueError, TypeError): в parse_sales_html (Bug S6)
 v1.3: load_all_managers_json сравнивает периоды по ДАТАМ, не по строкам
   - _normalize_period_dates() — парсит любой формат периода в (start, end)
@@ -431,11 +434,40 @@ class SalesSummary:
             logger.info(f"📅 Последний период продаж из JSON: {best_period}")
         return best_period
 
+    def get_all_periods_sorted(self, json_dir: Path,
+                               known_managers: Optional[set] = None) -> List[str]:
+        """
+        v1.5: Возвращает все уникальные периоды продаж, отсортированные по убыванию даты.
+        Используется для расчёта тренда неделя-к-неделе.
+        """
+        seen: dict = {}  # date_type → period_str (первый встреченный вариант строки)
+        for path in sorted(json_dir.glob("sales_*.json"),
+                           key=lambda p: p.stat().st_mtime, reverse=True):
+            if "товар" in path.name.lower():
+                continue
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                mgr = (data.get("manager") or "").strip()
+                if mgr in ("", "Не определён", "Неизвестно"):
+                    continue
+                if known_managers and mgr.lower() not in known_managers:
+                    continue
+                period_str = (data.get("period") or "").strip()
+                if not period_str:
+                    continue
+                d = _period_to_date(period_str)
+                if d != date_type.min and d not in seen:
+                    seen[d] = period_str
+            except Exception:
+                pass
+        return [v for _, v in sorted(seen.items(), reverse=True)]
+
     def build_admin_sales_summary(self, json_dir: Path,
                                   known_managers: Optional[set] = None) -> Optional[str]:
         """
-        v1.4: Строит краткую сводку для ADMIN агрегируя ВСЕ менеджеров за последний период.
-        Заменяет get_latest_sales_report + parse_sales_html + format_summary для admin.
+        v1.5: Строит краткую сводку для ADMIN агрегируя ВСЕ менеджеров за последний период.
+        Дополнительно добавляет тренд vs предыдущий период (C4).
         """
         period = self.get_latest_sales_period_from_json(json_dir, known_managers)
         if not period:
@@ -450,15 +482,38 @@ class SalesSummary:
             logger.warning(f"build_admin_sales_summary: нет данных менеджеров за {period}")
             return None
 
-        # Строим data-заглушку для format_admin_pipeline
         total_clients = sum(len(m.get("clients", [])) for m in all_managers)
+        current_revenue = sum(m["total_revenue"] for m in all_managers)
         data = {
             "date":          period,
-            "total_amount":  sum(m["total_revenue"] for m in all_managers),
+            "total_amount":  current_revenue,
             "clients_count": total_clients,
             "clients":       [],
         }
-        return self.format_admin_pipeline(data, all_managers)
+        result = self.format_admin_pipeline(data, all_managers)
+
+        # C4: Тренд неделя-к-неделе
+        try:
+            current_date = _period_to_date(period)
+            all_periods  = self.get_all_periods_sorted(json_dir, known_managers)
+            prev_period  = next(
+                (p for p in all_periods if _period_to_date(p) < current_date), None
+            )
+            if prev_period and current_revenue > 0:
+                prev_mgrs    = self.load_all_managers_json(json_dir, prev_period)
+                if known_managers:
+                    prev_mgrs = [m for m in prev_mgrs
+                                 if m["manager"].lower() in known_managers]
+                prev_revenue = sum(m["total_revenue"] for m in prev_mgrs)
+                if prev_revenue > 0:
+                    delta_pct = (current_revenue - prev_revenue) / prev_revenue * 100
+                    arrow     = "📈" if delta_pct >= 0 else "📉"
+                    sign      = "+" if delta_pct >= 0 else ""
+                    result   += f"\n{arrow} vs пред. период: {sign}{delta_pct:.1f}%"
+        except Exception:
+            pass
+
+        return result
 
 
     # ── v1.2: Pipeline-методы ──────────────────────────────────────────────────
