@@ -3531,26 +3531,62 @@ async def force_report_to_user(report_type: str, chat_id: int, context) -> str:
         elif report_type == "net_profit":
             if role != "admin":
                 return "⛔ Чистая прибыль доступна только администратору."
-            # Ищем свежайший net_profit HTML (день или период)
-            np_files: List[Path] = []
-            for subdir in ["net_profit_day", "net_profit_mtd", ""]:
-                search = ANALYTICS_DIR / subdir if subdir else ANALYTICS_DIR
-                np_files += list(search.glob("net_profit*.html"))
-            if not np_files:
+
+            def _parse_np_html(path: Path) -> Optional[str]:
+                """Парсит net_profit HTML → краткое текстовое уведомление."""
+                import re as _re
+                try:
+                    raw = path.read_text(encoding="utf-8")
+                except Exception:
+                    return None
+                # Убираем style/script, затем все теги
+                clean = _re.sub(r'<style[^>]*>.*?</style>', ' ', raw, flags=_re.S)
+                clean = _re.sub(r'<script[^>]*>.*?</script>', ' ', clean, flags=_re.S)
+                clean = _re.sub(r'<[^>]+>', ' ', clean)
+                clean = _re.sub(r'\s+', ' ', clean).strip()
+
+                def _get(pattern: str) -> str:
+                    m = _re.search(pattern, clean, _re.I)
+                    return m.group(1).strip() if m else "—"
+
+                # Период
+                ptype  = "За день" if "за день" in clean.lower() else "За период"
+                period = _get(r'(?:За день|За период)\s+📅\s*([^\s|]+(?:\s*[–-]\s*[^\s|]+)?)')
+                if period == "—":
+                    period = _get(r'(\d{2}\.\d{2}\.\d{4}(?:\s*[–-]\s*\d{2}\.\d{2}\.\d{4})?)')
+
+                revenue  = _get(r'Выручка\s+([\d\s\u202f,]+₸)')
+                gross    = _get(r'Валовая прибыль\s+([\d\s\u202f,]+₸)')
+                gross_m  = _get(r'Валовая прибыль[\s\S]{1,50}Маржа:\s*([\d.,\-]+%)')
+                expenses = _get(r'Расходы\s+([\d\s\u202f,]+₸)')
+                np_val   = _get(r'Чистая прибыль\s+([\-\d\s\u202f,]+₸)')
+                np_m     = _get(r'Чистая прибыль[\s\S]{1,50}Маржа:\s*([\-\d.,]+%)')
+                sign     = "✅" if "-" not in np_val else "❌"
+
+                return (
+                    f"💰 *ЧИСТАЯ ПРИБЫЛЬ — {ptype.upper()}*\n"
+                    f"📅 {period}\n\n"
+                    f"📈 Выручка:          {revenue}\n"
+                    f"💹 Валовая прибыль: {gross} ({gross_m})\n"
+                    f"💸 Расходы:          {expenses}\n"
+                    f"{'—'*28}\n"
+                    f"{sign} Чистая прибыль: {np_val} ({np_m})"
+                )
+
+            # Берём последние файлы за день И за период
+            parts: list = []
+            for subdir in ["net_profit_day", "net_profit_mtd"]:
+                search = ANALYTICS_DIR / subdir
+                files = sorted(search.glob("net_profit*.html"),
+                               key=lambda p: p.stat().st_mtime, reverse=True)
+                if files:
+                    parsed = _parse_np_html(files[0])
+                    if parsed:
+                        parts.append(parsed)
+
+            if not parts:
                 return "💰 Нет файлов чистой прибыли."
-            np_latest = max(np_files, key=lambda p: p.stat().st_mtime)
-            try:
-                with np_latest.open("rb") as fh:
-                    await context.bot.send_document(
-                        chat_id=chat_id,
-                        document=InputFile(fh, filename=np_latest.name),
-                        caption=f"💰 Чистая прибыль\n📄 {np_latest.name}",
-                        protect_content=True,
-                    )
-            except Exception as _e:
-                return f"💰 Ошибка отправки: {_e}"
-            logger.info(f"✅ force_report: net_profit отправлен chat_id={chat_id}")
-            return "✅ Чистая прибыль отправлена"
+            msg_text = "\n\n".join(parts)
 
         else:
             return f"❓ Неизвестный тип отчёта: {report_type}"
