@@ -58,7 +58,7 @@ def _log(msg: str, *, err: bool = False, extra: Dict[str, Any] | None = None) ->
     try:
         with (LOGS_DIR / "run_pipeline_all_mp.log").open("a", encoding="utf-8") as _f:
             _f.write(line + "\n")
-    except Exception:
+    except OSError:
         pass
 
 def _json_event(event: str, **kwargs) -> None:
@@ -138,7 +138,7 @@ def _release(work: Path) -> None:
     try:
         if work.exists():
             work.unlink()
-    except Exception:
+    except OSError:
         pass
 
 def _copy_to_active(work: Path) -> Path:
@@ -160,7 +160,7 @@ def _cleanup_active(active_copy: Path) -> None:
     try:
         if active_copy.exists():
             active_copy.unlink()
-    except Exception:
+    except OSError:
         pass
 
 def _move_to_processed(work: Path, original_name: str) -> bool:

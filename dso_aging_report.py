@@ -89,7 +89,7 @@ def _parse_period_date(s: str):
     for fmt in ("%d.%m.%Y", "%Y-%m-%d"):
         try:
             return _dt.strptime(s.strip(), fmt)
-        except Exception:
+        except ValueError:
             pass
     return None
 

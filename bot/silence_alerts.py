@@ -579,13 +579,13 @@ class SilenceAlert:
         if m:
             try:
                 return (int(m.group(6)), int(m.group(5)), int(m.group(4)))
-            except Exception:
+            except (ValueError, TypeError):
                 pass
         m2 = re.search(r'(\d{1,2})[./](\d{1,2})[./](\d{4})', date_str)
         if m2:
             try:
                 return (int(m2.group(3)), int(m2.group(2)), int(m2.group(1)))
-            except Exception:
+            except (ValueError, TypeError):
                 pass
         MONTHS = {"января":1,"февраля":2,"марта":3,"апреля":4,"мая":5,"июня":6,
                   "июля":7,"августа":8,"сентября":9,"октября":10,"ноября":11,"декабря":12}
@@ -595,7 +595,7 @@ class SilenceAlert:
             if mon:
                 try:
                     return (int(m3.group(3)), mon, int(m3.group(1)))
-                except Exception:
+                except (ValueError, TypeError):
                     pass
         return (0, 0, p.stat().st_mtime)
 

@@ -98,7 +98,7 @@ def to_float(x: Any) -> float:
     try:
         v = float(s)
         return -v if neg else v
-    except Exception:
+    except (ValueError, TypeError):
         return float("nan")
 
 def fmt_qty(v: float | int) -> str:
@@ -113,7 +113,7 @@ def fmt_qty(v: float | int) -> str:
     try:
         i_fmt = f"{int(i):,}".replace(",", NBSP)
         return f"{i_fmt}.{d}" if d else i_fmt
-    except Exception:
+    except (ValueError, TypeError):
         return s
 
 def fmt_int(v: float | int) -> str:
