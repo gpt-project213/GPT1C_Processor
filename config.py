@@ -9,7 +9,7 @@ config.py · v3.6.1 · 2026-03-10
 • debt_auto_report.py → import config, generated_at_tz, MANAGERS_CFG
 
 Инварианты из ТЗ:
-• HTML → reports/html; JSON → reports/json; PDF → reports/pdf
+• HTML → reports/html; JSON → reports/json
 • Логи: logs/<module>_YYYYMMDD_HHMMSS.log; "%(asctime)s, %(levelname)s %(message)s"; TZ из .env (по умолчанию Asia/Almaty)
 • Футер: "Сформировано: DD.MM.YYYY HH:MM (Asia/Almaty) | Версия: …"
 • reports_state.json — в корне проекта
@@ -40,7 +40,6 @@ TZ = ZoneInfo(os.getenv("TZ", DEFAULT_TZ) or DEFAULT_TZ)
 REPORTS_DIR: Path       = ROOT / "reports"
 HTML_DIR: Path          = REPORTS_DIR / "html"
 JSON_DIR: Path          = REPORTS_DIR / "json"
-PDF_DIR: Path           = REPORTS_DIR / "pdf"
 EXCEL_CLEAN_DIR: Path   = REPORTS_DIR / "excel"
 QUEUE_DIR: Path         = REPORTS_DIR / "queue"
 TEMPLATES_DIR: Path     = ROOT / "templates"
@@ -57,7 +56,7 @@ PATTERN_YAML: Path      = CONFIG_DIR / "pattern_config.yaml"     # опцион�
 
 
 def ensure_dirs() -> None:
-    for p in (REPORTS_DIR, HTML_DIR, JSON_DIR, PDF_DIR, EXCEL_CLEAN_DIR, QUEUE_DIR, LOGS_DIR, CACHE_DIR, CONFIG_DIR):
+    for p in (REPORTS_DIR, HTML_DIR, JSON_DIR, EXCEL_CLEAN_DIR, QUEUE_DIR, LOGS_DIR, CACHE_DIR, CONFIG_DIR):
         p.mkdir(parents=True, exist_ok=True)
 
 ensure_dirs()

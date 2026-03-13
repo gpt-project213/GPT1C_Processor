@@ -355,6 +355,30 @@ logger = logging.getLogger(__name__)
 TG_MAX_MSG = 4000  # чуть меньше 4096 — запас на переносы
 
 
+async def _send_auto(context, chat_id: int, text: str,
+                     parse_mode=None, delay_hours: int = 24) -> None:
+    """Отправляет сообщение и сразу ставит его в очередь на удаление через delay_hours."""
+    try:
+        msg = await context.bot.send_message(chat_id=chat_id, text=text,
+                                             parse_mode=parse_mode)
+        schedule_message_deletion(chat_id, msg.message_id,
+                                  msg.date.timestamp(), delay_hours=delay_hours)
+    except Exception as e:
+        logger.error("_send_auto chat_id=%s: %s", chat_id, e)
+
+
+async def _doc_auto(context, chat_id: int, document, caption: str = "",
+                    delay_hours: int = 24) -> None:
+    """Отправляет документ и сразу ставит его в очередь на удаление через delay_hours."""
+    try:
+        msg = await context.bot.send_document(chat_id=chat_id, document=document,
+                                              caption=caption)
+        schedule_message_deletion(chat_id, msg.message_id,
+                                  msg.date.timestamp(), delay_hours=delay_hours)
+    except Exception as e:
+        logger.error("_doc_auto chat_id=%s: %s", chat_id, e)
+
+
 async def _tg_send_long(context, chat_id: int, text: str,
                         parse_mode=None, delay_hours: int = 24) -> None:
     """
@@ -1492,12 +1516,9 @@ async def send_weekly_ai_to_recipients(results: list, context):
             caption = f"🤖 Еженедельный AI анализ дебиторки"
             
             with open(r['file'], 'rb') as f:
-                await context.bot.send_document(
-                    chat_id=chat_id,
-                    document=InputFile(f, filename=r['file'].name),
-                    caption=caption
-                )
-            
+                await _doc_auto(context, chat_id,
+                    InputFile(f, filename=r['file'].name), caption=caption)
+
             log_event("weekly_ai_sent_to_manager", manager=manager)
             await asyncio.sleep(1)
             
@@ -1526,21 +1547,15 @@ async def send_weekly_ai_to_recipients(results: list, context):
                 if r['manager'] == sa_name or r['manager'] in scope_list:
                     msg_lines.append(f"  ✅ {r['manager']} ({r['elapsed']:.1f} сек)")
 
-            await context.bot.send_message(
-                chat_id=sa_chat_id,
-                text="\n".join(msg_lines)
-            )
+            await _send_auto(context, sa_chat_id, "\n".join(msg_lines))
 
             for r in results:
                 if r['manager'] in scope_list:
                     caption = f"🤖 AI Анализ подшефного: {r['manager']}"
 
                     with open(r['file'], 'rb') as f:
-                        await context.bot.send_document(
-                            chat_id=sa_chat_id,
-                            document=InputFile(f, filename=r['file'].name),
-                            caption=caption
-                        )
+                        await _doc_auto(context, sa_chat_id,
+                            InputFile(f, filename=r['file'].name), caption=caption)
 
                     await asyncio.sleep(1)
 
@@ -1562,20 +1577,14 @@ async def send_weekly_ai_to_recipients(results: list, context):
             for r in results:
                 msg_lines.append(f"  ✅ {r['manager']} ({r['elapsed']:.1f} сек)")
             
-            await context.bot.send_message(
-                chat_id=admin_chat_id,
-                text="\n".join(msg_lines)
-            )
-            
+            await _send_auto(context, admin_chat_id, "\n".join(msg_lines))
+
             for r in results:
                 caption = f"🤖 AI Анализ: {r['manager']}"
-                
+
                 with open(r['file'], 'rb') as f:
-                    await context.bot.send_document(
-                        chat_id=admin_chat_id,
-                        document=InputFile(f, filename=r['file'].name),
-                        caption=caption
-                    )
+                    await _doc_auto(context, admin_chat_id,
+                        InputFile(f, filename=r['file'].name), caption=caption)
                 
                 await asyncio.sleep(1)
             
@@ -2590,11 +2599,11 @@ async def send_with_acl(section: str, intended_mgr: str,
     log_user_request(chat_id, section, intended_mgr)
     
     if intended_mgr == "Сводный отчёт" and section_rus not in ("ОСТАТКИ",) and user_role != "admin":
-        await context.bot.send_message(chat_id, "⛔ Сводные отчёты по этому разделу доступны только администратору.")
+        await _send_auto(context, chat_id, "⛔ Сводные отчёты по этому разделу доступны только администратору.")
         log_user_delivery(chat_id, section, False)
         return
     if intended_mgr != "Сводный отчёт" and intended_mgr not in scopes:
-        await context.bot.send_message(chat_id, "⛔ Нет доступа к отчётам этого менеджера.")
+        await _send_auto(context, chat_id, "⛔ Нет доступа к отчётам этого менеджера.")
         log_user_delivery(chat_id, section, False)
         return
     p = find_report(section, intended_mgr if intended_mgr != "Сводный отчёт" else None)
@@ -2620,11 +2629,11 @@ async def send_with_acl(section: str, intended_mgr: str,
                       file=p.name, level="INFO")
     if not p or not p.exists():
         log_event("report_not_found", section=section, manager=intended_mgr)
-        await context.bot.send_message(chat_id, f"❌ Отчёт не найден: {section_rus} для '{intended_mgr}'.")
+        await _send_auto(context, chat_id, f"❌ Отчёт не найден: {section_rus} для '{intended_mgr}'.")
         return
     full_text = _read_full(p)
     real_mgr = _extract_manager(full_text, p.name)
-    
+
     if user_role != 'admin':
         is_intended_summary = (intended_mgr == "Сводный отчёт")
         is_real_summary = (real_mgr == "Сводный отчёт")
@@ -2632,11 +2641,11 @@ async def send_with_acl(section: str, intended_mgr: str,
         # т.к. это ожидаемое поведение (сводный отчёт показывается запросившему менеджеру)
         if not sales_summary_fallback:
             if is_intended_summary != is_real_summary:
-                await context.bot.send_message(chat_id, "⛔ Ошибка безопасности: найден отчёт другого типа.")
+                await _send_auto(context, chat_id, "⛔ Ошибка безопасности: найден отчёт другого типа.")
                 log_user_delivery(chat_id, section, False)
                 return
             if not is_intended_summary and normalize_manager_name(intended_mgr) != normalize_manager_name(real_mgr):
-                await context.bot.send_message(chat_id, "⛔ Ошибка безопасности: найден отчёт для другого менеджера.")
+                await _send_auto(context, chat_id, "⛔ Ошибка безопасности: найден отчёт для другого менеджера.")
                 log_user_delivery(chat_id, section, False)
                 return
     
@@ -2684,27 +2693,25 @@ async def send_with_acl(section: str, intended_mgr: str,
                 await asyncio.sleep(e.retry_after)
             else:
                 log_event("tg_send_error", section=section, error="RetryAfter exhausted")
-                await context.bot.send_message(chat_id, "⏳ Telegram перегружен, попробуйте позже.")
+                await _send_auto(context, chat_id, "⏳ Telegram перегружен, попробуйте позже.")
                 return
         except BadRequest as e:
             error_msg = str(e).lower()
             if "file is too big" in error_msg or "too large" in error_msg:
                 log_event("tg_file_too_big", section=section, file=p.name, size_mb=round(p.stat().st_size/1024/1024, 2))
-                await context.bot.send_message(
-                    chat_id, 
-                    f"⚠️ Файл слишком большой для отправки.\n📄 Имя: {p.name}\n📏 Размер: {round(p.stat().st_size/1024/1024, 1)} МБ"
-                )
+                await _send_auto(context, chat_id,
+                    f"⚠️ Файл слишком большой для отправки.\n📄 Имя: {p.name}\n📏 Размер: {round(p.stat().st_size/1024/1024, 1)} МБ")
                 return
             else:
                 log_event("tg_send_error", section=section, error=str(e))
-                await context.bot.send_message(chat_id, f"❌ Ошибка Telegram: {str(e)[:100]}")
+                await _send_auto(context, chat_id, f"❌ Ошибка Telegram: {str(e)[:100]}")
                 return
         except Exception as e:
             log_event("tg_send_error", section=section, manager=real_mgr, error=str(e))
             if attempt < max_retries - 1:
                 await asyncio.sleep(2)
             else:
-                await context.bot.send_message(chat_id, "❌ Ошибка при отправке файла.")
+                await _send_auto(context, chat_id, "❌ Ошибка при отправке файла.")
                 return
 
 # Блок 8_______________Фоновые задачи (pipeline + скрипты)__________________
@@ -3753,7 +3760,8 @@ async def new_reports_notifier(context: ContextTypes.DEFAULT_TYPE):
                     message += f"📊 {clean_report}\n"
                 if len(reports) > 10:
                     message += f"\n... и еще {len(reports)-10} отчетов"
-            await context.bot.send_message(chat_id=chat_id, text=message, reply_markup=kb_open_menu())
+            msg = await context.bot.send_message(chat_id=chat_id, text=message, reply_markup=kb_open_menu())
+            schedule_message_deletion(chat_id, msg.message_id, msg.date.timestamp(), delay_hours=24)
             log_event("notification_sent", chat_id=chat_id, reports_count=len(reports))
         except Exception as e:
             log_event("notification_error", chat_id=chat_id, error=str(e), level="ERROR")
@@ -4086,27 +4094,27 @@ async def cmd_health(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🕐 Last build: {datetime.fromtimestamp(_index_ts, tz=TZ).strftime('%H:%M:%S') if _index_ts else 'n/a'}\n"
         f"🗑️ Pending deletions: {pending_deletions}"
     )
-    await update.effective_chat.send_message(text)
+    await _send_auto(context, update.effective_chat.id, text)
 
 async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """v2.0: Статистика использования бота"""
     chat_id = update.effective_chat.id
-    
+
     if not is_admin(chat_id):
-        await update.effective_chat.send_message("⛔ Доступ запрещён.")
+        await _send_auto(context, chat_id, "⛔ Доступ запрещён.")
         return
-    
+
     if not get_stats:
-        await update.effective_chat.send_message("⚠️ Модуль аналитики не загружен.")
+        await _send_auto(context, chat_id, "⚠️ Модуль аналитики не загружен.")
         return
-    
+
     try:
         stats = get_stats()
         message = format_stats_message(stats)
-        await update.effective_chat.send_message(message, parse_mode="Markdown")
+        await _send_auto(context, chat_id, message, parse_mode="Markdown")
     except Exception as e:
         logger.error(f"Ошибка в cmd_stats: {e}", exc_info=True)
-        await update.effective_chat.send_message(f"❌ Ошибка при получении статистики: {e}")
+        await _send_auto(context, chat_id, f"❌ Ошибка при получении статистики: {e}")
 
 async def _safe_edit_text(msg, text: str, reply_markup=None, parse_mode: Optional[str] = None):
     try:
@@ -4252,7 +4260,7 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             stats = get_stats()
             message = format_stats_message(stats)
-            await context.bot.send_message(chat_id=chat_id, text=message, parse_mode="Markdown")
+            await _send_auto(context, chat_id, message, parse_mode="Markdown")
             await q.answer("✅ Статистика отправлена")
         except Exception as e:
             logger.error(f"Ошибка в show_stats: {e}", exc_info=True)
