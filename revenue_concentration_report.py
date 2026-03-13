@@ -261,6 +261,7 @@ th,td{{padding:8px 10px;border-bottom:1px solid #d0d9e8}}
 th{{background:#eef2f8;font-weight:600;text-align:left;border-bottom:2px solid #d0d9e8}}
 tr:hover td{{background:#f5f8fc}}
 h2{{color:#1a3a5c;margin-top:30px;font-size:17px}}
+.table-wrap{{overflow:auto;border:1px solid #d0d9e8;border-radius:8px;margin:10px 0}}
 .footer{{margin-top:20px;padding-top:12px;border-top:1px solid #d0d9e8;text-align:center;color:#64748b;font-size:11px}}
 .footer strong{{color:#1a3a5c}}
 </style>
@@ -279,7 +280,7 @@ h2{{color:#1a3a5c;margin-top:30px;font-size:17px}}
 </div>
 
 <h2>📊 Топ-5 клиентов</h2>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th style="width:40px">#</th>
@@ -291,7 +292,7 @@ h2{{color:#1a3a5c;margin-top:30px;font-size:17px}}
 <tbody>
 {top5_rows}
 </tbody>
-</table>
+</table></div>
 
 <div style="background:#f8f9fa;padding:20px;border-radius:8px;margin:30px 0">
 <div style="font-weight:600;margin-bottom:10px">💡 Рекомендация:</div>
@@ -340,6 +341,7 @@ th,td{{padding:8px 10px;border-bottom:1px solid #d0d9e8}}
 th{{background:#eef2f8;font-weight:600;text-align:left;border-bottom:2px solid #d0d9e8}}
 tr:hover td{{background:#f5f8fc}}
 h2{{color:#1a3a5c;margin-top:30px;font-size:17px}}
+.table-wrap{{overflow:auto;border:1px solid #d0d9e8;border-radius:8px;margin:10px 0}}
 .footer{{margin-top:20px;padding-top:12px;border-top:1px solid #d0d9e8;text-align:center;color:#64748b;font-size:11px}}
 .footer strong{{color:#1a3a5c}}
 </style>
@@ -369,7 +371,7 @@ h2{{color:#1a3a5c;margin-top:30px;font-size:17px}}
 <tbody>
 {top5_rows_pct}
 </tbody>
-</table>
+</table></div>
 
 <div class="footer"><strong>AI 1C PRO</strong> | revenue_concentration_report.py v{__VERSION__} | {datetime.now(TZ).strftime("%d.%m.%Y %H:%M")} (Asia/Almaty)</div>
 </div>

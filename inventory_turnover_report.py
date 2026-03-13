@@ -285,6 +285,7 @@ th,td{{padding:8px 10px;border-bottom:1px solid #d0d9e8;text-align:left}}
 th{{background:#eef2f8;font-weight:600;border-bottom:2px solid #d0d9e8}}
 tr:hover td{{background:#f5f8fc}}
 h2{{color:#1a3a5c;margin-top:30px;padding-bottom:8px;border-bottom:2px solid #0070c0;font-size:17px}}
+.table-wrap{{overflow:auto;border:1px solid #d0d9e8;border-radius:8px;margin:10px 0}}
 .footer{{margin-top:20px;padding-top:12px;border-top:1px solid #d0d9e8;text-align:center;color:#64748b;font-size:11px}}
 .footer strong{{color:#1a3a5c}}
 </style>
@@ -303,7 +304,7 @@ h2{{color:#1a3a5c;margin-top:30px;padding-bottom:8px;border-bottom:2px solid #00
 
 <h2>🚫 Мертвый запас (топ-20)</h2>
 <p style="color:#666">Товары БЕЗ продаж в последнем отчёте:</p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th style="width:40px">#</th>
@@ -315,11 +316,11 @@ h2{{color:#1a3a5c;margin-top:30px;padding-bottom:8px;border-bottom:2px solid #00
 <tbody>
 {dead_rows if dead_rows else '<tr><td colspan="4" style="text-align:center;color:#666">Нет мертвого запаса ✅</td></tr>'}
 </tbody>
-</table>
+</table></div>
 
 <h2>🚀 Быстрооборачиваемые (топ-10)</h2>
 <p style="color:#666">Товары с высокими продажами относительно остатков:</p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th style="width:40px">#</th>
@@ -331,7 +332,7 @@ h2{{color:#1a3a5c;margin-top:30px;padding-bottom:8px;border-bottom:2px solid #00
 <tbody>
 {fast_rows if fast_rows else '<tr><td colspan="4" style="text-align:center;color:#666">Нет данных</td></tr>'}
 </tbody>
-</table>
+</table></div>
 
 <div class="footer"><strong>AI 1C PRO</strong> | inventory_turnover_report.py v{__VERSION__} | {datetime.now(TZ).strftime("%d.%m.%Y %H:%M")} (Asia/Almaty)</div>
 </div>
