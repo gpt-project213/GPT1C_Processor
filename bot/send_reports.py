@@ -2277,15 +2277,20 @@ def find_report(report_type: str, manager: Optional[str] = None) -> Optional[Pat
 # Gender mapping для эмодзи в меню
 # ═══════════════════════════════════════════════════════════════════
 
-GENDER_MAP = {
-    "Алена": "👩",
-    "Оксана": "👩",
-    "Магира": "👩",
-    "Ергали": "👨",
-}
 def gender_emoji(name: str) -> str:
-    """v9.4.19: Исправлен баг — теперь возвращает правильный эмодзи из GENDER_MAP"""
-    return GENDER_MAP.get(name.strip(), "👤")
+    """Определяет пол по окончанию имени (эвристика для русских имён).
+    Суффиксы женских имён: а, я, ь (Надежда, Наталья, Любовь).
+    Суффиксы мужских имён: й, ь (Ергали, Игорь) — уточняем по контексту.
+    Fallback: нейтральный 👤."""
+    n = name.strip()
+    if not n:
+        return "👤"
+    last = n[-1].lower()
+    if last in ("а", "я"):
+        return "👩"
+    if last in ("й", "и") and not n.endswith("ь"):
+        return "👨"
+    return "👤"
 
 # Блок 6.1_______________Функции архива______________________________________
 def _list_archive_dates_for_manager(manager: str) -> List[str]:
@@ -2603,6 +2608,16 @@ async def send_with_acl(section: str, intended_mgr: str,
             sales_summary_fallback = True
             log_event("sales_summary_fallback", section=section, intended_mgr=intended_mgr,
                       file=p.name, level="INFO")
+    # Bug fix: SALES_EXTENDED (По товару) никогда не имеет sales_products_* файлов —
+    # sales_report.py в grouped-режиме (≥3 клиентов) генерирует только sales_grouped_*.
+    # Fallback: показываем sales_grouped_* (содержит и товарные данные внутри клиентских секций).
+    if (not p or not p.exists()) and section == "SALES_EXTENDED":
+        _fb_mgr = intended_mgr if intended_mgr != "Сводный отчёт" else None
+        p = find_report("SALES_SIMPLE", _fb_mgr) or find_report("SALES_SIMPLE", None)
+        if p and p.exists():
+            sales_summary_fallback = True
+            log_event("sales_extended_fallback_to_simple", intended_mgr=intended_mgr,
+                      file=p.name, level="INFO")
     if not p or not p.exists():
         log_event("report_not_found", section=section, manager=intended_mgr)
         await context.bot.send_message(chat_id, f"❌ Отчёт не найден: {section_rus} для '{intended_mgr}'.")
@@ -2725,10 +2740,33 @@ async def run_script_async(script_name: str, *args: str, timeout: int = 600) -> 
         return -1, "", str(e)
 
 
+def _mark_notified_today(manager_name: str, period_str: str) -> None:
+    """Записывает факт успешной отправки декадного уведомления менеджеру."""
+    try:
+        _d = _parse_period_date(period_str)
+        if _d is None:
+            return
+        decade = (_d.day - 1) // 10
+        decade_key = f"{_d.year}-{_d.month:02d}-d{decade}"
+        state = {}
+        if SALES_NOTIFY_DECADE_PATH.exists():
+            try:
+                state = json.loads(SALES_NOTIFY_DECADE_PATH.read_text(encoding="utf-8"))
+            except Exception:
+                state = {}
+        state[manager_name.lower()] = decade_key
+        SALES_NOTIFY_DECADE_PATH.write_text(
+            json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except Exception as _e:
+        logger.warning(f"_mark_notified_today: {_e}")
+
+
 def _should_notify_manager_today(manager_name: str, period_str: str) -> bool:
     """
     v9.4.25: Подекадные уведомления менеджерам.
     Возвращает True только если в эту декаду ещё не отправляли.
+    Состояние записывается отдельно через _mark_notified_today() после успешной отправки.
     Декады: 1-10, 11-20, 21-конец месяца.
     Admin получает всегда — эта функция только для менеджеров.
     """
@@ -2770,12 +2808,7 @@ def _should_notify_manager_today(manager_name: str, period_str: str) -> bool:
         if state.get(mgr_key) == decade_key:
             return False  # Уже отправляли в эту декаду
 
-        # Запоминаем
-        state[mgr_key] = decade_key
-        SALES_NOTIFY_DECADE_PATH.write_text(
-            json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-        return True
+        return True  # Ещё не отправляли
 
     except Exception as _e:
         logger.warning(f"_should_notify_manager_today: {_e}")
@@ -3035,10 +3068,6 @@ async def pipeline_task(context: ContextTypes.DEFAULT_TYPE):
         if _pipeline_managers_by_period and SalesSummary:
             try:
                 _s = SalesSummary()
-                # Субадмин-константы (Алена видит свою команду отдельно)
-                _SUBADMIN_NAME  = "Алена"
-                _SUBADMIN_SCOPE = ["Магира", "Оксана"]
-                _SUBADMIN_CID   = MANAGERS_MAP.get(_SUBADMIN_NAME) if MANAGERS_MAP else None
 
                 for _period, _mgrs in _pipeline_managers_by_period.items():
                     if not _mgrs:
@@ -3093,32 +3122,46 @@ async def pipeline_task(context: ContextTypes.DEFAULT_TYPE):
                                 )
                                 schedule_message_deletion(_mgr_cid, _msg.message_id,
                                     _msg.date.timestamp(), delay_hours=24)
+                                _mark_notified_today(_mgr_name, _period)
                                 log_event("sales_pipeline_summary_sent",
                                           recipient=_mgr_name, period=_period)
                             except Exception as _e2:
                                 logger.warning(f"Сводка менеджеру {_mgr_name}: {_e2}")
 
-                    # 3. СУБАДМИН (Алена): мини-рейтинг своей команды (Алена+Магира+Оксана)
-                    if _SUBADMIN_CID:
+                    # 3. СУБАДМИНЫ: мини-рейтинг каждой команды (из roles.json)
+                    for _sa_cid_str, _sa_scope in ROLES.get("subadmin_scopes", {}).items():
+                        try:
+                            _sa_cid = int(_sa_cid_str)
+                        except (ValueError, TypeError):
+                            continue
+                        if not isinstance(_sa_scope, list):
+                            continue
+                        # Имя субадмина — менеджер чей chat_id совпадает
+                        _sa_name = next(
+                            (n for n, cid in (MANAGERS_MAP or {}).items() if cid == _sa_cid),
+                            None,
+                        )
+                        if not _sa_name:
+                            continue
                         _scope_data = [
                             m for m in _mgrs_sorted
-                            if m["manager"] in [_SUBADMIN_NAME] + _SUBADMIN_SCOPE
+                            if m["manager"] in [_sa_name] + _sa_scope
                         ]
                         if len(_scope_data) > 1:
                             _sub_txt = _s.format_subadmin_pipeline(
-                                _SUBADMIN_NAME, _scope_data, _period
+                                _sa_name, _scope_data, _period
                             )
                             try:
                                 _msg = await context.bot.send_message(
-                                    chat_id=_SUBADMIN_CID, text=_sub_txt, parse_mode=None
+                                    chat_id=_sa_cid, text=_sub_txt, parse_mode=None
                                 )
-                                schedule_message_deletion(_SUBADMIN_CID, _msg.message_id,
+                                schedule_message_deletion(_sa_cid, _msg.message_id,
                                     _msg.date.timestamp(), delay_hours=24)
                                 log_event("sales_pipeline_subadmin_sent",
-                                          manager=_SUBADMIN_NAME, period=_period,
+                                          manager=_sa_name, period=_period,
                                           scope_count=len(_scope_data))
                             except Exception as _e3:
-                                logger.warning(f"Субадмин-сводка продаж: {_e3}")
+                                logger.warning(f"Субадмин-сводка продаж ({_sa_name}): {_e3}")
 
             except Exception as _e:
                 logger.warning(f"Финальный рейтинг продаж (outer): {_e}")
