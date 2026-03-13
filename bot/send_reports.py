@@ -2742,8 +2742,26 @@ async def run_script_async(script_name: str, *args: str, timeout: int = 600) -> 
 
 def _mark_notified_today(manager_name: str, period_str: str) -> None:
     """Записывает факт успешной отправки декадного уведомления менеджеру."""
+    import re as _re
+    from datetime import date as _date
     try:
-        _d = _parse_period_date(period_str)
+        _d = None
+        all_m = list(_re.finditer(r"(\d{1,2})[\./ ](\d{1,2})[\./ ](\d{4})", period_str))
+        if all_m:
+            lm = all_m[-1]
+            try:
+                _d = _date(int(lm.group(3)), int(lm.group(2)), int(lm.group(1)))
+            except ValueError:
+                pass
+        else:
+            RU = {"января":1,"февраля":2,"марта":3,"апреля":4,"мая":5,"июня":6,
+                  "июля":7,"августа":8,"сентября":9,"октября":10,"ноября":11,"декабря":12}
+            m2 = _re.search(r"(\d{1,2})\s+([а-яё]+)\s+(\d{4})", period_str.lower())
+            if m2 and m2.group(2) in RU:
+                try:
+                    _d = _date(int(m2.group(3)), RU[m2.group(2)], int(m2.group(1)))
+                except ValueError:
+                    pass
         if _d is None:
             return
         decade = (_d.day - 1) // 10
