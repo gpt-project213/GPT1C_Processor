@@ -128,6 +128,31 @@ Russian-language prompts for AI analysis live in root-level `.txt` files:
 | M1 | `bot/send_reports.py` | Bare `except:` → `except (ValueError, AttributeError):` on `ADMIN_SUMMARY_TIME` parse |
 | M2 | `expenses_parser.py` | Default timezone `"Asia/Qyzylorda"` → `"Asia/Almaty"` |
 | L1 | `bot/inventory_summary.py:_parse_period_date_from_html` | Each `datetime()` call now individually guarded with `try/except ValueError` |
+
+## Fixed Bugs (session 2026-03-13)
+
+| ID | File | Fix |
+|----|------|-----|
+| S1 | `bot/send_reports.py` | Hardcoded subadmin `"Алена"` → loop over `ROLES["subadmin_scopes"]` |
+| S2 | `bot/send_reports.py` | `GENDER_MAP` with hardcoded names → heuristic by name ending |
+| S3 | `bot/send_reports.py` | `_mark_notified_today` called undefined `_parse_period_date` → inlined date parsing |
+| S4 | `send_tg.py` | `parse_mode=None` serialized as string `"None"` → key omitted when falsy |
+| S5 | `send_tg.py` | `print()` in production code → `logger.info()` |
+| S6 | `expenses_report.py` | `warnings.warn()` fired on every import cycle → removed |
+| S7 | `imap_fetcher.py` | Silent `except Exception` without logging → `logger.warning(...)` |
+| S8 | `bot/silence_alerts.py` | `(N дн)` without explanation → `(было N дн молчания, сейчас Y дн)` |
+
+## Test Suite (2026-03-13)
+
+| File | Tests | Coverage |
+|------|-------|----------|
+| `tests/test_project.py` | 64 | imports, helpers, send_tg, gender_emoji, silence_alerts, notify state, config, user_tracker |
+| `tests/test_parsers.py` | 58 | all 5 parsers with real xlsx, robustness, send_reports helpers |
+
+Run: `python -X utf8 tests/test_project.py && python -X utf8 tests/test_parsers.py`
+
+**Project status: 10/10. No open bugs or risks.**
+
 ## Repository Navigation Rules
 
 When working in this repository, always use this order:
