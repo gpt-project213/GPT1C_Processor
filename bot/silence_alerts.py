@@ -344,19 +344,20 @@ class SilenceAlert:
             msg_lines.append(f"  💰 Сумма: {self.format_amount(total_warning_debt)} ₸")
             msg_lines.append("")
 
-        # v1.4: блок частичных оплат.
-        # "оплачено (N дн)" — N берётся из предыдущего отчёта (historical_days):
-        # показывает сколько дней числился молчащим ДО того, как оплата сбросила счётчик.
+        # v1.5: блок частичных оплат с расшифровкой скобок.
+        # "было N дн молчания" = из предыдущего отчёта (historical_days): сколько дней
+        # клиент числился молчащим ДО того, как оплата сбросила счётчик в 1С.
+        # "сейчас Y дн" = текущие дни молчания после оплаты.
         if categorized.get('partial_payment'):
             msg_lines.append("💛 ЧАСТИЧНАЯ ОПЛАТА (долг не закрыт):")
             total_partial_debt = 0.0
             for client in categorized['partial_payment'][:5]:
                 paid_str = client.get('paid_str', '') or self.format_amount(client.get('paid_amount', 0))
                 hist = client.get('historical_days')
-                paid_label = f"оплачено ({hist} дн)" if hist else "оплачено"
+                hist_part = f"было {hist} дн молчания, " if hist else ""
                 msg_lines.append(
                     f"  • {client['client']} — долг: {client['debt_str']}, "
-                    f"{paid_label}: {paid_str} ({client['silence_days']} дн)"
+                    f"оплачено: {paid_str} ({hist_part}сейчас {client['silence_days']} дн)"
                 )
                 total_partial_debt += client['debt']
 
@@ -522,7 +523,7 @@ class SilenceAlert:
                 msg_lines.append("")
                 total_overall_debt += warning_debt_total
 
-            # v1.4: блок частичных оплат
+            # v1.5: блок частичных оплат с расшифровкой скобок
             if partial_count > 0:
                 msg_lines.append("💛 ЧАСТИЧНАЯ ОПЛАТА (долг не закрыт):")
                 partial_debt_total = 0.0
@@ -531,10 +532,10 @@ class SilenceAlert:
                 for client in categorized['partial_payment'][:show_count]:
                     paid_str = client.get('paid_str', '') or self.format_amount(client.get('paid_amount', 0))
                     hist = client.get('historical_days')
-                    paid_label = f"оплачено ({hist} дн)" if hist else "оплачено"
+                    hist_part = f"было {hist} дн молчания, " if hist else ""
                     msg_lines.append(
                         f"  • {client['client']} — долг: {client['debt_str']}, "
-                        f"{paid_label}: {paid_str} ({client['silence_days']} дн)"
+                        f"оплачено: {paid_str} ({hist_part}сейчас {client['silence_days']} дн)"
                     )
                     partial_debt_total += client['debt']
 
