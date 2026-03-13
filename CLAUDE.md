@@ -129,6 +129,33 @@ Russian-language prompts for AI analysis live in root-level `.txt` files:
 | M2 | `expenses_parser.py` | Default timezone `"Asia/Qyzylorda"` → `"Asia/Almaty"` |
 | L1 | `bot/inventory_summary.py:_parse_period_date_from_html` | Each `datetime()` call now individually guarded with `try/except ValueError` |
 
+## Brand Style + Audit (session 2026-03-13, commit 68441de)
+
+### Unified "AI 1C PRO" brand design applied to all HTML outputs
+
+CSS palette: `--brand:#1a3a5c` (navy), `--accent:#0070c0` (blue), `--good:#107c41`, `--bad:#c00000`, `--warn:#e09000`, `--bg:#f0f4f8`
+
+Brand bar (all templates and Layer 5 generators):
+```html
+<div class="brand-bar"><span class="brand-name">AI 1C PRO</span></div>
+```
+CSS: `.brand-name::before{content:"▲ ";color:var(--accent)}`
+
+**Jinja2 templates rewritten** (7): `base.html`, `gross.html`, `gross_percent.html`, `debt_auto.html`, `sales_report_grouped.html`, `sales_by_product.html`, `inventory_simple.html`
+
+**Layer 5 generators updated** (6): `dso_aging_report.py`, `net_profit_report.py`, `rfm_clients_report.py`, `revenue_concentration_report.py` (both variants), `inventory_turnover_report.py`, `sales_profitability_report.py`
+
+> Layer 5 files use Python f-strings — CSS braces must be escaped as `{{`/`}}`.
+
+### Audit fixes (same session)
+
+| ID | File | Fix |
+|----|------|-----|
+| A1 | `bot/sales_summary.py` | 16× `except Exception` → specific types |
+| A2 | `bot/user_tracker.py` | TZ hardcode → `ZoneInfo(os.getenv("TZ","Asia/Almaty"))` |
+| A3 | `bot/send_reports.py` | 4 missing `schedule_message_deletion` calls added (AI notify, daily summary, IMAP error, opportunity-loss no-data) |
+| A4 | `bot/gross_summary.py` | 2× `except Exception` → `(OSError, AttributeError, UnicodeDecodeError, ValueError)` |
+
 ## Fixed Bugs (session 2026-03-13)
 
 | ID | File | Fix |
