@@ -5,69 +5,57 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{{ title or "Рентабельность" }}</title>
 <style>
-:root{ --bg:#f7f9ff; --grid:#c5d4ff; --th:#dbe5ff; --alt:#eef3ff; --ink:#0f172a; --accent:#2563eb; --bad:#e11d48; --good:#16a34a; --warning:#f59e0b; }
+:root{--bg:#f5f5f5;--wrap-bg:#fff;--ink:#2c3e50;--muted:#666;--accent:#007bff;--good:#28a745;--bad:#dc3545;--warn:#ffc107;--th-bg:#f8f9fa;--border:#ddd;--shadow:0 2px 8px rgba(0,0,0,.10)}
 *{box-sizing:border-box}
-body{font-family:system-ui,Segoe UI,Arial,sans-serif;font-size:13px;margin:0;background:var(--bg);color:var(--ink);line-height:1.45}
-.wrap{max-width:1000px;margin:0 auto;padding:18px}
-h1{margin:0 0 8px;color:var(--accent);font-size:20px}
-small{color:#334155}
+body{font-family:Arial,sans-serif;background:var(--bg);margin:0;padding:15px;color:var(--ink);font-size:14px;line-height:1.45}
+.wrap{max-width:1000px;margin:0 auto;background:var(--wrap-bg);padding:24px 28px;border-radius:10px;box-shadow:var(--shadow)}
+h1{color:var(--ink);font-size:22px;margin:0 0 8px}
+small{color:var(--muted);line-height:1.6}
 .key{font-weight:600}
-.table-wrap{overflow:auto;border:1px solid var(--grid);border-radius:10px;background:#fff;margin:12px 0;box-shadow:0 2px 8px rgba(0,0,0,.03)}
-table{width:100%;border-collapse:collapse;table-layout:fixed;min-width:620px}
-thead th{background:var(--th);text-align:left;padding:8px;border-bottom:1px solid var(--grid)}
-tbody td{padding:8px;border-bottom:1px solid #eef2ff;vertical-align:top;text-align:left}
-.section{margin:16px 0 6px;font-weight:700;text-align:left}
-.pct{font-weight:700}.pct.ok{color:#156f3b}.pct.bad{color:#b91c1c}
-.tech{margin-top:12px;color:#475569;font-size:12px}
-
-/* ═══════════════════════════════════════════════════════════
-   MOBILE-FIRST АДАПТИВНОСТЬ (ДОБАВЛЕНО)
-   ═══════════════════════════════════════════════════════════ */
-@media (max-width:768px){
-  .wrap{padding:12px}
+.section{font-weight:700;color:var(--ink);margin:20px 0 6px;font-size:14px}
+.table-wrap{overflow:auto;border:1px solid var(--border);border-radius:8px;background:#fff;margin:12px 0;box-shadow:0 1px 4px rgba(0,0,0,.04)}
+table{width:100%;border-collapse:collapse;min-width:580px}
+thead th{background:var(--th-bg);text-align:left;padding:10px 12px;border-bottom:1px solid var(--border);font-weight:600}
+tbody td{padding:10px 12px;border-bottom:1px solid #eee;vertical-align:top}
+tr:hover{background:var(--th-bg)}
+.pct{font-weight:700}.pct.ok{color:var(--good)}.pct.bad{color:var(--bad)}
+.tech{margin-top:16px;color:var(--muted);font-size:12px}
+.footer{margin-top:24px;padding-top:14px;border-top:1px solid #eee;text-align:center;color:#bbb;font-size:11px}
+@media(max-width:768px){
+  body{padding:10px}
+  .wrap{padding:14px}
   h1{font-size:18px}
-  small{font-size:12px}
-  
-  /* 🔥 КРИТИЧНО: Убираем min-width у таблиц */
-  table{min-width:auto !important;table-layout:auto}
-  
-  /* Компактные таблицы */
-  thead th{padding:6px;font-size:12px}
-  tbody td{padding:6px;font-size:12px}
-  
-  /* Секции */
-  .section{margin:12px 0 4px;font-size:13px}
-  
-  /* Техническая сводка */
-  .tech{font-size:11px}
+  table{min-width:auto!important;table-layout:auto}
+  thead th,tbody td{padding:7px 8px;font-size:12px}
+  .section{font-size:13px}
 }
 </style>
 </head>
 <body>
-  <div class="wrap">
-    <small>
-      <span class="key">Период:</span> {{ period or "—" }}
-      &nbsp;|&nbsp; <span class="key">Менеджер:</span> {{ manager or "—" }}
-    </small>
+<div class="wrap">
+  <small>
+    <span class="key">Период:</span> {{ period or "—" }}
+    &nbsp;|&nbsp; <span class="key">Менеджер:</span> {{ manager or "—" }}
+  </small>
 
-    <h1>Рентабельность</h1>
+  <h1>Рентабельность</h1>
 
-    <div class="section">Средняя рентабельность</div>
-    {% set overall = overall_margin or 0.0 %}
-    <div><span class="pct {{ 'ok' if overall >= 12 else 'bad' }}">{{ "%.2f"|format(overall) }} %</span></div>
+  <div class="section">Средняя рентабельность</div>
+  {% set overall = overall_margin or 0.0 %}
+  <div><span class="pct {{ 'ok' if overall >= 12 else 'bad' }}">{{ "%.2f"|format(overall) }} %</span></div>
 
-    <div class="section">{{ top_title or "ТОП-15 рентабельности" }}</div>
-    {{ top_table|safe }}
+  <div class="section">{{ top_title or "ТОП-15 рентабельности" }}</div>
+  {{ top_table|safe }}
 
-    <div class="section">{{ low_title or "Низкая рентабельность — ТОП-15" }}</div>
-    {{ low_table|safe }}
+  <div class="section">{{ low_title or "Низкая рентабельность — ТОП-15" }}</div>
+  {{ low_table|safe }}
 
-    {% if tech_block %}
-    <div class="tech">
-      <div class="section">Техническая сводка</div>
-      <div>{{ tech_block|safe }}</div>
-    </div>
-    {% endif %}
+  {% if tech_block %}
+  <div class="tech">
+    <div class="section">Техническая сводка</div>
+    <div>{{ tech_block|safe }}</div>
   </div>
+  {% endif %}
+</div>
 </body>
 </html>

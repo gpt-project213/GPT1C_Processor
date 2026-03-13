@@ -1,139 +1,77 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{{ title or "Отчёт по валовой прибыли" }}</title>
 <style>
-:root{
-  --bg:#fafbfd;
-  --ink:#0f172a;
-  --muted:#475569;
-  --grid:#d9e1ff;
-  --th:#eaf0ff;
-  --alt:#f1f5ff;
-}
+:root{--bg:#f5f5f5;--wrap-bg:#fff;--ink:#2c3e50;--muted:#666;--accent:#007bff;--good:#28a745;--bad:#dc3545;--warn:#ffc107;--th-bg:#f8f9fa;--border:#ddd;--shadow:0 2px 8px rgba(0,0,0,.10)}
 *{box-sizing:border-box}
-html,body{height:100%}
-body{
-  margin:0;
-  font-family:system-ui,"Segoe UI",Arial,Helvetica,sans-serif;
-  font-size:13px;
-  line-height:1.45;
-  color:var(--ink);
-  background:var(--bg);
-}
-.wrap{max-width:1200px;margin:0 auto;padding:16px}
-h1{margin:0 0 8px;font-size:20px}
-small{color:var(--muted)}
+body{font-family:Arial,sans-serif;background:var(--bg);margin:0;padding:15px;color:var(--ink);font-size:14px;line-height:1.45}
+.wrap{max-width:1200px;margin:0 auto;background:var(--wrap-bg);padding:24px 28px;border-radius:10px;box-shadow:var(--shadow)}
+h1{color:var(--ink);font-size:22px;margin:0 0 8px}
+small{color:var(--muted);line-height:1.6}
 .key{font-weight:600}
-.section{margin:16px 0 6px;font-weight:700;text-align:left}
+.section{font-weight:700;color:var(--ink);margin:20px 0 6px;font-size:14px}
 .summary{margin:10px 0}
-
-.table-wrap{
-  overflow:auto;
-  border:1px solid var(--grid);
-  border-radius:10px;
-  background:#fff;
-  margin:12px 0;
-}
-table{width:100%;border-collapse:collapse;table-layout:fixed;min-width:760px}
-thead th{
-  background:var(--th);
-  text-align:left;
-  padding:8px;
-  border-bottom:1px solid var(--grid);
-}
-tbody td{
-  padding:8px;
-  border-bottom:1px solid var(--alt);
-  vertical-align:top;
-  text-align:left;
-}
-
-.kv{
-  display:grid;
-  grid-template-columns:repeat(4,1fr);
-  gap:8px;
-  margin:12px 0;
-}
-.kv .k{display:block;color:#334155}
-.kv .v{display:block;font-weight:700}
-
-.tech{margin-top:12px;color:#444;font-size:12px}
+.kv{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0}
+.kv .k{display:block;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px}
+.kv .v{display:block;font-weight:700;font-size:16px;color:var(--ink)}
+.table-wrap{overflow:auto;border:1px solid var(--border);border-radius:8px;background:#fff;margin:12px 0}
+table{width:100%;border-collapse:collapse;min-width:700px}
+thead th{background:var(--th-bg);text-align:left;padding:10px 12px;border-bottom:1px solid var(--border);font-weight:600}
+tbody td{padding:10px 12px;border-bottom:1px solid #eee;vertical-align:top}
+tr:hover{background:var(--th-bg)}
+.A{background:#d4edda!important}.B{background:#fff3cd!important}.C{background:#f8d7da!important}
+.tech{margin-top:16px;color:var(--muted);font-size:12px}
 .tech .section{margin-top:0}
-
-@media (max-width:900px){
-  .kv{grid-template-columns:repeat(2,1fr)}
-}
-
-/* ═══════════════════════════════════════════════════════════
-   MOBILE-FIRST АДАПТИВНОСТЬ (ДОБАВЛЕНО)
-   ═══════════════════════════════════════════════════════════ */
-@media (max-width:768px){
-  .wrap{padding:12px}
+.footer{margin-top:24px;padding-top:14px;border-top:1px solid #eee;text-align:center;color:#bbb;font-size:11px}
+@media(max-width:900px){.kv{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:768px){
+  body{padding:10px}
+  .wrap{padding:14px}
   h1{font-size:18px}
-  small{font-size:12px}
-  
-  /* 🔥 КРИТИЧНО: Убираем min-width у таблиц */
-  table{min-width:auto !important;table-layout:auto}
-  
-  /* Компактные таблицы */
-  thead th{padding:6px;font-size:12px}
-  tbody td{padding:6px;font-size:12px}
-  
-  /* Grid на мобильных - 1 колонка */
-  .kv{grid-template-columns:1fr !important;gap:6px}
-  
-  /* Секции */
-  .section{margin:12px 0 4px;font-size:13px}
-  
-  /* Сводка */
-  .summary{margin:8px 0;font-size:12px}
-  
-  /* Техническая сводка */
-  .tech{font-size:11px}
+  .kv{grid-template-columns:repeat(2,1fr)!important;gap:8px}
+  table{min-width:auto!important;table-layout:auto}
+  thead th{padding:7px 8px;font-size:12px}
+  tbody td{padding:7px 8px;font-size:12px}
+  .section{font-size:13px}
 }
+@media(max-width:480px){.kv{grid-template-columns:1fr!important}}
 </style>
 </head>
 <body>
-  <div class="wrap">
-    <!-- Шапка: только Период | Менеджер -->
-    <small>
-      <span class="key">Период:</span> {{ period or "—" }}
-      &nbsp;|&nbsp; <span class="key">Менеджер:</span> {{ manager or "Сводный отчёт" }}
-    </small>
+<div class="wrap">
+  <small>
+    <span class="key">Период:</span> {{ period or "—" }}
+    &nbsp;|&nbsp; <span class="key">Менеджер:</span> {{ manager or "Сводный отчёт" }}
+  </small>
 
-    <h1>Отчёт по&nbsp;валовой прибыли</h1>
+  <h1>Отчёт по&nbsp;валовой прибыли</h1>
 
-    <!-- Сводные ключевые показатели (HTML готовится в коде) -->
-    <div class="summary">{{ summary|safe }}</div>
+  <div class="summary">{{ summary|safe }}</div>
 
-    <!-- ABC-анализ -->
-    <div class="section">ABC-анализ прибыли</div>
-    {{ abc_table|safe }}
+  <div class="section">ABC-анализ прибыли</div>
+  {{ abc_table|safe }}
 
-    <!-- Низкая рентабельность -->
-    <div class="section">{{ loss_title or "Низкая рентабельность — ТОП-15" }}</div>
-    {{ loss_table|safe }}
+  <div class="section">{{ loss_title or "Низкая рентабельность — ТОП-15" }}</div>
+  {{ loss_table|safe }}
 
-    <!-- ТОП по прибыли -->
-    <div class="section">ТОП-15 по прибыли</div>
-    {{ top10_profit|safe }}
+  <div class="section">ТОП-15 по прибыли</div>
+  {{ top10_profit|safe }}
 
-    <!-- Техническая сводка (внизу: короткое имя файла и локальное время генерации) -->
-    {% if tech_block %}
-    <div class="tech">
-      <div class="section">Техническая сводка</div>
-      <div>{{ tech_block|safe }}</div>
-      <br>
-      <div>
-        <span class="key">Файл:</span> {{ file_name or "Отчёт по валовой прибыли" }}
-        &nbsp;|&nbsp;
-        <span class="key">Сгенерировано:</span> {{ generated }}
-      </div>
+  {% if tech_block %}
+  <div class="tech">
+    <div class="section">Техническая сводка</div>
+    <div>{{ tech_block|safe }}</div>
+    <br>
+    <div>
+      <span class="key">Файл:</span> {{ file_name or "Отчёт по валовой прибыли" }}
+      &nbsp;|&nbsp;
+      <span class="key">Сгенерировано:</span> {{ generated }}
     </div>
-    {% endif %}
   </div>
+  {% endif %}
+</div>
 </body>
 </html>
