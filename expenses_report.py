@@ -20,8 +20,6 @@ expenses_report.py · v2.0.0 (2026-03-06)
     from expenses_parser import UnifiedExpensesParser   # канонический вариант
 """
 
-import warnings as _warnings
-
 # Canonical source — all logic lives here
 from expenses_parser import (
     UnifiedExpensesParser,
@@ -32,13 +30,9 @@ from expenses_parser import (
     parse_file,
 )
 
-# Deprecation notice for direct imports from this module
-_warnings.warn(
-    "expenses_report.py is a compatibility shim. "
-    "Import directly from expenses_parser instead.",
-    DeprecationWarning,
-    stacklevel=2,
-)
+# NOTE: expenses_report.py is a compatibility shim.
+# Prefer: from expenses_parser import UnifiedExpensesParser, parse_file
+# This shim exists only for backward-compat with old call sites.
 
 __all__ = [
     "UnifiedExpensesParser",

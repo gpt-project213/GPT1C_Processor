@@ -123,7 +123,8 @@ def _load_env_and_cfg() -> Dict:
     try:
         if env_exists:
             env_vals = dotenv_values(dotenv_path=env_path, encoding="utf-8-sig") or {}
-    except Exception:
+    except Exception as e:
+        logger.warning("dotenv_values read error: %s", e)
         env_vals = {}
 
     def _get_env(name: str, default: str = "") -> str:
