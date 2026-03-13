@@ -132,11 +132,12 @@ def send_text(text: str, chat_id: Optional[str] = None, parse_html: bool = True)
     Оставлен для обратной совместимости.
     """
     _assert_ready()
-    data = {
+    data: dict = {
         "chat_id": chat_id or ADMIN_CHAT_ID,
         "text": text,
-        "parse_mode": "HTML" if parse_html else None
     }
+    if parse_html:
+        data["parse_mode"] = "HTML"
     r = requests.post(f"{API}/sendMessage", data=data, timeout=60)
     r.raise_for_status()
     return True
@@ -162,7 +163,7 @@ def send_file(file_path: str | Path, chat_id: Optional[str] = None, caption: Opt
     with p.open("rb") as f:
         r = requests.post(f"{API}/sendDocument", data=data, files={"document": f}, timeout=180)
         r.raise_for_status()
-    print(f"TG: file OK → {p}")
+    logging.getLogger(__name__).info("TG: file OK → %s", p)
     return True
 
 # ───────── CLI для ручной проверки ─────────
