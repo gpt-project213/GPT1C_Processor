@@ -207,7 +207,7 @@ class GrossSummary:
                 'low_margin': low_margin
             }
             
-        except Exception as e:
+        except (OSError, AttributeError, UnicodeDecodeError, ValueError) as e:
             logger.error(f"Ошибка при парсинге {html_path}: {e}", exc_info=True)
             return {
                 'date': '',
@@ -303,7 +303,7 @@ class GrossSummary:
                     if 'Период:' in text:
                         period_str = text.split('Период:')[1].split('\n')[0].strip()
                         return _period_to_date(period_str)
-            except Exception:
+            except (OSError, AttributeError, UnicodeDecodeError, ValueError):
                 pass
             return date_type.min
 
