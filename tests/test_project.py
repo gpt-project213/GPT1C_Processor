@@ -220,24 +220,26 @@ check("Мелкий долг пропущен",
       not any(c["client"] == "Мелкий" for c in cat.get("critical", []) +
               cat.get("alarm", []) + cat.get("warning", []) + cat.get("partial_payment", [])))
 
-# Проверяем формат строки с историческими днями
+# Проверяем формат строки: непрерывный счётчик effective_days
+# ТОО Тест: historical_days=19, silence_days=2 → effective=21
+# ИП Тест2: effective_days=0 (нет сброса)
 clients_pp = [
     {"client": "ТОО Тест",  "debt": 200_000, "debt_str": "200 000,00", "silence_days": 2,
      "debit_amount": 0, "paid_amount": 100_000, "paid_str": "100 000,00",
-     "partial_payment": True, "historical_days": 19},
+     "partial_payment": True, "historical_days": 19, "effective_days": 21},
     {"client": "ИП Тест2",  "debt": 150_000, "debt_str": "150 000,00", "silence_days": 0,
      "debit_amount": 0, "paid_amount": 50_000, "paid_str": "50 000,00",
-     "partial_payment": True, "historical_days": None},
+     "partial_payment": True, "historical_days": None, "effective_days": 0},
 ]
 cat_pp = {"critical": [], "alarm": [], "warning": [], "partial_payment": clients_pp}
 msg = alert.format_manager_alert("Ергали", cat_pp, report_date="01.03.2026 - 13.03.2026")
 
-check("format — 'было 19 дн молчания' присутствует", "было 19 дн молчания" in msg,
+check("format — '~21 дн' (effective) присутствует", "~21 дн" in msg,
       f"фрагмент не найден в:\n{msg[:300]}")
-check("format — 'сейчас 2 дн' присутствует", "сейчас 2 дн" in msg)
-check("format — 'сейчас 0 дн' присутствует для клиента без hist", "сейчас 0 дн" in msg)
-check("format — старый формат '(19 дн)' НЕ присутствует",
-      "(19 дн)" not in msg, "старый нечитабельный формат всё ещё есть!")
+check("format — '~0 дн' (без сброса) присутствует", "~0 дн" in msg)
+check("format — 'оплачено: 100 000,00' присутствует", "100 000,00" in msg)
+check("format — старый 'было N дн молчания' НЕ присутствует",
+      "было" not in msg, "старый формат всё ещё есть!")
 
 # ═══════════════════════════════════════════════════════════════
 # 6. _mark_notified_today / _should_notify_manager_today
