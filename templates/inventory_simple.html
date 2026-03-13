@@ -1,47 +1,40 @@
-<!doctype html><html lang="ru">
+<!doctype html>
+<html lang="ru">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{{ title or "Остатки (быстрый обзор)" }}</title>
 <style>
-:root{ --bg:#f7fbff; --grid:#d7e6ff; --th:#e8f1ff; --alt:#f3f8ff; --ink:#111; }
+:root{--bg:#f5f5f5;--wrap-bg:#fff;--ink:#2c3e50;--muted:#666;--accent:#007bff;--good:#28a745;--bad:#dc3545;--warn:#ffc107;--th-bg:#f8f9fa;--border:#ddd;--shadow:0 2px 8px rgba(0,0,0,.10)}
 *{box-sizing:border-box}
-body{font-family:system-ui,Segoe UI,Arial,sans-serif;font-size:13px;margin:0;background:var(--bg);color:var(--ink)}
-.wrap{max-width:1200px;margin:0 auto;padding:16px}
-h1{margin:0 0 6px;font-size:20px}
-small{color:#555;line-height:1.5}
+body{font-family:Arial,sans-serif;background:var(--bg);margin:0;padding:15px;color:var(--ink);font-size:14px;line-height:1.5}
+.wrap{max-width:1200px;margin:0 auto;background:var(--wrap-bg);padding:24px 28px;border-radius:10px;box-shadow:var(--shadow)}
+h1{color:var(--ink);font-size:22px;margin:0 0 8px}
+small{color:var(--muted);line-height:1.6}
 .key{font-weight:600}
-.table-wrap{overflow:auto;border:1px solid var(--grid);border-radius:10px;background:#fff;margin-top:10px}
+.table-wrap{overflow:auto;border:1px solid var(--border);border-radius:8px;background:#fff;margin:12px 0}
 table{width:100%;border-collapse:collapse}
 colgroup col:nth-child(1){width:70%}
 colgroup col:nth-child(2){width:30%}
-th,td{padding:6px 8px;border-bottom:1px solid var(--grid)}
-th{background:var(--th);text-align:center}
-tr:nth-child(even) td{background:var(--alt)}
+th,td{padding:9px 10px;border-bottom:1px solid var(--border)}
+th{background:var(--th-bg);text-align:center;font-weight:600}
+tr.category td{background:#e8f0fe;font-weight:700;font-size:14px}
+tr:not(.category):hover td{background:var(--th-bg)}
 td.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
-
-/* ═══════════════════════════════════════════════════════════
-   MOBILE-FIRST АДАПТИВНОСТЬ (ДОБАВЛЕНО)
-   ═══════════════════════════════════════════════════════════ */
-@media (max-width:768px){ 
-  h1{font-size:18px} 
-  .wrap{padding:12px}
-  
-  /* Убираем фиксированные ширины колонок */
-  colgroup col:nth-child(1){width:auto}
-  colgroup col:nth-child(2){width:auto}
-  
-  /* Компактные отступы */
-  th,td{padding:5px 6px;font-size:12px}
-  
-  /* Категории более заметные */
-  tr.category td{padding:8px 6px;font-size:13px;font-weight:700}
-  
-  /* Уменьшаем размер мелкого текста */
+.footer{margin-top:24px;padding-top:14px;border-top:1px solid #eee;text-align:center;color:#bbb;font-size:11px}
+@media(max-width:768px){
+  body{padding:10px}
+  .wrap{padding:14px}
+  h1{font-size:18px}
+  colgroup col:nth-child(1),colgroup col:nth-child(2){width:auto}
+  th,td{padding:6px 7px;font-size:12px}
+  tr.category td{font-size:13px;padding:8px 7px}
   small{font-size:12px}
 }
 </style>
 </head>
-<body><div class="wrap">
+<body>
+<div class="wrap">
 
 <h1>{{ title or "Остатки (быстрый обзор)" }}</h1>
 <small>
@@ -68,4 +61,6 @@ td.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 </table>
 </div>
 
-</div></body></html>
+</div>
+</body>
+</html>

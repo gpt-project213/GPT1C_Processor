@@ -1,66 +1,66 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>{{ title }}</title>
-  <style>
-    :root { --bg:#f7f9ff; --grid:#c5d4ff; --th:#dbe5ff; --alt:#eef2ff; --ink:#111; --accent:#2563eb; --bad:#e11d48; --good:#16a34a; --warning:#f59e0b; }
-    *{box-sizing:border-box}
-    body{font-family:system-ui,Segoe UI,Arial,sans-serif;font-size:14px;margin:0;background:var(--bg);color:var(--ink);line-height:1.5;-webkit-tap-highlight-color: rgba(0,0,0,0.08)}
-    .wrap{max-width:1400px;margin:0 auto;padding:20px}
-    h1,h2,h3{margin:0 0 12px;color:var(--accent)} h1{font-size:24px} h2{font-size:20px;border-bottom:2px solid var(--grid);padding-bottom:8px} h3{font-size:18px}
-    .header-info{background:#fff;border-radius:10px;padding:15px;margin-bottom:20px;box-shadow:0 2px 10px rgba(0,0,0,.05)}
-    .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;margin:15px 0}
-    .stat-card{background:#fff;border-radius:10px;padding:15px;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,.05)}
-    .stat-value{font-size:24px;font-weight:bold;margin:5px 0;color:var(--accent)}
-    .stat-label{font-size:12px;color:#666;text-transform:uppercase}
-    .positive{color:var(--good)} .negative{color:var(--bad)} .warning{color:var(--warning)}
-    .tabs{display:flex;flex-wrap:wrap;gap:5px;margin:20px 0 15px;border-bottom:2px solid var(--grid);padding-bottom:5px}
-    .tab{padding:8px 15px;background:#fff;border:1px solid var(--grid);border-radius:6px 6px 0 0;cursor:pointer;font-weight:500;transition:all .2s}
-    .tab:hover{background:var(--th)} .tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
-    .panel{display:none;animation:fadeIn .3s ease} .panel.active{display:block}
-    @keyframes fadeIn{from{opacity:0} to{opacity:1}}
-    .table-container{overflow:auto;margin:15px 0;border:1px solid var(--grid);border-radius:10px;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.05)}
-    table{width:100%;border-collapse:collapse;min-width:700px}
-    th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--grid)}
-    th{background:var(--th);font-weight:600;position:sticky;top:0}
-    tr:nth-child(even){background:var(--alt)} tr:hover{background:#e6eeff}
-    .num{text-align:right;font-variant-numeric:tabular-nums;font-family:'SF Mono',Monaco,monospace}
-    .summary-card{background:#fff;border-radius:10px;padding:15px;box-shadow:0 2px 10px rgba(0,0,0,.05);margin:10px 0}
-    .tech-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px;margin:15px 0}
-    .tech-item{background:#fff;border-radius:8px;padding:10px;box-shadow:0 1px 5px rgba(0,0,0,.05)}
-    .tech-key{font-weight:600;color:#666}
-    .footer{margin-top:30px;padding-top:15px;border-top:1px solid var(--grid);color:#666;font-size:12px;text-align:center}
-    
-    /* ═══════════════════════════════════════════════════════════
-       MOBILE-FIRST АДАПТИВНОСТЬ (ДОБАВЛЕНО)
-       ═══════════════════════════════════════════════════════════ */
-    @media (max-width:768px){
-      .wrap{padding:15px} 
-      h1{font-size:20px} 
-      h2{font-size:18px}
-      .tab{padding:6px 10px;font-size:12px}
-      
-      /* КРИТИЧНО: Убираем min-width у таблиц */
-      table{min-width:auto !important}
-      
-      /* Компактные карточки статистики */
-      .stats-grid{grid-template-columns:repeat(2,1fr);gap:10px}
-      .stat-card{padding:10px}
-      .stat-value{font-size:20px}
-      .stat-label{font-size:11px}
-      
-      /* Компактные табы */
-      .tabs{gap:3px;margin:15px 0 10px}
-      
-      /* Уменьшаем отступы в таблицах */
-      th,td{padding:8px 6px;font-size:13px}
-      
-      /* Техническая сетка */
-      .tech-grid{grid-template-columns:1fr;gap:8px}
-    }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{ title }}</title>
+<style>
+:root{--bg:#f5f5f5;--wrap-bg:#fff;--ink:#2c3e50;--muted:#666;--accent:#007bff;--good:#28a745;--bad:#dc3545;--warn:#ffc107;--th-bg:#f8f9fa;--border:#ddd;--shadow:0 2px 8px rgba(0,0,0,.10)}
+*{box-sizing:border-box}
+body{font-family:Arial,sans-serif;background:var(--bg);margin:0;padding:15px;color:var(--ink);font-size:14px;line-height:1.5;-webkit-tap-highlight-color:rgba(0,0,0,.06)}
+.wrap{max-width:1400px;margin:0 auto;background:var(--wrap-bg);padding:24px 28px;border-radius:10px;box-shadow:var(--shadow)}
+h1{color:var(--ink);font-size:22px;margin:0 0 8px}
+h2{color:var(--ink);font-size:17px;margin:24px 0 10px;padding-bottom:8px;border-bottom:2px solid var(--accent)}
+h3{color:var(--ink);font-size:15px;margin:16px 0 6px}
+h4{color:var(--ink);font-size:14px;margin:12px 0 6px}
+h5{color:var(--ink);font-size:13px;margin:10px 0 4px}
+/* header info block */
+.header-info{background:var(--th-bg);border-radius:8px;padding:16px 20px;margin-bottom:18px;border:1px solid var(--border)}
+/* stats grid */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:14px 0}
+.stat-card{background:#fff;border-radius:8px;padding:14px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.07);border:1px solid var(--border)}
+.stat-value{font-size:20px;font-weight:700;margin:4px 0;color:var(--accent)}
+.stat-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+/* colors */
+.positive{color:var(--good)}.negative{color:var(--bad)}.warning{color:var(--warn)}
+/* tabs */
+.tabs{display:flex;flex-wrap:wrap;gap:5px;margin:20px 0 0;border-bottom:2px solid var(--border);padding-bottom:0}
+.tab{padding:8px 15px;background:#fff;border:1px solid var(--border);border-bottom:none;border-radius:6px 6px 0 0;cursor:pointer;font-weight:500;font-size:13px;touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.05)}
+.tab:hover{background:var(--th-bg)}.tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.panel{display:none}.panel.active{display:block}
+/* tables */
+.table-container{overflow:auto;margin:14px 0;border:1px solid var(--border);border-radius:8px;background:#fff}
+table{width:100%;border-collapse:collapse;min-width:600px}
+th{background:var(--th-bg);font-weight:600;text-align:left;padding:10px 12px;border-bottom:1px solid var(--border);position:sticky;top:0}
+td{padding:10px 12px;border-bottom:1px solid #eee;vertical-align:top}
+tr:hover td{background:var(--th-bg)}
+.num{text-align:right!important;white-space:nowrap;font-variant-numeric:tabular-nums;font-family:ui-monospace,monospace}
+a{color:var(--accent);text-decoration:none;touch-action:manipulation;display:inline-block;min-height:24px;line-height:24px}
+a:hover{text-decoration:underline}
+/* summary cards */
+.summary-card{background:#fff;border-radius:8px;padding:16px;border:1px solid var(--border);margin:10px 0}
+/* tech */
+.tech-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin:12px 0}
+.tech-item{background:var(--th-bg);border-radius:8px;padding:10px 14px;border:1px solid var(--border)}
+.tech-key{font-weight:600;color:var(--muted);font-size:12px;margin-bottom:2px}
+.footer{margin-top:24px;padding-top:14px;border-top:1px solid #eee;text-align:center;color:#bbb;font-size:11px}
+@media(max-width:768px){
+  body{padding:10px}
+  .wrap{padding:14px}
+  h1{font-size:18px}
+  h2{font-size:15px}
+  .stats-grid{grid-template-columns:repeat(2,1fr);gap:8px}
+  .stat-value{font-size:16px}
+  .tab{padding:6px 10px;font-size:12px}
+  table{min-width:auto!important;table-layout:auto}
+  th,td{padding:7px 8px;font-size:12px}
+  .tech-grid{grid-template-columns:1fr}
+}
+@media(max-width:480px){
+  .stats-grid{grid-template-columns:repeat(2,1fr)}
+  th,td{padding:5px 6px;font-size:11px}
+}
+</style>
 </head>
 <body>
 <div class="wrap">
@@ -112,7 +112,6 @@
         <tbody>
           {% for r in top_debtors %}
           <tr id="client-{{ r.client_slug }}">
-            <!-- Ссылка ведёт в таб "Все клиенты" и к нужной строке -->
             <td><a href="#client-{{ r.client_slug }}" data-panel="t_all">{{ r.client }}</a></td>
             <td class="num">{{ r.debt|money }}</td>
             {% if report_type == 'simple' %}
@@ -187,7 +186,7 @@
   </div>
   {% endif %}
 
-  <!-- Все клиенты (без ссылок на себя) -->
+  <!-- Все клиенты -->
   <div class="panel" id="t_all">
     <h2>📋 Все клиенты</h2>
     <div class="table-container">
@@ -232,7 +231,7 @@
     </div>
   </div>
 
-  <!-- Движения (extended, по убыванию Кон. остатка) -->
+  <!-- Движения (extended) -->
   {% if report_type == 'extended' %}
   <div class="panel" id="t_movements">
     <h2>📊 Детализация движений по клиентам</h2>
@@ -241,7 +240,7 @@
       {% for client in clients %}
       <div class="summary-card" id="mov-{{ client.client_slug }}">
         <h4>{{ client.client }}</h4>
-        <div class="stats-grid" style="grid-template-columns: repeat(4, 1fr); gap: 12px;">
+        <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);gap:10px">
           <div class="stat-card"><div class="stat-label">Нач. остаток</div><div class="stat-value">{{ client.opening|money }} ₸</div></div>
           <div class="stat-card"><div class="stat-label">Отгрузка</div><div class="stat-value">{{ client.sum_debit|money }} ₸</div></div>
           <div class="stat-card"><div class="stat-label">Оплата</div><div class="stat-value">{{ client.sum_credit|money }} ₸</div></div>
@@ -316,17 +315,15 @@
     const href = a.getAttribute('href')||'';
     const id = href.slice(1);
     const target = document.getElementById(id);
-    if(!target) return; // даём браузеру стандартное поведение для неожиданного случая
+    if(!target) return;
 
     e.preventDefault();
 
-    // Если ссылка помечена на другой таб — переключаем
     const needPanel = a.dataset.panel;
     if(needPanel){
       const tabBtn = document.querySelector(`.tab[data-tab="${needPanel}"]`);
       if(tabBtn) activateTab(needPanel);
     }else{
-      // Если цель лежит в скрытой панели — переключимся автоматически
       const panel = target.closest('.panel');
       if(panel && !panel.classList.contains('active')){
         const tabBtn = document.querySelector(`.tab[data-tab="${panel.id}"]`);
@@ -334,10 +331,8 @@
       }
     }
 
-    // Скролл к элементу (внутри прокручиваемых контейнеров тоже работает)
     requestAnimationFrame(()=> target.scrollIntoView({behavior:'smooth', block:'nearest', inline:'nearest'}));
 
-    // Обновим hash для мобильных браузеров
     if(history && 'replaceState' in history){ history.replaceState(null,null,href); }
     else { location.hash = href; }
   }, {passive:false});
