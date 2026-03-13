@@ -270,11 +270,15 @@ class SilenceAlert:
                 # Ищем исторические дни молчания в предыдущем отчёте:
                 # показываем "оплачено (N дн)" — сколько дней клиент числился
                 # молчащим до того, как оплата сбросила счётчик в 1С.
-                hist_days = (historical_map or {}).get(client['client']) if historical_map else None
+                _raw_hist = (historical_map or {}).get(client['client']) if historical_map else None
+                # Показываем "было N дн молчания" только когда счётчик был сброшен
+                # оплатой: исторические дни ЗНАЧИТЕЛЬНО выше текущих.
+                # Если дни растут или стоят на месте — оплаты не было, метка вводит в заблуждение.
+                hist_days = _raw_hist if (_raw_hist and _raw_hist > client['silence_days'] + 2) else None
                 categorized['partial_payment'].append(dict(
                     client,
                     partial_payment=True,
-                    historical_days=hist_days,  # None если нет предыдущего отчёта
+                    historical_days=hist_days,  # None если нет сброса счётчика
                 ))
             # else: days < 7, маленький долг или нет оплаты → пропускаем
 
