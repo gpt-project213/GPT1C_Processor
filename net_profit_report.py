@@ -200,25 +200,31 @@ def generate_html(
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Чистая прибыль — {period_type_label}</title>
 <style>
-body{{font-family:Arial,sans-serif;background:#f5f5f5;margin:20px;padding:0}}
-.container{{max-width:900px;margin:0 auto;background:#fff;padding:30px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.1)}}
-h1{{color:#2c3e50;margin-bottom:5px}}
-.period-type{{display:inline-block;background:#007bff;color:#fff;padding:3px 12px;border-radius:12px;font-size:13px;font-weight:600;margin-bottom:8px}}
-.period{{color:#444;font-size:17px;font-weight:600;margin-bottom:5px}}
-.meta{{color:#888;font-size:12px;margin-bottom:25px}}
-.kpi{{display:grid;grid-template-columns:repeat(auto-fit,minmax(195px,1fr));gap:18px;margin:25px 0}}
-.card{{background:#f8f9fa;padding:20px;border-radius:8px;border-left:4px solid #007bff}}
-.card.green{{border-left-color:#28a745}}
-.card.red{{border-left-color:#dc3545}}
-.card-label{{font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}}
-.card-value{{font-size:24px;font-weight:700;color:#2c3e50}}
-.card-sub{{font-size:13px;color:#666;margin-top:6px}}
-.formula{{background:#fffbea;border:1px solid #ffd700;padding:12px 20px;border-radius:8px;margin:20px 0;text-align:center;font-size:16px;font-weight:600}}
-.footer{{margin-top:30px;padding-top:15px;border-top:1px solid #eee;text-align:center;color:#bbb;font-size:11px}}
+body{{font-family:Arial,sans-serif;background:#f0f4f8;margin:0;padding:15px;color:#1a2332;font-size:14px;line-height:1.5}}
+.container{{max-width:900px;margin:0 auto;background:#fff;padding:20px 26px 26px;border-radius:10px;box-shadow:0 2px 10px rgba(26,58,92,.10)}}
+.brand-bar{{display:flex;align-items:center;border-bottom:3px solid #1a3a5c;padding-bottom:10px;margin-bottom:18px}}
+.brand-name{{font-size:14px;font-weight:800;color:#1a3a5c;letter-spacing:.5px;text-transform:uppercase}}
+.brand-name::before{{content:"▲ ";color:#0070c0}}
+h1{{color:#1a2332;font-size:21px;margin:0 0 5px}}
+.period-type{{display:inline-block;background:#0070c0;color:#fff;padding:2px 10px;border-radius:10px;font-size:12px;font-weight:600;margin-bottom:6px}}
+.period{{color:#1a2332;font-size:16px;font-weight:600;margin-bottom:4px}}
+.meta{{color:#64748b;font-size:12px;margin-bottom:18px}}
+.kpi{{display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:14px;margin:18px 0}}
+.card{{background:#eef2f8;padding:16px 18px;border-radius:8px;border-left:4px solid #0070c0}}
+.card.green{{border-left-color:#107c41}}
+.card.red{{border-left-color:#c00000}}
+.card-label{{font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}}
+.card-value{{font-size:22px;font-weight:700;color:#1a2332}}
+.card-sub{{font-size:12px;color:#64748b;margin-top:4px}}
+.formula{{background:#f0f6ff;border:1px solid #0070c0;padding:10px 18px;border-radius:6px;margin:16px 0;text-align:center;font-size:15px;font-weight:600;color:#1a3a5c}}
+a,button{{touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.04)}}
+.footer{{margin-top:20px;padding-top:12px;border-top:1px solid #d0d9e8;text-align:center;color:#64748b;font-size:11px}}
+@media(max-width:768px){{body{{padding:8px}}.container{{padding:12px 14px 18px}}h1{{font-size:17px}}.kpi{{grid-template-columns:repeat(2,1fr)}}.card-value{{font-size:18px}}}}
 </style>
 </head>
 <body>
 <div class="container">
+<div class="brand-bar"><span class="brand-name">AI 1C PRO</span></div>
 <h1>💰 Чистая прибыль</h1>
 <div class="period-type">{period_type_label}</div>
 <div class="period">📅 {period_label}</div>
@@ -247,7 +253,7 @@ h1{{color:#2c3e50;margin-bottom:5px}}
 </div>
 </div>
 
-<div class="footer">net_profit_report.py v{__VERSION__} | {datetime.now(TZ).strftime("%Y-%m-%d %H:%M:%S")}</div>
+<div class="footer"><strong>AI 1C PRO</strong> | net_profit_report.py v{__VERSION__} | {datetime.now(TZ).strftime("%Y-%m-%d %H:%M:%S")}</div>
 </div>
 </body>
 </html>"""

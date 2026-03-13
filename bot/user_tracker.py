@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 # Путь к файлу с данными
 ANALYTICS_FILE = Path(__file__).parent.parent / "logs" / "user_analytics.json"
-TZ = ZoneInfo("Asia/Almaty")
+TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 
 def _load_analytics() -> Dict[str, Any]:
     """Загружает данные аналитики из JSON"""

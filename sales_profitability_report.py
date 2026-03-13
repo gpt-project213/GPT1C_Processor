@@ -365,41 +365,47 @@ def generate_html_report(result: Dict[str, Any],
 <title>Продажи + Рентабельность</title>
 <style>
 :root {{
-  --bg:#f7fbff; --grid:#d7e6ff; --th:#e8f1ff; --alt:#f3f8ff; --ink:#111;
-  --red:#dc3545; --yellow:#ffc107; --orange:#fd7e14; --green:#28a745;
+  --bg:#f0f4f8; --ink:#1a2332; --muted:#64748b; --brand:#1a3a5c; --accent:#0070c0;
+  --good:#107c41; --bad:#c00000; --warn:#e09000; --th-bg:#eef2f8; --border:#d0d9e8;
 }}
 * {{ box-sizing:border-box }}
-body {{ font-family:system-ui,Arial,sans-serif; font-size:14px; margin:0; background:var(--bg); color:var(--ink) }}
-.wrap {{ max-width:1400px; margin:0 auto; padding:20px }}
-h1 {{ margin:0 0 10px; font-size:24px }}
-h2 {{ margin:20px 0 10px; font-size:18px; border-bottom:2px solid var(--grid); padding-bottom:5px }}
-.meta {{ color:#555; line-height:1.6; margin-bottom:20px }}
+body {{ font-family:Arial,sans-serif; font-size:14px; margin:0; padding:15px; background:var(--bg); color:var(--ink); line-height:1.5 }}
+.wrap {{ max-width:1400px; margin:0 auto; background:#fff; padding:20px 26px 26px; border-radius:10px; box-shadow:0 2px 10px rgba(26,58,92,.10) }}
+.brand-bar {{ display:flex; align-items:center; border-bottom:3px solid var(--brand); padding-bottom:10px; margin-bottom:18px }}
+.brand-name {{ font-size:14px; font-weight:800; color:var(--brand); letter-spacing:.5px; text-transform:uppercase }}
+.brand-name::before {{ content:"▲ "; color:var(--accent) }}
+h1 {{ margin:0 0 8px; font-size:21px; color:var(--ink) }}
+h2 {{ margin:20px 0 10px; font-size:17px; border-bottom:2px solid var(--accent); padding-bottom:6px; color:var(--brand) }}
+.meta {{ color:var(--muted); line-height:1.6; margin-bottom:16px }}
 .key {{ font-weight:600 }}
-.alert {{ background:#fff3cd; border-left:4px solid var(--orange); padding:15px; margin:20px 0; border-radius:5px }}
-.alert h3 {{ margin:0 0 10px; color:var(--orange) }}
-.client-card {{ background:#fff; border:1px solid var(--grid); border-radius:8px; padding:15px; margin-bottom:15px }}
-.client-header {{ display:flex; justify-content:space-between; align-items:center; margin-bottom:10px }}
-.client-name {{ font-size:16px; font-weight:600 }}
-.client-metrics {{ display:flex; gap:20px; margin-bottom:10px; font-size:13px; color:#666 }}
+.alert {{ background:#fff8e6; border-left:4px solid var(--warn); padding:14px; margin:16px 0; border-radius:6px }}
+.alert h3 {{ margin:0 0 8px; color:var(--warn) }}
+.client-card {{ background:#fff; border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:12px }}
+.client-header {{ display:flex; justify-content:space-between; align-items:center; margin-bottom:8px }}
+.client-name {{ font-size:15px; font-weight:600; color:var(--brand) }}
+.client-metrics {{ display:flex; gap:20px; margin-bottom:8px; font-size:13px; color:var(--muted) }}
 .client-metrics strong {{ color:var(--ink) }}
 table {{ width:100%; border-collapse:collapse }}
-th,td {{ padding:8px; border-bottom:1px solid var(--grid); text-align:left }}
-th {{ background:var(--th); font-weight:600; font-size:12px }}
+th,td {{ padding:8px 10px; border-bottom:1px solid var(--border); text-align:left }}
+th {{ background:var(--th-bg); font-weight:600; font-size:12px; border-bottom:2px solid var(--border) }}
 td {{ font-size:13px }}
+tr:hover td {{ background:#f5f8fc }}
 .num {{ text-align:right; font-variant-numeric:tabular-nums }}
-.status-loss {{ background:#ffe5e8; color:var(--red); font-weight:600; padding:4px 8px; border-radius:4px }}
-.status-critical {{ background:#fff4e5; color:var(--orange); font-weight:600; padding:4px 8px; border-radius:4px }}
-.status-low {{ background:#fffbec; color:#856404; font-weight:600; padding:4px 8px; border-radius:4px }}
-.status-ok {{ color:var(--green); font-weight:600 }}
-.margin-loss {{ color:var(--red); font-weight:700 }}
-.margin-critical {{ color:var(--orange); font-weight:700 }}
+.status-loss {{ background:#ffe5e8; color:var(--bad); font-weight:600; padding:3px 7px; border-radius:4px }}
+.status-critical {{ background:#fff4e5; color:var(--warn); font-weight:600; padding:3px 7px; border-radius:4px }}
+.status-low {{ background:#fffbec; color:#856404; font-weight:600; padding:3px 7px; border-radius:4px }}
+.status-ok {{ color:var(--good); font-weight:600 }}
+.margin-loss {{ color:var(--bad); font-weight:700 }}
+.margin-critical {{ color:var(--warn); font-weight:700 }}
 .margin-low {{ color:#856404; font-weight:700 }}
-.margin-ok {{ color:var(--green) }}
+.margin-ok {{ color:var(--good) }}
+.footer {{ margin-top:20px; padding-top:12px; border-top:1px solid var(--border); text-align:center; color:var(--muted); font-size:11px }}
+.footer strong {{ color:var(--brand) }}
 </style>
 </head>
 <body>
 <div class="wrap">
-
+<div class="brand-bar"><span class="brand-name">AI 1C PRO</span></div>
 <h1>📊 Продажи + Рентабельность</h1>
 <div class="meta">
   <span class="key">Период:</span> {sales_data.get("period", "Не указан")}<br>
@@ -511,7 +517,8 @@ td {{ font-size:13px }}
 </div>
 """
     
-    html += """
+    html += f"""
+<div class="footer"><strong>AI 1C PRO</strong> | sales_profitability_report.py v{__VERSION__} | {datetime.now(TZ).strftime("%d.%m.%Y %H:%M")} (Asia/Almaty)</div>
 </div>
 </body>
 </html>

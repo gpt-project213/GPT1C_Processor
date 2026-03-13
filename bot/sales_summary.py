@@ -49,13 +49,13 @@ def _period_to_date(period_str: str) -> date_type:
     if m:
         try:
             return date_type(int(m.group(6)), int(m.group(5)), int(m.group(4)))
-        except Exception:
+        except (ValueError, TypeError):
             pass
     m = re.match(r'(\d{1,2})[./](\d{1,2})[./](\d{4})', s)
     if m:
         try:
             return date_type(int(m.group(3)), int(m.group(2)), int(m.group(1)))
-        except Exception:
+        except (ValueError, TypeError):
             pass
     m = re.match(r'(\d{1,2})\s+([а-яё]+)\s+(\d{4})', s.lower())
     if m:
@@ -63,7 +63,7 @@ def _period_to_date(period_str: str) -> date_type:
         if mon:
             try:
                 return date_type(int(m.group(3)), mon, int(m.group(1)))
-            except Exception:
+            except (ValueError, TypeError):
                 pass
     return date_type.min
 
@@ -81,7 +81,7 @@ def _period_range(period_str: str) -> Tuple[Optional[date_type], Optional[date_t
         try:
             return (date_type(int(m.group(3)), int(m.group(2)), int(m.group(1))),
                     date_type(int(m.group(6)), int(m.group(5)), int(m.group(4))))
-        except Exception:
+        except (ValueError, TypeError):
             pass
     # Один день: 24.02.2026
     m2 = re.match(r'(\d{1,2})[./](\d{1,2})[./](\d{4})$', s)
@@ -89,7 +89,7 @@ def _period_range(period_str: str) -> Tuple[Optional[date_type], Optional[date_t
         try:
             d = date_type(int(m2.group(3)), int(m2.group(2)), int(m2.group(1)))
             return d, d
-        except Exception:
+        except (ValueError, TypeError):
             pass
     # Один день русский: 24 февраля 2026 г.
     m3 = re.match(r'(\d{1,2})\s+([а-яё]+)\s+(\d{4})', s.lower())
@@ -99,7 +99,7 @@ def _period_range(period_str: str) -> Tuple[Optional[date_type], Optional[date_t
             try:
                 d = date_type(int(m3.group(3)), mon, int(m3.group(1)))
                 return d, d
-            except Exception:
+            except (ValueError, TypeError):
                 pass
     return None, None
 
@@ -388,7 +388,7 @@ class SalesSummary:
                     if 'Период:' in text:
                         period_str = text.split('Период:')[1].split('\n')[0].strip()
                         return _period_to_date(period_str)
-            except Exception:
+            except (OSError, AttributeError, UnicodeDecodeError):
                 pass
             return date_type.min
 
@@ -427,7 +427,7 @@ class SalesSummary:
                 if d > best_date:
                     best_date   = d
                     best_period = period_str
-            except Exception:
+            except (OSError, ValueError, KeyError):
                 pass
 
         if best_period:
@@ -459,7 +459,7 @@ class SalesSummary:
                 d = _period_to_date(period_str)
                 if d != date_type.min and d not in seen:
                     seen[d] = period_str
-            except Exception:
+            except (OSError, ValueError, KeyError):
                 pass
         return [v for _, v in sorted(seen.items(), reverse=True)]
 
@@ -510,7 +510,7 @@ class SalesSummary:
                     arrow     = "📈" if delta_pct >= 0 else "📉"
                     sign      = "+" if delta_pct >= 0 else ""
                     result   += f"\n{arrow} vs пред. период: {sign}{delta_pct:.1f}%"
-        except Exception:
+        except (ValueError, TypeError, ZeroDivisionError):
             pass
 
         return result
@@ -536,7 +536,7 @@ class SalesSummary:
                 start = date_type(int(m.group(3)), int(m.group(2)), int(m.group(1)))
                 end   = date_type(int(m.group(6)), int(m.group(5)), int(m.group(4)))
                 return start, end
-            except Exception:
+            except (ValueError, TypeError):
                 pass
         # Одна дата DD.MM.YYYY
         m2 = re.search(r'(\d{1,2})[./](\d{1,2})[./](\d{4})', s)
@@ -544,7 +544,7 @@ class SalesSummary:
             try:
                 d = date_type(int(m2.group(3)), int(m2.group(2)), int(m2.group(1)))
                 return d, d
-            except Exception:
+            except (ValueError, TypeError):
                 pass
         # Русские месяцы: DD месяц YYYY [г.]
         m3 = re.search(r'(\d{1,2})\s+([а-яё]+)\s+(\d{4})', s.lower())
@@ -555,7 +555,7 @@ class SalesSummary:
                 try:
                     d = date_type(int(m3.group(3)), mon, int(m3.group(1)))
                     return d, d
-                except Exception:
+                except (ValueError, TypeError):
                     pass
         return None, None
 
@@ -575,7 +575,7 @@ class SalesSummary:
         try:
             files = sorted(json_dir.glob("sales_*.json"),
                            key=lambda p: p.stat().st_mtime, reverse=True)
-        except Exception:
+        except OSError:
             return results
 
         for path in files:
