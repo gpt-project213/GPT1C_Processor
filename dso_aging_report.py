@@ -407,6 +407,7 @@ th{{background:#eef2f8;font-weight:600;text-align:left;border-bottom:2px solid #
 tr:hover{{background:#f5f8fc}}
 .alert{{background:#fffbeb;border:1px solid #e09000;padding:12px 14px;border-radius:6px;margin:14px 0}}
 a,button{{touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.04)}}
+.table-wrap{{overflow:auto;border:1px solid #d0d9e8;border-radius:8px;margin:10px 0}}
 .footer{{margin-top:20px;padding-top:12px;border-top:1px solid #d0d9e8;text-align:center;color:#64748b;font-size:11px}}
 @media(max-width:768px){{body{{padding:8px}}.container{{padding:12px 14px 18px}}h1{{font-size:17px}}h2{{font-size:14px}}table{{min-width:auto!important;table-layout:auto}}th,td{{padding:6px 7px;font-size:12px}}}}
 </style>
@@ -435,7 +436,7 @@ a,button{{touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.04)}
 
 <h2>📊 Aging дебиторки</h2>
 <p style="color:#666">Структура долгов по срокам:</p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Период</th>
@@ -446,11 +447,11 @@ a,button{{touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.04)}
 <tbody>
 {aging_rows}
 </tbody>
-</table>
+</table></div>
 
 <h2>⚠️ Проблемные клиенты (>30 дней)</h2>
 <p style="color:#666">Клиенты требующие внимания:</p>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th style="width:40px">#</th>
@@ -462,7 +463,7 @@ a,button{{touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.04)}
 <tbody>
 {problem_rows if problem_rows else '<tr><td colspan="4" style="text-align:center;color:#28a745">Нет проблемных клиентов ✅</td></tr>'}
 </tbody>
-</table>
+</table></div>
 
 <div class="footer"><strong>AI 1C PRO</strong> | dso_aging_report.py v{__VERSION__} | {datetime.now(TZ).strftime("%Y-%m-%d %H:%M:%S")}</div>
 </div>

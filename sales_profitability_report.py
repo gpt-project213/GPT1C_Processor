@@ -399,6 +399,7 @@ tr:hover td {{ background:#f5f8fc }}
 .margin-critical {{ color:var(--warn); font-weight:700 }}
 .margin-low {{ color:#856404; font-weight:700 }}
 .margin-ok {{ color:var(--good) }}
+.table-wrap {{ overflow:auto; border:1px solid var(--border); border-radius:8px; margin:10px 0 }}
 .footer {{ margin-top:20px; padding-top:12px; border-top:1px solid var(--border); text-align:center; color:var(--muted); font-size:11px }}
 .footer strong {{ color:var(--brand) }}
 </style>
@@ -420,7 +421,7 @@ tr:hover td {{ background:#f5f8fc }}
         html += f"""
 <div class="alert">
   <h3>⚠️ Товары с низкой рентабельностью (требуют корректировки прайса)</h3>
-  <table>
+  <div class="table-wrap"><table>
     <thead>
       <tr>
         <th>Товар</th>
@@ -450,10 +451,10 @@ tr:hover td {{ background:#f5f8fc }}
         
         html += """
     </tbody>
-  </table>
+  </table></div>
 </div>
 """
-    
+
     # Клиенты с товарами
     html += "<h2>Клиенты и товары</h2>\n"
     
@@ -468,7 +469,7 @@ tr:hover td {{ background:#f5f8fc }}
     <div>Средняя маржа: <strong>{fmt_pct(client["avg_margin_pct"])}</strong></div>
     <div>Прибыль: <strong>{fmt_money(client["total_profit"])}</strong></div>
   </div>
-  <table>
+  <div class="table-wrap"><table>
     <thead>
       <tr>
         <th>Товар</th>
@@ -513,10 +514,10 @@ tr:hover td {{ background:#f5f8fc }}
         
         html += """
     </tbody>
-  </table>
+  </table></div>
 </div>
 """
-    
+
     html += f"""
 <div class="footer"><strong>AI 1C PRO</strong> | sales_profitability_report.py v{__VERSION__} | {datetime.now(TZ).strftime("%d.%m.%Y %H:%M")} (Asia/Almaty)</div>
 </div>

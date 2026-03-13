@@ -123,7 +123,7 @@ def _load_env_and_cfg() -> Dict:
     try:
         if env_exists:
             env_vals = dotenv_values(dotenv_path=env_path, encoding="utf-8-sig") or {}
-    except Exception as e:
+    except (OSError, ValueError) as e:
         logger.warning("dotenv_values read error: %s", e)
         env_vals = {}
 
@@ -173,7 +173,7 @@ def _load_env_and_cfg() -> Dict:
             if isinstance(tm, list):
                 cfg["trash_mailboxes"] = [s.strip() for s in tm if s and isinstance(s, str)]
             cfg["sources"]["config_json"] = str(cfg_path)
-        except Exception as e:
+        except (OSError, ValueError, KeyError, TypeError) as e:
             logger.error("CONFIG read error: %s", e)
 
     # 4) Дополнение из .env CSV
@@ -260,7 +260,7 @@ def _select_mailbox(M: imaplib.IMAP4, name: str) -> bool:
     try:
         typ, _ = M.select(name)
         return (typ == "OK")
-    except Exception:
+    except (imaplib.IMAP4.error, OSError):
         return False
 
 def _expunge_mailbox(M: imaplib.IMAP4, mailbox: str) -> None:
@@ -268,7 +268,7 @@ def _expunge_mailbox(M: imaplib.IMAP4, mailbox: str) -> None:
         try:
             M.expunge()
             logger.info("TRASH cleaned: %s", mailbox)
-        except Exception as e:
+        except (imaplib.IMAP4.error, OSError) as e:
             logger.error("TRASH expunge error on %s: %s", mailbox, e)
     else:
         logger.info("TRASH skip %s: cannot SELECT", mailbox)
@@ -311,7 +311,7 @@ def _ensure_clean_copy(src: Path) -> Optional[Path]:
         else:
             logger.error("Clean copy not created for %s", name)
             return None
-    except Exception as e:
+    except (OSError, ValueError) as e:
         logger.error("Clean copy FAIL for %s: %s", name, e)
         return None
 
@@ -332,7 +332,7 @@ def _load_manager_names() -> List[str]:
                     if k:
                         out.append(k)
                 return out
-    except Exception as e:
+    except (OSError, ValueError) as e:
         logger.error("MANAGERS read error: %s", e)
     return []
 
@@ -424,7 +424,7 @@ def _imap_connect(cfg: Dict, max_retries: int = 5, login_timeout: int = 15) -> i
             M.login(user, pwd)
             logger.info("IMAP LOGIN OK (attempt %s/%s)", attempt, max_retries)
             return M
-        except Exception as e:
+        except (imaplib.IMAP4.error, OSError) as e:
             last_exc = e
             logger.error("IMAP connect/login failed (attempt %s/%s): %s", attempt, max_retries, e)
             time.sleep(min(2 * attempt, 5))
@@ -453,7 +453,7 @@ def list_mailboxes(debug: int = 1) -> None:
     _set_log_level(debug)
     try:
         M = _imap_connect(cfg)
-    except Exception as e:
+    except (imaplib.IMAP4.error, OSError, RuntimeError) as e:
         logger.error("LIST: connect error: %s", e)
         return
     try:
@@ -463,13 +463,13 @@ def list_mailboxes(debug: int = 1) -> None:
             for raw in mboxes:
                 try:
                     line = raw.decode("utf-8", errors="ignore") if isinstance(raw, bytes) else str(raw)
-                except Exception:
+                except (UnicodeDecodeError, AttributeError):
                     line = str(raw)
                 logger.info("BOX: %s", line)
     finally:
         try:
             M.logout()
-        except Exception:
+        except (imaplib.IMAP4.error, OSError):
             pass
 
 def run_once(since: Optional[str] = None, debug: int = 1) -> None:
@@ -482,7 +482,7 @@ def run_once(since: Optional[str] = None, debug: int = 1) -> None:
     # Подключение
     try:
         M = _imap_connect(cfg)
-    except Exception as e:
+    except (imaplib.IMAP4.error, OSError, RuntimeError) as e:
         logger.error("IMAP error: %s", e)
         return
 
@@ -506,7 +506,7 @@ def run_once(since: Optional[str] = None, debug: int = 1) -> None:
                     logger.info("SKIP sender not whitelisted: %s", sender)
                     try:
                         M.store(num, "+FLAGS", "\\Seen")
-                    except Exception:
+                    except (imaplib.IMAP4.error, OSError):
                         pass
                     continue
 
@@ -531,7 +531,7 @@ def run_once(since: Optional[str] = None, debug: int = 1) -> None:
                             logger.info("SKIP no-manager-in-name: %s", fname)
                             try:
                                 M.store(num, "+FLAGS", "\\Seen")
-                            except Exception:
+                            except (imaplib.IMAP4.error, OSError):
                                 pass
                             continue
 
@@ -558,7 +558,7 @@ def run_once(since: Optional[str] = None, debug: int = 1) -> None:
                     # clean-копия (без двойных суффиксов)
                     try:
                         _ensure_clean_copy(dst)
-                    except Exception as e:
+                    except (OSError, ValueError) as e:
                         logger.error("Clean copy error for %s: %s", dst.name, e)
 
                 if found_any:
@@ -566,15 +566,15 @@ def run_once(since: Optional[str] = None, debug: int = 1) -> None:
                         M.store(num, "+FLAGS", "\\Deleted")
                         saved_count += 1
                         logger.info("MAIL flagged \\Deleted, msg #%s", num)
-                    except Exception as e:
+                    except (imaplib.IMAP4.error, OSError) as e:
                         logger.error("MAIL delete flag error #%s: %s", num, e)
                 else:
                     try:
                         M.store(num, "+FLAGS", "\\Seen")
-                    except Exception:
+                    except (imaplib.IMAP4.error, OSError):
                         pass
 
-            except Exception as e:
+            except (imaplib.IMAP4.error, OSError, UnicodeDecodeError, ValueError) as e:
                 logger.error("MSG error #%s: %s", num, e)
 
         # INBOX EXPUNGE
@@ -582,7 +582,7 @@ def run_once(since: Optional[str] = None, debug: int = 1) -> None:
             if _select_mailbox(M, "INBOX"):
                 M.expunge()
                 logger.info("INBOX EXPUNGE OK")
-        except Exception as e:
+        except (imaplib.IMAP4.error, OSError) as e:
             logger.error("INBOX expunge error: %s", e)
 
         # Очистка корзины: перебор вариаций
@@ -594,7 +594,7 @@ def run_once(since: Optional[str] = None, debug: int = 1) -> None:
     finally:
         try:
             M.logout()
-        except Exception:
+        except (imaplib.IMAP4.error, OSError):
             pass
 
 # ─────────────────────────────────────────────────────────────────────
