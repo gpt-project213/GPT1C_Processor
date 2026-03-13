@@ -5,55 +5,50 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{{ title }}</title>
 <style>
-:root{--bg:#f5f5f5;--wrap-bg:#fff;--ink:#2c3e50;--muted:#666;--accent:#007bff;--good:#28a745;--bad:#dc3545;--warn:#ffc107;--th-bg:#f8f9fa;--border:#ddd;--shadow:0 2px 8px rgba(0,0,0,.10)}
+:root{--bg:#f0f4f8;--wrap-bg:#fff;--ink:#1a2332;--muted:#64748b;--brand:#1a3a5c;--accent:#0070c0;--good:#107c41;--bad:#c00000;--warn:#e09000;--th-bg:#eef2f8;--border:#d0d9e8;--shadow:0 2px 10px rgba(26,58,92,.10)}
 *{box-sizing:border-box}
-body{font-family:Arial,sans-serif;background:var(--bg);margin:0;padding:15px;color:var(--ink);font-size:14px;line-height:1.5;-webkit-tap-highlight-color:rgba(0,0,0,.06)}
-.wrap{max-width:1400px;margin:0 auto;background:var(--wrap-bg);padding:24px 28px;border-radius:10px;box-shadow:var(--shadow)}
-h1{color:var(--ink);font-size:22px;margin:0 0 8px}
-h2{color:var(--ink);font-size:17px;margin:24px 0 10px;padding-bottom:8px;border-bottom:2px solid var(--accent)}
-h3{color:var(--ink);font-size:15px;margin:16px 0 6px}
-h4{color:var(--ink);font-size:14px;margin:12px 0 6px}
-h5{color:var(--ink);font-size:13px;margin:10px 0 4px}
-/* header info block */
-.header-info{background:var(--th-bg);border-radius:8px;padding:16px 20px;margin-bottom:18px;border:1px solid var(--border)}
-/* stats grid */
-.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:14px 0}
-.stat-card{background:#fff;border-radius:8px;padding:14px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.07);border:1px solid var(--border)}
-.stat-value{font-size:20px;font-weight:700;margin:4px 0;color:var(--accent)}
-.stat-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
-/* colors */
+body{font-family:Arial,sans-serif;background:var(--bg);margin:0;padding:15px;color:var(--ink);font-size:14px;line-height:1.5;-webkit-tap-highlight-color:rgba(0,0,0,.04)}
+.wrap{max-width:1400px;margin:0 auto;background:var(--wrap-bg);padding:20px 26px 26px;border-radius:10px;box-shadow:var(--shadow)}
+.brand-bar{display:flex;align-items:center;border-bottom:3px solid var(--brand);padding-bottom:10px;margin-bottom:18px}
+.brand-name{font-size:14px;font-weight:800;color:var(--brand);letter-spacing:.5px;text-transform:uppercase}
+.brand-name::before{content:"▲ ";color:var(--accent)}
+h1{color:var(--ink);font-size:21px;margin:0 0 8px}
+h2{color:var(--ink);font-size:16px;margin:22px 0 8px;padding-bottom:7px;border-bottom:2px solid var(--accent)}
+h3{color:var(--ink);font-size:14px;margin:14px 0 6px}
+h4{color:var(--ink);font-size:13px;margin:10px 0 5px}
+h5{color:var(--ink);font-size:12px;margin:8px 0 4px}
+.header-info{background:var(--th-bg);border-radius:8px;padding:14px 18px;margin-bottom:16px;border:1px solid var(--border)}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin:12px 0}
+.stat-card{background:#fff;border-radius:8px;padding:12px;text-align:center;border:1px solid var(--border);box-shadow:0 1px 3px rgba(26,58,92,.06)}
+.stat-value{font-size:18px;font-weight:700;margin:4px 0;color:var(--accent)}
+.stat-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}
 .positive{color:var(--good)}.negative{color:var(--bad)}.warning{color:var(--warn)}
-/* tabs */
-.tabs{display:flex;flex-wrap:wrap;gap:5px;margin:20px 0 0;border-bottom:2px solid var(--border);padding-bottom:0}
-.tab{padding:8px 15px;background:#fff;border:1px solid var(--border);border-bottom:none;border-radius:6px 6px 0 0;cursor:pointer;font-weight:500;font-size:13px;touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.05)}
+.tabs{display:flex;flex-wrap:wrap;gap:4px;margin:18px 0 0;border-bottom:2px solid var(--border)}
+.tab{padding:7px 14px;background:#fff;border:1px solid var(--border);border-bottom:none;border-radius:5px 5px 0 0;cursor:pointer;font-weight:500;font-size:13px;touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.04)}
 .tab:hover{background:var(--th-bg)}.tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
 .panel{display:none}.panel.active{display:block}
-/* tables */
-.table-container{overflow:auto;margin:14px 0;border:1px solid var(--border);border-radius:8px;background:#fff}
+.table-container{overflow:auto;margin:12px 0;border:1px solid var(--border);border-radius:8px;background:#fff}
 table{width:100%;border-collapse:collapse;min-width:600px}
-th{background:var(--th-bg);font-weight:600;text-align:left;padding:10px 12px;border-bottom:1px solid var(--border);position:sticky;top:0}
-td{padding:10px 12px;border-bottom:1px solid #eee;vertical-align:top}
-tr:hover td{background:var(--th-bg)}
+th{background:var(--th-bg);font-weight:600;text-align:left;padding:9px 11px;border-bottom:2px solid var(--border);position:sticky;top:0}
+td{padding:9px 11px;border-bottom:1px solid #eaeff6;vertical-align:top}
+tr:hover td{background:#f5f8fc}
 .num{text-align:right!important;white-space:nowrap;font-variant-numeric:tabular-nums;font-family:ui-monospace,monospace}
-a{color:var(--accent);text-decoration:none;touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.05);display:inline-block;padding:2px 0}
+a{color:var(--accent);text-decoration:none;touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.04);display:inline-block;padding:2px 0}
 a:hover{text-decoration:underline}
-/* summary cards */
-.summary-card{background:#fff;border-radius:8px;padding:16px;border:1px solid var(--border);margin:10px 0}
-/* tech */
-.tech-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin:12px 0}
-.tech-item{background:var(--th-bg);border-radius:8px;padding:10px 14px;border:1px solid var(--border)}
+.summary-card{background:#fff;border-radius:8px;padding:14px;border:1px solid var(--border);margin:8px 0}
+.tech-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;margin:10px 0}
+.tech-item{background:var(--th-bg);border-radius:6px;padding:9px 12px;border:1px solid var(--border)}
 .tech-key{font-weight:600;color:var(--muted);font-size:12px;margin-bottom:2px}
-.footer{margin-top:24px;padding-top:14px;border-top:1px solid #eee;text-align:center;color:#bbb;font-size:11px}
+.footer{margin-top:20px;padding-top:12px;border-top:1px solid var(--border);text-align:center;color:var(--muted);font-size:11px}
+.footer strong{color:var(--brand)}
 @media(max-width:768px){
-  body{padding:10px}
-  .wrap{padding:14px}
-  h1{font-size:18px}
-  h2{font-size:15px}
-  .stats-grid{grid-template-columns:repeat(2,1fr);gap:8px}
-  .stat-value{font-size:16px}
-  .tab{padding:6px 10px;font-size:12px}
+  body{padding:8px}.wrap{padding:12px 14px 18px}
+  h1{font-size:17px}h2{font-size:14px}
+  .stats-grid{grid-template-columns:repeat(2,1fr);gap:7px}
+  .stat-value{font-size:15px}
+  .tab{padding:5px 9px;font-size:11px}
   table{min-width:auto!important;table-layout:auto}
-  th,td{padding:7px 8px;font-size:12px}
+  th,td{padding:6px 7px;font-size:12px}
   .tech-grid{grid-template-columns:1fr}
 }
 @media(max-width:480px){
@@ -64,6 +59,7 @@ a:hover{text-decoration:underline}
 </head>
 <body>
 <div class="wrap">
+  <div class="brand-bar"><span class="brand-name">AI 1C PRO</span></div>
 
   <div class="header-info">
     <h1>{{ title }}</h1>
@@ -240,7 +236,7 @@ a:hover{text-decoration:underline}
       {% for client in clients %}
       <div class="summary-card" id="mov-{{ client.client_slug }}">
         <h4>{{ client.client }}</h4>
-        <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);gap:10px">
+        <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);gap:8px">
           <div class="stat-card"><div class="stat-label">Нач. остаток</div><div class="stat-value">{{ client.opening|money }} ₸</div></div>
           <div class="stat-card"><div class="stat-label">Отгрузка</div><div class="stat-value">{{ client.sum_debit|money }} ₸</div></div>
           <div class="stat-card"><div class="stat-label">Оплата</div><div class="stat-value">{{ client.sum_credit|money }} ₸</div></div>
@@ -285,7 +281,7 @@ a:hover{text-decoration:underline}
     </div>
   </div>
 
-  <div class="footer">{{ generated }}</div>
+  <div class="footer"><strong>AI 1C PRO</strong> | {{ generated }}</div>
 </div>
 
 <script>
@@ -304,11 +300,9 @@ a:hover{text-decoration:underline}
     btn.addEventListener('click', ()=> activateTab(btn.dataset.tab));
   });
 
-  // Восстановить вкладку из hash
   const initial = (location.hash||'#t_top').slice(1);
   activateTab(document.querySelector(`.tab[data-tab="${initial}"]`) ? initial : 't_top');
 
-  // Универсальная обработка якорей
   document.addEventListener('click', function(e){
     const a = e.target.closest('a[href^="#"]');
     if(!a) return;

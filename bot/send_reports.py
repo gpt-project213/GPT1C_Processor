@@ -1383,7 +1383,7 @@ async def auto_generate_and_send_ai(manager: str, context: ContextTypes.DEFAULT_
         if ADMIN_CHAT_ID:
             await send_ai_file(ai_file, manager, ADMIN_CHAT_ID, context)
             
-            await context.bot.send_message(
+            _msg = await context.bot.send_message(
                 chat_id=ADMIN_CHAT_ID,
                 text=f"✅ Автоматически сгенерирован ИИ-анализ:\n"
                      f"👤 Менеджер: {manager}\n"
@@ -1391,6 +1391,7 @@ async def auto_generate_and_send_ai(manager: str, context: ContextTypes.DEFAULT_
                      f"📄 Файл: {ai_file.name}",
                 parse_mode=None
             )
+            schedule_message_deletion(ADMIN_CHAT_ID, _msg.message_id, _msg.date.timestamp(), delay_hours=24)
             log_event("ai_auto_sent_to_admin", manager=manager)
     except Exception as e:
         log_event("ai_auto_error", manager=manager, error=str(e))
@@ -1928,12 +1929,13 @@ async def send_daily_summary_to_admin(context: ContextTypes.DEFAULT_TYPE):
         
         message = "\n".join(message_parts)
         
-        await context.bot.send_message(
+        _msg = await context.bot.send_message(
             chat_id=ADMIN_CHAT_ID,
             text=message,
             parse_mode=None
         )
-        
+        schedule_message_deletion(ADMIN_CHAT_ID, _msg.message_id, _msg.date.timestamp(), delay_hours=24)
+
         log_event("daily_summary_sent", users_count=len(users), requests=total_requests)
         
         _save_daily_activity({"date": today, "users": {}})
@@ -2848,7 +2850,7 @@ async def pipeline_task(context: ContextTypes.DEFAULT_TYPE):
     if _imap_rc != 0 and ADMIN_CHAT_ID:
         try:
             _err_preview = (_imap_err or _imap_out or "")[:200].strip()
-            await context.bot.send_message(
+            _msg = await context.bot.send_message(
                 chat_id=ADMIN_CHAT_ID,
                 text=(
                     f"⚠️ Почта не отвечает ({datetime.now(TZ).strftime('%H:%M')})\n"
@@ -2857,6 +2859,7 @@ async def pipeline_task(context: ContextTypes.DEFAULT_TYPE):
                     + (f"\nОшибка: {_err_preview}" if _err_preview else "")
                 )
             )
+            schedule_message_deletion(ADMIN_CHAT_ID, _msg.message_id, _msg.date.timestamp(), delay_hours=24)
             log_event("imap_error_alert_sent", rc=_imap_rc)
         except Exception as _ae:
             logger.warning(f"imap_error_alert: {_ae}")
@@ -3388,11 +3391,12 @@ async def send_opportunity_loss_report(context=None):
             logger.error(f"❌ opportunity_loss: ошибка отправки admin: {e}")
     elif ADMIN_CHAT_ID and not all_data:
         try:
-            await context.bot.send_message(
+            _msg = await context.bot.send_message(
                 chat_id=ADMIN_CHAT_ID,
                 text="💸 Упущенная прибыль: нет данных — у всех менеджеров молчащих должников (≥15 дней) нет.",
                 parse_mode=None
             )
+            schedule_message_deletion(ADMIN_CHAT_ID, _msg.message_id, _msg.date.timestamp(), delay_hours=24)
         except Exception:
             pass
 

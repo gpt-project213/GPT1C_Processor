@@ -5,45 +5,48 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{{ title or "Сводный отчёт по продажам" }}</title>
 <style>
-:root{--bg:#f5f5f5;--wrap-bg:#fff;--ink:#2c3e50;--muted:#666;--accent:#007bff;--good:#28a745;--bad:#dc3545;--warn:#ffc107;--th-bg:#f8f9fa;--border:#ddd;--shadow:0 2px 8px rgba(0,0,0,.10)}
+:root{--bg:#f0f4f8;--wrap-bg:#fff;--ink:#1a2332;--muted:#64748b;--brand:#1a3a5c;--accent:#0070c0;--good:#107c41;--bad:#c00000;--warn:#e09000;--th-bg:#eef2f8;--border:#d0d9e8;--shadow:0 2px 10px rgba(26,58,92,.10)}
 *{box-sizing:border-box}
 body{font-family:Arial,sans-serif;background:var(--bg);margin:0;padding:15px;color:var(--ink);font-size:14px;line-height:1.5}
-.wrap{max-width:1200px;margin:0 auto;background:var(--wrap-bg);padding:24px 28px;border-radius:10px;box-shadow:var(--shadow)}
-h1{color:var(--ink);font-size:22px;margin:0 0 8px}
+.wrap{max-width:1200px;margin:0 auto;background:var(--wrap-bg);padding:20px 26px 26px;border-radius:10px;box-shadow:var(--shadow)}
+.brand-bar{display:flex;align-items:center;border-bottom:3px solid var(--brand);padding-bottom:10px;margin-bottom:18px}
+.brand-name{font-size:14px;font-weight:800;color:var(--brand);letter-spacing:.5px;text-transform:uppercase}
+.brand-name::before{content:"▲ ";color:var(--accent)}
+h1{color:var(--ink);font-size:21px;margin:0 0 8px}
 small{color:var(--muted);line-height:1.6}
 .key{font-weight:600}
-.table-wrap{overflow:auto;border:1px solid var(--border);border-radius:8px;background:#fff;margin:12px 0}
+.table-wrap{overflow:auto;border:1px solid var(--border);border-radius:8px;background:#fff;margin:10px 0}
 table{width:100%;border-collapse:collapse;table-layout:fixed;min-width:600px}
 colgroup col:nth-child(1){width:55%}
 colgroup col:nth-child(2),colgroup col:nth-child(3),colgroup col:nth-child(4){width:15%}
-th,td{padding:9px 10px;border-bottom:1px solid var(--border)}
-th{background:var(--th-bg);text-align:center;font-weight:600}
-tr:hover td{background:var(--th-bg)}
-.client-head td{background:#e8f0fe;font-weight:700;border-bottom:1px solid var(--border);font-size:14px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--border)}
+th{background:var(--th-bg);text-align:center;font-weight:600;border-bottom:2px solid var(--border)}
+tr:not(.client-head):hover td{background:#f5f8fc}
+.client-head td{background:#dce8f5;font-weight:700;border-bottom:1px solid var(--border);font-size:14px;color:var(--brand)}
 td.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 .neg{color:var(--bad)}
 .warn{margin-top:8px;color:var(--bad);font-weight:600}
-hr{border:none;border-top:1px solid var(--border);margin:16px 0}
-.tech{margin-top:12px;font-size:12px;color:var(--muted)}
-.tech summary{cursor:pointer;font-weight:600;color:var(--muted)}
-.tech ol{margin:6px 0}
-.tech li{margin:2px 0}
-a,button{touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.05)}
-.footer{margin-top:24px;padding-top:14px;border-top:1px solid #eee;text-align:center;color:#bbb;font-size:11px}
+hr{border:none;border-top:1px solid var(--border);margin:14px 0}
+.tech{margin-top:10px;font-size:12px;color:var(--muted)}
+.tech summary{cursor:pointer;font-weight:600}
+.tech ol{margin:6px 0}.tech li{margin:2px 0}
+a,button{touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.04)}
+.footer{margin-top:20px;padding-top:12px;border-top:1px solid var(--border);text-align:center;color:var(--muted);font-size:11px}
+.footer strong{color:var(--brand)}
 @media(max-width:768px){
-  body{padding:10px}
-  .wrap{padding:14px}
-  h1{font-size:18px}
+  body{padding:8px}.wrap{padding:12px 14px 18px}
+  h1{font-size:17px}
   table{min-width:auto!important;table-layout:auto}
   colgroup col:nth-child(1),colgroup col:nth-child(2),colgroup col:nth-child(3),colgroup col:nth-child(4){width:auto}
-  th,td{padding:6px 7px;font-size:12px}
-  .client-head td{padding:8px 7px;font-size:13px}
+  th,td{padding:5px 6px;font-size:12px}
+  .client-head td{padding:7px 6px;font-size:13px}
   small{font-size:12px}
 }
 </style>
 </head>
 <body>
 <div class="wrap">
+<div class="brand-bar"><span class="brand-name">AI 1C PRO</span></div>
 
 <h1>{{ title or "Сводный отчёт по продажам" }}</h1>
 <small>
@@ -83,6 +86,7 @@ a,button{touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.05)}
 </p>
 {% if table_delta_line %}<p class="warn">{{ table_delta_line }}</p>{% endif %}
 
+<div class="footer"><strong>AI 1C PRO</strong> | {{ generated_at }}</div>
 </div>
 </body>
 </html>

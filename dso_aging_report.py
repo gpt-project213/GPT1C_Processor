@@ -389,25 +389,31 @@ def generate_report():
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DSO + Aging: {manager}</title>
 <style>
-body{{font-family:Arial,sans-serif;background:#f5f5f5;margin:20px}}
-.container{{max-width:1000px;margin:0 auto;background:#fff;padding:30px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.1)}}
-h1{{color:#2c3e50;margin-bottom:10px}}
-.meta{{color:#666;font-size:14px;margin-bottom:30px}}
-.dso-card{{padding:30px;border-radius:8px;margin:30px 0;text-align:center;background:rgba(220,53,69,0.1);border:2px solid {dso_color}}}
-.dso-status{{font-size:18px;font-weight:600;color:{dso_color};margin-bottom:10px}}
-.dso-value{{font-size:48px;font-weight:700;color:{dso_color};margin:15px 0}}
-.dso-label{{font-size:14px;color:#666}}
-table{{width:100%;border-collapse:collapse;margin:20px 0}}
-th,td{{padding:12px;border-bottom:1px solid #ddd}}
-th{{background:#f8f9fa;font-weight:600;text-align:left}}
-tr:hover{{background:#f8f9fa}}
-h2{{color:#2c3e50;margin-top:40px;padding-bottom:10px;border-bottom:2px solid #007bff}}
-.alert{{background:#fff3cd;border:1px solid #ffc107;padding:15px;border-radius:8px;margin:20px 0}}
-.footer{{margin-top:30px;padding-top:20px;border-top:1px solid #eee;text-align:center;color:#999;font-size:12px}}
+body{{font-family:Arial,sans-serif;background:#f0f4f8;margin:0;padding:15px;color:#1a2332;font-size:14px;line-height:1.5}}
+.container{{max-width:1000px;margin:0 auto;background:#fff;padding:20px 26px 26px;border-radius:10px;box-shadow:0 2px 10px rgba(26,58,92,.10)}}
+.brand-bar{{display:flex;align-items:center;border-bottom:3px solid #1a3a5c;padding-bottom:10px;margin-bottom:18px}}
+.brand-name{{font-size:14px;font-weight:800;color:#1a3a5c;letter-spacing:.5px;text-transform:uppercase}}
+.brand-name::before{{content:"▲ ";color:#0070c0}}
+h1{{color:#1a2332;font-size:21px;margin:0 0 6px}}
+h2{{color:#1a2332;font-size:16px;margin:22px 0 8px;padding-bottom:7px;border-bottom:2px solid #0070c0}}
+.meta{{color:#64748b;font-size:13px;margin-bottom:16px}}
+.dso-card{{padding:24px;border-radius:8px;margin:18px 0;text-align:center;border:2px solid {dso_color};background:rgba(0,0,0,.03)}}
+.dso-status{{font-size:16px;font-weight:700;color:{dso_color};margin-bottom:8px}}
+.dso-value{{font-size:44px;font-weight:700;color:{dso_color};margin:12px 0}}
+.dso-label{{font-size:13px;color:#64748b}}
+table{{width:100%;border-collapse:collapse;margin:10px 0}}
+th,td{{padding:9px 11px;border-bottom:1px solid #d0d9e8}}
+th{{background:#eef2f8;font-weight:600;text-align:left;border-bottom:2px solid #d0d9e8}}
+tr:hover{{background:#f5f8fc}}
+.alert{{background:#fffbeb;border:1px solid #e09000;padding:12px 14px;border-radius:6px;margin:14px 0}}
+a,button{{touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.04)}}
+.footer{{margin-top:20px;padding-top:12px;border-top:1px solid #d0d9e8;text-align:center;color:#64748b;font-size:11px}}
+@media(max-width:768px){{body{{padding:8px}}.container{{padding:12px 14px 18px}}h1{{font-size:17px}}h2{{font-size:14px}}table{{min-width:auto!important;table-layout:auto}}th,td{{padding:6px 7px;font-size:12px}}}}
 </style>
 </head>
 <body>
 <div class="container">
+<div class="brand-bar"><span class="brand-name">AI 1C PRO</span></div>
 <h1>💳 DSO + Aging: {manager}</h1>
 <div class="meta">Для admin + subadmin | {datetime.now(TZ).strftime("%d.%m.%Y %H:%M")}</div>
 
@@ -458,9 +464,7 @@ h2{{color:#2c3e50;margin-top:40px;padding-bottom:10px;border-bottom:2px solid #0
 </tbody>
 </table>
 
-<div class="footer">
-dso_aging_report.py v{__VERSION__} | {datetime.now(TZ).strftime("%Y-%m-%d %H:%M:%S")}
-</div>
+<div class="footer"><strong>AI 1C PRO</strong> | dso_aging_report.py v{__VERSION__} | {datetime.now(TZ).strftime("%Y-%m-%d %H:%M:%S")}</div>
 </div>
 </body>
 </html>"""

@@ -246,23 +246,28 @@ def generate_report():
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Концентрация выручки: {manager}</title>
 <style>
-body{{font-family:Arial,sans-serif;background:#f5f5f5;margin:20px}}
-.container{{max-width:1000px;margin:0 auto;background:#fff;padding:30px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.1)}}
-h1{{color:#2c3e50;margin-bottom:10px}}
-.meta{{color:#666;font-size:14px;margin-bottom:30px}}
-.alert{{padding:25px;border-radius:8px;margin:30px 0;text-align:center}}
+body{{font-family:Arial,sans-serif;background:#f0f4f8;margin:0;padding:15px;color:#1a2332;font-size:14px;line-height:1.5}}
+.container{{max-width:1000px;margin:0 auto;background:#fff;padding:20px 26px 26px;border-radius:10px;box-shadow:0 2px 10px rgba(26,58,92,.10)}}
+.brand-bar{{display:flex;align-items:center;border-bottom:3px solid #1a3a5c;padding-bottom:10px;margin-bottom:18px}}
+.brand-name{{font-size:14px;font-weight:800;color:#1a3a5c;letter-spacing:.5px;text-transform:uppercase}}
+.brand-name::before{{content:"▲ ";color:#0070c0}}
+h1{{color:#1a2332;font-size:21px;margin:0 0 8px}}
+.meta{{color:#64748b;font-size:14px;margin-bottom:20px;line-height:1.6}}
+.alert{{padding:20px;border-radius:8px;margin:20px 0;text-align:center}}
 .alert-risk{{font-size:18px;font-weight:600;margin-bottom:10px}}
-.alert-value{{font-size:42px;font-weight:700;margin:15px 0}}
-table{{width:100%;border-collapse:collapse;margin:20px 0}}
-th,td{{padding:12px;border-bottom:1px solid #ddd}}
-th{{background:#f8f9fa;font-weight:600;text-align:left}}
-tr:hover{{background:#f8f9fa}}
-h2{{color:#2c3e50;margin-top:40px}}
-.footer{{margin-top:30px;padding-top:20px;border-top:1px solid #eee;text-align:center;color:#999;font-size:12px}}
+.alert-value{{font-size:38px;font-weight:700;margin:12px 0}}
+table{{width:100%;border-collapse:collapse;margin:16px 0}}
+th,td{{padding:8px 10px;border-bottom:1px solid #d0d9e8}}
+th{{background:#eef2f8;font-weight:600;text-align:left;border-bottom:2px solid #d0d9e8}}
+tr:hover td{{background:#f5f8fc}}
+h2{{color:#1a3a5c;margin-top:30px;font-size:17px}}
+.footer{{margin-top:20px;padding-top:12px;border-top:1px solid #d0d9e8;text-align:center;color:#64748b;font-size:11px}}
+.footer strong{{color:#1a3a5c}}
 </style>
 </head>
 <body>
 <div class="container">
+<div class="brand-bar"><span class="brand-name">AI 1C PRO</span></div>
 <h1>🎯 Концентрация выручки: {manager}</h1>
 <div class="meta">ADMIN версия (с суммами) | {datetime.now(TZ).strftime("%d.%m.%Y %H:%M")}</div>
 
@@ -297,13 +302,11 @@ h2{{color:#2c3e50;margin-top:40px}}
 </div>
 </div>
 
-<div class="footer">
-revenue_concentration_report.py v{__VERSION__} | {datetime.now(TZ).strftime("%Y-%m-%d %H:%M:%S")}
-</div>
+<div class="footer"><strong>AI 1C PRO</strong> | revenue_concentration_report.py v{__VERSION__} | {datetime.now(TZ).strftime("%d.%m.%Y %H:%M")} (Asia/Almaty)</div>
 </div>
 </body>
 </html>"""
-        
+
         # Версия только с % (для managers)
         top5_rows_pct = ""
         for i, client in enumerate(top5, 1):
@@ -322,23 +325,28 @@ revenue_concentration_report.py v{__VERSION__} | {datetime.now(TZ).strftime("%Y-
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Концентрация выручки: {manager}</title>
 <style>
-body{{font-family:Arial,sans-serif;background:#f5f5f5;margin:20px}}
-.container{{max-width:1000px;margin:0 auto;background:#fff;padding:30px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.1)}}
-h1{{color:#2c3e50;margin-bottom:10px}}
-.meta{{color:#666;font-size:14px;margin-bottom:30px}}
-.alert{{padding:25px;border-radius:8px;margin:30px 0;text-align:center}}
+body{{font-family:Arial,sans-serif;background:#f0f4f8;margin:0;padding:15px;color:#1a2332;font-size:14px;line-height:1.5}}
+.container{{max-width:1000px;margin:0 auto;background:#fff;padding:20px 26px 26px;border-radius:10px;box-shadow:0 2px 10px rgba(26,58,92,.10)}}
+.brand-bar{{display:flex;align-items:center;border-bottom:3px solid #1a3a5c;padding-bottom:10px;margin-bottom:18px}}
+.brand-name{{font-size:14px;font-weight:800;color:#1a3a5c;letter-spacing:.5px;text-transform:uppercase}}
+.brand-name::before{{content:"▲ ";color:#0070c0}}
+h1{{color:#1a2332;font-size:21px;margin:0 0 8px}}
+.meta{{color:#64748b;font-size:14px;margin-bottom:20px;line-height:1.6}}
+.alert{{padding:20px;border-radius:8px;margin:20px 0;text-align:center}}
 .alert-risk{{font-size:18px;font-weight:600;margin-bottom:10px}}
-.alert-value{{font-size:42px;font-weight:700;margin:15px 0}}
-table{{width:100%;border-collapse:collapse;margin:20px 0}}
-th,td{{padding:12px;border-bottom:1px solid #ddd}}
-th{{background:#f8f9fa;font-weight:600;text-align:left}}
-tr:hover{{background:#f8f9fa}}
-h2{{color:#2c3e50;margin-top:40px}}
-.footer{{margin-top:30px;padding-top:20px;border-top:1px solid #eee;text-align:center;color:#999;font-size:12px}}
+.alert-value{{font-size:38px;font-weight:700;margin:12px 0}}
+table{{width:100%;border-collapse:collapse;margin:16px 0}}
+th,td{{padding:8px 10px;border-bottom:1px solid #d0d9e8}}
+th{{background:#eef2f8;font-weight:600;text-align:left;border-bottom:2px solid #d0d9e8}}
+tr:hover td{{background:#f5f8fc}}
+h2{{color:#1a3a5c;margin-top:30px;font-size:17px}}
+.footer{{margin-top:20px;padding-top:12px;border-top:1px solid #d0d9e8;text-align:center;color:#64748b;font-size:11px}}
+.footer strong{{color:#1a3a5c}}
 </style>
 </head>
 <body>
 <div class="container">
+<div class="brand-bar"><span class="brand-name">AI 1C PRO</span></div>
 <h1>🎯 Концентрация выручки: {manager}</h1>
 <div class="meta">Manager версия (только %) | {datetime.now(TZ).strftime("%d.%m.%Y %H:%M")}</div>
 
@@ -363,13 +371,11 @@ h2{{color:#2c3e50;margin-top:40px}}
 </tbody>
 </table>
 
-<div class="footer">
-revenue_concentration_report.py v{__VERSION__} | {datetime.now(TZ).strftime("%Y-%m-%d %H:%M:%S")}
-</div>
+<div class="footer"><strong>AI 1C PRO</strong> | revenue_concentration_report.py v{__VERSION__} | {datetime.now(TZ).strftime("%d.%m.%Y %H:%M")} (Asia/Almaty)</div>
 </div>
 </body>
 </html>"""
-        
+
         # Сохранение
         ts = datetime.now(TZ).strftime("%Y%m%d")
         
