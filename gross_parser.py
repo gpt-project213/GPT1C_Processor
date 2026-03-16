@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-gross_parser.py · v1.0.3 (2026-03-10)
+gross_parser.py · v1.0.4 (2026-03-16)
 ────────────────────────────────────────────────────────────────────
 Парсер отчётов "Валовая прибыль" из 1С в JSON формат.
 
@@ -120,7 +120,7 @@ def to_float(x: Any) -> float:
     try:
         v = float(s)
         return -v if neg else v
-    except Exception:
+    except (ValueError, TypeError):
         return float("nan")
 
 def slugify(text: str) -> str:

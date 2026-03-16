@@ -1,5 +1,5 @@
 """
-opportunity_loss.py · v1.5.1 (09.03.2026)
+opportunity_loss.py · v1.5.2 (2026-03-16)
 ──────────────────────────────────────────────────────────────────────────────
 Fix #OPLOSS-1: _find_latest_gross_html больше не берёт чужой gross файл как
 fallback — возвращает None, _get_manager_margin использует DEFAULT_MARGIN_PCT.
@@ -28,6 +28,15 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_mtime(p: Path) -> float:
+    """p.stat().st_mtime с защитой от FileNotFoundError при конкурентном pipeline."""
+    try:
+        return p.stat().st_mtime
+    except (FileNotFoundError, OSError):
+        return 0.0
+
 
 # ── Зоны риска ──────────────────────────────────────────────────────────────
 ZONE_YELLOW_MIN  = 8     # >= 8 дней  → просрочка (договорной срок 7 дней)
@@ -71,7 +80,7 @@ def _find_latest_gross_html(html_dir: Path, manager_name: str) -> Optional[Path]
         if manager_lower in p.name.lower()
     ]
     if candidates:
-        return max(candidates, key=lambda p: p.stat().st_mtime)
+        return max(candidates, key=_safe_mtime)
 
     # Fix #OPLOSS-1: НЕ берём чужой файл — возвращаем None, используется DEFAULT_MARGIN_PCT
     logger.warning(

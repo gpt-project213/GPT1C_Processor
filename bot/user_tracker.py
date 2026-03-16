@@ -2,8 +2,9 @@
 bot/user_tracker.py
 Система отслеживания активности пользователей
 
-Версия: 1.0.0
-Дата: 2026-02-02
+Версия: 1.0.1
+Дата: 2026-03-16
+Изменения v1.0.1: load_dotenv() добавлен перед чтением TZ из os.getenv (audit fix)
 """
 
 import json
@@ -14,6 +15,10 @@ from datetime import datetime
 from tempfile import NamedTemporaryFile
 from zoneinfo import ZoneInfo
 from typing import Dict, Any
+from dotenv import load_dotenv
+
+load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env",
+            encoding="utf-8-sig", override=False)
 
 logger = logging.getLogger(__name__)
 

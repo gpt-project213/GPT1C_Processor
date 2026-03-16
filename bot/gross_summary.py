@@ -1,8 +1,9 @@
 """
 Модуль для генерации кратких сводок по валовой прибыли
 
-Версия: 1.1
-Дата: 22.02.2026
+Версия: 1.2
+Дата: 2026-03-16
+Изменения v1.2: _safe_mtime() — p.stat().st_mtime обёрнут в try/except (audit fix)
 Изменения v1.1: get_latest_gross_report сортирует по периоду данных, не по mtime
 """
 
@@ -19,6 +20,14 @@ _MONTHS_RU = {
     "мая": 5, "июня": 6, "июля": 7, "августа": 8,
     "сентября": 9, "октября": 10, "ноября": 11, "декабря": 12,
 }
+
+def _safe_mtime(p: Path) -> float:
+    """p.stat().st_mtime с защитой от FileNotFoundError при конкурентном pipeline."""
+    try:
+        return p.stat().st_mtime
+    except (FileNotFoundError, OSError):
+        return 0.0
+
 
 def _period_to_date(period_str: str) -> date_type:
     """Парсит строку периода в date для сортировки. Диапазон → конечная дата."""
@@ -307,7 +316,7 @@ class GrossSummary:
                 pass
             return date_type.min
 
-        latest = max(matching_files, key=lambda p: (_get_period(p), p.stat().st_mtime))
+        latest = max(matching_files, key=lambda p: (_get_period(p), _safe_mtime(p)))
         pd = _get_period(latest)
         logger.info(f"📄 Найден отчёт валовой: {latest.name} (период={pd})")
         return latest

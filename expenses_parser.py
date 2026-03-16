@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 expenses_parser.py – Универсальный парсер отчётов 1С "Затраты" (расходы)
-v1.1.0 (2026-02-19): добавлен module-level parse_file() для pipeline и test_system.py
+v1.1.1 (2026-03-16): audit fixes — narrow except clauses, datetime.now() TZ fallback
 Особенности:
 - Поддержка отчётов за день ("18 февраля 2026 г.") и за период ("01.02.2026 - 17.02.2026")
 - Автоопределение типа периода (DAY, MTD, MONTH, RANGE)
@@ -55,7 +55,7 @@ def _safe_isna(x: Any) -> bool:
     """Безопасная проверка на NaN/None."""
     try:
         return pd.isna(x)
-    except Exception:
+    except TypeError:
         return x is None
 
 
@@ -96,11 +96,11 @@ class UnifiedExpensesParser:
     def _now_tz(self) -> datetime:
         """Текущее время с учётом часового пояса."""
         if ZoneInfo is None:
-            return datetime.now()
+            return datetime.now()  # Python < 3.9 — project requires 3.11+, never reaches here
         try:
             return datetime.now(ZoneInfo(self.timezone))
-        except Exception:
-            return datetime.now()
+        except (LookupError, KeyError):
+            return datetime.now(ZoneInfo("Asia/Almaty"))  # fallback to project TZ (aware)
 
     def _setup_logging(self) -> logging.Logger:
         """Настройка логирования в файл и на консоль."""
@@ -143,7 +143,7 @@ class UnifiedExpensesParser:
             return None
         try:
             return float(s)
-        except Exception:
+        except (ValueError, TypeError):
             return None
 
     def _format_money(self, num: Optional[float]) -> str:
@@ -225,7 +225,7 @@ class UnifiedExpensesParser:
                     rtype = "RANGE"
                 self.logger.info(f"Период: {d1} - {d2}, тип: {rtype}")
                 return PeriodInfo(p, d1, d2, rtype)
-            except Exception as e:
+            except (ValueError, TypeError, IndexError) as e:
                 self.logger.warning(f"Ошибка парсинга диапазона: {e}")
 
         # 2) Одиночная дата DD.MM.YYYY
@@ -235,7 +235,7 @@ class UnifiedExpensesParser:
                 d = self._parse_date_dmy(single_match.group(1))
                 self.logger.info(f"Период: {d}, тип: DAY")
                 return PeriodInfo(p, d, d, "DAY")
-            except Exception as e:
+            except (ValueError, TypeError, IndexError) as e:
                 self.logger.warning(f"Ошибка парсинга одиночной даты: {e}")
 
         # 3) Текстовая дата "31 января 2026 г."
@@ -252,7 +252,7 @@ class UnifiedExpensesParser:
                     d = date(yy, MONTHS_RU[mon_name], dd)
                     self.logger.info(f"Период: {d}, тип: DAY (текстовый месяц)")
                     return PeriodInfo(p, d, d, "DAY")
-            except Exception as e:
+            except (ValueError, TypeError, IndexError) as e:
                 self.logger.warning(f"Ошибка парсинга текстовой даты: {e}")
 
         # 4) Месяц + год ("январь 2026", "февраля 2026 г.")

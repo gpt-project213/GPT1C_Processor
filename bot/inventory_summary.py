@@ -1,8 +1,8 @@
 """
 Модуль для генерации кратких сводок по остаткам
 
-Версия: 1.2
-Дата: 09.03.2026
+Версия: 1.3
+Дата: 2026-03-16
 Изменения v1.2:
   - Fix #INV-1: исправлен glob-паттерн inventory_simple_*.html → inventory_*.html
     (inventory.py генерирует файлы как inventory_{slug}.html без _simple_ в имени)
@@ -86,8 +86,11 @@ class InventorySummary:
                             pass
         except Exception as e:
             logger.debug(f"_parse_period_date_from_html({path.name}): {e}")
-        # Fallback: mtime
-        return datetime.fromtimestamp(path.stat().st_mtime)
+        # Fallback: mtime (защита от FileNotFoundError при конкурентном pipeline)
+        try:
+            return datetime.fromtimestamp(path.stat().st_mtime)
+        except (FileNotFoundError, OSError):
+            return datetime.min
 
     def parse_inventory_html(self, html_path: Path) -> Dict:
         """Парсит HTML остатков"""

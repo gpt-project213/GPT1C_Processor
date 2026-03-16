@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 r"""
-debt_auto_report.py · v2.7.3 · 2026-03-10
+debt_auto_report.py · v2.7.4 · 2026-03-16
 Правки: simple → убраны «Отгрузка/Оплата» во «Все клиенты»; extended → агрегаты в шапку,
 Δ (увеличение/уменьшение), сортировка «Движения» по убыванию closing, техданные без «Клиентов».
 
@@ -318,7 +318,7 @@ def money_to_float(v: Any) -> float:
     s = re.sub(r"[^0-9.\-]","", s)
     if s in ("","-","."): return 0.0
     try: return float(s)
-    except Exception: return 0.0
+    except (ValueError, TypeError): return 0.0
 
 def parse_date_cell(v: Any) -> pd.Timestamp:
     if v is None or (isinstance(v, float) and pd.isna(v)): return pd.NaT
@@ -542,7 +542,7 @@ def process_extended_report(clean_xlsx: Path, src_name: str) -> Dict[str, Any]:
             return None
         try:
             return max(0, (p_max - ref).days)
-        except Exception:
+        except (TypeError, AttributeError):
             return None
 
     all_rows = [{

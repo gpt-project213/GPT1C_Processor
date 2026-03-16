@@ -1,7 +1,7 @@
 """
 Модуль для генерации кратких сводок по продажам
 
-Версия: 1.5 (2026-03-12)
+Версия: 1.6 (2026-03-16)
 ─────────────────────────────────────────────────
 v1.5: C4 — тренд неделя-к-неделе в build_admin_sales_summary
   - get_all_periods_sorted() — список всех периодов по убыванию даты
@@ -39,6 +39,14 @@ _MONTHS_RU = {
     "мая": 5, "июня": 6, "июля": 7, "августа": 8,
     "сентября": 9, "октября": 10, "ноября": 11, "декабря": 12,
 }
+
+def _safe_mtime(p: Path) -> float:
+    """p.stat().st_mtime с защитой от FileNotFoundError при конкурентном pipeline."""
+    try:
+        return p.stat().st_mtime
+    except (FileNotFoundError, OSError):
+        return 0.0
+
 
 def _period_to_date(period_str: str) -> date_type:
     """Парсит строку периода в date для сортировки. Диапазон → конечная дата."""
@@ -392,7 +400,7 @@ class SalesSummary:
                 pass
             return date_type.min
 
-        latest = max(matching_files, key=lambda p: (_get_period(p), p.stat().st_mtime))
+        latest = max(matching_files, key=lambda p: (_get_period(p), _safe_mtime(p)))
         pd = _get_period(latest)
         logger.info(f"📄 Найден отчёт продаж: {latest.name} (период={pd})")
         return latest
@@ -408,7 +416,7 @@ class SalesSummary:
         best_date:   date_type     = date_type.min
 
         for path in sorted(json_dir.glob("sales_*.json"),
-                           key=lambda p: p.stat().st_mtime, reverse=True):
+                           key=_safe_mtime, reverse=True):
             if "товар" in path.name.lower():
                 continue
             try:
@@ -442,7 +450,7 @@ class SalesSummary:
         """
         seen: dict = {}  # date_type → period_str (первый встреченный вариант строки)
         for path in sorted(json_dir.glob("sales_*.json"),
-                           key=lambda p: p.stat().st_mtime, reverse=True):
+                           key=_safe_mtime, reverse=True):
             if "товар" in path.name.lower():
                 continue
             try:

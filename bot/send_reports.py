@@ -1,3 +1,4 @@
+# v. 9.4.34 / 2026-03-16 - Fix: p.stat().st_mtime в _extract_date обёрнут в try/except (audit fix)
 # v. 9.4.33 / 2026-03-10 - Fix: bare except: → except (ValueError, OverflowError) в _parse_period_date (Bug S5)
 # v. 9.4.32 / 09.03.2026 - Fix bugs: #INV-1, #MENU-SILENCE, #AI-MENU, упущенная прибыль → еженедельно (пятница 14:05)
 # ИЗМЕНЕНИЯ v9.4.32 / 09.03.2026:
@@ -2070,7 +2071,10 @@ def _extract_date(full_text: str, file_name: str, p: Path) -> str:
     )
     if m3:
         return m3.group(1).capitalize()
-    return datetime.fromtimestamp(p.stat().st_mtime, tz=TZ).strftime("%d.%m.%Y")
+    try:
+        return datetime.fromtimestamp(p.stat().st_mtime, tz=TZ).strftime("%d.%m.%Y")
+    except (FileNotFoundError, OSError):
+        return datetime.now(tz=TZ).strftime("%d.%m.%Y")
 
 def _classify_type(name: str, full_path: Optional[Path] = None) -> str:
     """Классификация типа отчета по названию файла"""

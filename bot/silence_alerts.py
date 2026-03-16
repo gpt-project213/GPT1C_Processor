@@ -2,8 +2,8 @@
 Модуль для мониторинга дней молчания клиентов в дебиторке
 и отправки уведомлений менеджерам
 
-Версия: 1.4
-Дата: 2026-03-11
+Версия: 1.5
+Дата: 2026-03-16
 Изменения v1.4:
   - parse_html_silence_days(): добавлен парсинг cells[3] (Отгрузка/debit).
   - categorize_by_silence(): исправлена логика partial_payment:
@@ -34,6 +34,14 @@ from datetime import datetime
 from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_mtime(p: Path) -> float:
+    """p.stat().st_mtime с защитой от FileNotFoundError при конкурентном pipeline."""
+    try:
+        return p.stat().st_mtime
+    except (FileNotFoundError, OSError):
+        return 0.0
 
 
 class SilenceAlert:
@@ -604,7 +612,7 @@ class SilenceAlert:
                     return (int(m3.group(3)), mon, int(m3.group(1)))
                 except (ValueError, TypeError):
                     pass
-        return (0, 0, p.stat().st_mtime)
+        return (0, 0, _safe_mtime(p))
 
     def _get_all_debt_reports(self, reports_dir: Path, manager_name: str) -> List[Path]:
         """
@@ -640,7 +648,7 @@ class SilenceAlert:
 
         return sorted(files, key=lambda p: (
             self._period_sort_key(p, self.parse_report_date(p)),
-            p.stat().st_mtime
+            _safe_mtime(p)
         ))
 
     def get_latest_debt_report(self, reports_dir: Path, manager_name: str) -> Optional[Path]:

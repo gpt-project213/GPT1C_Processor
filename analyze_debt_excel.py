@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 analyze_debt_excel.py
-version: v2.1 (2025-09-02)
+version: v2.1.1 (2026-03-16)
 
 Назначение: парсер ПРОСТОГО отчёта 1С «Ведомость по взаиморасчётам с контрагентами».
 Выход: DataFrame с колонками ['клиент','нач','приход','расход','кон'] и список ошибок математики.
@@ -126,7 +126,7 @@ def money_to_float(v: Any) -> float:
     if s in ("", "-", "."): return 0.0
     try:
         return float(s)
-    except Exception:
+    except (ValueError, TypeError):
         return 0.0
 
 # ── Публичный API -------------------------------------------------------------

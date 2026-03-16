@@ -35,11 +35,11 @@ def find_xlsx(*keywords):
 def read_json(p):
     if p is None: return None
     try: return json.loads(Path(p).read_text(encoding="utf-8"))
-    except: return None
+    except Exception: return None
 
 def is_pos(v):
     try: return float(v) >= 0
-    except: return False
+    except Exception: return False
 
 def is_str(v): return isinstance(v, str) and len(str(v).strip()) > 0
 
