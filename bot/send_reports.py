@@ -978,6 +978,41 @@ async def janitor_task(context: ContextTypes.DEFAULT_TYPE):
         log_event("janitor_error", error=str(e))
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# AI DEBT COLLECTOR — job-обёртки для scheduler
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+async def debt_collector_daily(context: ContextTypes.DEFAULT_TYPE):
+    """Ежедневный запуск AI-коллектора в 09:00 Asia/Almaty."""
+    dry_run = os.getenv("COLLECTOR_DRY_RUN", "false").lower() == "true"
+    log_event("collector_daily_start", dry_run=dry_run)
+    try:
+        rc, stdout, stderr = await run_script_async(
+            "collector/collections_engine.py",
+            "--send" if not dry_run else "--dry-run",
+            timeout=300,
+        )
+        if rc != 0:
+            log_event("collector_daily_error", rc=rc, stderr=stderr[:300], level="WARNING")
+    except (OSError, ValueError) as e:
+        log_event("collector_daily_error", error=str(e), level="ERROR")
+
+
+async def debt_collector_promises(context: ContextTypes.DEFAULT_TYPE):
+    """Ежедневная проверка просроченных обещаний оплаты в 10:00 Asia/Almaty."""
+    log_event("collector_promises_start")
+    try:
+        rc, stdout, stderr = await run_script_async(
+            "collector/collections_engine.py",
+            "--check-promises",
+            timeout=120,
+        )
+        if rc != 0:
+            log_event("collector_promises_error", rc=rc, stderr=stderr[:300], level="WARNING")
+    except (OSError, ValueError) as e:
+        log_event("collector_promises_error", error=str(e), level="ERROR")
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # v9.4.7.5: АВТООЧИСТКА СТАРЫХ ФАЙЛОВ
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -5436,6 +5471,21 @@ def main():
             name="cleanup_old_files"
         )
         logger.info("🧹 Настроена автоочистка файлов: логи 2д, AI 7д, HTML 30д, JSON 7д, Excel 14д | Запуск в 03:00")
+
+        # AI Debt Collector
+        job_queue.run_daily(
+            debt_collector_daily,
+            time=dt_time(9, 0, tzinfo=TZ),
+            name="debt_collector_daily",
+        )
+        logger.info("💰 Настроен AI Debt Collector: ежедневно 09:00")
+
+        job_queue.run_daily(
+            debt_collector_promises,
+            time=dt_time(10, 0, tzinfo=TZ),
+            name="debt_collector_promises",
+        )
+        logger.info("💰 Настроена проверка обещаний: ежедневно 10:00")
 
         logger.info(f"🗑️ Автоудаление сообщений через {AUTO_DELETE_HOURS} часов")
     
