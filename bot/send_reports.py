@@ -2892,8 +2892,8 @@ async def pipeline_task(context: ContextTypes.DEFAULT_TYPE):
             _msg = await context.bot.send_message(
                 chat_id=ADMIN_CHAT_ID,
                 text=(
-                    f"⚠️ Почта не отвечает ({datetime.now(TZ).strftime('%H:%M')})\n"
-                    f"Файлы за этот цикл не скачаны.\n"
+                    f"⚠️ imap_fetcher завершился с ошибкой ({datetime.now(TZ).strftime('%H:%M')})\n"
+                    f"Файлы могли быть скачаны частично или полностью.\n"
                     f"Проверь mailbox минбаракат.\n"
                     + (f"\nОшибка: {_err_preview}" if _err_preview else "")
                 )

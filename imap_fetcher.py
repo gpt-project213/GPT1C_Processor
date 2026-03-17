@@ -260,7 +260,7 @@ def _select_mailbox(M: imaplib.IMAP4, name: str) -> bool:
     try:
         typ, _ = M.select(name)
         return (typ == "OK")
-    except (imaplib.IMAP4.error, OSError):
+    except (imaplib.IMAP4.error, OSError, UnicodeEncodeError):
         return False
 
 def _expunge_mailbox(M: imaplib.IMAP4, mailbox: str) -> None:
