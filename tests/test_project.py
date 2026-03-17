@@ -52,7 +52,7 @@ def try_import(mod_name, from_path=None):
 
 try_import("utils_common")
 try_import("utils_excel")
-try_import("cleanup_cache")
+# cleanup_cache.py удалён (коммит 12323b2)
 try_import("expenses_report")   # должен работать без DeprecationWarning
 try_import("expenses_parser")
 try_import("send_tg")
@@ -321,14 +321,7 @@ with warnings.catch_warnings(record=True) as w:
     check("expenses_report — нет DeprecationWarning при импорте", len(dep_warnings) == 0,
           f"найдено {len(dep_warnings)} предупреждений")
 
-# ═══════════════════════════════════════════════════════════════
-# 8. cleanup_cache — _mtime безопасен для несуществующего файла
-# ═══════════════════════════════════════════════════════════════
-section("8. cleanup_cache — _mtime defensive")
-
-import cleanup_cache
-result_mtime = cleanup_cache._mtime(Path("/nonexistent/file/path.html"))
-check("_mtime(несуществующий файл) = 0.0", result_mtime == 0.0, f"got={result_mtime}")
+# cleanup_cache.py удалён в коммите 12323b2 — секция пропущена
 
 # ═══════════════════════════════════════════════════════════════
 # 9. config.py — загружается без исключений

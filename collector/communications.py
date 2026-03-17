@@ -33,10 +33,11 @@ load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env",
 
 TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 
-GREENAPI_ID    = os.getenv("GREENAPI_ID", "")
-GREENAPI_TOKEN = os.getenv("GREENAPI_TOKEN", "")
-BOT_TOKEN      = os.getenv("TG_BOT_TOKEN") or os.getenv("BOT_TOKEN", "")
-ADMIN_CHAT_ID  = os.getenv("ADMIN_CHAT_ID", "")
+GREENAPI_ID      = os.getenv("GREENAPI_ID", "")
+GREENAPI_TOKEN   = os.getenv("GREENAPI_TOKEN", "")
+BOT_TOKEN        = os.getenv("TG_BOT_TOKEN") or os.getenv("BOT_TOKEN", "")
+ADMIN_CHAT_ID    = os.getenv("ADMIN_CHAT_ID", "")
+WHATSAPP_ENABLED = os.getenv("WHATSAPP_ENABLED", "0") == "1"
 
 HOUR_START = int(os.getenv("COLLECTOR_HOUR_START", "9"))
 HOUR_END   = int(os.getenv("COLLECTOR_HOUR_END", "18"))
@@ -57,7 +58,11 @@ def send_whatsapp(phone: str, text: str) -> bool:
 
     POST https://api.green-api.com/waInstance{ID}/sendMessage/{TOKEN}
     Возвращает True при успехе.
+    WhatsApp временно отключён — установите WHATSAPP_ENABLED=1 в .env для включения.
     """
+    if not WHATSAPP_ENABLED:
+        logger.info("WhatsApp отключён (WHATSAPP_ENABLED=0) — пропуск отправки: %s", phone)
+        return False
     if not GREENAPI_ID or not GREENAPI_TOKEN:
         logger.warning("Green API не настроен (GREENAPI_ID / GREENAPI_TOKEN отсутствуют)")
         return False
