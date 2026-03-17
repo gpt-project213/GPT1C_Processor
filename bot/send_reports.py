@@ -4276,6 +4276,18 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await q.answer()
     data = q.data or ""
     chat_id = q.message.chat.id
+
+    # Collector dialog callbacks
+    if data.startswith("col_"):
+        try:
+            from collector.manager_dialog import handle_callback as _col_cb
+            handled = await _col_cb(data, chat_id, q.message.message_id)
+            if handled:
+                return
+        except Exception as e:
+            logger.error("collector callback error: %s", e)
+        return
+
     user_role = get_user_role(chat_id)
     scopes = user_scopes(chat_id)
     my_name = get_my_manager_name(chat_id)
@@ -5282,6 +5294,13 @@ async def handle_analytics(update: Update, context: ContextTypes.DEFAULT_TYPE, d
 # ═══════════════════════════════════════════════════════════════
 
 
+async def collector_reminder_task(context: ContextTypes.DEFAULT_TYPE):
+    """Hourly: send reminders to managers with pending collector dialogs."""
+    try:
+        from collector.manager_dialog import send_reminders as _collector_reminders
+        await _collector_reminders()
+    except Exception as e:
+        logger.error("collector_reminder_task error: %s", e)
 
 
 
@@ -5289,6 +5308,15 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
     """Обработчик команд от постоянного меню (v9.4.12)"""
     text = update.message.text
     chat_id = update.effective_chat.id
+
+    # Check active collector dialog first
+    try:
+        from collector.manager_dialog import handle_text_message as _col_text
+        if await _col_text(chat_id, text):
+            return
+    except Exception as e:
+        logger.error("collector text handler error: %s", e)
+
     user_role = get_user_role(chat_id)
     
     if text == "📊 Дебиторка":
@@ -5486,6 +5514,14 @@ def main():
             name="debt_collector_promises",
         )
         logger.info("💰 Настроена проверка обещаний: ежедневно 10:00")
+
+        job_queue.run_repeating(
+            collector_reminder_task,
+            interval=3600,
+            first=300,
+            name="collector_reminders",
+        )
+        logger.info("📨 Настроен AI Коллектор: напоминания менеджерам каждые 60 мин")
 
         logger.info(f"🗑️ Автоудаление сообщений через {AUTO_DELETE_HOURS} часов")
     

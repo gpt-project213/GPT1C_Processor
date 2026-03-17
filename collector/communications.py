@@ -18,6 +18,7 @@ collections/communications.py
   - При ошибке доставки — уведомить менеджера, не падать молча
 """
 
+import json
 import logging
 import os
 from datetime import datetime, time as dt_time
@@ -130,3 +131,31 @@ async def notify_admin(message: str) -> bool:
 async def notify_manager(manager_chat_id: int, message: str) -> bool:
     """Уведомляет менеджера клиента об ошибке доставки или нарушении обещания."""
     return await send_telegram(manager_chat_id, f"⚠️ <b>AI Коллектор</b>\n\n{message}")
+
+
+def get_observer_ids(manager_name: str) -> list:
+    """Returns chat_ids of manager + supervising subadmin (if any) + all admins."""
+    roles_path = Path(__file__).resolve().parent.parent / "config" / "roles.json"
+    try:
+        with open(roles_path, encoding="utf-8") as f:
+            roles = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return []
+
+    ids: set = set()
+
+    # The manager themselves
+    mgr_id = roles.get("managers", {}).get(manager_name)
+    if mgr_id:
+        ids.add(int(mgr_id))
+
+    # Subadmins who supervise this manager
+    for sub_id_str, scopes in roles.get("subadmin_scopes", {}).items():
+        if manager_name in scopes:
+            ids.add(int(sub_id_str))
+
+    # All admins
+    for admin_id in roles.get("admins", []):
+        ids.add(int(admin_id))
+
+    return sorted(ids)

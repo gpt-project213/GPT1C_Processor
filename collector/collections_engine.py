@@ -158,7 +158,7 @@ async def _process_single(
     contact: Dict[str, Any],
     dry_run: bool,
 ) -> Dict[str, Any]:
-    """Обрабатывает одного должника: генерация + отправка + звонок."""
+    """Обрабатывает одного должника: генерация + диалог с менеджером + звонок."""
     name = client["name"]
     level = client["level"]
     days = client["days"]
@@ -182,7 +182,7 @@ async def _process_single(
         "no_contacts": False,
     }
 
-    # Генерируем текст сообщения
+    # Генерируем текст сообщения (всегда — для dry-run и логирования)
     text = generate_message(
         client_name=name,
         debt_amount=amount,
@@ -197,27 +197,55 @@ async def _process_single(
         result["message_text"] = text
         return result
 
-    # Отправляем в WhatsApp
-    wa_ok = False
-    if phone:
-        wa_ok = send_whatsapp(phone, text)
-        if not wa_ok and manager_chat_id:
-            await notify_manager(
-                manager_chat_id,
-                f"❌ Не удалось отправить WhatsApp клиенту <b>{name}</b>",
+    # Если нет chat_id менеджера — прямая отправка (старый путь)
+    if not manager_chat_id:
+        wa_ok = False
+        if phone:
+            wa_ok = send_whatsapp(phone, text)
+        tg_ok = False
+        if tg_id:
+            tg_ok = await send_telegram(int(tg_id), text)
+        sent = wa_ok or tg_ok
+        if sent:
+            update_after_contact(name, "whatsapp" if wa_ok else "telegram", level, text)
+            result["sent"] = True
+    else:
+        # Используем диалог с менеджером
+        from collector.dialog_store import get_dialog as _get_dialog_state
+        from collector.manager_dialog import start_dialog as _start_manager_dialog
+
+        dialog = _get_dialog_state(manager_chat_id)
+
+        if dialog and dialog.get("client_name") == name:
+            state = dialog.get("state", "")
+            if state in ("CONFIRMED", "DONE"):
+                # WhatsApp уже отправлен через диалог
+                result["sent"] = True
+                result["via_dialog"] = True
+                return result
+            else:
+                # Диалог в процессе — ждём менеджера
+                logger.info(
+                    "[%s] диалог в состоянии %s — ожидаем менеджера", name, state
+                )
+                return result
+
+        elif dialog and dialog.get("state") not in ("CONFIRMED", "DONE", None):
+            # Менеджер занят диалогом по другому клиенту
+            logger.info(
+                "[%s] менеджер %s занят диалогом по %s — пропуск",
+                name, manager_name, dialog.get("client_name"),
             )
+            return result
 
-    # Отправляем в Telegram
-    tg_ok = False
-    if tg_id:
-        tg_ok = await send_telegram(int(tg_id), text)
+        else:
+            # Запускаем новый диалог
+            await _start_manager_dialog(client, contact, manager_name, manager_chat_id)
+            result["dialog_started"] = True
+            logger.info("[%s] диалог запущен с менеджером %s", name, manager_name)
+            return result
 
-    sent = wa_ok or tg_ok
-    if sent:
-        update_after_contact(name, "whatsapp" if wa_ok else "telegram", level, text)
-        result["sent"] = True
-
-    # Звонок при level >= CALL_LEVEL_MIN
+    # Звонок только когда диалог подтверждён (state CONFIRMED) или прямая отправка
     if not do_not_call and phone and is_call_allowed_time():
         call_res = initiate_call(
             phone=phone,
