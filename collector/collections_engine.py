@@ -189,6 +189,7 @@ async def _process_single(
         days_overdue=days,
         level=level,
         language=language,
+        manager_name=manager_name,
     )
     logger.info("[%s] level=%d days=%d | текст: %s...", name, level, days, text[:60])
 
@@ -209,6 +210,23 @@ async def _process_single(
         if sent:
             update_after_contact(name, "whatsapp" if wa_ok else "telegram", level, text)
             result["sent"] = True
+            # Регистрируем клиентский диалог если WhatsApp отправлен
+            if wa_ok and phone:
+                try:
+                    from collector.client_dialog import start_client_dialog
+                    phone_clean = "".join(c for c in phone if c.isdigit())
+                    await start_client_dialog(
+                        phone=phone_clean,
+                        client_name=name,
+                        manager_name=manager_name,
+                        manager_chat_id=0,
+                        level=level,
+                        days=days,
+                        amount=amount,
+                        message_text=text,
+                    )
+                except Exception as e:
+                    logger.error("[%s] start_client_dialog ошибка: %s", name, e)
     else:
         # Используем диалог с менеджером
         from collector.dialog_store import get_dialog as _get_dialog_state

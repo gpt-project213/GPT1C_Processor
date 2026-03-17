@@ -31,6 +31,14 @@ DEEPSEEK_API_KEY       = os.getenv("DEEPSEEK_API_KEY", "")
 DEEPSEEK_MODEL         = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 COLLECTOR_REMINDER_HOURS = float(os.getenv("COLLECTOR_REMINDER_HOURS", "1"))
 COLLECTOR_DEADLINE_DAYS  = int(os.getenv("COLLECTOR_DEADLINE_DAYS", "5"))
+COMPANY_NAME             = os.getenv("COMPANY_NAME", "Минбаракат")
+TEST_MODE                = os.getenv("TEST_MODE", "0") == "1"
+TEST_TG_CHAT_IDS: List[int] = [
+    int(x.strip())
+    for x in os.getenv("TEST_TG_CHAT_IDS", "").split(",")
+    if x.strip()
+]
+OPENAI_API_KEY           = os.getenv("OPENAI_API_KEY", "")
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +67,18 @@ async def _send_msg(
     text: str,
     markup: Optional[Dict[str, Any]] = None,
 ) -> Optional[int]:
-    """Отправляет сообщение; возвращает message_id или None."""
+    """Отправляет сообщение; возвращает message_id или None.
+
+    В TEST_MODE сообщения отправляются только на TEST_TG_CHAT_IDS.
+    """
+    if TEST_MODE:
+        if TEST_TG_CHAT_IDS and chat_id not in TEST_TG_CHAT_IDS:
+            logger.info(
+                "TEST_MODE: redirecting to test recipients — "
+                "пропуск отправки chat_id=%d (не в TEST_TG_CHAT_IDS)",
+                chat_id,
+            )
+            return None
     payload: Dict[str, Any] = {
         "chat_id":    chat_id,
         "text":       text,
@@ -110,30 +129,74 @@ def _fmt_amount(amount: float) -> str:
 # ─── Message builders ────────────────────────────────────────────────────────
 
 def _build_initial_message(dialog: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
-    """Строит начальное сообщение с кнопками подтверждения/обновления/отказа."""
+    """Строит начальное сообщение с раздельным подтверждением имени и телефона."""
     mid = dialog["manager_chat_id"]
     contact = dialog.get("current_contact") or {}
-    phone = contact.get("whatsapp") or contact.get("phone", "не указан")
-    person = contact.get("contact_person", "не указан")
+    phone = contact.get("whatsapp") or contact.get("phone", "не задан")
+    display_name = contact.get("display_name") or contact.get("contact_person", "не задано")
+
+    name_confirmations = contact.get("name_confirmations", 0)
+    phone_confirmations = contact.get("phone_confirmations", 0)
+
+    name_confirmed  = dialog.get("name_confirmed", False) or name_confirmations >= 3
+    phone_confirmed = dialog.get("phone_confirmed", False) or phone_confirmations >= 3
+
+    if name_confirmed and phone_confirmed:
+        # Оба подтверждены — показываем финальное подтверждение
+        return _build_final_confirm_message(dialog)
+
+    lines = [
+        f"📋 <b>AI Коллектор — новый должник</b>\n",
+        f"Клиент в 1С: {dialog['client_name']}",
+        f"Просрочка: {dialog['days']} дн. | {_fmt_amount(dialog['amount'])} тг | Уровень: {dialog['level']}\n",
+    ]
+
+    keyboard_rows: List[List[Tuple[str, str]]] = []
+
+    if not name_confirmed:
+        lines.append("━━━━━━━━━━━━━━━━")
+        lines.append("👤 <b>КАК ОБРАЩАТЬСЯ К КЛИЕНТУ?</b>\n")
+        lines.append(f"Сейчас в базе: {display_name}")
+        lines.append("(это имя войдёт в сообщение клиенту)\n")
+        keyboard_rows.append([
+            (f"✅ Верно — {display_name[:20]}", f"col_name_ok_{mid}"),
+            ("✏️ Другое название",               f"col_name_edit_{mid}"),
+        ])
+
+    if not phone_confirmed:
+        lines.append("━━━━━━━━━━━━━━━━")
+        lines.append("📞 <b>ТЕЛЕФОН ДЛЯ WHATSAPP:</b>\n")
+        lines.append(f"{phone}\n")
+        keyboard_rows.append([
+            ("✅ Актуален",    f"col_phone_ok_{mid}"),
+            ("📞 Изменился",   f"col_phone_edit_{mid}"),
+        ])
+
+    keyboard_rows.append([("❌ Не отправлять сейчас", f"col_reject_{mid}")])
+
+    text = "\n".join(lines)
+    markup = _inline(keyboard_rows)
+    return text, markup
+
+
+def _build_final_confirm_message(dialog: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
+    """Строит финальное сообщение подтверждения после проверки имени и телефона."""
+    mid = dialog["manager_chat_id"]
+    contact = dialog.get("current_contact") or {}
+    phone = contact.get("whatsapp") or contact.get("phone", "не задан")
+    display_name = contact.get("display_name") or contact.get("contact_person", "не задано")
 
     text = (
-        f"📋 <b>AI Коллектор — запрос подтверждения</b>\n\n"
-        f"Менеджер: {dialog['manager_name']}\n"
-        f"Клиент: {dialog['client_name']}\n"
-        f"Просрочка: {dialog['days']} дн. | Сумма: {_fmt_amount(dialog['amount'])} тг\n"
-        f"Уровень давления: {dialog['level']}\n\n"
-        f"Данные в базе:\n"
-        f"  📞 Телефон/WhatsApp: {phone}\n"
-        f"  👤 Контакт: {person}\n\n"
-        f"Данные актуальны? Отправить WhatsApp-напоминание?"
+        f"✅ <b>Данные подтверждены</b>\n\n"
+        f"Клиент: {display_name}\n"
+        f"Телефон: {phone}\n"
+        f"Просрочка: {dialog['days']} дн. | {_fmt_amount(dialog['amount'])} тг\n\n"
+        f"Отправить WhatsApp-уведомление?"
     )
     markup = _inline([
         [
-            ("✅ Актуально — отправить", f"col_confirm_{mid}"),
-            ("✏️ Обновить данные",       f"col_update_{mid}"),
-        ],
-        [
-            ("❌ Не отправлять сейчас",  f"col_reject_{mid}"),
+            ("🚀 Отправить",        f"col_confirm_{mid}"),
+            ("❌ Не отправлять",    f"col_reject_{mid}"),
         ],
     ])
     return text, markup
@@ -334,7 +397,12 @@ def _save_contact(client_name: str, contact: Dict[str, Any]) -> None:
 # ─── WhatsApp + Notification ──────────────────────────────────────────────────
 
 async def _send_whatsapp_and_notify(dialog: Dict[str, Any]) -> None:
-    """Отправляет WhatsApp-сообщение и уведомляет всех наблюдателей."""
+    """Отправляет WhatsApp-сообщение и уведомляет всех наблюдателей.
+
+    Повторяет попытку до 3 раз с интервалом 5 минут при неудаче.
+    После успешной отправки регистрирует клиентский диалог.
+    """
+    import asyncio as _asyncio
     from collector.collection_agent import generate_message
     from collector.communications import send_whatsapp, get_observer_ids
     from collector.collections_db import update_after_contact
@@ -347,27 +415,59 @@ async def _send_whatsapp_and_notify(dialog: Dict[str, Any]) -> None:
     amount       = dialog["amount"]
     language     = contact.get("language", "ru")
     phone        = contact.get("whatsapp") or contact.get("phone", "")
+    manager_chat_id = dialog.get("manager_chat_id")
+
+    # Получаем display_name из контакта
+    display_name = (
+        contact.get("display_name")
+        or contact.get("contact_person")
+        or client_name
+    )
 
     # Генерируем текст сообщения
     try:
         message_text = generate_message(
-            client_name=client_name,
+            client_name=display_name,
             debt_amount=amount,
             days_overdue=days,
             level=level,
             language=language,
+            manager_name=manager_name,
         )
     except Exception as e:
         logger.error("[%s] generate_message ошибка: %s", client_name, e)
         message_text = f"Уважаемый клиент, у вас просроченная задолженность {_fmt_amount(amount)} тг."
 
-    # Отправка WhatsApp
+    # Отправка WhatsApp с повторными попытками (до 3 раз, интервал 5 мин)
     wa_ok = False
     if phone:
+        for attempt in range(3):
+            try:
+                wa_ok = send_whatsapp(phone, message_text)
+            except Exception as e:
+                logger.error("[%s] send_whatsapp попытка %d ошибка: %s", client_name, attempt + 1, e)
+                wa_ok = False
+            if wa_ok:
+                break
+            if attempt < 2:
+                logger.info("[%s] WhatsApp не отправлен, повтор через 5 мин (попытка %d/3)", client_name, attempt + 1)
+                await _asyncio.sleep(300)
+
+    # Если все попытки провалились — уведомляем наблюдателей
+    if phone and not wa_ok:
         try:
-            wa_ok = send_whatsapp(phone, message_text)
+            observer_ids_fail = get_observer_ids(manager_name)
         except Exception as e:
-            logger.error("[%s] send_whatsapp ошибка: %s", client_name, e)
+            logger.error("get_observer_ids ошибка: %s", e)
+            observer_ids_fail = []
+        if manager_chat_id and manager_chat_id not in observer_ids_fail:
+            observer_ids_fail = [manager_chat_id] + observer_ids_fail
+        for obs_id in observer_ids_fail:
+            await _send_msg(
+                obs_id,
+                f"❌ Не удалось отправить WhatsApp клиенту {display_name} после 3 попыток. "
+                f"Телефон: {phone}",
+            )
 
     # Обновляем БД если отправлено
     if wa_ok:
@@ -375,6 +475,24 @@ async def _send_whatsapp_and_notify(dialog: Dict[str, Any]) -> None:
             update_after_contact(client_name, "whatsapp", level, message_text)
         except Exception as e:
             logger.error("[%s] update_after_contact ошибка: %s", client_name, e)
+
+        # Регистрируем клиентский диалог
+        if phone and manager_chat_id:
+            try:
+                from collector.client_dialog import start_client_dialog
+                phone_clean = "".join(c for c in phone if c.isdigit())
+                await start_client_dialog(
+                    phone=phone_clean,
+                    client_name=display_name,
+                    manager_name=manager_name,
+                    manager_chat_id=int(manager_chat_id),
+                    level=level,
+                    days=days,
+                    amount=amount,
+                    message_text=message_text,
+                )
+            except Exception as e:
+                logger.error("[%s] start_client_dialog ошибка: %s", client_name, e)
 
     # Уведомляем наблюдателей
     status_icon = "✅" if wa_ok else "⚠️"
@@ -646,6 +764,184 @@ async def _on_admin_deny_rejection(dialog: Dict[str, Any], mid: int) -> None:
         )
 
 
+# ─── Vadim control reminder ──────────────────────────────────────────────────
+
+async def _send_control_reminder(dialog: Dict[str, Any]) -> None:
+    """Отправляет напоминание администратору (Вадиму) по клиенту на контроле."""
+    mid    = dialog["manager_chat_id"]
+    client = dialog["client_name"]
+    mgr    = dialog["manager_name"]
+    days   = dialog["days"]
+    amount = dialog["amount"]
+    reason = dialog.get("rejection_reason") or "(не указана)"
+
+    text = (
+        f"🕐 <b>На контроле — нет результата</b>\n\n"
+        f"👤 Менеджер: {mgr}\n"
+        f"🏢 Клиент: {client}\n"
+        f"📅 Просрочка: теперь {days} дн. | {_fmt_amount(amount)} тг\n\n"
+        f"Вчера принята причина:\n"
+        f"\"{reason}\"\n\n"
+        f"Оплата не поступила. Ваше решение?"
+    )
+    markup = _inline([
+        [("📤 Уведомить клиента сейчас",    f"col_adm_send_{mid}")],
+        [("💬 Вызвать менеджера на отчёт",   f"col_adm_call_{mid}")],
+        [("⏳ Продлить контроль +1 день",    f"col_adm_extend_{mid}")],
+    ])
+    admin_ids = _get_admin_ids()
+    for admin_id in admin_ids:
+        await _send_msg(admin_id, text, markup)
+
+
+async def _on_admin_send(dialog: Dict[str, Any], mid: int) -> None:
+    """Администратор решил отправить уведомление клиенту сейчас."""
+    from collector.dialog_store import update_dialog, STATE_CONFIRMED
+    update_dialog(mid, state=STATE_CONFIRMED)
+    dialog["state"] = STATE_CONFIRMED
+    await _send_whatsapp_and_notify(dialog)
+
+
+async def _on_admin_extend(dialog: Dict[str, Any], mid: int) -> None:
+    """Администратор продлевает контроль на +1 день."""
+    from collector.dialog_store import update_dialog
+    control_extensions = dialog.get("control_extensions", 0) + 1
+    old_deadline = dialog.get("control_deadline")
+    if old_deadline:
+        try:
+            from datetime import date
+            old_date = datetime.fromisoformat(old_deadline).date()
+            new_date = old_date + timedelta(days=1)
+            new_deadline = new_date.isoformat()
+        except (ValueError, TypeError):
+            new_deadline = (datetime.now(TZ) + timedelta(days=1)).date().isoformat()
+    else:
+        new_deadline = (datetime.now(TZ) + timedelta(days=1)).date().isoformat()
+
+    update_dialog(
+        mid,
+        control_deadline=new_deadline,
+        control_extensions=control_extensions,
+    )
+    admin_ids = _get_admin_ids()
+    for admin_id in admin_ids:
+        await _send_msg(
+            admin_id,
+            f"⏳ Контроль продлён до <b>{new_deadline}</b>\n\n"
+            f"Клиент: {dialog['client_name']}\n"
+            f"Менеджер: {dialog['manager_name']}",
+        )
+
+
+async def _on_admin_call_manager(dialog: Dict[str, Any], mid: int) -> None:
+    """Администратор запрашивает объяснения от менеджера."""
+    from collector.dialog_store import update_dialog, STATE_AWAITING_MANAGER_EXPLANATION
+    client = dialog["client_name"]
+    days   = dialog["days"]
+    amount = dialog["amount"]
+    reason = dialog.get("rejection_reason") or "(не указана)"
+
+    update_dialog(mid, awaiting_manager_explanation=True, state=STATE_AWAITING_MANAGER_EXPLANATION)
+
+    await _send_msg(
+        mid,
+        f"🔔 <b>Руководитель запрашивает объяснения</b>\n\n"
+        f"Клиент: {client}\n"
+        f"Просрочка: {days} дн. | {_fmt_amount(amount)} тг\n"
+        f"Принятая причина: \"{reason}\"\n\n"
+        f"❓ Вадим требует объяснений.\n"
+        f"Напишите ответ ответным сообщением:",
+    )
+
+
+async def _on_manager_explanation(dialog: Dict[str, Any], mid: int, text: str) -> None:
+    """Обрабатывает объяснение менеджера — форвардит администраторам."""
+    from collector.dialog_store import update_dialog, STATE_DEADLINE_SET
+    client = dialog["client_name"]
+    days   = dialog["days"]
+    amount = dialog["amount"]
+
+    update_dialog(mid, awaiting_manager_explanation=False, state=STATE_DEADLINE_SET)
+
+    forward_text = (
+        f"💬 <b>Ответ менеджера {dialog['manager_name']}:</b>\n\n"
+        f"\"{text}\"\n\n"
+        f"Клиент: {client} | {days} дн. | {_fmt_amount(amount)} тг"
+    )
+    markup = _inline([
+        [
+            ("📤 Уведомить клиента",    f"col_adm_send_{mid}"),
+            ("⏳ +1 день",               f"col_adm_extend_{mid}"),
+            ("✅ Принять объяснение",    f"col_adm_ok_{mid}"),
+        ],
+    ])
+    admin_ids = _get_admin_ids()
+    for admin_id in admin_ids:
+        await _send_msg(admin_id, forward_text, markup)
+
+
+# ─── Name/Phone confirmation handlers ─────────────────────────────────────────
+
+async def _on_name_ok(dialog: Dict[str, Any], mid: int) -> None:
+    """Менеджер подтвердил имя клиента."""
+    from collector.dialog_store import update_dialog
+    contact = dict(dialog.get("current_contact") or {})
+    contact["name_confirmations"] = contact.get("name_confirmations", 0) + 1
+    # Сохраняем в debtors_contacts.json
+    _save_contact(dialog["client_name"], contact)
+    update_dialog(mid, name_confirmed=True, current_contact=contact)
+    dialog["name_confirmed"] = True
+    dialog["current_contact"] = contact
+    # Переотправляем сообщение с обновлённым состоянием
+    text, markup = _build_initial_message(dialog)
+    await _send_msg(mid, text, markup)
+
+
+async def _on_name_edit(dialog: Dict[str, Any], mid: int) -> None:
+    """Менеджер хочет изменить имя клиента."""
+    from collector.dialog_store import update_dialog, STATE_AWAITING_NAME_TEXT
+    update_dialog(mid, awaiting_name_text=True, state=STATE_AWAITING_NAME_TEXT)
+    contact = dict(dialog.get("current_contact") or {})
+    contact["name_confirmations"] = 0
+    _save_contact(dialog["client_name"], contact)
+    update_dialog(mid, current_contact=contact)
+    await _send_msg(
+        mid,
+        "✏️ <b>Введите имя клиента</b>\n\n"
+        "Как обращаться к клиенту в сообщении WhatsApp?\n"
+        "Например: ТОО Альфа, Иван Иванов, Магазин у дома",
+    )
+
+
+async def _on_phone_ok(dialog: Dict[str, Any], mid: int) -> None:
+    """Менеджер подтвердил телефон клиента."""
+    from collector.dialog_store import update_dialog
+    contact = dict(dialog.get("current_contact") or {})
+    contact["phone_confirmations"] = contact.get("phone_confirmations", 0) + 1
+    _save_contact(dialog["client_name"], contact)
+    update_dialog(mid, phone_confirmed=True, current_contact=contact)
+    dialog["phone_confirmed"] = True
+    dialog["current_contact"] = contact
+    text, markup = _build_initial_message(dialog)
+    await _send_msg(mid, text, markup)
+
+
+async def _on_phone_edit(dialog: Dict[str, Any], mid: int) -> None:
+    """Менеджер сообщает о смене телефона клиента."""
+    from collector.dialog_store import update_dialog, STATE_AWAITING_PHONE_TEXT
+    update_dialog(mid, awaiting_phone_text=True, state=STATE_AWAITING_PHONE_TEXT)
+    contact = dict(dialog.get("current_contact") or {})
+    contact["phone_confirmations"] = 0
+    _save_contact(dialog["client_name"], contact)
+    update_dialog(mid, current_contact=contact)
+    await _send_msg(
+        mid,
+        "📞 <b>Введите новый телефон</b>\n\n"
+        "Введите актуальный номер WhatsApp клиента.\n"
+        "Например: +77011234567 или 87011234567",
+    )
+
+
 # ─── Public API ───────────────────────────────────────────────────────────────
 
 async def start_dialog(
@@ -725,6 +1021,13 @@ async def handle_callback(data: str, chat_id: int, message_id: int) -> bool:
         ("col_data_edit_", "data_edit"),
         ("col_adm_ok_",    "adm_ok"),
         ("col_adm_deny_",  "adm_deny"),
+        ("col_adm_send_",  "adm_send"),
+        ("col_adm_call_",  "adm_call"),
+        ("col_adm_extend_","adm_extend"),
+        ("col_name_ok_",   "name_ok"),
+        ("col_name_edit_", "name_edit"),
+        ("col_phone_ok_",  "phone_ok"),
+        ("col_phone_edit_","phone_edit"),
     ]
 
     action = None
@@ -762,6 +1065,20 @@ async def handle_callback(data: str, chat_id: int, message_id: int) -> bool:
         await _on_admin_approve_rejection(dialog, mid)
     elif action == "adm_deny":
         await _on_admin_deny_rejection(dialog, mid)
+    elif action == "adm_send":
+        await _on_admin_send(dialog, mid)
+    elif action == "adm_call":
+        await _on_admin_call_manager(dialog, mid)
+    elif action == "adm_extend":
+        await _on_admin_extend(dialog, mid)
+    elif action == "name_ok":
+        await _on_name_ok(dialog, mid)
+    elif action == "name_edit":
+        await _on_name_edit(dialog, mid)
+    elif action == "phone_ok":
+        await _on_phone_ok(dialog, mid)
+    elif action == "phone_edit":
+        await _on_phone_edit(dialog, mid)
     else:
         return False
 
@@ -777,6 +1094,9 @@ async def handle_text_message(chat_id: int, text: str) -> bool:
         STATE_AWAITING_CONFIRM,
         STATE_AWAITING_DATA_CONFIRM,
         STATE_REJECTED_PENDING_ADMIN,
+        STATE_AWAITING_MANAGER_EXPLANATION,
+        STATE_AWAITING_NAME_TEXT,
+        STATE_AWAITING_PHONE_TEXT,
     )
 
     dialog = get_dialog(chat_id)
@@ -787,6 +1107,54 @@ async def handle_text_message(chat_id: int, text: str) -> bool:
 
     if state in (STATE_AWAITING_DATA, STATE_AWAITING_REJECTION_REASON):
         await _on_data_received(dialog, chat_id, text)
+        return True
+
+    if state == STATE_AWAITING_NAME_TEXT:
+        # Менеджер вводит новое имя клиента
+        from collector.dialog_store import update_dialog
+        contact = dict(dialog.get("current_contact") or {})
+        contact["display_name"] = text.strip()
+        contact["name_confirmations"] = 1
+        _save_contact(dialog["client_name"], contact)
+        update_dialog(
+            chat_id,
+            current_contact=contact,
+            name_confirmed=True,
+            awaiting_name_text=False,
+            state=STATE_AWAITING_CONFIRM,
+        )
+        dialog["current_contact"] = contact
+        dialog["name_confirmed"] = True
+        await _send_msg(chat_id, f"✅ Имя обновлено: <b>{text.strip()}</b>")
+        # Показываем следующий шаг
+        msg_text, markup = _build_initial_message(dialog)
+        await _send_msg(chat_id, msg_text, markup)
+        return True
+
+    if state == STATE_AWAITING_PHONE_TEXT:
+        # Менеджер вводит новый телефон клиента
+        from collector.dialog_store import update_dialog
+        phone_clean = "".join(c for c in text if c.isdigit() or c == "+")
+        contact = dict(dialog.get("current_contact") or {})
+        contact["phone"] = phone_clean
+        contact["phone_confirmations"] = 1
+        _save_contact(dialog["client_name"], contact)
+        update_dialog(
+            chat_id,
+            current_contact=contact,
+            phone_confirmed=True,
+            awaiting_phone_text=False,
+            state=STATE_AWAITING_CONFIRM,
+        )
+        dialog["current_contact"] = contact
+        dialog["phone_confirmed"] = True
+        await _send_msg(chat_id, f"✅ Телефон обновлён: <b>{phone_clean}</b>")
+        msg_text, markup = _build_initial_message(dialog)
+        await _send_msg(chat_id, msg_text, markup)
+        return True
+
+    if state == STATE_AWAITING_MANAGER_EXPLANATION:
+        await _on_manager_explanation(dialog, chat_id, text)
         return True
 
     if state == STATE_AWAITING_CONFIRM:
@@ -811,6 +1179,96 @@ async def handle_text_message(chat_id: int, text: str) -> bool:
         return True
 
     return False
+
+
+async def handle_voice_message(chat_id: int, file_id: str) -> bool:
+    """Скачивает голосовое сообщение из Telegram и обрабатывает как текст.
+
+    Args:
+        chat_id: Telegram chat_id менеджера.
+        file_id: file_id голосового сообщения из Telegram.
+
+    Returns:
+        True если обработано, False если нет активного диалога.
+    """
+    if not BOT_TOKEN:
+        logger.warning("BOT_TOKEN не задан — голосовые сообщения недоступны")
+        return False
+    if not OPENAI_API_KEY:
+        logger.warning("OPENAI_API_KEY не задан — транскрипция голоса недоступна")
+        return False
+
+    import tempfile as _tempfile
+
+    # Получаем информацию о файле
+    file_info_url = f"https://api.telegram.org/bot{BOT_TOKEN}/getFile?file_id={file_id}"
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(file_info_url)
+        if resp.status_code != 200:
+            logger.warning("getFile ошибка %d", resp.status_code)
+            return False
+        file_path = resp.json()["result"]["file_path"]
+    except (httpx.RequestError, httpx.TimeoutException, KeyError) as e:
+        logger.error("getFile сетевая ошибка: %s", e)
+        return False
+
+    # Скачиваем файл
+    download_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}"
+    tmp_path: Optional[str] = None
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            dl_resp = await client.get(download_url)
+        if dl_resp.status_code != 200:
+            logger.warning("Скачивание голоса ошибка %d", dl_resp.status_code)
+            return False
+
+        suffix = ".oga"
+        tmp_fd, tmp_path = _tempfile.mkstemp(suffix=suffix, prefix="tg_voice_")
+        try:
+            with os.fdopen(tmp_fd, "wb") as f:
+                f.write(dl_resp.content)
+        except OSError as e:
+            logger.error("Ошибка записи голоса: %s", e)
+            return False
+
+        # Транскрибируем через Whisper
+        headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
+        with open(tmp_path, "rb") as audio_f:
+            files = {"file": (f"voice{suffix}", audio_f, "audio/ogg")}
+            data = {"model": "whisper-1"}
+            try:
+                async with httpx.AsyncClient(timeout=60) as client:
+                    whisper_resp = await client.post(
+                        "https://api.openai.com/v1/audio/transcriptions",
+                        headers=headers,
+                        files=files,
+                        data=data,
+                    )
+                if whisper_resp.status_code != 200:
+                    logger.warning("Whisper ошибка %d", whisper_resp.status_code)
+                    return False
+                transcribed = whisper_resp.json().get("text", "").strip()
+            except (httpx.RequestError, httpx.TimeoutException, KeyError) as e:
+                logger.error("Whisper сетевая ошибка: %s", e)
+                return False
+
+    except (httpx.RequestError, httpx.TimeoutException) as e:
+        logger.error("Скачивание голоса сетевая ошибка: %s", e)
+        return False
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+    if not transcribed:
+        logger.info("Whisper вернул пустую транскрипцию для chat_id=%d", chat_id)
+        return False
+
+    logger.info("Голосовое сообщение chat_id=%d транскрибировано: %s...", chat_id, transcribed[:60])
+    return await handle_text_message(chat_id, transcribed)
 
 
 async def send_reminders() -> None:

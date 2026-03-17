@@ -90,14 +90,16 @@ def _save(data: dict) -> None:
 
 def _empty_record(name: str) -> dict:
     return {
-        "phone":          "",
-        "email":          "",
-        "contact_person": "",
-        "manager":        "",
-        "language":       "ru",
-        "do_not_call":    False,
-        "notes":          "",
+        "phone":               "",
+        "email":               "",
+        "contact_person":      "",
+        "manager":             "",
+        "language":            "ru",
+        "do_not_call":         False,
+        "notes":               "",
         "openclaw_session_id": None,
+        "name_confirmations":  0,
+        "phone_confirmations": 0,
     }
 
 
@@ -147,6 +149,9 @@ def import_xlsx(xlsx_path: Path, overwrite: bool = False) -> None:
 
         is_new = name not in existing
         record = existing.get(name, _empty_record(name))
+        # Убеждаемся что confirmations поля присутствуют (обратная совместимость)
+        record.setdefault("name_confirmations", 0)
+        record.setdefault("phone_confirmations", 0)
 
         for i, key in col_to_key.items():
             if key == "name" or i >= len(row):

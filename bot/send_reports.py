@@ -5304,6 +5304,28 @@ async def collector_reminder_task(context: ContextTypes.DEFAULT_TYPE):
 
 
 
+async def whatsapp_poller_task(context: ContextTypes.DEFAULT_TYPE):
+    """Poll Green API for incoming WhatsApp messages every 10 seconds."""
+    try:
+        from collector.whatsapp_poller import poll_once
+        await poll_once()
+    except Exception as e:
+        logger.error("whatsapp_poller_task error: %s", e)
+
+
+async def handle_voice_message_tg(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик голосовых сообщений от менеджеров."""
+    chat_id = update.effective_chat.id
+    voice = update.message.voice
+    if voice:
+        try:
+            from collector.manager_dialog import handle_voice_message as _col_voice
+            if await _col_voice(chat_id, voice.file_id):
+                return
+        except Exception as e:
+            logger.error("voice handler error: %s", e)
+
+
 async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команд от постоянного меню (v9.4.12)"""
     text = update.message.text
@@ -5382,6 +5404,7 @@ def main():
     # v9.4.12: Обработчик текстовых команд от persistent menu
     from telegram.ext import MessageHandler, filters
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_persistent_menu))
+    application.add_handler(MessageHandler(filters.VOICE, handle_voice_message_tg))
     application.add_handler(CommandHandler("health", cmd_health))
     application.add_handler(CommandHandler("stats", cmd_stats))
     application.add_handler(CommandHandler("analytics", cmd_analytics))  # 🆕 v9.4.9  # v2.0
@@ -5522,6 +5545,14 @@ def main():
             name="collector_reminders",
         )
         logger.info("📨 Настроен AI Коллектор: напоминания менеджерам каждые 60 мин")
+
+        job_queue.run_repeating(
+            whatsapp_poller_task,
+            interval=10,
+            first=60,
+            name="whatsapp_poller",
+        )
+        logger.info("📱 Настроен Green API поллер: каждые 10 сек")
 
         logger.info(f"🗑️ Автоудаление сообщений через {AUTO_DELETE_HOURS} часов")
     

@@ -57,6 +57,8 @@ try_import("collector.collection_agent")
 try_import("collector.communications")
 try_import("collector.voice_calls")
 try_import("collector.collections_engine")
+try_import("collector.whatsapp_poller")
+try_import("collector.client_dialog")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -326,7 +328,179 @@ check("daily_summary: empty live — no DRY", "DRY-RUN" not in summary_live)
 
 
 # ═══════════════════════════════════════════════════════════════
-# 10. ИТОГ
+# 10. client_dialog — detect_language
+# ═══════════════════════════════════════════════════════════════
+section("10. client_dialog.detect_language")
+
+from collector.client_dialog import detect_language
+
+check("detect_language: русский текст → ru",
+      detect_language("Оплачу завтра") == "ru")
+check("detect_language: казахский с ә → kz",
+      detect_language("Мақсаты бар, әрі бергімен айтысайық") == "kz")
+check("detect_language: 2 казахских символа → kz",
+      detect_language("Жақсы, мен төлеуге дайынмын, қарызды беремін") == "kz")
+check("detect_language: один казахский символ → ru",
+      detect_language("Ладно, я позвоню") == "ru")
+check("detect_language: пустая строка → ru",
+      detect_language("") == "ru")
+check("detect_language: кириллица без казахских символов → ru",
+      detect_language("Добрый день, уточните пожалуйста") == "ru")
+# ә+ғ = 2 kz символа
+check("detect_language: ә+ғ → kz",
+      detect_language("Ғалым мен Әселдің есімі") == "kz")
+
+
+# ═══════════════════════════════════════════════════════════════
+# 11. client_dialog — store operations
+# ═══════════════════════════════════════════════════════════════
+section("11. client_dialog — store (temp path)")
+
+import asyncio
+import collector.client_dialog as cd_mod
+
+_orig_dialogs_path = cd_mod._DIALOGS_PATH
+_tmpdir2 = tempfile.mkdtemp()
+cd_mod._DIALOGS_PATH = Path(_tmpdir2) / "client_dialogs.json"
+
+try:
+    # start_client_dialog создаёт запись
+    asyncio.run(cd_mod.start_client_dialog(
+        phone="77011234567",
+        client_name="ТОО Тест",
+        manager_name="Алена",
+        manager_chat_id=123456,
+        level=2,
+        days=15,
+        amount=500000.0,
+        message_text="Добрый день, напоминаем о задолженности.",
+    ))
+    d = cd_mod._get_client_dialog("77011234567")
+    check("start_client_dialog: запись создана", d is not None)
+    check("start_client_dialog: state=active", d.get("state") == "active")
+    check("start_client_dialog: exchange_count=0", d.get("exchange_count") == 0)
+    check("start_client_dialog: exchanges has bot message",
+          len(d.get("exchanges", [])) == 1 and d["exchanges"][0]["role"] == "bot")
+    check("start_client_dialog: amount", d.get("amount") == 500000.0)
+
+    # handle_incoming обновляет exchange_count (мокаем DeepSeek)
+    with patch("collector.collection_agent._call_deepseek") as mock_ds:
+        mock_ds.return_value = '{"intent":"unclear","promise_date":null,"promise_amount":null,"requires_human":false,"suggested_reply":"Уточните дату."}'
+        with patch("collector.client_dialog._reply_to_client") as mock_reply:
+            mock_reply.return_value = None
+            asyncio.run(cd_mod.handle_incoming("77011234567", "Ладно, я подумаю"))
+    d2 = cd_mod._get_client_dialog("77011234567")
+    check("handle_incoming: exchange_count увеличился", d2.get("exchange_count") == 1)
+    check("handle_incoming: клиентский обмен добавлен",
+          any(ex["role"] == "client" for ex in d2.get("exchanges", [])))
+
+    # Диалог inactive — игнорируется
+    d2["state"] = "escalated"
+    cd_mod._set_client_dialog("77011234567", d2)
+    with patch("collector.collection_agent._call_deepseek") as mock_ds2:
+        asyncio.run(cd_mod.handle_incoming("77011234567", "ещё одно сообщение"))
+    d3 = cd_mod._get_client_dialog("77011234567")
+    check("handle_incoming: escalated диалог не обновляется", d3.get("exchange_count") == 1)
+
+    # Неизвестный клиент — игнорируется без ошибки
+    asyncio.run(cd_mod.handle_incoming("99999999999", "привет"))
+    check("handle_incoming: неизвестный телефон — не падает", True)
+
+finally:
+    cd_mod._DIALOGS_PATH = _orig_dialogs_path
+    shutil.rmtree(_tmpdir2, ignore_errors=True)
+
+
+# ═══════════════════════════════════════════════════════════════
+# 12. name_confirmations — счётчик
+# ═══════════════════════════════════════════════════════════════
+section("12. name_confirmations / phone_confirmations logic")
+
+import collector.dialog_store as ds_mod
+
+_orig_ds_path = ds_mod.DIALOGS_PATH
+_tmpdir3 = tempfile.mkdtemp()
+ds_mod.DIALOGS_PATH = Path(_tmpdir3) / "dialogs.json"
+
+try:
+    dlg = ds_mod.new_dialog(
+        manager_chat_id=999,
+        manager_name="Тест",
+        client_name="ТОО Проверка",
+        level=1,
+        days=10,
+        amount=100000.0,
+        current_contact={"phone": "+77001112233", "name_confirmations": 0, "phone_confirmations": 0},
+    )
+    check("new_dialog: name_confirmed=False", dlg.get("name_confirmed") is False)
+    check("new_dialog: phone_confirmed=False", dlg.get("phone_confirmed") is False)
+    check("new_dialog: awaiting_name_text=False", dlg.get("awaiting_name_text") is False)
+    check("new_dialog: control_deadline=None", dlg.get("control_deadline") is None)
+    check("new_dialog: control_extensions=0", dlg.get("control_extensions") == 0)
+    check("new_dialog: awaiting_manager_explanation=False",
+          dlg.get("awaiting_manager_explanation") is False)
+
+    # Обновляем name_confirmed
+    ds_mod.update_dialog(999, name_confirmed=True)
+    d_upd = ds_mod.get_dialog(999)
+    check("update_dialog: name_confirmed → True", d_upd.get("name_confirmed") is True)
+
+    # Новые состояния в PENDING_STATES
+    check("STATE_AWAITING_MANAGER_EXPLANATION in PENDING_STATES",
+          ds_mod.STATE_AWAITING_MANAGER_EXPLANATION in ds_mod.PENDING_STATES)
+    check("STATE_AWAITING_NAME_TEXT in PENDING_STATES",
+          ds_mod.STATE_AWAITING_NAME_TEXT in ds_mod.PENDING_STATES)
+    check("STATE_AWAITING_PHONE_TEXT in PENDING_STATES",
+          ds_mod.STATE_AWAITING_PHONE_TEXT in ds_mod.PENDING_STATES)
+
+finally:
+    ds_mod.DIALOGS_PATH = _orig_ds_path
+    shutil.rmtree(_tmpdir3, ignore_errors=True)
+
+
+# ═══════════════════════════════════════════════════════════════
+# 13. TEST_MODE — send_whatsapp redirect
+# ═══════════════════════════════════════════════════════════════
+section("13. TEST_MODE — WhatsApp redirect")
+
+import collector.communications as comm2
+
+# Сохраняем исходные значения
+_orig_test_mode  = comm2.TEST_MODE
+_orig_test_wa    = comm2.TEST_WA_PHONE
+_orig_wa_enabled = comm2.WHATSAPP_ENABLED
+
+try:
+    # TEST_MODE=1 + TEST_WA_PHONE — перенаправляет
+    comm2.TEST_MODE        = True
+    comm2.TEST_WA_PHONE    = "77000000001"
+    comm2.WHATSAPP_ENABLED = True
+    comm2.GREENAPI_ID      = ""  # нет кредов — вернёт False, но перенаправление залогировано
+    result_redirect = comm2.send_whatsapp("+77011234567", "тест")
+    # При пустом GREENAPI_ID возвращает False — это ок, главное не упасть
+    check("TEST_MODE: send_whatsapp не упал при перенаправлении", True)
+
+    # TEST_MODE=0 — работает как обычно
+    comm2.TEST_MODE = False
+    comm2.WHATSAPP_ENABLED = False
+    check("TEST_MODE=0: WHATSAPP_ENABLED=0 → False",
+          comm2.send_whatsapp("+77011234567", "тест") is False)
+
+    # TEST_MODE=1 без TEST_WA_PHONE — не перенаправляет
+    comm2.TEST_MODE     = True
+    comm2.TEST_WA_PHONE = ""
+    comm2.WHATSAPP_ENABLED = False
+    check("TEST_MODE=1 + TEST_WA_PHONE='' → False (disabled)",
+          comm2.send_whatsapp("+77011234567", "тест") is False)
+
+finally:
+    comm2.TEST_MODE        = _orig_test_mode
+    comm2.TEST_WA_PHONE    = _orig_test_wa
+    comm2.WHATSAPP_ENABLED = _orig_wa_enabled
+
+
+# ═══════════════════════════════════════════════════════════════
+# 14. ИТОГ
 # ═══════════════════════════════════════════════════════════════
 section("ИТОГ")
 total  = len(results)

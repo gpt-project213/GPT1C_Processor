@@ -27,14 +27,17 @@ _ROOT = Path(__file__).resolve().parent.parent
 DIALOGS_PATH = _ROOT / "logs" / "collector_dialogs.json"
 
 # Состояния диалога
-STATE_AWAITING_CONFIRM          = "AWAITING_CONFIRM"
-STATE_AWAITING_DATA             = "AWAITING_DATA"
-STATE_AWAITING_REJECTION_REASON = "AWAITING_REJECTION_REASON"
-STATE_AWAITING_DATA_CONFIRM     = "AWAITING_DATA_CONFIRM"
-STATE_REJECTED_PENDING_ADMIN    = "REJECTED_PENDING_ADMIN"
-STATE_DEADLINE_SET              = "DEADLINE_SET"
-STATE_CONFIRMED                 = "CONFIRMED"
-STATE_DONE                      = "DONE"
+STATE_AWAITING_CONFIRM              = "AWAITING_CONFIRM"
+STATE_AWAITING_DATA                 = "AWAITING_DATA"
+STATE_AWAITING_REJECTION_REASON     = "AWAITING_REJECTION_REASON"
+STATE_AWAITING_DATA_CONFIRM         = "AWAITING_DATA_CONFIRM"
+STATE_REJECTED_PENDING_ADMIN        = "REJECTED_PENDING_ADMIN"
+STATE_DEADLINE_SET                  = "DEADLINE_SET"
+STATE_CONFIRMED                     = "CONFIRMED"
+STATE_DONE                          = "DONE"
+STATE_AWAITING_MANAGER_EXPLANATION  = "AWAITING_MANAGER_EXPLANATION"
+STATE_AWAITING_NAME_TEXT            = "AWAITING_NAME_TEXT"
+STATE_AWAITING_PHONE_TEXT           = "AWAITING_PHONE_TEXT"
 
 PENDING_STATES = {
     STATE_AWAITING_CONFIRM,
@@ -43,6 +46,9 @@ PENDING_STATES = {
     STATE_AWAITING_DATA_CONFIRM,
     STATE_REJECTED_PENDING_ADMIN,
     STATE_DEADLINE_SET,
+    STATE_AWAITING_MANAGER_EXPLANATION,
+    STATE_AWAITING_NAME_TEXT,
+    STATE_AWAITING_PHONE_TEXT,
 }
 
 TERMINAL_STATES = {STATE_CONFIRMED, STATE_DONE}
@@ -131,21 +137,31 @@ def new_dialog(
     """Создаёт новую запись диалога и сохраняет её."""
     now = _now_iso()
     dialog: Dict[str, Any] = {
-        "client_name":        client_name,
-        "manager_name":       manager_name,
-        "manager_chat_id":    manager_chat_id,
-        "level":              level,
-        "days":               days,
-        "amount":             amount,
-        "current_contact":    current_contact,
-        "proposed_contact":   None,
-        "state":              STATE_AWAITING_CONFIRM,
-        "rejection_reason":   None,
-        "deadline":           None,
-        "remind_count":       0,
-        "last_reminded":      now,
-        "created":            now,
-        "message_id":         None,
+        "client_name":                client_name,
+        "manager_name":               manager_name,
+        "manager_chat_id":            manager_chat_id,
+        "level":                      level,
+        "days":                       days,
+        "amount":                     amount,
+        "current_contact":            current_contact,
+        "proposed_contact":           None,
+        "state":                      STATE_AWAITING_CONFIRM,
+        "rejection_reason":           None,
+        "deadline":                   None,
+        "remind_count":               0,
+        "last_reminded":              now,
+        "created":                    now,
+        "message_id":                 None,
+        # Подтверждение имени/телефона в текущем диалоге
+        "name_confirmed":             False,
+        "phone_confirmed":            False,
+        "awaiting_name_text":         False,
+        "awaiting_phone_text":        False,
+        # Контроль администратора
+        "control_deadline":           None,
+        "control_extensions":         0,
+        # Ожидание объяснения менеджера
+        "awaiting_manager_explanation": False,
     }
     set_dialog(manager_chat_id, dialog)
     return dialog

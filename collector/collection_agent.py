@@ -43,6 +43,7 @@ DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 
 OPENCLAW_ENABLED  = os.getenv("OPENCLAW_ENABLED", "false").lower() == "true"
 OPENCLAW_GATEWAY  = os.getenv("OPENCLAW_GATEWAY", "ws://127.0.0.1:18789")
+COMPANY_NAME      = os.getenv("COMPANY_NAME", "Минбаракат")
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +103,7 @@ def generate_message(
     level: int,
     language: str = "ru",
     previous_promise: Optional[str] = None,
+    manager_name: str = "",
 ) -> str:
     """Генерирует персонализированный текст сообщения должнику через DeepSeek.
 
@@ -112,6 +114,7 @@ def generate_message(
         level:            Уровень давления 1–5
         language:         "ru" или "kz"
         previous_promise: Дата предыдущего обещания если было (ISO строка)
+        manager_name:     Имя менеджера (для персонализации системного промпта)
 
     Returns:
         Текст сообщения (4–6 предложений, завершается вопросом о дате оплаты).
@@ -127,9 +130,19 @@ def generate_message(
             f"но обещание не было выполнено. Упомяни это деликатно."
         )
 
+    if manager_name:
+        persona = (
+            f"Ты — ИИ-ассистент менеджера {manager_name} из компании {COMPANY_NAME} "
+            f"(оптовые поставки продуктов питания, Алматы, Казахстан)."
+        )
+    else:
+        persona = (
+            f"Ты — официальный представитель компании {COMPANY_NAME} "
+            f"(оптовые поставки продуктов питания, Алматы, Казахстан)."
+        )
+
     system_prompt = (
-        "Ты — официальный представитель компании Минбаракат (оптовые поставки "
-        "продуктов питания, Алматы, Казахстан). Ты ведёшь переписку по вопросу "
+        f"{persona} Ты ведёшь переписку по вопросу "
         "дебиторской задолженности. НЕ угрожаешь, НЕ давишь эмоционально — "
         "ты официальный и профессиональный представитель компании. "
         f"{lang_inst}"
@@ -157,8 +170,17 @@ def generate_message(
     return result
 
 
-def analyze_response(response_text: str) -> dict:
+def analyze_response(
+    response_text: str,
+    manager_name: str = "",
+    conversation_history: Optional[list] = None,
+) -> dict:
     """Анализирует ответ должника через DeepSeek.
+
+    Args:
+        response_text:         Текст ответа клиента.
+        manager_name:          Имя менеджера (для контекста промпта).
+        conversation_history:  Список предыдущих обменов (последние 4 включаются в промпт).
 
     Возвращает:
         intent:           promise | refusal | delay_request | question | unclear
@@ -176,8 +198,11 @@ def analyze_response(response_text: str) -> dict:
             "suggested_reply": "Уточните, пожалуйста, Ваше решение по оплате.",
         }
 
+    company_ctx = f"для компании {COMPANY_NAME}"
+    mgr_ctx = f" (менеджер: {manager_name})" if manager_name else ""
+
     system_prompt = (
-        "Ты — аналитик сообщений должников для компании Минбаракат. "
+        f"Ты — аналитик сообщений должников {company_ctx}{mgr_ctx}. "
         "Твоя задача: проанализировать ответ клиента и вернуть ТОЛЬКО JSON без пояснений. "
         "Формат ответа строго:\n"
         '{"intent":"...", "promise_date":"...", "promise_amount":..., '
@@ -186,9 +211,28 @@ def analyze_response(response_text: str) -> dict:
         "promise_date: дата в формате YYYY-MM-DD или null\n"
         "promise_amount: число или null\n"
         "requires_human: true если агрессия, юридические угрозы или неоднозначность\n"
-        "suggested_reply: короткий ответ агента на русском (1–2 предложения)"
+        "suggested_reply: короткий ответ агента на русском (1–2 предложения)\n"
+        "Не обсуждай темы не связанные с задолженностью. "
+        "Если клиент уходит от темы — это off_topic, set requires_human=true "
+        "после второго off_topic."
     )
-    user_prompt = f"Ответ клиента:\n{response_text}"
+
+    # Включаем последние 4 обмена как контекст
+    history_block = ""
+    if conversation_history:
+        last_exchanges = conversation_history[-4:]
+        lines = []
+        for ex in last_exchanges:
+            role = ex.get("role", "")
+            txt = ex.get("text", "")
+            if role == "bot":
+                lines.append(f"Бот: {txt[:120]}")
+            elif role == "client":
+                lines.append(f"Клиент: {txt[:120]}")
+        if lines:
+            history_block = "История переписки (последние обмены):\n" + "\n".join(lines) + "\n\n"
+
+    user_prompt = f"{history_block}Ответ клиента:\n{response_text}"
 
     raw = _call_deepseek(system_prompt, user_prompt, max_tokens=300)
     try:
