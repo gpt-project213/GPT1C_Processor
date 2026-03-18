@@ -346,7 +346,10 @@ LOG_FILE = LOGS_DIR / f"send_reports_{datetime.now(TZ).strftime('%Y%m%d')}.log"
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s, %(levelname)s %(message)s",
-    handlers=[logging.FileHandler(LOG_FILE, encoding='utf-8'), logging.StreamHandler(sys.stdout)]
+    handlers=[
+        logging.FileHandler(LOG_FILE, encoding='utf-8'),
+        logging.StreamHandler(open(sys.stdout.fileno(), mode='w', encoding='utf-8', errors='replace', closefd=False)),
+    ]
 )
 logger = logging.getLogger(__name__)
 
