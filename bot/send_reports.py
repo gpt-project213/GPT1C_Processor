@@ -4292,6 +4292,32 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error("collector callback error: %s", e)
         return
 
+    # Callback: менеджер нажал "Внести телефон клиента"
+    if data == "reg_phone":
+        try:
+            from collector.collections_db import get_phone_pending
+            pending_client = get_phone_pending(chat_id)
+            if pending_client:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=(
+                        f"📞 <b>Введите номер WhatsApp</b> для клиента:\n"
+                        f"<b>{pending_client}</b>\n\n"
+                        f"Формат: <code>7XXXXXXXXXX</code> (11 цифр, начиная с 7)\n\n"
+                        f"🔴 <b>Проверьте номер дважды!</b> Ошибочный номер — "
+                        f"и бот будет тревожить постороннего человека."
+                    ),
+                    parse_mode="HTML",
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="⚠️ Запрос на ввод телефона устарел. Номер клиента не найден.",
+                )
+        except Exception as e:
+            logger.error("reg_phone callback error: %s", e)
+        return
+
     user_role = get_user_role(chat_id)
     scopes = user_scopes(chat_id)
     my_name = get_my_manager_name(chat_id)
@@ -5334,6 +5360,37 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
     """Обработчик команд от постоянного меню (v9.4.12)"""
     text = update.message.text
     chat_id = update.effective_chat.id
+
+    # Ввод телефона для реестра должников (если менеджер в режиме ожидания)
+    try:
+        from collector.collections_db import clear_phone_pending, get_phone_pending
+        pending_client = get_phone_pending(chat_id)
+        if pending_client:
+            import re as _re
+            phone_clean = _re.sub(r"\D", "", text.strip())
+            if _re.fullmatch(r"7\d{10}", phone_clean):
+                from collector.registry_manager import update_client_phone
+                if update_client_phone(pending_client, phone_clean):
+                    clear_phone_pending(chat_id)
+                    await update.message.reply_text(
+                        f"✅ Телефон <b>{phone_clean}</b> сохранён для клиента:\n"
+                        f"<b>{pending_client}</b>\n\n"
+                        f"ИИ-помощник подключится к нему при следующем цикле.",
+                        parse_mode="HTML",
+                    )
+                else:
+                    await update.message.reply_text(
+                        "⚠️ Не удалось сохранить. Попробуйте ещё раз.",
+                    )
+            else:
+                await update.message.reply_text(
+                    f"❌ Неверный формат номера: <code>{text.strip()}</code>\n\n"
+                    f"Введите 11 цифр начиная с 7, например: <code>77001234567</code>",
+                    parse_mode="HTML",
+                )
+            return
+    except Exception as e:
+        logger.error("phone input handler error: %s", e)
 
     # Check active collector dialog first
     try:

@@ -205,6 +205,37 @@ def save_call_result(name: str, call_result: str, transcript: Optional[str]) -> 
 _MGR_NOTIFY_PREFIX = "__mgr_notify__"
 
 
+_PHONE_PENDING_PREFIX = "__phone_pending__"
+
+
+def set_phone_pending(manager_chat_id: int, client_name: str) -> None:
+    """Сохраняет ожидание ввода телефона от менеджера для указанного клиента."""
+    state = load_state()
+    state[_PHONE_PENDING_PREFIX + str(manager_chat_id)] = {
+        "client": client_name,
+        "date": _today(),
+    }
+    save_state(state)
+
+
+def get_phone_pending(manager_chat_id: int) -> Optional[str]:
+    """Возвращает имя клиента, для которого менеджер ожидает ввода телефона, или None."""
+    state = load_state()
+    record = state.get(_PHONE_PENDING_PREFIX + str(manager_chat_id))
+    if record and record.get("date") == _today():
+        return record.get("client")
+    return None
+
+
+def clear_phone_pending(manager_chat_id: int) -> None:
+    """Сбрасывает ожидание ввода телефона для менеджера."""
+    state = load_state()
+    key = _PHONE_PENDING_PREFIX + str(manager_chat_id)
+    if key in state:
+        del state[key]
+        save_state(state)
+
+
 def already_notified_manager_today(client_name: str) -> bool:
     """True если менеджер уже получал запрос на регистрацию этого клиента сегодня."""
     state = load_state()

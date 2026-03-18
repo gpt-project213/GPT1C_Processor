@@ -80,6 +80,7 @@ from collector.collections_db import (
     mark_promise_broken,
     save_call_result,
     save_promise,
+    set_phone_pending,
     update_after_contact,
 )
 from collector.collection_agent import analyze_response, generate_message
@@ -330,35 +331,54 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
             processed.append({"name": name, "level": level, "no_contacts": True,
                                "sent": False, "promise_received": False,
                                "promise_broken": False, "escalated": False})
-            # Уведомляем ответственного менеджера (не чаще 1 раза в день)
+            # Авторегистрация + уведомление менеджера (не чаще 1 раза в день)
             if not dry_run and not already_notified_manager_today(name):
                 mgr_name = client.get("manager", "")
                 mgr_chat_id = _get_manager_chat_id(mgr_name) if mgr_name else None
+
+                # Авторегистрируем клиента в реестре без телефона
+                from collector.registry_manager import auto_register_client
+                auto_register_client(
+                    name=name,
+                    manager=mgr_name,
+                    amount=client["amount"],
+                    days=client["days"],
+                    violation=bool(client.get("violation_shipment")),
+                )
+
                 if mgr_chat_id:
-                    violation_flag = "⚠️ <b>НАРУШЕНИЕ: отгрузка при наличии долга!</b>\n" \
+                    violation_flag = (
+                        "⚠️ <b>НАРУШЕНИЕ: отгрузка при наличии долга!</b>\n\n"
                         if client.get("violation_shipment") else ""
+                    )
                     reg_msg = (
-                        f"🔔 <b>Обнаружен должник без контакта в реестре</b>\n\n"
+                        f"🤖 <b>Новый должник внесён в реестр автоматически</b>\n\n"
                         f"{violation_flag}"
                         f"Клиент: <b>{name}</b>\n"
                         f"Долг: <b>{client['amount']:,.0f} тг</b>\n"
                         f"Дней просрочки: <b>{client['days']}</b> (уровень {level})\n\n"
-                        f"Пожалуйста, внесите контактные данные клиента, чтобы "
-                        f"ИИ-помощник мог самостоятельно с ним связываться.\n\n"
-                        f"📋 <b>Пример заполнения — отправьте администратору:</b>\n"
-                        f"<pre>"
-                        f"Клиент: {name}\n"
-                        f"WhatsApp: 7XXXXXXXXXX\n"
-                        f"Telegram ID: (если есть)\n"
-                        f"Менеджер: {mgr_name}\n"
-                        f"Язык: ru\n"
-                        f"Не звонить: нет"
-                        f"</pre>"
+                        f"📞 Для запуска автоматических уведомлений необходим "
+                        f"номер WhatsApp клиента.\n\n"
+                        f"🔴 <b>ВАЖНО:</b> Убедитесь, что номер принадлежит именно "
+                        f"этому клиенту — ошибка приведёт к тому, что бот будет "
+                        f"беспокоить постороннего человека!"
                     )
-                    await notify_manager(mgr_chat_id, reg_msg)
+                    # Сохраняем pending-состояние и отправляем с кнопкой
+                    set_phone_pending(mgr_chat_id, name)
+                    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+                    keyboard = InlineKeyboardMarkup([[
+                        InlineKeyboardButton(
+                            "📞 Внести телефон клиента",
+                            callback_data="reg_phone",
+                        )
+                    ]])
+                    from collector.communications import send_telegram_with_markup
+                    await send_telegram_with_markup(mgr_chat_id, reg_msg, keyboard)
                     mark_manager_notified(name)
-                    logger.info("[%s] менеджер %s уведомлён о необходимости внести контакт",
-                                name, mgr_name)
+                    logger.info(
+                        "[%s] авторегистрация + уведомление менеджеру %s отправлено",
+                        name, mgr_name,
+                    )
             continue
 
         result = await _process_single(client, contact, dry_run)

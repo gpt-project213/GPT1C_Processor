@@ -23,7 +23,7 @@ import logging
 import os
 from datetime import datetime, time as dt_time
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import httpx
 from dotenv import load_dotenv
@@ -138,6 +138,34 @@ async def notify_admin(message: str) -> bool:
 async def notify_manager(manager_chat_id: int, message: str) -> bool:
     """Уведомляет менеджера клиента об ошибке доставки или нарушении обещания."""
     return await send_telegram(manager_chat_id, f"⚠️ <b>AI Коллектор</b>\n\n{message}")
+
+
+async def send_telegram_with_markup(
+    telegram_id: int, text: str, reply_markup: Any
+) -> bool:
+    """Отправляет сообщение с inline-клавиатурой через Telegram Bot API."""
+    if not BOT_TOKEN:
+        logger.warning("BOT_TOKEN не задан — Telegram недоступен")
+        return False
+    import json as _json
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": telegram_id,
+        "text": text,
+        "parse_mode": "HTML",
+        "reply_markup": reply_markup.to_dict() if hasattr(reply_markup, "to_dict") else reply_markup,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(url, json=payload)
+        if resp.status_code == 200:
+            logger.info("Telegram+markup отправлен: chat_id=%s", telegram_id)
+            return True
+        logger.warning("Telegram+markup ошибка %d: %s", resp.status_code, resp.text[:200])
+        return False
+    except (httpx.RequestError, httpx.TimeoutException) as e:
+        logger.error("Telegram+markup сетевая ошибка: %s", e)
+        return False
 
 
 def get_observer_ids(manager_name: str) -> list:
