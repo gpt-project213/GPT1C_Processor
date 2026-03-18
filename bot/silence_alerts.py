@@ -191,20 +191,24 @@ class SilenceAlert:
 
                 # v1.4: col0=Клиент, col1=Долг, col2=Нач.остаток,
                 #        col3=Отгрузка, col4=Оплата, col5=Операций, col6=Дни молчания
-                debit_str  = cells[3].get_text(strip=True) if len(cells) > 3 else ""
-                paid_str   = cells[4].get_text(strip=True) if len(cells) > 4 else ""
-                debit_amount = self.parse_debt_amount(debit_str)
-                paid_amount  = self.parse_debt_amount(paid_str)
+                initial_str  = cells[2].get_text(strip=True) if len(cells) > 2 else ""
+                debit_str    = cells[3].get_text(strip=True) if len(cells) > 3 else ""
+                paid_str     = cells[4].get_text(strip=True) if len(cells) > 4 else ""
+                initial_amount = self.parse_debt_amount(initial_str)
+                debit_amount   = self.parse_debt_amount(debit_str)
+                paid_amount    = self.parse_debt_amount(paid_str)
 
                 clients_data.append({
-                    'client':        client_name,
-                    'debt':          debt_amount,
-                    'debt_str':      debt_str,
-                    'silence_days':  silence_days,
-                    'debit_amount':  debit_amount,   # отгрузка в периоде
-                    'debit_str':     debit_str,
-                    'paid_amount':   paid_amount,    # оплата в периоде
-                    'paid_str':      paid_str,
+                    'client':          client_name,
+                    'debt':            debt_amount,
+                    'debt_str':        debt_str,
+                    'silence_days':    silence_days,
+                    'initial_amount':  initial_amount,  # начальный остаток периода
+                    'initial_str':     initial_str,
+                    'debit_amount':    debit_amount,    # отгрузка в периоде
+                    'debit_str':       debit_str,
+                    'paid_amount':     paid_amount,     # оплата в периоде
+                    'paid_str':        paid_str,
                 })
             
             logger.info(f"📊 Распарсено {len(clients_data)} клиентов из {html_path.name}")
@@ -368,11 +372,12 @@ class SilenceAlert:
             msg_lines.append("💛 ЧАСТИЧНАЯ ОПЛАТА (долг не закрыт):")
             total_partial_debt = 0.0
             for client in categorized['partial_payment'][:5]:
-                paid_str = client.get('paid_str', '') or self.format_amount(client.get('paid_amount', 0))
+                paid_str    = client.get('paid_str', '') or self.format_amount(client.get('paid_amount', 0))
+                initial_str = client.get('initial_str', '') or self.format_amount(client.get('initial_amount', 0))
                 eff = client.get('effective_days', client['silence_days'])
                 msg_lines.append(
-                    f"  • {client['client']} — долг: {client['debt_str']} (~{eff} дн), "
-                    f"оплачено: {paid_str}"
+                    f"  • {client['client']} — "
+                    f"нач: {initial_str} → оплачено: {paid_str} → остаток: {client['debt_str']} (~{eff} дн)"
                 )
                 total_partial_debt += client['debt']
 
@@ -545,11 +550,12 @@ class SilenceAlert:
 
                 show_count = min(10, partial_count)
                 for client in categorized['partial_payment'][:show_count]:
-                    paid_str = client.get('paid_str', '') or self.format_amount(client.get('paid_amount', 0))
+                    paid_str    = client.get('paid_str', '') or self.format_amount(client.get('paid_amount', 0))
+                    initial_str = client.get('initial_str', '') or self.format_amount(client.get('initial_amount', 0))
                     eff = client.get('effective_days', client['silence_days'])
                     msg_lines.append(
-                        f"  • {client['client']} — долг: {client['debt_str']} (~{eff} дн), "
-                        f"оплачено: {paid_str}"
+                        f"  • {client['client']} — "
+                        f"нач: {initial_str} → оплачено: {paid_str} → остаток: {client['debt_str']} (~{eff} дн)"
                     )
                     partial_debt_total += client['debt']
 
