@@ -78,13 +78,18 @@ def load_latest_debt_json() -> Dict[str, Any]:
     loaded = 0
     for base, paths in groups.items():
         latest = max(paths, key=_safe_mtime)
-        logger.info("Загружаем debt JSON: %s", latest.name)
         try:
             with open(latest, encoding="utf-8") as f:
                 data = json.load(f)
         except (OSError, json.JSONDecodeError) as e:
             logger.error("Ошибка чтения %s: %s", latest.name, e)
             continue
+        # Пропускаем общие файлы без привязки к менеджеру —
+        # их клиенты уже есть в per-менеджерных файлах
+        if isinstance(data, dict) and not data.get("manager"):
+            logger.debug("Пропускаем общий файл (нет менеджера): %s", latest.name)
+            continue
+        logger.info("Загружаем debt JSON: %s", latest.name)
 
         clients: List[Dict[str, Any]] = []
         if isinstance(data, dict):
@@ -210,6 +215,10 @@ def classify_debtors(debt_data: Dict[str, Any]) -> List[Dict[str, Any]]:
                     break
                 except (ValueError, TypeError):
                     continue
+
+        # Клиент с нулевым или отрицательным долгом не является должником
+        if amount <= 0:
+            continue
 
         level = _level_for_days(days)
         results.append({
