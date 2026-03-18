@@ -199,3 +199,21 @@ def save_call_result(name: str, call_result: str, transcript: Optional[str]) -> 
     record["call_transcript"] = transcript
     state[name] = record
     save_state(state)
+
+
+# Ключ для хранения даты уведомления менеджера об отсутствии контакта
+_MGR_NOTIFY_PREFIX = "__mgr_notify__"
+
+
+def already_notified_manager_today(client_name: str) -> bool:
+    """True если менеджер уже получал запрос на регистрацию этого клиента сегодня."""
+    state = load_state()
+    key = _MGR_NOTIFY_PREFIX + client_name
+    return state.get(key, {}).get("date") == _today()
+
+
+def mark_manager_notified(client_name: str) -> None:
+    """Фиксирует что менеджеру отправлен запрос на регистрацию клиента."""
+    state = load_state()
+    state[_MGR_NOTIFY_PREFIX + client_name] = {"date": _today()}
+    save_state(state)

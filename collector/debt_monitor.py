@@ -85,8 +85,10 @@ def load_latest_debt_json() -> Dict[str, Any]:
             logger.error("Ошибка чтения %s: %s", latest.name, e)
             continue
         # Пропускаем общие файлы без привязки к менеджеру —
-        # их клиенты уже есть в per-менеджерных файлах
-        if isinstance(data, dict) and not data.get("manager"):
+        # их клиенты уже есть в per-менеджерных файлах.
+        # manager='?' означает «не определён» (общий файл).
+        file_mgr = (data.get("manager") or "") if isinstance(data, dict) else ""
+        if not file_mgr or file_mgr in ("?", "-", "—", "ABSENT"):
             logger.debug("Пропускаем общий файл (нет менеджера): %s", latest.name)
             continue
         logger.info("Загружаем debt JSON: %s", latest.name)
@@ -104,18 +106,23 @@ def load_latest_debt_json() -> Dict[str, Any]:
         elif isinstance(data, list):
             clients = data
 
+        file_manager = data.get("manager", "") if isinstance(data, dict) else ""
         for c in clients:
             if not isinstance(c, dict):
                 continue
             name = (c.get("name") or c.get("client") or "").strip()
             if not name:
                 continue
+            # Сохраняем привязку к менеджеру из корня файла
+            c_stamped = dict(c)
+            if file_manager and not c_stamped.get("_manager"):
+                c_stamped["_manager"] = file_manager
             existing = merged_clients.get(name)
             if existing is None:
-                merged_clients[name] = c
+                merged_clients[name] = c_stamped
             else:
-                if _extract_days_silence(c) > _extract_days_silence(existing):
-                    merged_clients[name] = c
+                if _extract_days_silence(c_stamped) > _extract_days_silence(existing):
+                    merged_clients[name] = c_stamped
         loaded += 1
 
     logger.info("Загружено %d файлов, объединено %d клиентов", loaded, len(merged_clients))
@@ -220,12 +227,28 @@ def classify_debtors(debt_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         if amount <= 0:
             continue
 
+        # Нарушение: была отгрузка при наличии предыдущего долга
+        opening = 0.0
+        debit = 0.0
+        try:
+            opening = float(str(client.get("opening") or 0).replace(" ", "").replace(",", "."))
+            debit = float(str(client.get("debit") or 0).replace(" ", "").replace(",", "."))
+        except (ValueError, TypeError):
+            pass
+        violation_shipment = opening > 0 and debit > 0
+
         level = _level_for_days(days)
+        # Нарушение → минимум уровень 1, даже если дней молчания < 10
+        if violation_shipment and level == 0:
+            level = 1
+
         results.append({
             "name": name,
             "amount": amount,
             "days": days,
             "level": level,
+            "violation_shipment": violation_shipment,
+            "manager": client.get("_manager", ""),
             "raw": client,
         })
 

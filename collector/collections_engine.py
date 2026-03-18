@@ -73,8 +73,10 @@ from collector.debt_monitor import (
 )
 from collector.collections_db import (
     already_contacted_today,
+    already_notified_manager_today,
     get_pending_promises,
     mark_escalated,
+    mark_manager_notified,
     mark_promise_broken,
     save_call_result,
     save_promise,
@@ -328,6 +330,35 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
             processed.append({"name": name, "level": level, "no_contacts": True,
                                "sent": False, "promise_received": False,
                                "promise_broken": False, "escalated": False})
+            # Уведомляем ответственного менеджера (не чаще 1 раза в день)
+            if not dry_run and not already_notified_manager_today(name):
+                mgr_name = client.get("manager", "")
+                mgr_chat_id = _get_manager_chat_id(mgr_name) if mgr_name else None
+                if mgr_chat_id:
+                    violation_flag = "⚠️ <b>НАРУШЕНИЕ: отгрузка при наличии долга!</b>\n" \
+                        if client.get("violation_shipment") else ""
+                    reg_msg = (
+                        f"🔔 <b>Обнаружен должник без контакта в реестре</b>\n\n"
+                        f"{violation_flag}"
+                        f"Клиент: <b>{name}</b>\n"
+                        f"Долг: <b>{client['amount']:,.0f} тг</b>\n"
+                        f"Дней просрочки: <b>{client['days']}</b> (уровень {level})\n\n"
+                        f"Пожалуйста, внесите контактные данные клиента, чтобы "
+                        f"ИИ-помощник мог самостоятельно с ним связываться.\n\n"
+                        f"📋 <b>Пример заполнения — отправьте администратору:</b>\n"
+                        f"<pre>"
+                        f"Клиент: {name}\n"
+                        f"WhatsApp: 7XXXXXXXXXX\n"
+                        f"Telegram ID: (если есть)\n"
+                        f"Менеджер: {mgr_name}\n"
+                        f"Язык: ru\n"
+                        f"Не звонить: нет"
+                        f"</pre>"
+                    )
+                    await notify_manager(mgr_chat_id, reg_msg)
+                    mark_manager_notified(name)
+                    logger.info("[%s] менеджер %s уведомлён о необходимости внести контакт",
+                                name, mgr_name)
             continue
 
         result = await _process_single(client, contact, dry_run)
