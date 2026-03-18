@@ -58,19 +58,75 @@ def _level_for_days(days: int) -> int:
 
 
 def load_latest_debt_json() -> Dict[str, Any]:
-    """Загружает последний по дате файл debt_ext_*.json из reports/json/."""
+    """Загружает последний по дате debt_ext_*.json для каждой группы (менеджера).
+
+    Группировка по базовому имени файла (без ' (NNN)').
+    Клиенты всех групп объединяются; при дублях берётся запись с большим days_silence.
+    """
     candidates = list(JSON_DIR.glob("debt_ext_*.json"))
     if not candidates:
         logger.warning("Нет debt_ext_*.json в %s", JSON_DIR)
         return {}
-    latest = max(candidates, key=lambda p: _safe_mtime(p))
-    logger.info("Загружаем debt JSON: %s", latest.name)
-    try:
-        with open(latest, encoding="utf-8") as f:
-            return json.load(f)
-    except (OSError, json.JSONDecodeError) as e:
-        logger.error("Ошибка чтения %s: %s", latest.name, e)
-        return {}
+
+    # Группируем по базовому имени (убираем суффикс ' (NNN)')
+    groups: Dict[str, List[Path]] = {}
+    for p in candidates:
+        base = re.sub(r"\s*\(\d+\)$", "", p.stem)
+        groups.setdefault(base, []).append(p)
+
+    merged_clients: Dict[str, Dict[str, Any]] = {}
+    loaded = 0
+    for base, paths in groups.items():
+        latest = max(paths, key=_safe_mtime)
+        logger.info("Загружаем debt JSON: %s", latest.name)
+        try:
+            with open(latest, encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError) as e:
+            logger.error("Ошибка чтения %s: %s", latest.name, e)
+            continue
+
+        clients: List[Dict[str, Any]] = []
+        if isinstance(data, dict):
+            for key in ("clients", "rows", "data"):
+                if key in data and isinstance(data[key], list):
+                    clients = data[key]
+                    break
+            else:
+                for name, val in data.items():
+                    if isinstance(val, dict):
+                        clients.append({"name": name, **val})
+        elif isinstance(data, list):
+            clients = data
+
+        for c in clients:
+            if not isinstance(c, dict):
+                continue
+            name = (c.get("name") or c.get("client") or "").strip()
+            if not name:
+                continue
+            existing = merged_clients.get(name)
+            if existing is None:
+                merged_clients[name] = c
+            else:
+                if _extract_days_silence(c) > _extract_days_silence(existing):
+                    merged_clients[name] = c
+        loaded += 1
+
+    logger.info("Загружено %d файлов, объединено %d клиентов", loaded, len(merged_clients))
+    return {"clients": list(merged_clients.values())}
+
+
+def _extract_days_silence(c: Dict[str, Any]) -> int:
+    """Возвращает days_silence из записи клиента (вспомогательная функция)."""
+    for field in ("days_silence", "max_days", "days", "overdue_days", "max_overdue_days"):
+        val = c.get(field)
+        if val is not None:
+            try:
+                return int(val)
+            except (ValueError, TypeError):
+                continue
+    return 0
 
 
 def _safe_mtime(p: Path) -> float:
@@ -86,7 +142,7 @@ def get_overdue_days(client_data: Dict[str, Any]) -> int:
     Поддерживаемые поля: max_days, days, overdue_days, max_overdue_days.
     Возвращает 0 если поле не найдено.
     """
-    for field in ("max_days", "days", "overdue_days", "max_overdue_days"):
+    for field in ("days_silence", "max_days", "days", "overdue_days", "max_overdue_days"):
         val = client_data.get(field)
         if val is not None:
             try:
