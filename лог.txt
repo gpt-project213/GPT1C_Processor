@@ -1,0 +1,778 @@
+﻿
+
+•
+Formatting may be inconsistent from source
+2026-03-17 20:28:06, INFO ✅ json_read_success · file=roles.json; encoding=utf-8
+2026-03-17 20:28:06, INFO {"event": "json_read_success", "file": "roles.json", "encoding": "utf-8"}
+2026-03-17 20:28:06, INFO ✅ json_read_success · file=managers.json; encoding=utf-8
+2026-03-17 20:28:06, INFO {"event": "json_read_success", "file": "managers.json", "encoding": "utf-8"}
+2026-03-17 20:28:06, INFO {"event": "managers_normalized", "count": 4}
+2026-03-17 20:28:06, INFO ✅ json_read_success · file=imap.json; encoding=utf-8
+2026-03-17 20:28:06, INFO {"event": "json_read_success", "file": "imap.json", "encoding": "utf-8"}
+2026-03-17 20:28:06, INFO 🔒 SensitiveDataFilter: зарегистрировано 10 масок
+2026-03-17 20:28:06, INFO 🤖 bot_starting · version=v9.4.32/09.03.2026
+2026-03-17 20:28:06, INFO {"event": "bot_starting", "version": "v9.4.32/09.03.2026"}
+2026-03-17 20:28:08, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-17 20:28:08, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-17 20:28:08, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-17 20:28:08, INFO ⏰ Настроен ежедневный джоб: проверка дней молчания в 14:00
+2026-03-17 20:28:08, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-17 20:28:08, INFO ⏰ Настроен ежедневный джоб: проверка дней молчания в 21:00
+2026-03-17 20:28:08, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-17 20:28:08, INFO 💸 Настроен еженедельный джоб: упущенная прибыль по пятницам 14:05
+2026-03-17 20:28:08, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-17 20:28:08, INFO 🧹 Настроен janitor: проверка очереди удаления каждые 3600 сек (60 мин)
+2026-03-17 20:28:08, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-17 20:28:08, INFO 🤖 Настроен обработчик очереди ИИ: интервал 120 сек
+2026-03-17 20:28:08, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-17 20:28:08, INFO 📊 Настроена ежедневная сводка админу в 23:00
+2026-03-17 20:28:08, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-17 20:28:08, INFO 🔄 Настроен сброс счётчика ИИ-генераций в 00:01
+2026-03-17 20:28:08, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-17 20:28:08, INFO 🤖 Настроена еженедельная AI генерация: понедельник 10:00
+2026-03-17 20:28:08, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-17 20:28:08, INFO 📊 Настроена ежедневная аналитика: каждый день 22:00
+2026-03-17 20:28:08, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-17 20:28:08, INFO 📦 Настроена краткая сводка остатков: ежедневно 09:00
+2026-03-17 20:28:08, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-17 20:28:08, INFO 💰 Настроена краткая сводка валовой: ежедневно 20:00
+2026-03-17 20:28:08, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-17 20:28:08, INFO 🛒 Настроена краткая сводка продаж: ежедневно 21:00
+2026-03-17 20:28:08, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-17 20:28:08, INFO 🧹 Настроена автоочистка файлов: логи 2д, AI 7д, HTML 30д, JSON 7д, Excel  14д | Запуск в 03:00
+2026-03-17 20:28:08, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-17 20:28:08, INFO 💰 Настроен AI Debt Collector: ежедневно 09:00
+2026-03-17 20:28:08, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-17 20:28:08, INFO 💰 Настроена проверка обещаний: ежедневно 10:00
+2026-03-17 20:28:08, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-17 20:28:08, INFO 📨 Настроен AI Коллектор: напоминания менеджерам каждые 60 мин
+2026-03-17 20:28:08, INFO Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-17 20:28:08, INFO 📱 Настроен Green API поллер: каждые 10 сек
+2026-03-17 20:28:08, INFO 🗑️ Автоудаление сообщений через 24 часов
+2026-03-17 20:28:08, INFO 📡 bot_polling_started
+2026-03-17 20:28:08, INFO {"event": "bot_polling_started"}
+2026-03-17 20:28:09, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/getMe "HTTP/1.1 200 OK"
+2026-03-17 20:28:13, INFO 🗂️ index_built · files=308; report_types=8; build_ms=4124.9
+2026-03-17 20:28:13, INFO {"event": "index_built", "files": 308, "report_types": 8, "build_ms": 4124.9}
+2026-03-17 20:28:13, INFO 🗂️ initial_index_built
+2026-03-17 20:28:13, INFO {"event": "initial_index_built"}
+2026-03-17 20:28:13, INFO ✅ json_read_success · file=deletion_queue.json; encoding=utf-8
+2026-03-17 20:28:13, INFO {"event": "json_read_success", "file": "deletion_queue.json", "encoding": "utf-8"}
+2026-03-17 20:28:13, INFO 🧹 Восстановлено 70 задач на удаление из очереди
+2026-03-17 20:28:13, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/sendMessage "HTTP/1.1 200 OK"
+2026-03-17 20:28:13, INFO ✅ Стартовое уведомление отправлено admin
+2026-03-17 20:28:13, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/sendMessage "HTTP/1.1 200 OK"
+2026-03-17 20:28:13, INFO ✅ Стартовое уведомление отправлено: Алена
+2026-03-17 20:28:13, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/sendMessage "HTTP/1.1 400 Bad Request"
+2026-03-17 20:28:13, WARNING ⚠️ Стартовое уведомление Оксана: Chat not found
+2026-03-17 20:28:14, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/sendMessage "HTTP/1.1 400 Bad Request"
+2026-03-17 20:28:14, WARNING ⚠️ Стартовое уведомление Магира: Chat not found
+2026-03-17 20:28:14, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/sendMessage "HTTP/1.1 400 Bad Request"
+2026-03-17 20:28:14, WARNING ⚠️ Стартовое уведомление Ергали: Chat not found
+2026-03-17 20:28:14, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/deleteWebhook "HTTP/1.1 200 OK"
+2026-03-17 20:28:14, INFO Added job "pipeline" to job store "default"
+2026-03-17 20:28:14, INFO Added job "new_reports" to job store "default"
+2026-03-17 20:28:14, INFO Added job "silence_alerts_14h" to job store "default"
+2026-03-17 20:28:14, INFO Added job "silence_alerts_21h" to job store "default"
+2026-03-17 20:28:14, INFO Added job "opportunity_loss_weekly" to job store "default"
+2026-03-17 20:28:14, INFO Added job "janitor" to job store "default"
+2026-03-17 20:28:14, INFO Added job "ai_queue_processor" to job store "default"
+2026-03-17 20:28:14, INFO Added job "daily_summary" to job store "default"
+2026-03-17 20:28:14, INFO Added job "reset_ai_state" to job store "default"
+2026-03-17 20:28:14, INFO Added job "weekly_ai_generation" to job store "default"
+2026-03-17 20:28:14, INFO Added job "daily_analytics" to job store "default"
+2026-03-17 20:28:14, INFO Added job "inventory_summary" to job store "default"
+2026-03-17 20:28:14, INFO Added job "gross_summary" to job store "default"
+2026-03-17 20:28:14, INFO Added job "sales_summary" to job store "default"
+2026-03-17 20:28:14, INFO Added job "cleanup_old_files" to job store "default"
+2026-03-17 20:28:14, INFO Added job "debt_collector_daily" to job store "default"
+2026-03-17 20:28:14, INFO Added job "debt_collector_promises" to job store "default"
+2026-03-17 20:28:14, INFO Added job "collector_reminders" to job store "default"
+2026-03-17 20:28:14, INFO Added job "whatsapp_poller" to job store "default"
+2026-03-17 20:28:14, INFO Scheduler started
+2026-03-17 20:28:14, INFO Application started
+2026-03-17 20:28:25, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/getUpdates "HTTP/1.1 200 OK"
+2026-03-17 20:28:35, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/getUpdates "HTTP/1.1 200 OK"
+2026-03-17 20:28:43, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/getUpdates "HTTP/1.1 200 OK"
+2026-03-17 20:28:43, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-03-17 20:28:43, INFO 📘 callback_query · data=back_main; chat_id=ADMIN_ID; user_role=admin
+2026-03-17 20:28:43, INFO {"event": "callback_query", "data": "back_main", "chat_id": ADMIN_ID, "user_role": "admin"}
+2026-03-17 20:28:43, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/sendMessage "HTTP/1.1 200 OK"
+2026-03-17 20:28:48, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/getUpdates "HTTP/1.1 200 OK"
+2026-03-17 20:28:48, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-03-17 20:28:48, INFO 📘 callback_query · data=menu_analytics; chat_id=ADMIN_ID; user_role=admin
+2026-03-17 20:28:48, INFO {"event": "callback_query", "data": "menu_analytics", "chat_id": ADMIN_ID, "user_role": "admin"}
+2026-03-17 20:28:48, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/editMessageText "HTTP/1.1 200 OK"
+2026-03-17 20:28:54, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/getUpdates "HTTP/1.1 200 OK"
+2026-03-17 20:28:56, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-03-17 20:28:56, INFO 📘 callback_query · data=back_main; chat_id=ADMIN_ID; user_role=admin
+2026-03-17 20:28:56, INFO {"event": "callback_query", "data": "back_main", "chat_id": ADMIN_ID, "user_role": "admin"}
+2026-03-17 20:28:56, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/deleteMessage "HTTP/1.1 200 OK"
+2026-03-17 20:28:56, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/sendMessage "HTTP/1.1 200 OK"
+2026-03-17 20:29:01, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/getUpdates "HTTP/1.1 200 OK"
+2026-03-17 20:29:01, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-03-17 20:29:01, INFO 📘 callback_query · data=menu_debt; chat_id=ADMIN_ID; user_role=admin
+2026-03-17 20:29:01, INFO {"event": "callback_query", "data": "menu_debt", "chat_id": ADMIN_ID, "user_role": "admin"}
+2026-03-17 20:29:01, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/editMessageText "HTTP/1.1 200 OK"
+2026-03-17 20:29:05, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/getUpdates "HTTP/1.1 200 OK"
+2026-03-17 20:29:05, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-03-17 20:29:05, INFO 📘 callback_query · data=back_main; chat_id=ADMIN_ID; user_role=admin
+2026-03-17 20:29:05, INFO {"event": "callback_query", "data": "back_main", "chat_id": ADMIN_ID, "user_role": "admin"}
+2026-03-17 20:29:05, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/deleteMessage "HTTP/1.1 200 OK"
+2026-03-17 20:29:05, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/sendMessage "HTTP/1.1 200 OK"
+2026-03-17 20:29:08, INFO Running job "pipeline (trigger: interval[0:10:00], next run at: 2026-03-17 15:39:08 UTC)" (scheduled at 2026-03-17 15:29:08.603934+00:00)
+2026-03-17 20:29:08, INFO 🔍 pipeline_cycle_start
+2026-03-17 20:29:08, INFO {"event": "pipeline_cycle_start"}
+2026-03-17 20:29:08, INFO ▶️ run_script_start · script=imap_fetcher.py; args=('--once',)
+2026-03-17 20:29:08, INFO {"event": "run_script_start", "script": "imap_fetcher.py", "args": ["--once"]}
+2026-03-17 20:29:08, INFO Running job "whatsapp_poller (trigger: interval[0:00:10], next run at: 2026-03-17 15:29:18 UTC)" (scheduled at 2026-03-17 15:29:08.682061+00:00)
+2026-03-17 20:29:12, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/getUpdates "HTTP/1.1 200 OK"
+2026-03-17 20:29:13, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-03-17 20:29:13, INFO 📘 callback_query · data=menu_notify; chat_id=ADMIN_ID; user_role=admin
+2026-03-17 20:29:13, INFO {"event": "callback_query", "data": "menu_notify", "chat_id": ADMIN_ID, "user_role": "admin"}
+2026-03-17 20:29:13, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/editMessageText "HTTP/1.1 200 OK"
+2026-03-17 20:29:17, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/getUpdates "HTTP/1.1 200 OK"
+2026-03-17 20:29:17, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-03-17 20:29:17, INFO 📘 callback_query · data=force|sales; chat_id=ADMIN_ID; user_role=admin
+2026-03-17 20:29:17, INFO {"event": "callback_query", "data": "force|sales", "chat_id": ADMIN_ID, "user_role": "admin"}
+2026-03-17 20:29:17, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-03-17 20:29:17, INFO 🚀 force_report: 🛒 Продажи → chat_id=ADMIN_ID role=admin
+2026-03-17 20:29:18, INFO 📅 Последний период продаж из JSON: 13 марта 2026 г.
+2026-03-17 20:29:18, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/sendMessage "HTTP/1.1 200 OK"
+2026-03-17 20:29:18, INFO ✅ json_read_success · file=deletion_queue.json; encoding=utf-8
+2026-03-17 20:29:18, INFO {"event": "json_read_success", "file": "deletion_queue.json", "encoding": "utf-8"}
+2026-03-17 20:29:18, INFO 🗑️ deletion_scheduled · chat_id=ADMIN_ID; message_id=1672; due_time=18.03  20:29; delay_hours=24
+2026-03-17 20:29:18, INFO {"event": "deletion_scheduled", "chat_id": ADMIN_ID, "message_id": 1672, "due_time": "18.03 20:29", "delay_hours": 24}
+2026-03-17 20:29:18, INFO ✅ force_report: 🛒 Продажи отправлен chat_id=ADMIN_ID
+2026-03-17 20:29:18, WARNING Execution of job "whatsapp_poller (trigger: interval[0:00:10], next run at: 2026-03-17 15:29:18 UTC)" skipped: maximum number of running instances reached (1)
+2026-03-17 20:29:18, INFO 📄 script_stdout · script=imap_fetcher.py; output=2026-03-17 20:29:10, INFO === imap_fetcher vv4.4.3 ===
+2026-03-17 20:29:11, INFO IMAP cfg: host=mail.minbarakat.kz port=993 ssl=True user=IMAP_EMAIL pass_set=True tz=Asia/Almaty env=C:\Users\user\Documents\GPT1C_Processor_analitic\.env cfg=C:\Users\user\Documents\GPT1C_Processor_analitic\config\imap.json
+2026-03-17 20:29:11, INFO IMAP LOGIN OK (attempt 1/5)
+2026-03-17 20:29:11, INFO SEARCH found 8 msgs
+2026-03-17 20:29:11, INFO SKIP no-manager-in-name: 2026 год баланс Excel (2).xlsx
+2026-03-17 20:29:12, INFO SKIP no-manager-in-name: 2026 год баланс Excel (3).xlsx
+2026-03-17 20:29:12, INFO SUMMARY REPORT detected: Продажи Магира (266).xlsx (keyword: продажи)
+2026-03-17 20:29:12, INFO SAVED: reports\queue\Продажи Магира (266).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:12, INFO Clean copy: reports\excel\clean\Продажи Магира (266).xlsx.__clean.xlsx
+2026-03-17 20:29:12, INFO SUMMARY REPORT detected: Продажи Оксана (256).xlsx (keyword: продажи)
+2026-03-17 20:29:12, INFO SAVED: reports\queue\Продажи Оксана (256).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:12, INFO Clean copy: reports\excel\clean\Продажи Оксана (256).xlsx.__clean.xlsx
+2026-03-17 20:29:12, INFO SUMMARY REPORT detected: Продажи Алена (248).xlsx (keyword: продажи)
+2026-03-17 20:29:12, INFO SAVED: reports\queue\Продажи Алена (248).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:12, INFO Clean copy: reports\excel\clean\Продажи Алена (248).xlsx.__clean.xlsx
+2026-03-17 20:29:12, INFO SUMMARY REPORT detected: Продажи Ергали (231).xlsx (keyword: продажи)
+2026-03-17 20:29:12, INFO SAVED: reports\queue\Продажи Ергали (231).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:12, INFO Clean copy: reports\excel\clean\Продажи Ергали (231).xlsx.__clean.xlsx
+2026-03-17 20:29:12, INFO MAIL flagged \Deleted, msg #b'3'
+2026-03-17 20:29:12, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами (356).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-03-17 20:29:12, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами (356).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:13, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами (356).xlsx.__clean.xlsx
+2026-03-17 20:29:13, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (285).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-03-17 20:29:13, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (285).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:13, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (285).xlsx.__clean.xlsx
+2026-03-17 20:29:13, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Магира (285).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-03-17 20:29:13, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (285).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:13, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (285).xlsx.__clean.xlsx
+2026-03-17 20:29:13, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (186).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-03-17 20:29:13, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (186).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:13, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (186).xlsx.__clean.xlsx
+2026-03-17 20:29:13, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (285).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-03-17 20:29:13, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (285).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:13, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (285).xlsx.__clean.xlsx
+2026-03-17 20:29:13, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Алена (284).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-03-17 20:29:13, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (284).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:13, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (284).xlsx.__clean.xlsx
+2026-03-17 20:29:13, INFO SUMMARY REPORT detected: Валовая прибыль (367).xlsx (keyword: валовая)
+2026-03-17 20:29:13, INFO SAVED: reports\queue\Валовая прибыль (367).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:13, INFO Clean copy: reports\excel\clean\Валовая прибыль (367).xlsx.__clean.xlsx
+2026-03-17 20:29:13, INFO SUMMARY REPORT detected: Продажи (383).xlsx (keyword: продажи)
+2026-03-17 20:29:13, INFO SAVED: reports\queue\Продажи (383).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:14, INFO Clean copy: reports\excel\clean\Продажи (383).xlsx.__clean.xlsx
+2026-03-17 20:29:14, INFO SUMMARY REPORT detected: Затраты с нарастающим (191).xlsx (keyword: затраты)
+2026-03-17 20:29:14, INFO SAVED: reports\queue\Затраты с нарастающим (191).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:14, INFO Clean copy: reports\excel\clean\Затраты с нарастающим (191).xlsx.__clean.xlsx
+2026-03-17 20:29:14, INFO SUMMARY REPORT detected: Ведомость по товарам на складах (192).xlsx (phrase: ведомость по товарам на складах)
+2026-03-17 20:29:14, INFO SAVED: reports\queue\Ведомость по товарам на складах (192).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:14, INFO Clean copy: reports\excel\clean\Ведомость по товарам на складах (192).xlsx.__clean.xlsx
+2026-03-17 20:29:14, INFO SUMMARY REPORT detected: Ведомость_по_партиям_товаров_на_складах (194).xlsx (keyword: ведомость)
+2026-03-17 20:29:14, INFO SAVED: reports\queue\Ведомость_по_партиям_товаров_на_складах (194).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:14, INFO Clean copy: reports\excel\clean\Ведомость_по_партиям_товаров_на_складах (194).xlsx.__clean.xlsx
+2026-03-17 20:29:14, INFO SUMMARY REPORT detected: Ведомость по денежным средствам (369).xlsx (keyword: ведомость)
+2026-03-17 20:29:14, INFO SAVED: reports\queue\Ведомость по денежным средствам (369).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:14, INFO Clean copy: reports\excel\clean\Ведомость по денежным средствам (369).xlsx.__clean.xlsx
+2026-03-17 20:29:14, INFO MAIL flagged \Deleted, msg #b'4'
+2026-03-17 20:29:14, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Магира (286).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-03-17 20:29:14, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (286).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:14, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (286).xlsx.__clean.xlsx
+2026-03-17 20:29:14, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (286).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-03-17 20:29:14, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (286).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:14, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (286).xlsx.__clean.xlsx
+2026-03-17 20:29:14, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами (357).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-03-17 20:29:14, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами (357).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:14, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами (357).xlsx.__clean.xlsx
+2026-03-17 20:29:14, INFO SUMMARY REPORT detected: Ведомость по денежным средствам (370).xlsx (keyword: ведомость)
+2026-03-17 20:29:14, INFO SAVED: reports\queue\Ведомость по денежным средствам (370).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:14, INFO Clean copy: reports\excel\clean\Ведомость по денежным средствам (370).xlsx.__clean.xlsx
+2026-03-17 20:29:14, INFO SUMMARY REPORT detected: Детальный Дебиторы Алена (112).xlsx (keyword: детальный)
+2026-03-17 20:29:14, INFO SAVED: reports\queue\Детальный Дебиторы Алена (112).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:14, INFO Clean copy: reports\excel\clean\Детальный Дебиторы Алена (112).xlsx.__clean.xlsx
+2026-03-17 20:29:14, INFO SUMMARY REPORT detected: Детальный Дебиторы Ергали (112).xlsx (keyword: детальный)
+2026-03-17 20:29:14, INFO SAVED: reports\queue\Детальный Дебиторы Ергали (112).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:14, INFO Clean copy: reports\excel\clean\Детальный Дебиторы Ергали (112).xlsx.__clean.xlsx
+2026-03-17 20:29:14, INFO SUMMARY REPORT detected: Детальный Дебиторы Магира (120).xlsx (keyword: детальный)
+2026-03-17 20:29:14, INFO SAVED: reports\queue\Детальный Дебиторы Магира (120).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:14, INFO Clean copy: reports\excel\clean\Детальный Дебиторы Магира (120).xlsx.__clean.xlsx
+2026-03-17 20:29:14, INFO SUMMARY REPORT detected: Детальный Дебиторы Оксана (116).xlsx (keyword: детальный)
+2026-03-17 20:29:14, INFO SAVED: reports\queue\Детальный Дебиторы Оксана (116).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:14, INFO Clean copy: reports\excel\clean\Детальный Дебиторы Оксана (116).xlsx.__clean.xlsx
+2026-03-17 20:29:14, INFO SUMMARY REPORT detected: Детальный_по_взаиморасчетам_с_контрагентами (104).xlsx (phrase: детальный_по_взаиморасчетам_с_контрагентами)
+2026-03-17 20:29:14, INFO SAVED: reports\queue\Детальный_по_взаиморасчетам_с_контрагентами (104).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:15, INFO Clean copy: reports\excel\clean\Детальный_по_взаиморасчетам_с_контрагентами (104).xlsx.__clean.xlsx
+2026-03-17 20:29:15, INFO SUMMARY REPORT detected: Затраты (59).xlsx (keyword: затраты)
+2026-03-17 20:29:15, INFO SAVED: reports\queue\Затраты (59).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:15, INFO Clean copy: reports\excel\clean\Затраты (59).xlsx.__clean.xlsx
+2026-03-17 20:29:15, INFO SUMMARY REPORT detected: Остатки всем (270).xlsx (keyword: остатки)
+2026-03-17 20:29:15, INFO SAVED: reports\queue\Остатки всем (270).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:15, INFO Clean copy: reports\excel\clean\Остатки всем (270).xlsx.__clean.xlsx
+2026-03-17 20:29:15, INFO SUMMARY REPORT detected: Продажи (384).xlsx (keyword: продажи)
+2026-03-17 20:29:15, INFO SAVED: reports\queue\Продажи (384).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:15, INFO Clean copy: reports\excel\clean\Продажи (384).xlsx.__clean.xlsx
+2026-03-17 20:29:15, INFO SUMMARY REPORT detected: Валовая прибыль (368).xlsx (keyword: валовая)
+2026-03-17 20:29:15, INFO SAVED: reports\queue\Валовая прибыль (368).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:15, INFO Clean copy: reports\excel\clean\Валовая прибыль (368).xlsx.__clean.xlsx
+2026-03-17 20:29:15, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Алена (285).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-03-17 20:29:15, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (285).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:15, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (285).xlsx.__clean.xlsx
+2026-03-17 20:29:15, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (286).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-03-17 20:29:15, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (286).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:15, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (286).xlsx.__clean.xlsx
+2026-03-17 20:29:15, INFO MAIL flagged \Deleted, msg #b'5'
+2026-03-17 20:29:15, INFO SUMMARY REPORT detected: Продажи Магира (268).xlsx (keyword: продажи)
+2026-03-17 20:29:15, INFO SAVED: reports\queue\Продажи Магира (268).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:15, INFO Clean copy: reports\excel\clean\Продажи Магира (268).xlsx.__clean.xlsx
+2026-03-17 20:29:15, INFO SUMMARY REPORT detected: Продажи Оксана (260).xlsx (keyword: продажи)
+2026-03-17 20:29:15, INFO SAVED: reports\queue\Продажи Оксана (260).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:15, INFO Clean copy: reports\excel\clean\Продажи Оксана (260).xlsx.__clean.xlsx
+2026-03-17 20:29:15, INFO SUMMARY REPORT detected: Продажи Алена (250).xlsx (keyword: продажи)
+2026-03-17 20:29:15, INFO SAVED: reports\queue\Продажи Алена (250).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:15, INFO Clean copy: reports\excel\clean\Продажи Алена (250).xlsx.__clean.xlsx
+2026-03-17 20:29:15, INFO SUMMARY REPORT detected: Продажи Ергали (233).xlsx (keyword: продажи)
+2026-03-17 20:29:15, INFO SAVED: reports\queue\Продажи Ергали (233).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:15, INFO Clean copy: reports\excel\clean\Продажи Ергали (233).xlsx.__clean.xlsx
+2026-03-17 20:29:15, INFO MAIL flagged \Deleted, msg #b'6'
+2026-03-17 20:29:15, INFO SUMMARY REPORT detected: Ведомость_по_партиям_товаров_на_складах (195).xlsx (keyword: ведомость)
+2026-03-17 20:29:15, INFO SAVED: reports\queue\Ведомость_по_партиям_товаров_на_складах (195).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:15, INFO Clean copy: reports\excel\clean\Ведомость_по_партиям_товаров_на_складах (195).xlsx.__clean.xlsx
+2026-03-17 20:29:15, INFO SUMMARY REPORT detected: Ведомость по денежным средствам (371).xlsx (keyword: ведомость)
+2026-03-17 20:29:15, INFO SAVED: reports\queue\Ведомость по денежным средствам (371).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:15, INFO Clean copy: reports\excel\clean\Ведомость по денежным средствам (371).xlsx.__clean.xlsx
+2026-03-17 20:29:15, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами (358).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-03-17 20:29:15, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами (358).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:16, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами (358).xlsx.__clean.xlsx
+2026-03-17 20:29:16, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (287).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-03-17 20:29:16, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (287).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:16, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (287).xlsx.__clean.xlsx
+2026-03-17 20:29:16, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Магира (287).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-03-17 20:29:16, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (287).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:16, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (287).xlsx.__clean.xlsx
+2026-03-17 20:29:16, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (187).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-03-17 20:29:16, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (187).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:16, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (187).xlsx.__clean.xlsx
+2026-03-17 20:29:16, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (287).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-03-17 20:29:16, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (287).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:16, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (287).xlsx.__clean.xlsx
+2026-03-17 20:29:16, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Алена (286).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-03-17 20:29:16, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (286).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:16, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (286).xlsx.__clean.xlsx
+2026-03-17 20:29:16, INFO SUMMARY REPORT detected: Валовая прибыль (369).xlsx (keyword: валовая)
+2026-03-17 20:29:16, INFO SAVED: reports\queue\Валовая прибыль (369).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:16, INFO Clean copy: reports\excel\clean\Валовая прибыль (369).xlsx.__clean.xlsx
+2026-03-17 20:29:16, INFO SUMMARY REPORT detected: Продажи (385).xlsx (keyword: продажи)
+2026-03-17 20:29:16, INFO SAVED: reports\queue\Продажи (385).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:16, INFO Clean copy: reports\excel\clean\Продажи (385).xlsx.__clean.xlsx
+2026-03-17 20:29:16, INFO SUMMARY REPORT detected: Затраты с нарастающим (192).xlsx (keyword: затраты)
+2026-03-17 20:29:16, INFO SAVED: reports\queue\Затраты с нарастающим (192).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:16, INFO Clean copy: reports\excel\clean\Затраты с нарастающим (192).xlsx.__clean.xlsx
+2026-03-17 20:29:16, INFO SUMMARY REPORT detected: Ведомость по товарам на складах (193).xlsx (phrase: ведомость по товарам на складах)
+2026-03-17 20:29:16, INFO SAVED: reports\queue\Ведомость по товарам на складах (193).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:16, INFO Clean copy: reports\excel\clean\Ведомость по товарам на складах (193).xlsx.__clean.xlsx
+2026-03-17 20:29:17, INFO MAIL flagged \Deleted, msg #b'7'
+2026-03-17 20:29:17, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Магира (288).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-03-17 20:29:17, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (288).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:17, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (288).xlsx.__clean.xlsx
+2026-03-17 20:29:17, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (288).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-03-17 20:29:17, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (288).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:17, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (288).xlsx.__clean.xlsx
+2026-03-17 20:29:17, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами (359).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-03-17 20:29:17, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами (359).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:17, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами (359).xlsx.__clean.xlsx
+2026-03-17 20:29:17, INFO SUMMARY REPORT detected: Ведомость по денежным средствам (372).xlsx (keyword: ведомость)
+2026-03-17 20:29:17, INFO SAVED: reports\queue\Ведомость по денежным средствам (372).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:17, INFO Clean copy: reports\excel\clean\Ведомость по денежным средствам (372).xlsx.__clean.xlsx
+2026-03-17 20:29:17, INFO SUMMARY REPORT detected: Детальный Дебиторы Алена (113).xlsx (keyword: детальный)
+2026-03-17 20:29:17, INFO SAVED: reports\queue\Детальный Дебиторы Алена (113).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:17, INFO Clean copy: reports\excel\clean\Детальный Дебиторы Алена (113).xlsx.__clean.xlsx
+2026-03-17 20:29:17, INFO SUMMARY REPORT detected: Детальный Дебиторы Ергали (113).xlsx (keyword: детальный)
+2026-03-17 20:29:17, INFO SAVED: reports\queue\Детальный Дебиторы Ергали (113).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:17, INFO Clean copy: reports\excel\clean\Детальный Дебиторы Ергали (113).xlsx.__clean.xlsx
+2026-03-17 20:29:17, INFO SUMMARY REPORT detected: Детальный Дебиторы Магира (121).xlsx (keyword: детальный)
+2026-03-17 20:29:17, INFO SAVED: reports\queue\Детальный Дебиторы Магира (121).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:17, INFO Clean copy: reports\excel\clean\Детальный Дебиторы Магира (121).xlsx.__clean.xlsx
+2026-03-17 20:29:17, INFO SUMMARY REPORT detected: Детальный Дебиторы Оксана (119).xlsx (keyword: детальный)
+2026-03-17 20:29:17, INFO SAVED: reports\queue\Детальный Дебиторы Оксана (119).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:17, INFO Clean copy: reports\excel\clean\Детальный Дебиторы Оксана (119).xlsx.__clean.xlsx
+2026-03-17 20:29:17, INFO SUMMARY REPORT detected: Детальный_по_взаиморасчетам_с_контрагентами (105).xlsx (phrase: детальный_по_взаиморасчетам_с_контрагентами)
+2026-03-17 20:29:17, INFO SAVED: reports\queue\Детальный_по_взаиморасчетам_с_контрагентами (105).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:18, INFO Clean copy: reports\excel\clean\Детальный_по_взаиморасчетам_с_контрагентами (105).xlsx.__clean.xlsx
+2026-03-17 20:29:18, INFO SUMMARY REPORT detected: Затраты (60).xlsx (keyword: затраты)
+2026-03-17 20:29:18, INFO SAVED: reports\queue\Затраты (60).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:18, INFO Clean copy: reports\excel\clean\Затраты (60).xlsx.__clean.xlsx
+2026-03-17 20:29:18, INFO SUMMARY REPORT detected: Остатки всем (273).xlsx (keyword: остатки)
+2026-03-17 20:29:18, INFO SAVED: reports\queue\Остатки всем (273).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:18, INFO Clean copy: reports\excel\clean\Остатки всем (273).xlsx.__clean.xlsx
+2026-03-17 20:29:18, INFO SUMMARY REPORT detected: Продажи (386).xlsx (keyword: продажи)
+2026-03-17 20:29:18, INFO SAVED: reports\queue\Продажи (386).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:18, INFO Clean copy: reports\excel\clean\Продажи (386).xlsx.__clean.xlsx
+2026-03-17 20:29:18, INFO SUMMARY REPORT detected: Валовая прибыль (370).xlsx (keyword: валовая)
+2026-03-17 20:29:18, INFO SAVED: reports\queue\Валовая прибыль (370).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:18, INFO Clean copy: reports\excel\clean\Валовая прибыль (370).xlsx.__clean.xlsx
+2026-03-17 20:29:18, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Алена (287).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-03-17 20:29:18, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (287).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:18, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (287).xlsx.__clean.xlsx
+2026-03-17 20:29:18, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (288).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)
+2026-03-17 20:29:18, INFO SAVED: reports\queue\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (288).xlsx (from EMAIL_HIDDEN)
+2026-03-17 20:29:18, INFO Clean copy: reports\excel\clean\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (288).xlsx.__clean.xlsx
+2026-03-17 20:29:18, INFO MAIL flagged \Deleted, msg #b'8'
+2026-03-17 20:29:18, INFO INBOX EXPUNGE OK
+2026-03-17 20:29:18, INFO TRASH skip Trash: cannot SELECT
+2026-03-17 20:29:18, INFO {"event": "script_stdout", "script": "imap_fetcher.py", "output": "2026-03-17 20:29:10, INFO === imap_fetcher vv4.4.3 ===\r\n2026-03-17 20:29:11, INFO IMAP cfg: host=mail.minbarakat.kz port=993 ssl=True user=IMAP_EMAIL pass_set=True tz=Asia/Almaty env=C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\.env cfg=C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\config\\imap.json\r\n2026-03-17 20:29:11, INFO IMAP LOGIN OK (attempt 1/5)\r\n2026-03-17 20:29:11, INFO SEARCH found 8 msgs\r\n2026-03-17 20:29:11, INFO SKIP no-manager-in-name: 2026 год баланс Excel (2).xlsx\r\n2026-03-17 20:29:12, INFO SKIP no-manager-in-name: 2026 год баланс Excel (3).xlsx\r\n2026-03-17 20:29:12, INFO SUMMARY REPORT detected: Продажи Магира (266).xlsx (keyword: продажи)\r\n2026-03-17 20:29:12, INFO SAVED: reports\\queue\\Продажи Магира (266).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:12, INFO Clean copy: reports\\excel\\clean\\Продажи Магира (266).xlsx.__clean.xlsx\r\n2026-03-17 20:29:12, INFO SUMMARY REPORT detected: Продажи Оксана (256).xlsx (keyword: продажи)\r\n2026-03-17 20:29:12, INFO SAVED: reports\\queue\\Продажи Оксана (256).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:12, INFO Clean copy: reports\\excel\\clean\\Продажи Оксана (256).xlsx.__clean.xlsx\r\n2026-03-17 20:29:12, INFO SUMMARY REPORT detected: Продажи Алена (248).xlsx (keyword: продажи)\r\n2026-03-17 20:29:12, INFO SAVED: reports\\queue\\Продажи Алена (248).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:12, INFO Clean copy: reports\\excel\\clean\\Продажи Алена (248).xlsx.__clean.xlsx\r\n2026-03-17 20:29:12, INFO SUMMARY REPORT detected: Продажи Ергали (231).xlsx (keyword: продажи)\r\n2026-03-17 20:29:12, INFO SAVED: reports\\queue\\Продажи Ергали (231).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:12, INFO Clean copy: reports\\excel\\clean\\Продажи Ергали (231).xlsx.__clean.xlsx\r\n2026-03-17 20:29:12, INFO MAIL flagged \\Deleted, msg #b'3'\r\n2026-03-17 20:29:12, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами (356).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)\r\n2026-03-17 20:29:12, INFO SAVED: reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами (356).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:13, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_взаиморасчетам_с_контрагентами (356).xlsx.__clean.xlsx\r\n2026-03-17 20:29:13, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (285).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)\r\n2026-03-17 20:29:13, INFO SAVED: reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (285).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:13, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (285).xlsx.__clean.xlsx\r\n2026-03-17 20:29:13, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Магира (285).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)\r\n2026-03-17 20:29:13, INFO SAVED: reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (285).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:13, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (285).xlsx.__clean.xlsx\r\n2026-03-17 20:29:13, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (186).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)\r\n2026-03-17 20:29:13, INFO SAVED: reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (186).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:13, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (186).xlsx.__clean.xlsx\r\n2026-03-17 20:29:13, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (285).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)\r\n2026-03-17 20:29:13, INFO SAVED: reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (285).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:13, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (285).xlsx.__clean.xlsx\r\n2026-03-17 20:29:13, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Алена (284).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)\r\n2026-03-17 20:29:13, INFO SAVED: reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (284).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:13, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (284).xlsx.__clean.xlsx\r\n2026-03-17 20:29:13, INFO SUMMARY REPORT detected: Валовая прибыль (367).xlsx (keyword: валовая)\r\n2026-03-17 20:29:13, INFO SAVED: reports\\queue\\Валовая прибыль (367).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:13, INFO Clean copy: reports\\excel\\clean\\Валовая прибыль (367).xlsx.__clean.xlsx\r\n2026-03-17 20:29:13, INFO SUMMARY REPORT detected: Продажи (383).xlsx (keyword: продажи)\r\n2026-03-17 20:29:13, INFO SAVED: reports\\queue\\Продажи (383).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:14, INFO Clean copy: reports\\excel\\clean\\Продажи (383).xlsx.__clean.xlsx\r\n2026-03-17 20:29:14, INFO SUMMARY REPORT detected: Затраты с нарастающим (191).xlsx (keyword: затраты)\r\n2026-03-17 20:29:14, INFO SAVED: reports\\queue\\Затраты с нарастающим (191).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:14, INFO Clean copy: reports\\excel\\clean\\Затраты с нарастающим (191).xlsx.__clean.xlsx\r\n2026-03-17 20:29:14, INFO SUMMARY REPORT detected: Ведомость по товарам на складах (192).xlsx (phrase: ведомость по товарам на складах)\r\n2026-03-17 20:29:14, INFO SAVED: reports\\queue\\Ведомость по товарам на складах (192).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:14, INFO Clean copy: reports\\excel\\clean\\Ведомость по товарам на складах (192).xlsx.__clean.xlsx\r\n2026-03-17 20:29:14, INFO SUMMARY REPORT detected: Ведомость_по_партиям_товаров_на_складах (194).xlsx (keyword: ведомость)\r\n2026-03-17 20:29:14, INFO SAVED: reports\\queue\\Ведомость_по_партиям_товаров_на_складах (194).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:14, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_партиям_товаров_на_складах (194).xlsx.__clean.xlsx\r\n2026-03-17 20:29:14, INFO SUMMARY REPORT detected: Ведомость по денежным средствам (369).xlsx (keyword: ведомость)\r\n2026-03-17 20:29:14, INFO SAVED: reports\\queue\\Ведомость по денежным средствам (369).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:14, INFO Clean copy: reports\\excel\\clean\\Ведомость по денежным средствам (369).xlsx.__clean.xlsx\r\n2026-03-17 20:29:14, INFO MAIL flagged \\Deleted, msg #b'4'\r\n2026-03-17 20:29:14, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Магира (286).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)\r\n2026-03-17 20:29:14, INFO SAVED: reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (286).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:14, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (286).xlsx.__clean.xlsx\r\n2026-03-17 20:29:14, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (286).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)\r\n2026-03-17 20:29:14, INFO SAVED: reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (286).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:14, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (286).xlsx.__clean.xlsx\r\n2026-03-17 20:29:14, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами (357).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)\r\n2026-03-17 20:29:14, INFO SAVED: reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами (357).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:14, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_взаиморасчетам_с_контрагентами (357).xlsx.__clean.xlsx\r\n2026-03-17 20:29:14, INFO SUMMARY REPORT detected: Ведомость по денежным средствам (370).xlsx (keyword: ведомость)\r\n2026-03-17 20:29:14, INFO SAVED: reports\\queue\\Ведомость по денежным средствам (370).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:14, INFO Clean copy: reports\\excel\\clean\\Ведомость по денежным средствам (370).xlsx.__clean.xlsx\r\n2026-03-17 20:29:14, INFO SUMMARY REPORT detected: Детальный Дебиторы Алена (112).xlsx (keyword: детальный)\r\n2026-03-17 20:29:14, INFO SAVED: reports\\queue\\Детальный Дебиторы Алена (112).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:14, INFO Clean copy: reports\\excel\\clean\\Детальный Дебиторы Алена (112).xlsx.__clean.xlsx\r\n2026-03-17 20:29:14, INFO SUMMARY REPORT detected: Детальный Дебиторы Ергали (112).xlsx (keyword: детальный)\r\n2026-03-17 20:29:14, INFO SAVED: reports\\queue\\Детальный Дебиторы Ергали (112).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:14, INFO Clean copy: reports\\excel\\clean\\Детальный Дебиторы Ергали (112).xlsx.__clean.xlsx\r\n2026-03-17 20:29:14, INFO SUMMARY REPORT detected: Детальный Дебиторы Магира (120).xlsx (keyword: детальный)\r\n2026-03-17 20:29:14, INFO SAVED: reports\\queue\\Детальный Дебиторы Магира (120).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:14, INFO Clean copy: reports\\excel\\clean\\Детальный Дебиторы Магира (120).xlsx.__clean.xlsx\r\n2026-03-17 20:29:14, INFO SUMMARY REPORT detected: Детальный Дебиторы Оксана (116).xlsx (keyword: детальный)\r\n2026-03-17 20:29:14, INFO SAVED: reports\\queue\\Детальный Дебиторы Оксана (116).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:14, INFO Clean copy: reports\\excel\\clean\\Детальный Дебиторы Оксана (116).xlsx.__clean.xlsx\r\n2026-03-17 20:29:14, INFO SUMMARY REPORT detected: Детальный_по_взаиморасчетам_с_контрагентами (104).xlsx (phrase: детальный_по_взаиморасчетам_с_контрагентами)\r\n2026-03-17 20:29:14, INFO SAVED: reports\\queue\\Детальный_по_взаиморасчетам_с_контрагентами (104).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:15, INFO Clean copy: reports\\excel\\clean\\Детальный_по_взаиморасчетам_с_контрагентами (104).xlsx.__clean.xlsx\r\n2026-03-17 20:29:15, INFO SUMMARY REPORT detected: Затраты (59).xlsx (keyword: затраты)\r\n2026-03-17 20:29:15, INFO SAVED: reports\\queue\\Затраты (59).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:15, INFO Clean copy: reports\\excel\\clean\\Затраты (59).xlsx.__clean.xlsx\r\n2026-03-17 20:29:15, INFO SUMMARY REPORT detected: Остатки всем (270).xlsx (keyword: остатки)\r\n2026-03-17 20:29:15, INFO SAVED: reports\\queue\\Остатки всем (270).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:15, INFO Clean copy: reports\\excel\\clean\\Остатки всем (270).xlsx.__clean.xlsx\r\n2026-03-17 20:29:15, INFO SUMMARY REPORT detected: Продажи (384).xlsx (keyword: продажи)\r\n2026-03-17 20:29:15, INFO SAVED: reports\\queue\\Продажи (384).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:15, INFO Clean copy: reports\\excel\\clean\\Продажи (384).xlsx.__clean.xlsx\r\n2026-03-17 20:29:15, INFO SUMMARY REPORT detected: Валовая прибыль (368).xlsx (keyword: валовая)\r\n2026-03-17 20:29:15, INFO SAVED: reports\\queue\\Валовая прибыль (368).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:15, INFO Clean copy: reports\\excel\\clean\\Валовая прибыль (368).xlsx.__clean.xlsx\r\n2026-03-17 20:29:15, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Алена (285).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)\r\n2026-03-17 20:29:15, INFO SAVED: reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (285).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:15, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (285).xlsx.__clean.xlsx\r\n2026-03-17 20:29:15, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (286).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)\r\n2026-03-17 20:29:15, INFO SAVED: reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (286).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:15, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (286).xlsx.__clean.xlsx\r\n2026-03-17 20:29:15, INFO MAIL flagged \\Deleted, msg #b'5'\r\n2026-03-17 20:29:15, INFO SUMMARY REPORT detected: Продажи Магира (268).xlsx (keyword: продажи)\r\n2026-03-17 20:29:15, INFO SAVED: reports\\queue\\Продажи Магира (268).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:15, INFO Clean copy: reports\\excel\\clean\\Продажи Магира (268).xlsx.__clean.xlsx\r\n2026-03-17 20:29:15, INFO SUMMARY REPORT detected: Продажи Оксана (260).xlsx (keyword: продажи)\r\n2026-03-17 20:29:15, INFO SAVED: reports\\queue\\Продажи Оксана (260).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:15, INFO Clean copy: reports\\excel\\clean\\Продажи Оксана (260).xlsx.__clean.xlsx\r\n2026-03-17 20:29:15, INFO SUMMARY REPORT detected: Продажи Алена (250).xlsx (keyword: продажи)\r\n2026-03-17 20:29:15, INFO SAVED: reports\\queue\\Продажи Алена (250).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:15, INFO Clean copy: reports\\excel\\clean\\Продажи Алена (250).xlsx.__clean.xlsx\r\n2026-03-17 20:29:15, INFO SUMMARY REPORT detected: Продажи Ергали (233).xlsx (keyword: продажи)\r\n2026-03-17 20:29:15, INFO SAVED: reports\\queue\\Продажи Ергали (233).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:15, INFO Clean copy: reports\\excel\\clean\\Продажи Ергали (233).xlsx.__clean.xlsx\r\n2026-03-17 20:29:15, INFO MAIL flagged \\Deleted, msg #b'6'\r\n2026-03-17 20:29:15, INFO SUMMARY REPORT detected: Ведомость_по_партиям_товаров_на_складах (195).xlsx (keyword: ведомость)\r\n2026-03-17 20:29:15, INFO SAVED: reports\\queue\\Ведомость_по_партиям_товаров_на_складах (195).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:15, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_партиям_товаров_на_складах (195).xlsx.__clean.xlsx\r\n2026-03-17 20:29:15, INFO SUMMARY REPORT detected: Ведомость по денежным средствам (371).xlsx (keyword: ведомость)\r\n2026-03-17 20:29:15, INFO SAVED: reports\\queue\\Ведомость по денежным средствам (371).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:15, INFO Clean copy: reports\\excel\\clean\\Ведомость по денежным средствам (371).xlsx.__clean.xlsx\r\n2026-03-17 20:29:15, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами (358).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)\r\n2026-03-17 20:29:15, INFO SAVED: reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами (358).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:16, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_взаиморасчетам_с_контрагентами (358).xlsx.__clean.xlsx\r\n2026-03-17 20:29:16, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (287).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)\r\n2026-03-17 20:29:16, INFO SAVED: reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (287).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:16, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (287).xlsx.__clean.xlsx\r\n2026-03-17 20:29:16, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Магира (287).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)\r\n2026-03-17 20:29:16, INFO SAVED: reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (287).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:16, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (287).xlsx.__clean.xlsx\r\n2026-03-17 20:29:16, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (187).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)\r\n2026-03-17 20:29:16, INFO SAVED: reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (187).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:16, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (187).xlsx.__clean.xlsx\r\n2026-03-17 20:29:16, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (287).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)\r\n2026-03-17 20:29:16, INFO SAVED: reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (287).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:16, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (287).xlsx.__clean.xlsx\r\n2026-03-17 20:29:16, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Алена (286).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)\r\n2026-03-17 20:29:16, INFO SAVED: reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (286).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:16, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (286).xlsx.__clean.xlsx\r\n2026-03-17 20:29:16, INFO SUMMARY REPORT detected: Валовая прибыль (369).xlsx (keyword: валовая)\r\n2026-03-17 20:29:16, INFO SAVED: reports\\queue\\Валовая прибыль (369).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:16, INFO Clean copy: reports\\excel\\clean\\Валовая прибыль (369).xlsx.__clean.xlsx\r\n2026-03-17 20:29:16, INFO SUMMARY REPORT detected: Продажи (385).xlsx (keyword: продажи)\r\n2026-03-17 20:29:16, INFO SAVED: reports\\queue\\Продажи (385).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:16, INFO Clean copy: reports\\excel\\clean\\Продажи (385).xlsx.__clean.xlsx\r\n2026-03-17 20:29:16, INFO SUMMARY REPORT detected: Затраты с нарастающим (192).xlsx (keyword: затраты)\r\n2026-03-17 20:29:16, INFO SAVED: reports\\queue\\Затраты с нарастающим (192).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:16, INFO Clean copy: reports\\excel\\clean\\Затраты с нарастающим (192).xlsx.__clean.xlsx\r\n2026-03-17 20:29:16, INFO SUMMARY REPORT detected: Ведомость по товарам на складах (193).xlsx (phrase: ведомость по товарам на складах)\r\n2026-03-17 20:29:16, INFO SAVED: reports\\queue\\Ведомость по товарам на складах (193).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:16, INFO Clean copy: reports\\excel\\clean\\Ведомость по товарам на складах (193).xlsx.__clean.xlsx\r\n2026-03-17 20:29:17, INFO MAIL flagged \\Deleted, msg #b'7'\r\n2026-03-17 20:29:17, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Магира (288).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)\r\n2026-03-17 20:29:17, INFO SAVED: reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (288).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:17, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_взаиморасчетам_с_контрагентами_Магира (288).xlsx.__clean.xlsx\r\n2026-03-17 20:29:17, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (288).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)\r\n2026-03-17 20:29:17, INFO SAVED: reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (288).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:17, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (288).xlsx.__clean.xlsx\r\n2026-03-17 20:29:17, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами (359).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)\r\n2026-03-17 20:29:17, INFO SAVED: reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами (359).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:17, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_взаиморасчетам_с_контрагентами (359).xlsx.__clean.xlsx\r\n2026-03-17 20:29:17, INFO SUMMARY REPORT detected: Ведомость по денежным средствам (372).xlsx (keyword: ведомость)\r\n2026-03-17 20:29:17, INFO SAVED: reports\\queue\\Ведомость по денежным средствам (372).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:17, INFO Clean copy: reports\\excel\\clean\\Ведомость по денежным средствам (372).xlsx.__clean.xlsx\r\n2026-03-17 20:29:17, INFO SUMMARY REPORT detected: Детальный Дебиторы Алена (113).xlsx (keyword: детальный)\r\n2026-03-17 20:29:17, INFO SAVED: reports\\queue\\Детальный Дебиторы Алена (113).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:17, INFO Clean copy: reports\\excel\\clean\\Детальный Дебиторы Алена (113).xlsx.__clean.xlsx\r\n2026-03-17 20:29:17, INFO SUMMARY REPORT detected: Детальный Дебиторы Ергали (113).xlsx (keyword: детальный)\r\n2026-03-17 20:29:17, INFO SAVED: reports\\queue\\Детальный Дебиторы Ергали (113).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:17, INFO Clean copy: reports\\excel\\clean\\Детальный Дебиторы Ергали (113).xlsx.__clean.xlsx\r\n2026-03-17 20:29:17, INFO SUMMARY REPORT detected: Детальный Дебиторы Магира (121).xlsx (keyword: детальный)\r\n2026-03-17 20:29:17, INFO SAVED: reports\\queue\\Детальный Дебиторы Магира (121).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:17, INFO Clean copy: reports\\excel\\clean\\Детальный Дебиторы Магира (121).xlsx.__clean.xlsx\r\n2026-03-17 20:29:17, INFO SUMMARY REPORT detected: Детальный Дебиторы Оксана (119).xlsx (keyword: детальный)\r\n2026-03-17 20:29:17, INFO SAVED: reports\\queue\\Детальный Дебиторы Оксана (119).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:17, INFO Clean copy: reports\\excel\\clean\\Детальный Дебиторы Оксана (119).xlsx.__clean.xlsx\r\n2026-03-17 20:29:17, INFO SUMMARY REPORT detected: Детальный_по_взаиморасчетам_с_контрагентами (105).xlsx (phrase: детальный_по_взаиморасчетам_с_контрагентами)\r\n2026-03-17 20:29:17, INFO SAVED: reports\\queue\\Детальный_по_взаиморасчетам_с_контрагентами (105).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:18, INFO Clean copy: reports\\excel\\clean\\Детальный_по_взаиморасчетам_с_контрагентами (105).xlsx.__clean.xlsx\r\n2026-03-17 20:29:18, INFO SUMMARY REPORT detected: Затраты (60).xlsx (keyword: затраты)\r\n2026-03-17 20:29:18, INFO SAVED: reports\\queue\\Затраты (60).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:18, INFO Clean copy: reports\\excel\\clean\\Затраты (60).xlsx.__clean.xlsx\r\n2026-03-17 20:29:18, INFO SUMMARY REPORT detected: Остатки всем (273).xlsx (keyword: остатки)\r\n2026-03-17 20:29:18, INFO SAVED: reports\\queue\\Остатки всем (273).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:18, INFO Clean copy: reports\\excel\\clean\\Остатки всем (273).xlsx.__clean.xlsx\r\n2026-03-17 20:29:18, INFO SUMMARY REPORT detected: Продажи (386).xlsx (keyword: продажи)\r\n2026-03-17 20:29:18, INFO SAVED: reports\\queue\\Продажи (386).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:18, INFO Clean copy: reports\\excel\\clean\\Продажи (386).xlsx.__clean.xlsx\r\n2026-03-17 20:29:18, INFO SUMMARY REPORT detected: Валовая прибыль (370).xlsx (keyword: валовая)\r\n2026-03-17 20:29:18, INFO SAVED: reports\\queue\\Валовая прибыль (370).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:18, INFO Clean copy: reports\\excel\\clean\\Валовая прибыль (370).xlsx.__clean.xlsx\r\n2026-03-17 20:29:18, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Алена (287).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)\r\n2026-03-17 20:29:18, INFO SAVED: reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (287).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:18, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_взаиморасчетам_с_контрагентами_Алена (287).xlsx.__clean.xlsx\r\n2026-03-17 20:29:18, INFO SUMMARY REPORT detected: Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (288).xlsx (phrase: ведомость_по_взаиморасчетам_с_контрагентами)\r\n2026-03-17 20:29:18, INFO SAVED: reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (288).xlsx (from EMAIL_HIDDEN)\r\n2026-03-17 20:29:18, INFO Clean copy: reports\\excel\\clean\\Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (288).xlsx.__clean.xlsx\r\n2026-03-17 20:29:18, INFO MAIL flagged \\Deleted, msg #b'8'\r\n2026-03-17 20:29:18, INFO INBOX EXPUNGE OK\r\n2026-03-17 20:29:18, INFO TRASH skip Trash: cannot SELECT"}
+2026-03-17 20:29:19, INFO ⚠️ script_stderr · script=imap_fetcher.py; output=2026-03-17 20:29:12, INFO Clean copy → Продажи Магира (266).xlsx.__clean.xlsx
+2026-03-17 20:29:12, INFO Clean copy → Продажи Оксана (256).xlsx.__clean.xlsx
+2026-03-17 20:29:12, INFO Clean copy → Продажи Алена (248).xlsx.__clean.xlsx
+2026-03-17 20:29:12, INFO Clean copy → Продажи Ергали (231).xlsx.__clean.xlsx
+2026-03-17 20:29:13, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами (356).xlsx.__clean.xlsx
+2026-03-17 20:29:13, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (285).xlsx.__clean.xlsx
+2026-03-17 20:29:13, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_Магира (285).xlsx.__clean.xlsx
+2026-03-17 20:29:13, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (186).xlsx.__clean.xlsx
+2026-03-17 20:29:13, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (285).xlsx.__clean.xlsx
+2026-03-17 20:29:13, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_Алена (284).xlsx.__clean.xlsx
+2026-03-17 20:29:13, INFO Clean copy → Валовая прибыль (367).xlsx.__clean.xlsx
+2026-03-17 20:29:14, INFO Clean copy → Продажи (383).xlsx.__clean.xlsx
+2026-03-17 20:29:14, INFO Clean copy → Затраты с нарастающим (191).xlsx.__clean.xlsx
+2026-03-17 20:29:14, INFO Clean copy → Ведомость по товарам на складах (192).xlsx.__clean.xlsx
+2026-03-17 20:29:14, INFO Clean copy → Ведомость_по_партиям_товаров_на_складах (194).xlsx.__clean.xlsx
+2026-03-17 20:29:14, INFO Clean copy → Ведомость по денежным средствам (369).xlsx.__clean.xlsx
+2026-03-17 20:29:14, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_Магира (286).xlsx.__clean.xlsx
+2026-03-17 20:29:14, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (286).xlsx.__clean.xlsx
+2026-03-17 20:29:14, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами (357).xlsx.__clean.xlsx
+2026-03-17 20:29:14, INFO Clean copy → Ведомость по денежным средствам (370).xlsx.__clean.xlsx
+2026-03-17 20:29:14, INFO Clean copy → Детальный Дебиторы Алена (112).xlsx.__clean.xlsx
+2026-03-17 20:29:14, INFO Clean copy → Детальный Дебиторы Ергали (112).xlsx.__clean.xlsx
+2026-03-17 20:29:14, INFO Clean copy → Детальный Дебиторы Магира (120).xlsx.__clean.xlsx
+2026-03-17 20:29:14, INFO Clean copy → Детальный Дебиторы Оксана (116).xlsx.__clean.xlsx
+2026-03-17 20:29:15, INFO Clean copy → Детальный_по_взаиморасчетам_с_контрагентами (104).xlsx.__clean.xlsx
+2026-03-17 20:29:15, INFO Clean copy → Затраты (59).xlsx.__clean.xlsx
+2026-03-17 20:29:15, INFO Clean copy → Остатки всем (270).xlsx.__clean.xlsx
+2026-03-17 20:29:15, INFO Clean copy → Продажи (384).xlsx.__clean.xlsx
+2026-03-17 20:29:15, INFO Clean copy → Валовая прибыль (368).xlsx.__clean.xlsx
+2026-03-17 20:29:15, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_Алена (285).xlsx.__clean.xlsx
+2026-03-17 20:29:15, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (286).xlsx.__clean.xlsx
+2026-03-17 20:29:15, INFO Clean copy → Продажи Магира (268).xlsx.__clean.xlsx
+2026-03-17 20:29:15, INFO Clean copy → Продажи Оксана (260).xlsx.__clean.xlsx
+2026-03-17 20:29:15, INFO Clean copy → Продажи Алена (250).xlsx.__clean.xlsx
+2026-03-17 20:29:15, INFO Clean copy → Продажи Ергали (233).xlsx.__clean.xlsx
+2026-03-17 20:29:15, INFO Clean copy → Ведомость_по_партиям_товаров_на_складах (195).xlsx.__clean.xlsx
+2026-03-17 20:29:15, INFO Clean copy → Ведомость по денежным средствам (371).xlsx.__clean.xlsx
+2026-03-17 20:29:16, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами (358).xlsx.__clean.xlsx
+2026-03-17 20:29:16, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (287).xlsx.__clean.xlsx
+2026-03-17 20:29:16, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_Магира (287).xlsx.__clean.xlsx
+2026-03-17 20:29:16, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (187).xlsx.__clean.xlsx
+2026-03-17 20:29:16, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (287).xlsx.__clean.xlsx
+2026-03-17 20:29:16, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_Алена (286).xlsx.__clean.xlsx
+2026-03-17 20:29:16, INFO Clean copy → Валовая прибыль (369).xlsx.__clean.xlsx
+2026-03-17 20:29:16, INFO Clean copy → Продажи (385).xlsx.__clean.xlsx
+2026-03-17 20:29:16, INFO Clean copy → Затраты с нарастающим (192).xlsx.__clean.xlsx
+2026-03-17 20:29:16, INFO Clean copy → Ведомость по товарам на складах (193).xlsx.__clean.xlsx
+2026-03-17 20:29:17, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_Магира (288).xlsx.__clean.xlsx
+2026-03-17 20:29:17, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (288).xlsx.__clean.xlsx
+2026-03-17 20:29:17, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами (359).xlsx.__clean.xlsx
+2026-03-17 20:29:17, INFO Clean copy → Ведомость по денежным средствам (372).xlsx.__clean.xlsx
+2026-03-17 20:29:17, INFO Clean copy → Детальный Дебиторы Алена (113).xlsx.__clean.xlsx
+2026-03-17 20:29:17, INFO Clean copy → Детальный Дебиторы Ергали (113).xlsx.__clean.xlsx
+2026-03-17 20:29:17, INFO Clean copy → Детальный Дебиторы Магира (121).xlsx.__clean.xlsx
+2026-03-17 20:29:17, INFO Clean copy → Детальный Дебиторы Оксана (119).xlsx.__clean.xlsx
+2026-03-17 20:29:18, INFO Clean copy → Детальный_по_взаиморасчетам_с_контрагентами (105).xlsx.__clean.xlsx
+2026-03-17 20:29:18, INFO Clean copy → Затраты (60).xlsx.__clean.xlsx
+2026-03-17 20:29:18, INFO Clean copy → Остатки всем (273).xlsx.__clean.xlsx
+2026-03-17 20:29:18, INFO Clean copy → Продажи (386).xlsx.__clean.xlsx
+2026-03-17 20:29:18, INFO Clean copy → Валовая прибыль (370).xlsx.__clean.xlsx
+2026-03-17 20:29:18, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_Алена (287).xlsx.__clean.xlsx
+2026-03-17 20:29:18, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (288).xlsx.__clean.xlsx
+Traceback (most recent call last):
+  File "C:\Users\user\Documents\GPT1C_Processor_analitic\imap_fetcher.py", line 626, in <module>
+    main()
+  File "C:\Users\user\Documents\GPT1C_Processor_analitic\imap_fetcher.py", line 622, in main
+    run_once(since=args.since, debug=args.debug)
+  File "C:\Users\user\Documents\GPT1C_Processor_analitic\imap_fetcher.py", line 590, in run_once
+    _expunge_mailbox(M, mb)
+  File "C:\Users\user\Documents\GPT1C_Processor_analitic\imap_fetcher.py", line 267, in _expunge_mailbox
+    if _select_mailbox(M, mailbox):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\user\Documents\GPT1C_Processor_analitic\imap_fetcher.py", line 261, in _select_mailbox
+    typ, _ = M.select(name)
+             ^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\imaplib.py", line 756, in select
+    typ, dat = self._simple_command(name, mailbox)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\imaplib.py", line 1230, in _simple_command
+    return self._command_complete(name, self._command(name, *args))
+                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\imaplib.py", line 987, in _command
+    arg = bytes(arg, self._encoding)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'ascii' codec can't encode characters in position 0-6: ordinal not in range(128); level=WARNING
+2026-03-17 20:29:19, INFO {"event": "script_stderr", "script": "imap_fetcher.py", "output": "2026-03-17 20:29:12, INFO Clean copy → Продажи Магира (266).xlsx.__clean.xlsx\r\n2026-03-17 20:29:12, INFO Clean copy → Продажи Оксана (256).xlsx.__clean.xlsx\r\n2026-03-17 20:29:12, INFO Clean copy → Продажи Алена (248).xlsx.__clean.xlsx\r\n2026-03-17 20:29:12, INFO Clean copy → Продажи Ергали (231).xlsx.__clean.xlsx\r\n2026-03-17 20:29:13, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами (356).xlsx.__clean.xlsx\r\n2026-03-17 20:29:13, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (285).xlsx.__clean.xlsx\r\n2026-03-17 20:29:13, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_Магира (285).xlsx.__clean.xlsx\r\n2026-03-17 20:29:13, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (186).xlsx.__clean.xlsx\r\n2026-03-17 20:29:13, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (285).xlsx.__clean.xlsx\r\n2026-03-17 20:29:13, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_Алена (284).xlsx.__clean.xlsx\r\n2026-03-17 20:29:13, INFO Clean copy → Валовая прибыль (367).xlsx.__clean.xlsx\r\n2026-03-17 20:29:14, INFO Clean copy → Продажи (383).xlsx.__clean.xlsx\r\n2026-03-17 20:29:14, INFO Clean copy → Затраты с нарастающим (191).xlsx.__clean.xlsx\r\n2026-03-17 20:29:14, INFO Clean copy → Ведомость по товарам на складах (192).xlsx.__clean.xlsx\r\n2026-03-17 20:29:14, INFO Clean copy → Ведомость_по_партиям_товаров_на_складах (194).xlsx.__clean.xlsx\r\n2026-03-17 20:29:14, INFO Clean copy → Ведомость по денежным средствам (369).xlsx.__clean.xlsx\r\n2026-03-17 20:29:14, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_Магира (286).xlsx.__clean.xlsx\r\n2026-03-17 20:29:14, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (286).xlsx.__clean.xlsx\r\n2026-03-17 20:29:14, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами (357).xlsx.__clean.xlsx\r\n2026-03-17 20:29:14, INFO Clean copy → Ведомость по денежным средствам (370).xlsx.__clean.xlsx\r\n2026-03-17 20:29:14, INFO Clean copy → Детальный Дебиторы Алена (112).xlsx.__clean.xlsx\r\n2026-03-17 20:29:14, INFO Clean copy → Детальный Дебиторы Ергали (112).xlsx.__clean.xlsx\r\n2026-03-17 20:29:14, INFO Clean copy → Детальный Дебиторы Магира (120).xlsx.__clean.xlsx\r\n2026-03-17 20:29:14, INFO Clean copy → Детальный Дебиторы Оксана (116).xlsx.__clean.xlsx\r\n2026-03-17 20:29:15, INFO Clean copy → Детальный_по_взаиморасчетам_с_контрагентами (104).xlsx.__clean.xlsx\r\n2026-03-17 20:29:15, INFO Clean copy → Затраты (59).xlsx.__clean.xlsx\r\n2026-03-17 20:29:15, INFO Clean copy → Остатки всем (270).xlsx.__clean.xlsx\r\n2026-03-17 20:29:15, INFO Clean copy → Продажи (384).xlsx.__clean.xlsx\r\n2026-03-17 20:29:15, INFO Clean copy → Валовая прибыль (368).xlsx.__clean.xlsx\r\n2026-03-17 20:29:15, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_Алена (285).xlsx.__clean.xlsx\r\n2026-03-17 20:29:15, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (286).xlsx.__clean.xlsx\r\n2026-03-17 20:29:15, INFO Clean copy → Продажи Магира (268).xlsx.__clean.xlsx\r\n2026-03-17 20:29:15, INFO Clean copy → Продажи Оксана (260).xlsx.__clean.xlsx\r\n2026-03-17 20:29:15, INFO Clean copy → Продажи Алена (250).xlsx.__clean.xlsx\r\n2026-03-17 20:29:15, INFO Clean copy → Продажи Ергали (233).xlsx.__clean.xlsx\r\n2026-03-17 20:29:15, INFO Clean copy → Ведомость_по_партиям_товаров_на_складах (195).xlsx.__clean.xlsx\r\n2026-03-17 20:29:15, INFO Clean copy → Ведомость по денежным средствам (371).xlsx.__clean.xlsx\r\n2026-03-17 20:29:16, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами (358).xlsx.__clean.xlsx\r\n2026-03-17 20:29:16, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (287).xlsx.__clean.xlsx\r\n2026-03-17 20:29:16, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_Магира (287).xlsx.__clean.xlsx\r\n2026-03-17 20:29:16, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_за_26_05 (187).xlsx.__clean.xlsx\r\n2026-03-17 20:29:16, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (287).xlsx.__clean.xlsx\r\n2026-03-17 20:29:16, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_Алена (286).xlsx.__clean.xlsx\r\n2026-03-17 20:29:16, INFO Clean copy → Валовая прибыль (369).xlsx.__clean.xlsx\r\n2026-03-17 20:29:16, INFO Clean copy → Продажи (385).xlsx.__clean.xlsx\r\n2026-03-17 20:29:16, INFO Clean copy → Затраты с нарастающим (192).xlsx.__clean.xlsx\r\n2026-03-17 20:29:16, INFO Clean copy → Ведомость по товарам на складах (193).xlsx.__clean.xlsx\r\n2026-03-17 20:29:17, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_Магира (288).xlsx.__clean.xlsx\r\n2026-03-17 20:29:17, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_Оксана (288).xlsx.__clean.xlsx\r\n2026-03-17 20:29:17, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами (359).xlsx.__clean.xlsx\r\n2026-03-17 20:29:17, INFO Clean copy → Ведомость по денежным средствам (372).xlsx.__clean.xlsx\r\n2026-03-17 20:29:17, INFO Clean copy → Детальный Дебиторы Алена (113).xlsx.__clean.xlsx\r\n2026-03-17 20:29:17, INFO Clean copy → Детальный Дебиторы Ергали (113).xlsx.__clean.xlsx\r\n2026-03-17 20:29:17, INFO Clean copy → Детальный Дебиторы Магира (121).xlsx.__clean.xlsx\r\n2026-03-17 20:29:17, INFO Clean copy → Детальный Дебиторы Оксана (119).xlsx.__clean.xlsx\r\n2026-03-17 20:29:18, INFO Clean copy → Детальный_по_взаиморасчетам_с_контрагентами (105).xlsx.__clean.xlsx\r\n2026-03-17 20:29:18, INFO Clean copy → Затраты (60).xlsx.__clean.xlsx\r\n2026-03-17 20:29:18, INFO Clean copy → Остатки всем (273).xlsx.__clean.xlsx\r\n2026-03-17 20:29:18, INFO Clean copy → Продажи (386).xlsx.__clean.xlsx\r\n2026-03-17 20:29:18, INFO Clean copy → Валовая прибыль (370).xlsx.__clean.xlsx\r\n2026-03-17 20:29:18, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_Алена (287).xlsx.__clean.xlsx\r\n2026-03-17 20:29:18, INFO Clean copy → Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (288).xlsx.__clean.xlsx\r\nTraceback (most recent call last):\r\n  File \"C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\imap_fetcher.py\", line 626, in <module>\r\n    main()\r\n  File \"C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\imap_fetcher.py\", line 622, in main\r\n    run_once(since=args.since, debug=args.debug)\r\n  File \"C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\imap_fetcher.py\", line 590, in run_once\r\n    _expunge_mailbox(M, mb)\r\n  File \"C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\imap_fetcher.py\", line 267, in _expunge_mailbox\r\n    if _select_mailbox(M, mailbox):\r\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\n  File \"C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\imap_fetcher.py\", line 261, in _select_mailbox\r\n    typ, _ = M.select(name)\r\n             ^^^^^^^^^^^^^^\r\n  File \"C:\\Users\\User\\AppData\\Local\\Programs\\Python\\Python311\\Lib\\imaplib.py\", line 756, in select\r\n    typ, dat = self._simple_command(name, mailbox)\r\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\r\n  File \"C:\\Users\\User\\AppData\\Local\\Programs\\Python\\Python311\\Lib\\imaplib.py\", line 1230, in _simple_command\r\n    return self._command_complete(name, self._command(name, *args))\r\n                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^\r\n  File \"C:\\Users\\User\\AppData\\Local\\Programs\\Python\\Python311\\Lib\\imaplib.py\", line 987, in _command\r\n    arg = bytes(arg, self._encoding)\r\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^\r\nUnicodeEncodeError: 'ascii' codec can't encode characters in position 0-6: ordinal not in range(128)", "level": "WARNING"}
+2026-03-17 20:29:19, INFO ✅ run_script_finish · script=imap_fetcher.py; return_code=1
+2026-03-17 20:29:19, INFO {"event": "run_script_finish", "script": "imap_fetcher.py", "return_code": 1}
+2026-03-17 20:29:19, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-03-17 20:29:19, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/deleteMessage "HTTP/1.1 200 OK"
+2026-03-17 20:29:19, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/sendMessage "HTTP/1.1 200 OK"
+2026-03-17 20:29:19, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/sendMessage "HTTP/1.1 200 OK"
+2026-03-17 20:29:19, INFO ✅ json_read_success · file=deletion_queue.json; encoding=utf-8
+2026-03-17 20:29:19, INFO {"event": "json_read_success", "file": "deletion_queue.json", "encoding": "utf-8"}
+2026-03-17 20:29:19, INFO 🗑️ deletion_scheduled · chat_id=ADMIN_ID; message_id=1674; due_time=18.03  20:29; delay_hours=24
+2026-03-17 20:29:19, INFO {"event": "deletion_scheduled", "chat_id": ADMIN_ID, "message_id": 1674, "due_time": "18.03 20:29", "delay_hours": 24}
+2026-03-17 20:29:19, INFO {"event": "imap_error_alert_sent", "rc": 1}
+2026-03-17 20:29:19, INFO 🔬 queue_found_files · count=62
+2026-03-17 20:29:19, INFO {"event": "queue_found_files", "count": 62}
+2026-03-17 20:29:19, INFO 💰 gross_processing_start · file=Валовая прибыль (367).xlsx
+2026-03-17 20:29:19, INFO {"event": "gross_processing_start", "file": "Валовая прибыль (367).xlsx"}
+2026-03-17 20:29:19, INFO ▶️ run_script_start · script=gross_report.py; args=('C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\reports\\queue\\Валовая прибыль (367).xlsx',)
+2026-03-17 20:29:19, INFO {"event": "run_script_start", "script": "gross_report.py", "args": ["C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\reports\\queue\\Валовая прибыль (367).xlsx"]}
+2026-03-17 20:29:20, INFO HTTP Request: GET https://api.green-api.com/waInstance7107551921/receiveNotification/8d756bef182446379400f38267ef9eccbb55fd8a5fe1422595 "HTTP/1.1 200 OK"
+2026-03-17 20:29:20, INFO Job "whatsapp_poller (trigger: interval[0:00:10], next run at: 2026-03-17 15:29:28 UTC)" executed successfully
+2026-03-17 20:29:23, INFO ✅ run_script_finish · script=gross_report.py; return_code=0
+2026-03-17 20:29:23, INFO {"event": "run_script_finish", "script": "gross_report.py", "return_code": 0}
+2026-03-17 20:29:23, INFO ✅ gross_sum_success · file=Валовая прибыль (367).xlsx
+2026-03-17 20:29:23, INFO {"event": "gross_sum_success", "file": "Валовая прибыль (367).xlsx"}
+2026-03-17 20:29:23, INFO ▶️ run_script_start · script=gross_report_pct.py; args=('C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\reports\\excel\\clean\\Валовая прибыль (367).xlsx.__clean.xlsx',)
+2026-03-17 20:29:23, INFO {"event": "run_script_start", "script": "gross_report_pct.py", "args": ["C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\reports\\excel\\clean\\Валовая прибыль (367).xlsx.__clean.xlsx"]}
+2026-03-17 20:29:26, INFO ✅ run_script_finish · script=gross_report_pct.py; return_code=0
+2026-03-17 20:29:26, INFO {"event": "run_script_finish", "script": "gross_report_pct.py", "return_code": 0}
+2026-03-17 20:29:26, INFO ✅ gross_pct_success · file=Валовая прибыль (367).xlsx
+2026-03-17 20:29:26, INFO {"event": "gross_pct_success", "file": "Валовая прибыль (367).xlsx"}
+2026-03-17 20:29:26, INFO 💰 gross_processing_complete · file=Валовая прибыль (367).xlsx; sum_rc=0; pct_rc=0
+2026-03-17 20:29:26, INFO {"event": "gross_processing_complete", "file": "Валовая прибыль (367).xlsx", "sum_rc": 0, "pct_rc": 0}
+2026-03-17 20:29:26, INFO ▶️ run_script_start · script=gross_parser.py; args=('C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\reports\\excel\\clean\\Валовая прибыль (367).xlsx.__clean.xlsx',)
+2026-03-17 20:29:26, INFO {"event": "run_script_start", "script": "gross_parser.py", "args": ["C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\reports\\excel\\clean\\Валовая прибыль (367).xlsx.__clean.xlsx"]}
+2026-03-17 20:29:27, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/getUpdates "HTTP/1.1 200 OK"
+2026-03-17 20:29:28, INFO Running job "whatsapp_poller (trigger: interval[0:00:10], next run at: 2026-03-17 15:29:38 UTC)" (scheduled at 2026-03-17 15:29:28.682061+00:00)
+2026-03-17 20:29:30, INFO ✅ run_script_finish · script=gross_parser.py; return_code=0
+2026-03-17 20:29:30, INFO {"event": "run_script_finish", "script": "gross_parser.py", "return_code": 0}
+2026-03-17 20:29:30, INFO {"event": "gross_parser_done", "file": "Валовая прибыль (367).xlsx", "rc": 0}
+2026-03-17 20:29:30, INFO 📦 file_processed · original=Валовая прибыль (367).xlsx; moved_to=20260317202930_Валовая прибыль (367).xlsx
+2026-03-17 20:29:30, INFO {"event": "file_processed", "original": "Валовая прибыль (367).xlsx", "moved_to": "20260317202930_Валовая прибыль (367).xlsx"}
+2026-03-17 20:29:30, INFO 💰 gross_processing_start · file=Валовая прибыль (368).xlsx
+2026-03-17 20:29:30, INFO {"event": "gross_processing_start", "file": "Валовая прибыль (368).xlsx"}
+2026-03-17 20:29:30, INFO ▶️ run_script_start · script=gross_report.py; args=('C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\reports\\queue\\Валовая прибыль (368).xlsx',)
+2026-03-17 20:29:30, INFO {"event": "run_script_start", "script": "gross_report.py", "args": ["C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\reports\\queue\\Валовая прибыль (368).xlsx"]}
+2026-03-17 20:29:33, INFO ✅ run_script_finish · script=gross_report.py; return_code=0
+2026-03-17 20:29:33, INFO {"event": "run_script_finish", "script": "gross_report.py", "return_code": 0}
+2026-03-17 20:29:33, INFO ✅ gross_sum_success · file=Валовая прибыль (368).xlsx
+2026-03-17 20:29:33, INFO {"event": "gross_sum_success", "file": "Валовая прибыль (368).xlsx"}
+2026-03-17 20:29:33, INFO ▶️ run_script_start · script=gross_report_pct.py; args=('C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\reports\\excel\\clean\\Валовая прибыль (368).xlsx.__clean.xlsx',)
+2026-03-17 20:29:33, INFO {"event": "run_script_start", "script": "gross_report_pct.py", "args": ["C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\reports\\excel\\clean\\Валовая прибыль (368).xlsx.__clean.xlsx"]}
+2026-03-17 20:29:37, INFO ✅ run_script_finish · script=gross_report_pct.py; return_code=0
+2026-03-17 20:29:37, INFO {"event": "run_script_finish", "script": "gross_report_pct.py", "return_code": 0}
+2026-03-17 20:29:37, INFO ✅ gross_pct_success · file=Валовая прибыль (368).xlsx
+2026-03-17 20:29:37, INFO {"event": "gross_pct_success", "file": "Валовая прибыль (368).xlsx"}
+2026-03-17 20:29:37, INFO 💰 gross_processing_complete · file=Валовая прибыль (368).xlsx; sum_rc=0; pct_rc=0
+2026-03-17 20:29:37, INFO {"event": "gross_processing_complete", "file": "Валовая прибыль (368).xlsx", "sum_rc": 0, "pct_rc": 0}
+2026-03-17 20:29:37, INFO ▶️ run_script_start · script=gross_parser.py; args=('C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\reports\\excel\\clean\\Валовая прибыль (368).xlsx.__clean.xlsx',)
+2026-03-17 20:29:37, INFO {"event": "run_script_start", "script": "gross_parser.py", "args": ["C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\reports\\excel\\clean\\Валовая прибыль (368).xlsx.__clean.xlsx"]}
+2026-03-17 20:29:38, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/getUpdates "HTTP/1.1 200 OK"
+2026-03-17 20:29:38, WARNING Execution of job "whatsapp_poller (trigger: interval[0:00:10], next run at: 2026-03-17 15:29:38 UTC)" skipped: maximum number of running instances reached (1)
+2026-03-17 20:29:40, INFO HTTP Request: GET https://api.green-api.com/waInstance7107551921/receiveNotification/8d756bef182446379400f38267ef9eccbb55fd8a5fe1422595 "HTTP/1.1 200 OK"
+2026-03-17 20:29:40, INFO Job "whatsapp_poller (trigger: interval[0:00:10], next run at: 2026-03-17 15:29:48 UTC)" executed successfully
+2026-03-17 20:29:40, INFO ✅ run_script_finish · script=gross_parser.py; return_code=0
+2026-03-17 20:29:40, INFO {"event": "run_script_finish", "script": "gross_parser.py", "return_code": 0}
+2026-03-17 20:29:40, INFO {"event": "gross_parser_done", "file": "Валовая прибыль (368).xlsx", "rc": 0}
+2026-03-17 20:29:40, INFO 📦 file_processed · original=Валовая прибыль (368).xlsx; moved_to=20260317202940_Валовая прибыль (368).xlsx
+2026-03-17 20:29:40, INFO {"event": "file_processed", "original": "Валовая прибыль (368).xlsx", "moved_to": "20260317202940_Валовая прибыль (368).xlsx"}
+2026-03-17 20:29:40, INFO 💰 gross_processing_start · file=Валовая прибыль (369).xlsx
+2026-03-17 20:29:40, INFO {"event": "gross_processing_start", "file": "Валовая прибыль (369).xlsx"}
+2026-03-17 20:29:40, INFO ▶️ run_script_start · script=gross_report.py; args=('C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\reports\\queue\\Валовая прибыль (369).xlsx',)
+2026-03-17 20:29:40, INFO {"event": "run_script_start", "script": "gross_report.py", "args": ["C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\reports\\queue\\Валовая прибыль (369).xlsx"]}
+2026-03-17 20:29:43, INFO ✅ run_script_finish · script=gross_report.py; return_code=0
+2026-03-17 20:29:43, INFO {"event": "run_script_finish", "script": "gross_report.py", "return_code": 0}
+2026-03-17 20:29:43, INFO ✅ gross_sum_success · file=Валовая прибыль (369).xlsx
+2026-03-17 20:29:43, INFO {"event": "gross_sum_success", "file": "Валовая прибыль (369).xlsx"}
+2026-03-17 20:29:43, INFO ▶️ run_script_start · script=gross_report_pct.py; args=('C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\reports\\excel\\clean\\Валовая прибыль (369).xlsx.__clean.xlsx',)
+2026-03-17 20:29:43, INFO {"event": "run_script_start", "script": "gross_report_pct.py", "args": ["C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\reports\\excel\\clean\\Валовая прибыль (369).xlsx.__clean.xlsx"]}
+2026-03-17 20:29:47, INFO ✅ run_script_finish · script=gross_report_pct.py; return_code=0
+2026-03-17 20:29:47, INFO {"event": "run_script_finish", "script": "gross_report_pct.py", "return_code": 0}
+2026-03-17 20:29:47, INFO ✅ gross_pct_success · file=Валовая прибыль (369).xlsx
+2026-03-17 20:29:47, INFO {"event": "gross_pct_success", "file": "Валовая прибыль (369).xlsx"}
+2026-03-17 20:29:47, INFO 💰 gross_processing_complete · file=Валовая прибыль (369).xlsx; sum_rc=0; pct_rc=0
+2026-03-17 20:29:47, INFO {"event": "gross_processing_complete", "file": "Валовая прибыль (369).xlsx", "sum_rc": 0, "pct_rc": 0}
+2026-03-17 20:29:47, INFO ▶️ run_script_start · script=gross_parser.py; args=('C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\reports\\excel\\clean\\Валовая прибыль (369).xlsx.__clean.xlsx',)
+2026-03-17 20:29:47, INFO {"event": "run_script_start", "script": "gross_parser.py", "args": ["C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\reports\\excel\\clean\\Валовая прибыль (369).xlsx.__clean.xlsx"]}
+2026-03-17 20:29:48, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/getUpdates "HTTP/1.1 200 OK"
+2026-03-17 20:29:48, INFO Running job "whatsapp_poller (trigger: interval[0:00:10], next run at: 2026-03-17 15:29:58 UTC)" (scheduled at 2026-03-17 15:29:48.682061+00:00)
+2026-03-17 20:29:50, INFO ✅ run_script_finish · script=gross_parser.py; return_code=0
+2026-03-17 20:29:50, INFO {"event": "run_script_finish", "script": "gross_parser.py", "return_code": 0}
+2026-03-17 20:29:50, INFO {"event": "gross_parser_done", "file": "Валовая прибыль (369).xlsx", "rc": 0}
+2026-03-17 20:29:50, INFO 📦 file_processed · original=Валовая прибыль (369).xlsx; moved_to=20260317202950_Валовая прибыль (369).xlsx
+2026-03-17 20:29:50, INFO {"event": "file_processed", "original": "Валовая прибыль (369).xlsx", "moved_to": "20260317202950_Валовая прибыль (369).xlsx"}
+2026-03-17 20:29:50, INFO 💰 gross_processing_start · file=Валовая прибыль (370).xlsx
+2026-03-17 20:29:50, INFO {"event": "gross_processing_start", "file": "Валовая прибыль (370).xlsx"}
+2026-03-17 20:29:50, INFO ▶️ run_script_start · script=gross_report.py; args=('C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\reports\\queue\\Валовая прибыль (370).xlsx',)
+2026-03-17 20:29:50, INFO {"event": "run_script_start", "script": "gross_report.py", "args": ["C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\reports\\queue\\Валовая прибыль (370).xlsx"]}
+2026-03-17 20:29:54, INFO ✅ run_script_finish · script=gross_report.py; return_code=0
+2026-03-17 20:29:54, INFO {"event": "run_script_finish", "script": "gross_report.py", "return_code": 0}
+2026-03-17 20:29:54, INFO ✅ gross_sum_success · file=Валовая прибыль (370).xlsx
+2026-03-17 20:29:54, INFO {"event": "gross_sum_success", "file": "Валовая прибыль (370).xlsx"}
+2026-03-17 20:29:54, INFO ▶️ run_script_start · script=gross_report_pct.py; args=('C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\reports\\excel\\clean\\Валовая прибыль (370).xlsx.__clean.xlsx',)
+2026-03-17 20:29:54, INFO {"event": "run_script_start", "script": "gross_report_pct.py", "args": ["C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\reports\\excel\\clean\\Валовая прибыль (370).xlsx.__clean.xlsx"]}
+2026-03-17 20:29:57, INFO ✅ run_script_finish · script=gross_report_pct.py; return_code=0
+2026-03-17 20:29:57, INFO {"event": "run_script_finish", "script": "gross_report_pct.py", "return_code": 0}
+2026-03-17 20:29:57, INFO ✅ gross_pct_success · file=Валовая прибыль (370).xlsx
+2026-03-17 20:29:57, INFO {"event": "gross_pct_success", "file": "Валовая прибыль (370).xlsx"}
+2026-03-17 20:29:57, INFO 💰 gross_processing_complete · file=Валовая прибыль (370).xlsx; sum_rc=0; pct_rc=0
+2026-03-17 20:29:57, INFO {"event": "gross_processing_complete", "file": "Валовая прибыль (370).xlsx", "sum_rc": 0, "pct_rc": 0}
+2026-03-17 20:29:57, INFO ▶️ run_script_start · script=gross_parser.py; args=('C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\reports\\excel\\clean\\Валовая прибыль (370).xlsx.__clean.xlsx',)
+2026-03-17 20:29:57, INFO {"event": "run_script_start", "script": "gross_parser.py", "args": ["C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\reports\\excel\\clean\\Валовая прибыль (370).xlsx.__clean.xlsx"]}
+2026-03-17 20:29:58, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/getUpdates "HTTP/1.1 200 OK"
+2026-03-17 20:29:58, WARNING Execution of job "whatsapp_poller (trigger: interval[0:00:10], next run at: 2026-03-17 15:29:58 UTC)" skipped: maximum number of running instances reached (1)
+2026-03-17 20:30:00, INFO HTTP Request: GET https://api.green-api.com/waInstance7107551921/receiveNotification/8d756bef182446379400f38267ef9eccbb55fd8a5fe1422595 "HTTP/1.1 200 OK"
+2026-03-17 20:30:00, INFO Job "whatsapp_poller (trigger: interval[0:00:10], next run at: 2026-03-17 15:30:08 UTC)" executed successfully
+2026-03-17 20:30:01, INFO ✅ run_script_finish · script=gross_parser.py; return_code=0
+2026-03-17 20:30:01, INFO {"event": "run_script_finish", "script": "gross_parser.py", "return_code": 0}
+2026-03-17 20:30:01, INFO {"event": "gross_parser_done", "file": "Валовая прибыль (370).xlsx", "rc": 0}
+2026-03-17 20:30:01, INFO 📦 file_processed · original=Валовая прибыль (370).xlsx; moved_to=20260317203001_Валовая прибыль (370).xlsx
+2026-03-17 20:30:01, INFO {"event": "file_processed", "original": "Валовая прибыль (370).xlsx", "moved_to": "20260317203001_Валовая прибыль (370).xlsx"}
+2026-03-17 20:30:01, INFO 🗑️💰 cash_file_rejected · original=Ведомость по денежным средствам (369). xlsx; moved_to=20260317_203001_Ведомость по денежным средствам (369).xlsx; level=INFO
+2026-03-17 20:30:01, INFO {"event": "cash_file_rejected", "original": "Ведомость по денежным средствам (369).xlsx", "moved_to": "20260317_203001_Ведомость по денежным средствам (369).xlsx", "level": "INFO"}
+2026-03-17 20:30:01, INFO 🗑️💰 cash_file_rejected · original=Ведомость по денежным средствам (370). xlsx; moved_to=20260317_203001_Ведомость по денежным средствам (370).xlsx; level=INFO
+2026-03-17 20:30:01, INFO {"event": "cash_file_rejected", "original": "Ведомость по денежным средствам (370).xlsx", "moved_to": "20260317_203001_Ведомость по денежным средствам (370).xlsx", "level": "INFO"}
+2026-03-17 20:30:01, INFO 🗑️💰 cash_file_rejected · original=Ведомость по денежным средствам (371). xlsx; moved_to=20260317_203001_Ведомость по денежным средствам (371).xlsx; level=INFO
+2026-03-17 20:30:01, INFO {"event": "cash_file_rejected", "original": "Ведомость по денежным средствам (371).xlsx", "moved_to": "20260317_203001_Ведомость по денежным средствам (371).xlsx", "level": "INFO"}
+2026-03-17 20:30:01, INFO 🗑️💰 cash_file_rejected · original=Ведомость по денежным средствам (372). xlsx; moved_to=20260317_203001_Ведомость по денежным средствам (372).xlsx; level=INFO
+2026-03-17 20:30:01, INFO {"event": "cash_file_rejected", "original": "Ведомость по денежным средствам (372).xlsx", "moved_to": "20260317_203001_Ведомость по денежным средствам (372).xlsx", "level": "INFO"}
+2026-03-17 20:30:01, INFO ▶️ run_script_start · script=inventory.py; args=('C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\reports\\queue\\Ведомость по товарам на складах (192).xlsx',)
+2026-03-17 20:30:01, INFO {"event": "run_script_start", "script": "inventory.py", "args": ["C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\reports\\queue\\Ведомость по товарам на складах (192).xlsx"]}
+2026-03-17 20:30:04, INFO ✅ run_script_finish · script=inventory.py; return_code=0
+2026-03-17 20:30:04, INFO {"event": "run_script_finish", "script": "inventory.py", "return_code": 0}
+2026-03-17 20:30:04, INFO {"event": "inventory_parser_skip_no_cost", "file": "Ведомость по товарам на складах (192).xlsx", "reason": "Файл без себестоимости (Остатки/Ведомость товаров)"}
+2026-03-17 20:30:04, INFO 📦 file_processed · original=Ведомость по товарам на складах (192).xlsx; moved_to=20260317203004_Ведомость по товарам на складах (192).xlsx
+2026-03-17 20:30:04, INFO {"event": "file_processed", "original": "Ведомость по товарам на складах (192).xlsx", "moved_to": "20260317203004_Ведомость по товарам на складах (192).xlsx"}
+2026-03-17 20:30:04, INFO ▶️ run_script_start · script=inventory.py; args=('C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\reports\\queue\\Ведомость по товарам на складах (193).xlsx',)
+2026-03-17 20:30:04, INFO {"event": "run_script_start", "script": "inventory.py", "args": ["C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\reports\\queue\\Ведомость по товарам на складах (193).xlsx"]}
+2026-03-17 20:30:08, INFO ✅ run_script_finish · script=inventory.py; return_code=0
+2026-03-17 20:30:08, INFO {"event": "run_script_finish", "script": "inventory.py", "return_code": 0}
+2026-03-17 20:30:08, INFO {"event": "inventory_parser_skip_no_cost", "file": "Ведомость по товарам на складах (193).xlsx", "reason": "Файл без себестоимости (Остатки/Ведомость товаров)"}
+2026-03-17 20:30:08, INFO 📦 file_processed · original=Ведомость по товарам на складах (193).xlsx; moved_to=20260317203008_Ведомость по товарам на складах (193).xlsx
+2026-03-17 20:30:08, INFO {"event": "file_processed", "original": "Ведомость по товарам на складах (193).xlsx", "moved_to": "20260317203008_Ведомость по товарам на складах (193).xlsx"}
+2026-03-17 20:30:08, INFO ▶️ run_script_start · script=debt_auto_report.py; args=('C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами (356).xlsx',)
+2026-03-17 20:30:08, INFO {"event": "run_script_start", "script": "debt_auto_report.py", "args": ["C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами (356).xlsx"]}
+2026-03-17 20:30:08, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/getUpdates "HTTP/1.1 200 OK"
+2026-03-17 20:30:08, INFO Running job "janitor (trigger: interval[1:00:00], next run at: 2026-03-17 16:30:08 UTC)" (scheduled at 2026-03-17 15:30:08.635187+00:00)
+2026-03-17 20:30:08, INFO 🧹 janitor_start
+2026-03-17 20:30:08, INFO {"event": "janitor_start"}
+2026-03-17 20:30:08, INFO ✅ json_read_success · file=deletion_queue.json; encoding=utf-8
+2026-03-17 20:30:08, INFO {"event": "json_read_success", "file": "deletion_queue.json", "encoding": "utf-8"}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1437; age_hours=120.5
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1437, "age_hours": 120.5}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1441; age_hours=120.1
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1441, "age_hours": 120.1}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1442; age_hours=120.1
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1442, "age_hours": 120.1}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1444; age_hours=120.1
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1444, "age_hours": 120.1}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1446; age_hours=120.0
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1446, "age_hours": 120.0}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1452; age_hours=119.6
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1452, "age_hours": 119.6}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1454; age_hours=119.6
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1454, "age_hours": 119.6}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1461; age_hours=119.5
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1461, "age_hours": 119.5}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=SUBADMIN_ID; message_id=1463; age_hours=119.5
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": SUBADMIN_ID, "message_id": 1463, "age_hours": 119.5}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1464; age_hours=119.5
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1464, "age_hours": 119.5}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1466; age_hours=119.5
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1466, "age_hours": 119.5}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1467; age_hours=119.5
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1467, "age_hours": 119.5}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=SUBADMIN_ID; message_id=1472; age_hours=118.4
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": SUBADMIN_ID, "message_id": 1472, "age_hours": 118.4}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=SUBADMIN_ID; message_id=1474; age_hours=118.4
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": SUBADMIN_ID, "message_id": 1474, "age_hours": 118.4}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=SUBADMIN_ID; message_id=1477; age_hours=118.4
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": SUBADMIN_ID, "message_id": 1477, "age_hours": 118.4}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1485; age_hours=117.9
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1485, "age_hours": 117.9}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=SUBADMIN_ID; message_id=1488; age_hours=117.9
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": SUBADMIN_ID, "message_id": 1488, "age_hours": 117.9}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=SUBADMIN_ID; message_id=1490; age_hours=117.9
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": SUBADMIN_ID, "message_id": 1490, "age_hours": 117.9}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=SUBADMIN_ID; message_id=1493; age_hours=117.9
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": SUBADMIN_ID, "message_id": 1493, "age_hours": 117.9}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=SUBADMIN_ID; message_id=1499; age_hours=117.9
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": SUBADMIN_ID, "message_id": 1499, "age_hours": 117.9}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1502; age_hours=117.9
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1502, "age_hours": 117.9}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=SUBADMIN_ID; message_id=1504; age_hours=117.9
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": SUBADMIN_ID, "message_id": 1504, "age_hours": 117.9}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=SUBADMIN_ID; message_id=1507; age_hours=117.9
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": SUBADMIN_ID, "message_id": 1507, "age_hours": 117.9}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=SUBADMIN_ID; message_id=1523; age_hours=117.9
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": SUBADMIN_ID, "message_id": 1523, "age_hours": 117.9}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1528; age_hours=106.2
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1528, "age_hours": 106.2}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=SUBADMIN_ID; message_id=1531; age_hours=106.2
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": SUBADMIN_ID, "message_id": 1531, "age_hours": 106.2}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=SUBADMIN_ID; message_id=1532; age_hours=106.2
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": SUBADMIN_ID, "message_id": 1532, "age_hours": 106.2}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1535; age_hours=106.2
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1535, "age_hours": 106.2}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1536; age_hours=106.2
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1536, "age_hours": 106.2}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1538; age_hours=106.2
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1538, "age_hours": 106.2}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=SUBADMIN_ID; message_id=1539; age_hours=106.2
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": SUBADMIN_ID, "message_id": 1539, "age_hours": 106.2}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=SUBADMIN_ID; message_id=1544; age_hours=105.2
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": SUBADMIN_ID, "message_id": 1544, "age_hours": 105.2}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1546; age_hours=105.2
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1546, "age_hours": 105.2}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1547; age_hours=105.2
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1547, "age_hours": 105.2}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1556; age_hours=104.9
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1556, "age_hours": 104.9}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1557; age_hours=104.9
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1557, "age_hours": 104.9}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1559; age_hours=104.9
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1559, "age_hours": 104.9}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1561; age_hours=104.9
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1561, "age_hours": 104.9}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1563; age_hours=104.8
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1563, "age_hours": 104.8}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1565; age_hours=104.8
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1565, "age_hours": 104.8}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1567; age_hours=104.8
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1567, "age_hours": 104.8}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=SUBADMIN_ID; message_id=1569; age_hours=102.5
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": SUBADMIN_ID, "message_id": 1569, "age_hours": 102.5}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1571; age_hours=102.5
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1571, "age_hours": 102.5}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1572; age_hours=102.5
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1572, "age_hours": 102.5}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1574; age_hours=102.4
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1574, "age_hours": 102.4}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=SUBADMIN_ID; message_id=1576; age_hours=102.4
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": SUBADMIN_ID, "message_id": 1576, "age_hours": 102.4}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1581; age_hours=97.0
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1581, "age_hours": 97.0}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1583; age_hours=97.0
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1583, "age_hours": 97.0}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1585; age_hours=97.0
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1585, "age_hours": 97.0}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1587; age_hours=97.0
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1587, "age_hours": 97.0}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1590; age_hours=97.0
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1590, "age_hours": 97.0}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=SUBADMIN_ID; message_id=1592; age_hours=96.8
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": SUBADMIN_ID, "message_id": 1592, "age_hours": 96.8}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1594; age_hours=96.8
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1594, "age_hours": 96.8}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1595; age_hours=96.8
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1595, "age_hours": 96.8}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1597; age_hours=96.8
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1597, "age_hours": 96.8}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=SUBADMIN_ID; message_id=1598; age_hours=96.8
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": SUBADMIN_ID, "message_id": 1598, "age_hours": 96.8}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1599; age_hours=96.8
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1599, "age_hours": 96.8}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=SUBADMIN_ID; message_id=1600; age_hours=96.8
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": SUBADMIN_ID, "message_id": 1600, "age_hours": 96.8}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1602; age_hours=96.8
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1602, "age_hours": 96.8}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1604; age_hours=96.8
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1604, "age_hours": 96.8}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1607; age_hours=96.7
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1607, "age_hours": 96.7}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1609; age_hours=96.7
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1609, "age_hours": 96.7}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1611; age_hours=96.7
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1611, "age_hours": 96.7}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1613; age_hours=96.7
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1613, "age_hours": 96.7}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1615; age_hours=96.7
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1615, "age_hours": 96.7}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1618; age_hours=96.7
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1618, "age_hours": 96.7}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1647; age_hours=96.6
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1647, "age_hours": 96.6}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1651; age_hours=96.6
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1651, "age_hours": 96.6}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1653; age_hours=96.6
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1653, "age_hours": 96.6}
+2026-03-17 20:30:08, INFO ⏰ deletion_too_old · chat_id=ADMIN_ID; message_id=1655; age_hours=96.5
+2026-03-17 20:30:08, INFO {"event": "deletion_too_old", "chat_id": ADMIN_ID, "message_id": 1655, "age_hours": 96.5}
+2026-03-17 20:30:08, INFO ✅ janitor_finish · total=72; deleted=0; failed=0; too_old=70; remaining=2
+2026-03-17 20:30:08, INFO {"event": "janitor_finish", "total": 72, "deleted": 0, "failed": 0, "too_old": 70, "remaining": 2}
+2026-03-17 20:30:08, INFO Job "janitor (trigger: interval[1:00:00], next run at: 2026-03-17 16:30:08 UTC)" executed successfully
+2026-03-17 20:30:08, INFO Running job "whatsapp_poller (trigger: interval[0:00:10], next run at: 2026-03-17 15:30:18 UTC)" (scheduled at 2026-03-17 15:30:08.682061+00:00)
+2026-03-17 20:30:17, INFO 📄 script_stdout · script=debt_auto_report.py; output=✅ Отчёт сохранён: C:\Users\user\Documents\GPT1C_Processor_analitic\reports\html\debt_ext_Ведомость_по_взаиморасчетам_с_контрагентами (356).html
+2026-03-17 20:30:17, INFO {"event": "script_stdout", "script": "debt_auto_report.py", "output": "✅ Отчёт сохранён: C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\reports\\html\\debt_ext_Ведомость_по_взаиморасчетам_с_контрагентами (356).html"}
+2026-03-17 20:30:17, INFO ✅ run_script_finish · script=debt_auto_report.py; return_code=0
+2026-03-17 20:30:17, INFO {"event": "run_script_finish", "script": "debt_auto_report.py", "return_code": 0}
+2026-03-17 20:30:17, INFO 📦 file_processed · original=Ведомость_по_взаиморасчетам_с_контрагентами (356).xlsx; moved_to=20260317203017_Ведомость_по_взаиморасчетам_с_контрагентами (356).xlsx
+2026-03-17 20:30:17, INFO {"event": "file_processed", "original": "Ведомость_по_взаиморасчетам_с_контрагентами (356).xlsx", "moved_to": "20260317203017_Ведомость_по_взаиморасчетам_с_контрагентами (356).xlsx"}
+2026-03-17 20:30:17, INFO ▶️ run_script_start · script=debt_auto_report.py; args=('C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами (357).xlsx',)
+2026-03-17 20:30:17, INFO {"event": "run_script_start", "script": "debt_auto_report.py", "args": ["C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\reports\\queue\\Ведомость_по_взаиморасчетам_с_контрагентами (357).xlsx"]}
+2026-03-17 20:30:18, INFO HTTP Request: POST https://api.telegram.org/botBOT_TOKEN/getUpdates "HTTP/1.1 200 OK"
+2026-03-17 20:30:18, WARNING Execution of job "whatsapp_poller (trigger: interval[0:00:10], next run at: 2026-03-17 15:30:18 UTC)" skipped: maximum number of running instances reached (1)
+2026-03-17 20:30:20, INFO HTTP Request: GET https://api.green-api.com/waInstance7107551921/receiveNotification/8d756bef182446379400f38267ef9eccbb55fd8a5fe1422595 "HTTP/1.1 200 OK"
+2026-03-17 20:30:20, INFO Job "whatsapp_poller (trigger: interval[0:00:10], next run at: 2026-03-17 15:30:28 UTC)" executed successfully
+2026-03-17 20:30:23, INFO 📄 script_stdout · script=debt_auto_report.py; output=✅ Отчёт сохранён: C:\Users\user\Documents\GPT1C_Processor_analitic\reports\html\Ведомость_по_взаиморасчетам_с_контрагентами (357)_debt.html
+2026-03-17 20:30:23, INFO {"event": "script_stdout", "script": "debt_auto_report.py", "output": "✅ Отчёт сохранён: C:\\Users\\user\\Documents\\GPT1C_Processor_analitic\\reports\\html\\Ведомость_по_взаиморасчетам_с_контрагентами (357)_debt.html"}
+2026-03-17 20:30:23, INFO ✅ run_script_finish · script=debt_auto_report.py; return_code=0
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,62 @@
+  ---
+  Инструкция запуска на Nettop (CMD)
+
+  Один раз при первой установке
+
+  cd E:\GPT1C_Processor_analitic
+
+  python -m venv .venv
+
+  .venv\Scripts\pip install --upgrade pip
+
+  .venv\Scripts\pip install -r requirements.txt
+
+  Затем создай .env (скопируй с другого компа или заполни вручную — все ключи уже знаешь).
+
+  ---
+  Каждый раз при запуске бота
+
+  cd E:\GPT1C_Processor_analitic
+
+  .venv\Scripts\python bot/send_reports.py
+
+  Всё. Бот работает, коллектор работает, WhatsApp polling работает.
+
+  ---
+  Проверка перед запуском (если что-то не так)
+
+  cd E:\GPT1C_Processor_analitic
+
+  :: Проверить окружение и .env
+  .venv\Scripts\python -X utf8 -c "from dotenv import load_dotenv; load_dotenv('.env',encoding='utf-8-sig'); import os;
+  print('BOT:', 'OK' if os.getenv('TG_BOT_TOKEN') else 'MISSING'); print('WA:', 'OK' if os.getenv('GREENAPI_ID') else
+  'MISSING'); print('AI:', 'OK' if os.getenv('DEEPSEEK_API_KEY') else 'MISSING')"
+
+  :: Тесты (убедиться что всё работает)
+  .venv\Scripts\python -X utf8 tests/test_project.py
+  .venv\Scripts\python -X utf8 tests/test_collector.py
+
+  ---
+  Автозапуск при включении Nettop
+
+  Создай файл start_bot.bat в папке проекта:
+
+  @echo off
+  cd /d E:\GPT1C_Processor_analitic
+  .venv\Scripts\python bot/send_reports.py
+
+  Добавь start_bot.bat в автозагрузку Windows:
+  Win+R → shell:startup → скопируй start_bot.bat
+
+  ---
+  Если бот упал — перезапуск
+
+  Для надёжности можно добавить в start_bot.bat авто-перезапуск:
+
+  @echo off
+  cd /d E:\GPT1C_Processor_analitic
+  :loop
+  .venv\Scripts\python bot/send_reports.py
+  echo Бот завершился. Перезапуск через 10 сек...
+  timeout /t 10
+  goto loop

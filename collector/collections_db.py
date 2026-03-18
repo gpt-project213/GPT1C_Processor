@@ -248,3 +248,42 @@ def mark_manager_notified(client_name: str) -> None:
     state = load_state()
     state[_MGR_NOTIFY_PREFIX + client_name] = {"date": _today()}
     save_state(state)
+
+
+# ─── Счётчик дней с момента обнаружения долга ────────────────────────────────
+
+_DEBT_DATE_PREFIX = "__debt_since__"
+
+
+def get_debt_days_since_first_seen(client_name: str) -> int:
+    """Возвращает кол-во дней с момента первого обнаружения долга у клиента.
+
+    Независимо от частичных оплат — счётчик не сбрасывается до debt=0.
+    Если запись не найдена — регистрирует сегодняшнюю дату и возвращает 0.
+    """
+    state = load_state()
+    key = _DEBT_DATE_PREFIX + client_name
+    today_str = _today()
+
+    if key not in state:
+        # Первый раз видим этого должника — фиксируем дату
+        state[key] = {"first_seen": today_str}
+        save_state(state)
+        return 0
+
+    first_seen = state[key].get("first_seen", today_str)
+    try:
+        from datetime import date as _date
+        d0 = _date.fromisoformat(first_seen)
+        return (datetime.now(tz=TZ).date() - d0).days
+    except (ValueError, TypeError):
+        return 0
+
+
+def reset_debt_first_seen(client_name: str) -> None:
+    """Сбрасывает счётчик долга (вызывать когда debt стал 0)."""
+    state = load_state()
+    key = _DEBT_DATE_PREFIX + client_name
+    if key in state:
+        del state[key]
+        save_state(state)

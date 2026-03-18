@@ -4275,8 +4275,9 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     try:
         await q.answer()
-    except (TimedOut, NetworkError) as e:
-        logger.warning("cb_data q.answer() network error: %s", e)
+    except Exception as e:
+        # httpx.ConnectTimeout может пробивать telegram.error wrapper
+        logger.warning("cb_data q.answer() error: %s: %s", type(e).__name__, e)
         return
     data = q.data or ""
     chat_id = q.message.chat.id
@@ -4303,7 +4304,10 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     text=(
                         f"📞 <b>Введите номер WhatsApp</b> для клиента:\n"
                         f"<b>{pending_client}</b>\n\n"
-                        f"Формат: <code>7XXXXXXXXXX</code> (11 цифр, начиная с 7)\n\n"
+                        f"Принимается любой формат:\n"
+                        f"• <code>+77001234567</code>\n"
+                        f"• <code>77001234567</code>\n"
+                        f"• <code>87001234567</code>\n\n"
                         f"🔴 <b>Проверьте номер дважды!</b> Ошибочный номер — "
                         f"и бот будет тревожить постороннего человека."
                     ),
@@ -5368,12 +5372,15 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
         if pending_client:
             import re as _re
             phone_clean = _re.sub(r"\D", "", text.strip())
+            # Принимаем +7..., 7..., 8... (Казахстан/Россия)
+            if _re.fullmatch(r"8\d{10}", phone_clean):
+                phone_clean = "7" + phone_clean[1:]
             if _re.fullmatch(r"7\d{10}", phone_clean):
                 from collector.registry_manager import update_client_phone
                 if update_client_phone(pending_client, phone_clean):
                     clear_phone_pending(chat_id)
                     await update.message.reply_text(
-                        f"✅ Телефон <b>{phone_clean}</b> сохранён для клиента:\n"
+                        f"✅ Телефон <b>+{phone_clean}</b> сохранён для клиента:\n"
                         f"<b>{pending_client}</b>\n\n"
                         f"ИИ-помощник подключится к нему при следующем цикле.",
                         parse_mode="HTML",
@@ -5384,8 +5391,11 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
                     )
             else:
                 await update.message.reply_text(
-                    f"❌ Неверный формат номера: <code>{text.strip()}</code>\n\n"
-                    f"Введите 11 цифр начиная с 7, например: <code>77001234567</code>",
+                    f"❌ Неверный формат: <code>{text.strip()}</code>\n\n"
+                    f"Введите номер в любом формате:\n"
+                    f"• <code>+77001234567</code>\n"
+                    f"• <code>77001234567</code>\n"
+                    f"• <code>87001234567</code>",
                     parse_mode="HTML",
                 )
             return

@@ -74,10 +74,12 @@ from collector.debt_monitor import (
 from collector.collections_db import (
     already_contacted_today,
     already_notified_manager_today,
+    get_debt_days_since_first_seen,
     get_pending_promises,
     mark_escalated,
     mark_manager_notified,
     mark_promise_broken,
+    reset_debt_first_seen,
     save_call_result,
     save_promise,
     set_phone_pending,
@@ -309,7 +311,16 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
 
     for client in debtors:
         name = client["name"]
-        level = client["level"]
+
+        # Пересчитываем уровень через собственный счётчик дней с первой отгрузки.
+        # days_silence из 1С сбрасывается на любую оплату — это ненадёжно.
+        # Наш счётчик считает дни с момента ПЕРВОГО обнаружения долга у клиента
+        # и сбрасывается только при полном погашении (debt=0).
+        real_days = get_debt_days_since_first_seen(name)
+        # Уровень — максимум из 1С-дней и наших дней (берём наибольший)
+        from collector.debt_monitor import _level_for_days
+        level = max(client["level"], _level_for_days(real_days))
+        client = dict(client, level=level, days=max(client["days"], real_days))
 
         # Фильтр по одному клиенту если задан
         if single_client and single_client.lower() not in name.lower():
