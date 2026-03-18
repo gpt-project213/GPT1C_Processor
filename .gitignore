@@ -25,6 +25,8 @@ cache/
 config/imap.json
 config/roles.json
 config/managers.json
+config/debtors_contacts.json
+collector/debtors_contacts.json
 reports_state.json
 ai_generation_state.json
 ai_generation_queue.json
