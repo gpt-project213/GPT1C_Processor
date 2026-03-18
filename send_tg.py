@@ -21,6 +21,7 @@ import os
 import time
 import json
 import html
+import logging
 from pathlib import Path
 from typing import Iterable, List, Optional
 

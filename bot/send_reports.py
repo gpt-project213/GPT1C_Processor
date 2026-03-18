@@ -197,7 +197,7 @@ def kb_persistent() -> ReplyKeyboardMarkup:
         [KeyboardButton("📦 Остатки"), KeyboardButton("📈 Аналитика")],
         [KeyboardButton("🗄️ Архив")]
     ], resize_keyboard=True)
-from telegram.error import BadRequest, RetryAfter
+from telegram.error import BadRequest, RetryAfter, TimedOut, NetworkError
 from silence_alerts import SilenceAlert
 # v2.0: Мобильная адаптивность и аналитика
 try:
@@ -4273,7 +4273,11 @@ async def handle_ai_only(
 
 async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
-    await q.answer()
+    try:
+        await q.answer()
+    except (TimedOut, NetworkError) as e:
+        logger.warning("cb_data q.answer() network error: %s", e)
+        return
     data = q.data or ""
     chat_id = q.message.chat.id
 
