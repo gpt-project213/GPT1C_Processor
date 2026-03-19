@@ -14,6 +14,7 @@ Fix #AI-1: AI_MAX_INPUT_CHARS 80000 → 15000 (экономия ~96% токен�
 - Обратная совместимость: --type не задан = DEBT (старое поведение)
 """
 
+import logging
 import os
 import sys
 import argparse
@@ -24,6 +25,8 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from openai import OpenAI
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 # Версия
 VERSION = "v9.4.18"
@@ -88,8 +91,7 @@ def get_ai_client():
                 "AI_PROVIDER=openai но OPENAI_API_KEY не установлен!\n"
                 "Получите ключ: https://platform.openai.com/api-keys"
             )
-        print(f"🤖 AI Provider: OpenAI")
-        print(f"📦 Model: {OPENAI_MODEL}")
+        logger.info("AI Provider: OpenAI, Model: %s", OPENAI_MODEL)
         return OpenAI(api_key=OPENAI_API_KEY), OPENAI_MODEL
     
     elif AI_PROVIDER == "deepseek":
@@ -98,8 +100,7 @@ def get_ai_client():
                 "AI_PROVIDER=deepseek но DEEPSEEK_API_KEY не установлен!\n"
                 "Получите ключ: https://platform.deepseek.com"
             )
-        print(f"🤖 AI Provider: DeepSeek")
-        print(f"📦 Model: {DEEPSEEK_MODEL}")
+        logger.info("AI Provider: DeepSeek, Model: %s", DEEPSEEK_MODEL)
         return OpenAI(
             api_key=DEEPSEEK_API_KEY,
             base_url="https://api.deepseek.com"
@@ -108,15 +109,13 @@ def get_ai_client():
     else:
         # Автовыбор: пробуем DeepSeek, потом OpenAI
         if DEEPSEEK_API_KEY:
-            print(f"🤖 AI Provider: DeepSeek (автовыбор)")
-            print(f"📦 Model: {DEEPSEEK_MODEL}")
+            logger.info("AI Provider: DeepSeek (автовыбор), Model: %s", DEEPSEEK_MODEL)
             return OpenAI(
                 api_key=DEEPSEEK_API_KEY,
                 base_url="https://api.deepseek.com"
             ), DEEPSEEK_MODEL
         elif OPENAI_API_KEY and OPENAI_API_KEY != "ВСТАВЬ_СЮДА_КЛЮЧ_GPT":
-            print(f"🤖 AI Provider: OpenAI (автовыбор)")
-            print(f"📦 Model: {OPENAI_MODEL}")
+            logger.info("AI Provider: OpenAI (автовыбор), Model: %s", OPENAI_MODEL)
             return OpenAI(api_key=OPENAI_API_KEY), OPENAI_MODEL
         else:
             raise ValueError(
@@ -158,15 +157,15 @@ def load_prompt(report_type: str = "DEBT") -> str:
         try:
             with open(prompt_path, "r", encoding="utf-8") as f:
                 prompt = f.read().strip()
-            print(f"✅ Промпт [{rtype}] загружен: {Path(prompt_path).name}")
+            logger.info("Промпт [%s] загружен: %s", rtype, Path(prompt_path).name)
             return prompt
         except Exception as e:
-            print(f"⚠️ Ошибка загрузки промпта [{rtype}]: {e}")
+            logger.warning("Ошибка загрузки промпта [%s]: %s", rtype, e)
     else:
         if prompt_path:
-            print(f"⚠️ Файл промпта [{rtype}] не найден: {prompt_path}")
+            logger.warning("Файл промпта [%s] не найден: %s", rtype, prompt_path)
         else:
-            print(f"📝 AI_PROMPT_{rtype} не задан в .env — используется дефолтный")
+            logger.info("AI_PROMPT_%s не задан в .env — используется дефолтный", rtype)
     
     # Дефолтный промпт по типу
     return DEFAULT_PROMPTS.get(rtype, DEFAULT_PROMPTS["DEBT"])
@@ -220,13 +219,8 @@ def extract_manager_from_filename(path: str) -> str:
 def analyze(path: str, chat_id: str, send_mode: bool = False, report_type: str = "DEBT"):
     """Основная функция анализа"""
     
-    print(f"\n{'='*60}")
-    print(f"🤖 AI ANALYZER {VERSION}")
-    print(f"{'='*60}")
-    print(f"📁 Файл: {path}")
-    print(f"📊 Тип отчёта: {report_type}")
-    print(f"👤 Chat ID: {chat_id}")
-    print(f"🕐 Время: {datetime.now(TZ).strftime('%d.%m.%Y %H:%M:%S')}")
+    logger.info("AI ANALYZER %s | Файл: %s | Тип: %s | Chat: %s",
+                VERSION, path, report_type, chat_id)
     
     # Проверка файла
     json_path = Path(path)
@@ -238,7 +232,7 @@ def analyze(path: str, chat_id: str, send_mode: bool = False, report_type: str =
         with open(json_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         data_str = json.dumps(data, ensure_ascii=False, indent=2)
-        print(f"✅ Данные загружены: {len(data_str)} символов")
+        logger.info("Данные загружены: %d символов", len(data_str))
     except Exception as e:
         raise RuntimeError(f"Ошибка чтения JSON: {e}") from e
     
@@ -251,13 +245,13 @@ def analyze(path: str, chat_id: str, send_mode: bool = False, report_type: str =
         if last_nl > AI_MAX_INPUT_CHARS // 2:
             truncated = truncated[:last_nl]
         data_str = truncated + "\n... [данные обрезаны]"
-        print(f"⚠️ Данные обрезаны: {len(data_str)} → {AI_MAX_INPUT_CHARS} символов")
+        logger.warning("Данные обрезаны: %d → %d символов", len(data_str), AI_MAX_INPUT_CHARS)
     
     # Определяем менеджера
     manager = extract_manager_from_data(data)
     if manager == "Unknown":
         manager = extract_manager_from_filename(path)
-    print(f"👤 Менеджер: {manager}")
+    logger.info("Менеджер: %s", manager)
     
     # Загружаем промпт по типу отчёта
     system_prompt = load_prompt(report_type)
@@ -279,20 +273,14 @@ def analyze(path: str, chat_id: str, send_mode: bool = False, report_type: str =
 
 Проанализируй эти данные согласно инструкции.{manager_note}"""
     
-    print(f"{'='*60}")
-    
     # Получаем AI клиента
     try:
         client, model = get_ai_client()
     except ValueError as e:
         raise RuntimeError(f"Ошибка конфигурации: {e}") from e
     
-    # Параметры генерации
-    print(f"🌡️ Temperature: {AI_TEMPERATURE}")
-    print(f"📊 Max tokens: {AI_MAX_TOKENS}")
-    
-    # Отправляем запрос
-    print(f"\n⏳ Генерация анализа...")
+    logger.info("Температура: %s, Max tokens: %d", AI_TEMPERATURE, AI_MAX_TOKENS)
+    logger.info("Генерация анализа...")
     start_time = time.time()
     
     try:
@@ -309,13 +297,12 @@ def analyze(path: str, chat_id: str, send_mode: bool = False, report_type: str =
         answer = response.choices[0].message.content
         elapsed = time.time() - start_time
         
-        print(f"✅ Анализ готов! ({elapsed:.1f} сек)")
-        
-        # Информация о токенах
+        logger.info("Анализ готов! (%.1f сек)", elapsed)
         if hasattr(response, 'usage'):
-            print(f"📊 Токены: {response.usage.total_tokens} "
-                  f"(prompt: {response.usage.prompt_tokens}, "
-                  f"completion: {response.usage.completion_tokens})")
+            logger.info("Токены: %d (prompt: %d, completion: %d)",
+                        response.usage.total_tokens,
+                        response.usage.prompt_tokens,
+                        response.usage.completion_tokens)
         
     except Exception as e:
         raise RuntimeError(f"Ошибка API: {e}") from e
@@ -329,38 +316,32 @@ def analyze(path: str, chat_id: str, send_mode: bool = False, report_type: str =
         try:
             with open(output_file, 'w', encoding='utf-8') as f:
                 f.write(answer)
-            print(f"\n✅ Результат сохранён:")
-            print(f"📄 {output_file}")
-            print(f"AI saved: {output_file}")  # Для парсинга в send_reports.py
+            logger.info("Результат сохранён: %s", output_file)
+            print(f"AI saved: {output_file}")  # sentinel: парсится subprocess-caller'ом в send_reports.py
             
         except Exception as e:
             raise RuntimeError(f"Ошибка сохранения: {e}") from e
     
     # Отправка в Telegram (если требуется)
     if send_mode:
-        print(f"\n📤 Отправка в Telegram...")
+        logger.info("Отправка в Telegram...")
         try:
-            # Импортируем модули отправки
             from send_tg import send_long_text, send_file
-            
+
             if AI_TG_SEND_HTML:
-                # Отправка как HTML файл
                 from tools.txt_to_html import build_html
                 html_path = build_html(output_file)
                 send_file(html_path, caption="AI-анализ дебиторки", chat_id=chat_id)
-                print(f"✅ HTML отправлен: {html_path.name}")
+                logger.info("HTML отправлен: %s", html_path.name)
             else:
-                # Отправка как текст
                 send_long_text(answer, chat_id=chat_id)
                 send_file(output_file, caption="AI-анализ (.txt)", chat_id=chat_id)
-                print(f"✅ Текст отправлен")
-                
+                logger.info("Текст отправлен")
+
         except Exception as e:
-            print(f"⚠️ Ошибка отправки: {e}")
-    
-    print(f"\n{'='*60}")
-    print(f"🎉 ГОТОВО!")
-    print(f"{'='*60}\n")
+            logger.warning("Ошибка отправки в Telegram: %s", e)
+
+    logger.info("ГОТОВО")
 
 
 def main(argv=None):
@@ -402,14 +383,14 @@ def main(argv=None):
     
     # --send-html устарел, но поддерживается для обратной совместимости
     if args.send_html:
-        print("⚠️ --send-html устарел, используйте AI_TG_SEND_HTML=true в .env")
+        logger.warning("--send-html устарел, используйте AI_TG_SEND_HTML=true в .env")
         global AI_TG_SEND_HTML
         AI_TG_SEND_HTML = True
     
     try:
         analyze(args.path, args.chat_id, send_mode=args.send, report_type=args.type)
     except Exception as e:
-        print(f"❌ {e}")
+        logger.error("FAILED: %s", e)
         sys.exit(1)
 
 
