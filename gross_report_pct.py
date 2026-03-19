@@ -60,7 +60,7 @@ def _clean(s: str) -> str:
 
 def _money_to_float(s: pd.Series) -> pd.Series:
     return pd.to_numeric(
-        s.astype(str).str.replace(r"[^\d.-]", "", regex=True).str.replace(",", "."),
+        s.astype(str).str.replace(r"[^\d.,-]", "", regex=True).str.replace(",", "."),
         errors="coerce"
     ).fillna(0.0)
 
