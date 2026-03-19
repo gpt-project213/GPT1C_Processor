@@ -1,5 +1,5 @@
 # SESSION_CONTEXT.md
-> Автоматически обновляется Claude Code. Последнее обновление: 2026-03-19 (сессия 3)
+> Автоматически обновляется Claude Code. Последнее обновление: 2026-03-19 (финал сессии 3)
 
 ## Цель этого файла
 Позволяет Claude Code в новой сессии мгновенно восстановить контекст без перечитывания всего проекта.
@@ -9,14 +9,15 @@
 ## Текущее состояние проекта
 
 **Ветка**: `master`
-**Последний коммит**: `5c522ac` (2026-03-19)
+**Последний коммит**: `41e73ee` (SESSION_CONTEXT обновлён)
 **Статус тестов**: 62/62 + 58/58 ✅
+**Продакшн платформа**: Synology DS224+ (18GB RAM, 20TB, UPS, Docker)
 
 ---
 
 ## Все исправленные баги по сессиям
 
-### Сессия 1 (коммиты 6383aa5–7877a87, 2026-03-19)
+### Сессия 1 (коммиты 6383aa5–7877a87)
 | Коммит | Баги | Файлы |
 |--------|------|-------|
 | `6383aa5` | BUG-C2 | `gross_report_pct._money_to_float` — запятая в regex |
@@ -27,7 +28,7 @@
 | `651bb36` | BUG-M6,M10 | `send_reports._formatTime_almaty`; `silence_alerts` dead import |
 | `7877a87` | BUG-M8 | `send_reports.get_managers_list()` хардкод "Минай" → `_SYSTEM_ACCOUNTS` |
 
-### Сессия 2 (коммиты 237bc6e–e48ba5a, 2026-03-19)
+### Сессия 2 (коммиты 237bc6e–e48ba5a)
 | Коммит | Баги | Файлы |
 |--------|------|-------|
 | `237bc6e` | BUG-H2 | `silence_alerts.parse_html_silence_days()` — индексы из `<thead>` |
@@ -37,20 +38,19 @@
 | `cfb5d22` | BUG-M7,L5,M9 | `send_reports.py` fd leak + PID + failed counter |
 | `2741ae9` | BUG-M15,M16 | `collector/` — bool env + `CALL_HOUR_END` из env |
 | `e48ba5a` | BUG-L1,L2,L8 | `inject_local`, `txt_to_html`, `opportunity_loss` |
-| `18aea5f` | — | `SESSION_CONTEXT.md` добавлен в корень |
 
-### Сессия 3 (начата 2026-03-19, коммит 5c522ac)
+### Сессия 3 (коммит 5c522ac)
 | Коммит | Баги | Файлы |
 |--------|------|-------|
 | `5c522ac` | BUG-M2 | `gross_report.py` + `debt_auto_report.py` — regex `(?:покупатель\|контрагент)` |
 
 ---
 
-## Оставшиеся баги (не исправлены)
+## Оставшиеся баги — НАЧАТЬ ОТСЮДА в новой сессии
 
 | ID | Файл | Описание | Приоритет |
 |----|------|----------|-----------|
-| BUG-M17 | `bot/inventory_summary.py` | Хрупкий парсинг `<small>` тега — split('\n'), split('Период:') | M |
+| **BUG-M17** | `bot/inventory_summary.py` | `split('количество:')` никогда не срабатывает — нужен regex `Всего количество:` | **M — первый** |
 | BUG-L3 | `inventory.py` | `MAIN_CATEGORIES` захардкоден | L |
 | BUG-L4 | `inventory_cost_parser.py` | Хардкод индексов колонок | L |
 | BUG-M11 | `analyze_debt_excel.py` | Устаревшая версия `"v2.1 — 2025-09-02"` | L |
@@ -62,32 +62,53 @@
 
 ---
 
-## BUG-M17 — исследование (НЕ ИСПРАВЛЕН, начат в сессии 3)
+## BUG-M17 — детальный анализ (готов к исправлению)
 
-`bot/inventory_summary.py:parse_inventory_html()` — строки 101-116:
-```python
-small_tag = soup.find('small')
-if small_tag:
-    text = small_tag.get_text()
-    parts = text.split('Период:')
-    ...
-    parts = text.lower().split('количество:')
-```
+**Файл**: `bot/inventory_summary.py`, метод `parse_inventory_html()`, строки 101-116
 
-**Реальная структура `<small>` в `inventory_*.html`** (проверено на живом файле):
+**Реальная структура `<small>` тега** (проверено на живом файле `inventory_20260318...html`):
 ```
 Период: 17 марта 2026 г.
 Сформировано: 19.03.2026 19:29
 Всего количество: 49 561.462
 ```
 
-**Проблемы:**
-1. `split('количество:')` никогда не сработает — в HTML `Всего количество:`, а не просто `количество:`
-2. `split('\n')` хрупко — при изменении шаблона пробелы могут измениться
+**Баг**: код делает `text.lower().split('количество:')` — но в HTML написано `Всего количество:`.
+Сплит по `'количество:'` найдёт подстроку внутри `'всего количество:'` — на самом деле СРАБОТАЕТ,
+но `parts[0]` будет `'всего '`, а `parts[1]` — значение. Надо проверить точнее.
 
-**Предложенный фикс (не применён):**
-- Использовать regex по каждому полю: `re.search(r'Период:\s*(.+)', text)`
-- Для количества: `re.search(r'[Вв]сего\s+количество:\s*([\d\s,.]+)', text)`
+**Более точная проблема**: `split('\n')` для извлечения значения — хрупко при изменении шаблона.
+
+**Предложенный фикс**:
+```python
+# Вместо split-логики использовать regex:
+import re
+date_m = re.search(r'Период:\s*(.+?)(?:\n|$)', text)
+qty_m  = re.search(r'[Вв]сего\s+количество:\s*([\d\s,.]+)', text)
+date_str  = date_m.group(1).strip() if date_m else ""
+total_qty = self.parse_quantity(qty_m.group(1)) if qty_m else 0.0
+```
+
+---
+
+## Инфраструктура (финально утверждена)
+
+```
+Платформа: Synology DS224+
+RAM:       18 ГБ (unoffical upgrade) — хватит на 8-10 клиентов
+Storage:   20 ТБ HDD — достаточно, не highload
+OS:        DSM (Linux) — Docker, cron, systemd-like
+Docker:    Container Manager — изоляция клиентов
+UPS:       есть, роутер тоже подключён
+Интернет:  держится при отключении света
+
+Схема деплоя на Docker:
+/volume1/docker/gpt1c_CLIENT_NAME/
+  .env
+  managers.json
+  reports/
+  logs/
+```
 
 ---
 
@@ -101,23 +122,9 @@ if small_tag:
 6. **Commit flow**: после каждого изменения — `py_compile` → тесты → commit → push
 7. **Sentinel print**: в `ai_analyzer.py` строка `print(f"AI saved: ...")` — НЕЛЬЗЯ трогать
 8. **Layer 5**: standalone файлы — обязаны сами вызвать `load_dotenv()` до чтения env
-9. **SESSION_CONTEXT.md**: обновлять после каждой сессии — ПРАВИЛО пользователя
+9. **SESSION_CONTEXT.md**: обновлять после каждой сессии — ПРАВИЛО
 
 ---
-
-## Структура проекта (кратко)
-
-```
-Layer 0: utils_common.py, send_tg.py, cleanup_cache.py, tools/
-Layer 1: config.py
-Layer 2: utils_excel.py, utils.py
-Layer 3: *_parser.py  (святой грааль — трогать осторожно!)
-Layer 4: debt/sales/gross/inventory/expenses_report.py
-Layer 5: dso/rfm/concentration/turnover/net_profit/profitability_report.py
-Layer 6: ai_analyzer.py
-Layer 7: imap_fetcher.py, run_pipeline*.py
-Layer 8: bot/send_reports.py + bot/*.py
-```
 
 ## Тесты
 
@@ -131,17 +138,5 @@ python -X utf8 tests/test_parsers.py    # 58 тестов
 ```
 origin: https://github.com/gpt-project213/GPT1C_Processor.git
 branch: master
-HEAD: 5c522ac
-```
-
-## Структура директорий отчётов
-
-```
-reports/queue/        ← входящие xlsx
-reports/html/         ← HTML отчёты
-reports/json/         ← JSON данные
-reports/analytics/    ← Layer 5 analytics
-reports/ai/           ← AI txt/html
-reports/excel/active/ ← в обработке
-reports/excel/processed/ ← завершённые
+HEAD:   41e73ee
 ```
