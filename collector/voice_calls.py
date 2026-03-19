@@ -39,7 +39,7 @@ RETELL_AGENT_ID = os.getenv("RETELL_AGENT_ID", "")
 COMPANY_PHONE   = os.getenv("COMPANY_PHONE", "")
 CALL_LEVEL_MIN  = int(os.getenv("COLLECTOR_CALL_LEVEL", "4"))
 CALL_HOUR_START = int(os.getenv("COLLECTOR_HOUR_START", "9"))
-CALL_HOUR_END   = 17  # жёстко: 17:00 (не 18:00)
+CALL_HOUR_END   = int(os.getenv("COLLECTOR_CALL_HOUR_END", "17"))  # настраивается через .env
 
 RETELL_BASE_URL = "https://api.retellai.com"
 

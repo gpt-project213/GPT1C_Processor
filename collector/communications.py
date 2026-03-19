@@ -38,8 +38,8 @@ GREENAPI_ID      = os.getenv("GREENAPI_ID", "")
 GREENAPI_TOKEN   = os.getenv("GREENAPI_TOKEN", "")
 BOT_TOKEN        = os.getenv("TG_BOT_TOKEN") or os.getenv("BOT_TOKEN", "")
 ADMIN_CHAT_ID    = os.getenv("ADMIN_CHAT_ID", "")
-WHATSAPP_ENABLED = os.getenv("WHATSAPP_ENABLED", "0") == "1"
-TEST_MODE        = os.getenv("TEST_MODE", "0") == "1"
+WHATSAPP_ENABLED = os.getenv("WHATSAPP_ENABLED", "0").lower() in ("1", "true", "yes")
+TEST_MODE        = os.getenv("TEST_MODE", "0").lower() in ("1", "true", "yes")
 TEST_WA_PHONE    = os.getenv("TEST_WA_PHONE", "")
 
 HOUR_START = int(os.getenv("COLLECTOR_HOUR_START", "9"))
