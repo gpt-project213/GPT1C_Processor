@@ -178,7 +178,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.32/09.03.2026"
+__VERSION__ = "v9.4.35/19.03.2026"
 
 from datetime import datetime, time as dt_time
 from zoneinfo import ZoneInfo
@@ -257,6 +257,50 @@ REJECTED_DIR = REPORTS_DIR / "rejected"  # 🆕 v9.4.13.3
 REJECTED_CASH_DIR = REJECTED_DIR / "cash"  # 🆕 v9.4.13.3
 NOTIFY_STATE_PATH = LOGS_DIR / "notify_state.json"
 SALES_NOTIFY_DECADE_PATH = LOGS_DIR / "sales_notify_decade.json"  # v9.4.25: подекадные уведомления
+PID_FILE = LOGS_DIR / "bot.pid"
+
+
+# ── Защита от нескольких экземпляров (pid-файл) ───────────────────────────────
+def _is_pid_running(pid: int) -> bool:
+    """Проверяет, запущен ли процесс с указанным PID (Windows-safe через tasklist)."""
+    try:
+        result = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
+            capture_output=True, text=True, timeout=5,
+        )
+        return str(pid) in result.stdout
+    except Exception:
+        return False
+
+
+def _write_pid() -> None:
+    PID_FILE.write_text(str(os.getpid()), encoding="utf-8")
+
+
+def _clear_pid() -> None:
+    try:
+        if PID_FILE.exists() and PID_FILE.read_text(encoding="utf-8").strip() == str(os.getpid()):
+            PID_FILE.unlink()
+    except OSError:
+        pass
+
+
+def _check_single_instance() -> None:
+    """Завершает запуск если уже работает другой экземпляр бота."""
+    if PID_FILE.exists():
+        try:
+            old_pid = int(PID_FILE.read_text(encoding="utf-8").strip())
+        except (ValueError, OSError):
+            old_pid = None
+        if old_pid and old_pid != os.getpid() and _is_pid_running(old_pid):
+            print(f"[CRITICAL] Бот уже запущен (PID={old_pid}). Завершение. "
+                  f"Убейте старый процесс или удалите {PID_FILE}", flush=True)
+            sys.exit(1)
+        else:
+            print(f"[WARNING] Устаревший PID-файл (PID={old_pid}), продолжаем.", flush=True)
+    _write_pid()
+    import atexit
+    atexit.register(_clear_pid)
 for d in [REPORTS_DIR, HTML_DIR, JSON_DIR, AI_DIR, ANALYTICS_DIR, CONFIG_DIR, LOGS_DIR, ARCHIVE_DIR, QUEUE_DIR, PROCESSED_DIR, CLEAN_DIR, REJECTED_DIR, REJECTED_CASH_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 BOT_TOKEN = os.getenv("TG_BOT_TOKEN") or os.getenv("BOT_TOKEN") or ""
@@ -1942,16 +1986,17 @@ async def send_daily_summary_to_admin(context: ContextTypes.DEFAULT_TYPE):
             message_parts.append("━" * 50)
             message_parts.append(f"👤 {user_name.upper()}")
             message_parts.append("━" * 50)
-            message_parts.append("📥 Запросила отчеты:")
-            
+            _verb = "а" if gender_emoji(user_name) == "👩" else ""
+            message_parts.append(f"📥 Запросил{_verb} отчеты:")
+
             for report, count in sorted(requests.items()):
                 report_rus = SECTIONS.get(report, report)
                 message_parts.append(f"  • {report_rus} ({count} раз)" if count > 1 else f"  • {report_rus}")
                 total_requests += count
-            
+
             if delivered:
                 message_parts.append("")
-                message_parts.append("📤 Получила отчеты:")
+                message_parts.append(f"📤 Получил{_verb} отчеты:")
                 for report in delivered:
                     report_rus = SECTIONS.get(report, report)
                     message_parts.append(f"  • {report_rus} ✅")
@@ -5464,10 +5509,11 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
 
 
 def main():
+    _check_single_instance()  # завершаем если уже запущен другой экземпляр
     if not BOT_TOKEN:
         logger.critical("TG_BOT_TOKEN не найден в .env! Запуск невозможен.")
         sys.exit(1)
-    
+
     # v9.4.6.2: Версия в логе
     log_event("bot_starting", version = __VERSION__)
     

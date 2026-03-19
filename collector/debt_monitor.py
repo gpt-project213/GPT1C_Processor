@@ -223,8 +223,8 @@ def classify_debtors(debt_data: Dict[str, Any]) -> List[Dict[str, Any]]:
                 except (ValueError, TypeError):
                     continue
 
-        # Клиент с нулевым или отрицательным долгом не является должником
-        if amount <= 0:
+        # Клиент с нулевым/отрицательным или ниже минимального порога долгом — пропуск
+        if amount < 5000:
             continue
 
         # Нарушение: была отгрузка при наличии предыдущего долга
