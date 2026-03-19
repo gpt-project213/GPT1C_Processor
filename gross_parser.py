@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 import logging
 import argparse
@@ -59,7 +60,7 @@ except ImportError:
 
 # ──────────────────────────────────────────────────────────────────
 # Настройки
-TZ = ZoneInfo("Asia/Almaty")
+TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 ROOT = Path(__file__).resolve().parent
 JSON_OUT = ROOT / "reports" / "json"
 LOGS = ROOT / "logs"

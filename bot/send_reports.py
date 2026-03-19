@@ -383,7 +383,7 @@ def txt_to_html(txt_path: Path, html_path: Path):
         raise Exception(f"Ошибка конвертации TXT в HTML: {e}")
 # Блок 3_______________Логирование (Asia/Almaty)_____________________________
 def _formatTime_almaty(self, record, datefmt=None):
-    dt = datetime.fromtimestamp(record.created, ZoneInfo("Asia/Almaty"))
+    dt = datetime.fromtimestamp(record.created, TZ)
     return dt.strftime(datefmt or "%Y-%m-%d %H:%M:%S")
 logging.Formatter.formatTime = _formatTime_almaty
 LOG_FILE = LOGS_DIR / f"send_reports_{datetime.now(TZ).strftime('%Y%m%d')}.log"
