@@ -11,9 +11,8 @@ fallback — возвращает None, _get_manager_margin использует
   - долг >= 10 000 ₸ (MIN_DEBT_AMOUNT из silence_alerts)
 
 Зоны риска:
-  15–60 дней   → ⚡ рабочая просрочка
-  60–120 дней  → 🔴 красная зона
-  120+ дней    → ☠️  мёртвая дебиторка (коэффициент 100%)
+  8–15 дней  → ⚡ рабочая просрочка
+  15+ дней   → 🔴 красная зона
 
 Источники данных:
   - debt HTML  → silence_alerts.SilenceAlert (parse_html_silence_days, get_latest_debt_report)
@@ -175,7 +174,7 @@ def calculate_opportunity_loss(
     margin_pct, margin_source = _get_manager_margin(html_dir, manager_name)
 
     # 5. Фильтруем и группируем по зонам
-    zones: Dict[str, List[Dict]] = {"dead": [], "red": [], "yellow": []}
+    zones: Dict[str, List[Dict]] = {"red": [], "yellow": []}
 
     for client in clients_data:
         days  = client.get("silence_days", 0)
@@ -213,13 +212,13 @@ def calculate_opportunity_loss(
         zones[key].sort(key=lambda x: x["debt"], reverse=True)
 
     # 6. Итоги
-    red_loss       = sum(e["loss"] for e in zones["red"])
-    yellow_loss    = sum(e["loss"] for e in zones["yellow"])
-    total_loss     = red_loss + yellow_loss
+    red_loss    = sum(e["loss"] for e in zones["red"])
+    yellow_loss = sum(e["loss"] for e in zones["yellow"])
+    total_loss  = red_loss + yellow_loss
 
-    red_real       = sum(e["real_loss"] for e in zones["red"])
-    yellow_real    = sum(e["real_loss"] for e in zones["yellow"])
-    total_real     = red_real + yellow_real
+    red_real    = sum(e["real_loss"] for e in zones["red"])
+    yellow_real = sum(e["real_loss"] for e in zones["yellow"])
+    total_real  = red_real + yellow_real
 
     total_clients = len(zones["red"]) + len(zones["yellow"])
 
@@ -241,6 +240,7 @@ def calculate_opportunity_loss(
         "yellow_real":   yellow_real,
         "total_clients": total_clients,
     }
+
 
 
 # ── Форматирование сообщений ──────────────────────────────────────────────────
