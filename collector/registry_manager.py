@@ -124,6 +124,27 @@ def update_client_phone(name: str, phone: str) -> bool:
     return True
 
 
+def update_client_display_name(name: str, display_name: str) -> bool:
+    """Сохраняет откорректированное отображаемое имя клиента (псевдоним).
+
+    Ключ в базе (имя из 1С) остаётся неизменным — меняется только display_name,
+    которое используется в сообщениях должнику.
+    Возвращает True при успехе.
+    """
+    contacts = _load_contacts()
+    if name not in contacts:
+        logger.warning("update_client_display_name: клиент не найден: %s", name)
+        return False
+
+    contacts[name]["display_name"] = display_name.strip()
+    if not _save_contacts(contacts):
+        return False
+
+    logger.info("display_name обновлён для %s: %s", name, display_name.strip())
+    export_registry_excel(contacts)
+    return True
+
+
 def export_registry_excel(contacts: Optional[Dict[str, Any]] = None) -> bool:
     """Экспортирует реестр должников в Excel для просмотра администратором.
 
@@ -146,7 +167,7 @@ def export_registry_excel(contacts: Optional[Dict[str, Any]] = None) -> bool:
 
     # --- Заголовки ---
     headers = [
-        "Статус", "Клиент", "WhatsApp", "Telegram ID",
+        "Статус", "Клиент (1С)", "Имя для сообщений", "WhatsApp", "Telegram ID",
         "Менеджер", "Язык", "Не звонить",
         "Долг (тг)", "Дней просрочки", "Нарушение", "Дата добавления",
     ]
@@ -175,6 +196,7 @@ def export_registry_excel(contacts: Optional[Dict[str, Any]] = None) -> bool:
         values = [
             status,
             name,
+            info.get("display_name", ""),
             info.get("whatsapp", ""),
             info.get("telegram_id", ""),
             info.get("manager", ""),
@@ -193,7 +215,7 @@ def export_registry_excel(contacts: Optional[Dict[str, Any]] = None) -> bool:
             cell.alignment = Alignment(vertical="center")
 
     # --- Ширина столбцов ---
-    col_widths = [16, 45, 16, 14, 14, 8, 12, 14, 14, 12, 16]
+    col_widths = [16, 45, 30, 16, 14, 14, 8, 12, 14, 14, 12, 16]
     for col_idx, width in enumerate(col_widths, 1):
         ws.column_dimensions[get_column_letter(col_idx)].width = width
 

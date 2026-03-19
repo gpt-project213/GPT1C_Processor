@@ -4340,6 +4340,31 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error("collector callback error: %s", e)
         return
 
+    # Callback: менеджер нажал "Исправить имя клиента"
+    if data == "reg_name":
+        try:
+            from collector.collections_db import get_name_pending, set_name_pending
+            pending_client = get_name_pending(chat_id)
+            if pending_client:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=(
+                        f"✏️ <b>Введите правильное имя</b> для клиента:\n"
+                        f"<b>{pending_client}</b>\n\n"
+                        f"Имя из 1С останется как ключ для матчинга.\n"
+                        f"Введённое имя будет использоваться в сообщениях должнику."
+                    ),
+                    parse_mode="HTML",
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="⚠️ Запрос на исправление имени устарел.",
+                )
+        except Exception as e:
+            logger.error("reg_name callback error: %s", e)
+        return
+
     # Callback: менеджер нажал "Внести телефон клиента"
     if data == "reg_phone":
         try:
@@ -5411,6 +5436,30 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
     """Обработчик команд от постоянного меню (v9.4.12)"""
     text = update.message.text
     chat_id = update.effective_chat.id
+
+    # Ввод исправленного имени для реестра должников
+    try:
+        from collector.collections_db import clear_name_pending, get_name_pending
+        pending_name_client = get_name_pending(chat_id)
+        if pending_name_client:
+            new_name = text.strip()
+            if len(new_name) >= 2:
+                from collector.registry_manager import update_client_display_name
+                if update_client_display_name(pending_name_client, new_name):
+                    clear_name_pending(chat_id)
+                    await update.message.reply_text(
+                        f"✅ Имя сохранено.\n"
+                        f"В 1С (ключ): <b>{pending_name_client}</b>\n"
+                        f"В сообщениях: <b>{new_name}</b>",
+                        parse_mode="HTML",
+                    )
+                else:
+                    await update.message.reply_text("⚠️ Не удалось сохранить. Попробуйте ещё раз.")
+            else:
+                await update.message.reply_text("❌ Слишком короткое имя. Введите полное имя клиента.")
+            return
+    except Exception as e:
+        logger.error("name input handler error: %s", e)
 
     # Ввод телефона для реестра должников (если менеджер в режиме ожидания)
     try:

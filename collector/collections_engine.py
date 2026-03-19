@@ -167,6 +167,7 @@ async def _process_single(
 ) -> Dict[str, Any]:
     """Обрабатывает одного должника: генерация + диалог с менеджером + звонок."""
     name = client["name"]
+    display_name = contact.get("display_name") or name
     level = client["level"]
     days = client["days"]
     amount = client["amount"]
@@ -191,7 +192,7 @@ async def _process_single(
 
     # Генерируем текст сообщения (всегда — для dry-run и логирования)
     text = generate_message(
-        client_name=name,
+        client_name=display_name,
         debt_amount=amount,
         days_overdue=days,
         level=level,
@@ -392,14 +393,20 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
                         f"этому клиенту — ошибка приведёт к тому, что бот будет "
                         f"беспокоить постороннего человека!"
                     )
-                    # Сохраняем pending-состояние и отправляем с кнопкой
+                    # Сохраняем pending-состояние и отправляем с кнопками
                     set_phone_pending(mgr_chat_id, name)
+                    from collector.collections_db import set_name_pending as _set_name_pending
+                    _set_name_pending(mgr_chat_id, name)
                     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
                     keyboard = InlineKeyboardMarkup([[
                         InlineKeyboardButton(
                             "📞 Внести телефон клиента",
                             callback_data="reg_phone",
-                        )
+                        ),
+                        InlineKeyboardButton(
+                            "✏️ Исправить имя",
+                            callback_data="reg_name",
+                        ),
                     ]])
                     from collector.communications import send_telegram_with_markup
                     await send_telegram_with_markup(mgr_chat_id, reg_msg, keyboard)

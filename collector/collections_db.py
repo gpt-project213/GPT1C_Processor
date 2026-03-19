@@ -236,6 +236,37 @@ def clear_phone_pending(manager_chat_id: int) -> None:
         save_state(state)
 
 
+_NAME_PENDING_PREFIX = "__name_pending__"
+
+
+def set_name_pending(manager_chat_id: int, client_name: str) -> None:
+    """Сохраняет ожидание ввода исправленного имени от менеджера."""
+    state = load_state()
+    state[_NAME_PENDING_PREFIX + str(manager_chat_id)] = {
+        "client": client_name,
+        "date": _today(),
+    }
+    save_state(state)
+
+
+def get_name_pending(manager_chat_id: int) -> Optional[str]:
+    """Возвращает имя клиента, для которого менеджер ожидает ввода исправления, или None."""
+    state = load_state()
+    record = state.get(_NAME_PENDING_PREFIX + str(manager_chat_id))
+    if record and record.get("date") == _today():
+        return record.get("client")
+    return None
+
+
+def clear_name_pending(manager_chat_id: int) -> None:
+    """Сбрасывает ожидание ввода исправленного имени для менеджера."""
+    state = load_state()
+    key = _NAME_PENDING_PREFIX + str(manager_chat_id)
+    if key in state:
+        del state[key]
+        save_state(state)
+
+
 def already_notified_manager_today(client_name: str) -> bool:
     """True если менеджер уже получал запрос на регистрацию этого клиента сегодня."""
     state = load_state()
