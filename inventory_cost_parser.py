@@ -48,11 +48,43 @@ NBSP = "\u202f"
 TOTAL_RE = re.compile(r"\b(итог(?:о)?|всего|итоги|общий итог|total)\b", re.I)
 PERIOD_RE = re.compile(r"период[:\s]*([^\n|;]+)", re.I)
 
-# Фиксированные индексы колонок (на основе анализа файла)
-COL_PRODUCT = 1      # B - наименование товара
-COL_QTY_BASE = 4     # E - количество в базовых единицах
-COL_UNIT_COST = 5    # F - себестоимость единицы
+# Индексы колонок — defaults (fallback если заголовки не найдены)
+COL_PRODUCT    = 1   # B - наименование товара
+COL_QTY_BASE   = 4   # E - количество в базовых единицах
+COL_UNIT_COST  = 5   # F - себестоимость единицы
 COL_TOTAL_COST = 6   # G - общая стоимость
+
+# Ключевые слова для автодетекции колонок из заголовка
+_COL_KEYWORDS = {
+    "product":    ("номенклатура", "товар", "наименование"),
+    "qty_base":   ("количество (в базовых", "кол-во (баз", "базовых ед"),
+    "unit_cost":  ("себестоимость", "цена", "ед.товара"),
+    "total_cost": ("стоимость", "сумма", "итого стоимость"),
+}
+
+def _detect_col_indices(df: "pd.DataFrame", header_row: int) -> None:
+    """Обновляет глобальные COL_* по реальным заголовкам Excel.
+    Fallback: оставляет текущие значения если колонка не найдена."""
+    global COL_PRODUCT, COL_QTY_BASE, COL_UNIT_COST, COL_TOTAL_COST
+    row = df.iloc[header_row].astype(str).str.lower().tolist()
+    found: dict = {}
+    for j, cell in enumerate(row):
+        cell = cell.strip()
+        for key, variants in _COL_KEYWORDS.items():
+            if key in found:
+                continue
+            if any(v in cell for v in variants):
+                found[key] = j
+    if "product" in found:
+        COL_PRODUCT = found["product"]
+    if "qty_base" in found:
+        COL_QTY_BASE = found["qty_base"]
+    if "unit_cost" in found:
+        COL_UNIT_COST = found["unit_cost"]
+    if "total_cost" in found:
+        COL_TOTAL_COST = found["total_cost"]
+    LOG.info("Индексы колонок: product=%d qty_base=%d unit_cost=%d total_cost=%d",
+             COL_PRODUCT, COL_QTY_BASE, COL_UNIT_COST, COL_TOTAL_COST)
 
 def clean(x: Any) -> str:
     if x is None or (isinstance(x, float) and math.isnan(x)):
@@ -439,6 +471,7 @@ def build_inventory_cost_report(xlsx: Path) -> Dict[str, Path]:
     raw = read_excel_raw(xlsx)
     header_row = find_header_row(raw)
     LOG.info(f"Заголовок таблицы на строке {header_row}")
+    _detect_col_indices(raw, header_row)
 
     period = extract_period(raw, header_row)
     data_start = find_first_data_row(raw, header_row)

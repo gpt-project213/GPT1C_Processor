@@ -46,12 +46,30 @@ LOG = logging.getLogger("inventory")
 NBSP = "\u202f"
 
 # Основные категории (верхнего уровня)
-MAIN_CATEGORIES = {
+# Читаются из config/inventory_categories.json если файл существует,
+# иначе используется встроенный набор (backward compatible)
+_DEFAULT_MAIN_CATEGORIES = {
     "утка", "ряба", "укпф", "айсер", "ардагер", "рыба", "китай",
     "продукция кз", "продукция россия", "полуфабрикаты",
     "ягоды, овощи", "ягоды и овощи", "морепродукты",
     "бразилия", "говядина", "без категории"
 }
+
+def _load_main_categories() -> set:
+    cfg = ROOT / "config" / "inventory_categories.json"
+    try:
+        if cfg.exists():
+            with open(cfg, encoding="utf-8") as f:
+                data = json.load(f)
+            cats = {str(c).lower().strip() for c in data if c}
+            if cats:
+                LOG.info("Категории загружены из %s (%d шт.)", cfg.name, len(cats))
+                return cats
+    except (OSError, json.JSONDecodeError, TypeError) as e:
+        LOG.warning("Не удалось загрузить %s: %s — используется встроенный список", cfg.name, e)
+    return _DEFAULT_MAIN_CATEGORIES
+
+MAIN_CATEGORIES = _load_main_categories()
 
 COLS = {
     "warehouse": ("склад",),
