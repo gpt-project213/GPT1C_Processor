@@ -28,7 +28,7 @@ import re
 import numpy as np
 import pandas as pd
 
-__VERSION__ = "analyze_debt_excel.py v2.1 — 2025-09-02"
+__VERSION__ = "analyze_debt_excel.py v2.2 — 2026-03-19"
 
 # ── Регулярные выражения (синхронизированы с расширенным отчётом) ────────────
 RE_CLIENT_EQ  = re.compile(r"^\s*контрагент\s*$", re.I)

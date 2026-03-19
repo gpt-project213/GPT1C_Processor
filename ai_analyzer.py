@@ -216,7 +216,8 @@ def extract_manager_from_filename(path: str) -> str:
     return "Unknown"
 
 
-def analyze(path: str, chat_id: str, send_mode: bool = False, report_type: str = "DEBT"):
+def analyze(path: str, chat_id: str, send_mode: bool = False, report_type: str = "DEBT",
+            send_html: bool = False):
     """Основная функция анализа"""
     
     logger.info("AI ANALYZER %s | Файл: %s | Тип: %s | Chat: %s",
@@ -328,7 +329,7 @@ def analyze(path: str, chat_id: str, send_mode: bool = False, report_type: str =
         try:
             from send_tg import send_long_text, send_file
 
-            if AI_TG_SEND_HTML:
+            if AI_TG_SEND_HTML or send_html:
                 from tools.txt_to_html import build_html
                 html_path = build_html(output_file)
                 send_file(html_path, caption="AI-анализ дебиторки", chat_id=chat_id)
@@ -384,11 +385,10 @@ def main(argv=None):
     # --send-html устарел, но поддерживается для обратной совместимости
     if args.send_html:
         logger.warning("--send-html устарел, используйте AI_TG_SEND_HTML=true в .env")
-        global AI_TG_SEND_HTML
-        AI_TG_SEND_HTML = True
-    
+
     try:
-        analyze(args.path, args.chat_id, send_mode=args.send, report_type=args.type)
+        analyze(args.path, args.chat_id, send_mode=args.send, report_type=args.type,
+                send_html=args.send_html)
     except Exception as e:
         logger.error("FAILED: %s", e)
         sys.exit(1)

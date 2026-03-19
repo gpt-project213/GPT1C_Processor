@@ -33,7 +33,7 @@ from utils_excel import ensure_clean_xlsx
 from utils import money
 from analyze_debt_excel import parse_debt_report
 
-__VERSION__ = "debt_auto=v2.7.3"
+__VERSION__ = "debt_auto=v2.7.4"
 NBSP = "\u202f"
 
 log = getattr(config, "setup_logging", lambda name: logging.getLogger(name))("debt_auto_report")
