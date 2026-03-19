@@ -2,14 +2,18 @@
 bot/user_tracker.py
 Система отслеживания активности пользователей
 
-Версия: 1.0.1
-Дата: 2026-03-16
+Версия: 1.0.2
+Дата: 2026-03-19
+Изменения v1.0.2:
+  - BUG-H4: добавлен threading.Lock для атомарного read-modify-write (race condition fix)
+  - BUG-L7: except Exception → конкретные типы исключений
 Изменения v1.0.1: load_dotenv() добавлен перед чтением TZ из os.getenv (audit fix)
 """
 
 import json
 import logging
 import os
+import threading
 from pathlib import Path
 from datetime import datetime
 from tempfile import NamedTemporaryFile
@@ -26,19 +30,22 @@ logger = logging.getLogger(__name__)
 ANALYTICS_FILE = Path(__file__).parent.parent / "logs" / "user_analytics.json"
 TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 
+# Мьютекс для атомарного read-modify-write (защита от race condition между хендлерами)
+_ANALYTICS_LOCK = threading.Lock()
+
 def _load_analytics() -> Dict[str, Any]:
-    """Загружает данные аналитики из JSON"""
+    """Загружает данные аналитики из JSON. Вызывать только внутри _ANALYTICS_LOCK."""
     try:
         if ANALYTICS_FILE.exists():
             with open(ANALYTICS_FILE, 'r', encoding='utf-8') as f:
                 return json.load(f)
         return {"users": {}, "actions": []}
-    except Exception as e:
+    except (OSError, json.JSONDecodeError, ValueError) as e:
         logger.error(f"Ошибка загрузки аналитики: {e}")
         return {"users": {}, "actions": []}
 
 def _save_analytics(data: Dict[str, Any]):
-    """Атомарно сохраняет данные аналитики в JSON через tmp + replace."""
+    """Атомарно сохраняет данные аналитики в JSON через tmp + replace. Вызывать только внутри _ANALYTICS_LOCK."""
     tmp = None
     try:
         ANALYTICS_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -47,7 +54,7 @@ def _save_analytics(data: Dict[str, Any]):
             json.dump(data, f, ensure_ascii=False, indent=2)
             tmp = f.name
         os.replace(tmp, ANALYTICS_FILE)
-    except Exception as e:
+    except (OSError, TypeError) as e:
         logger.error(f"Ошибка сохранения аналитики: {e}")
         if tmp:
             try:
@@ -58,78 +65,80 @@ def _save_analytics(data: Dict[str, Any]):
 def track_user(user_id: int, first_name: str, username: str = None):
     """
     Регистрирует или обновляет пользователя
-    
+
     Args:
         user_id: Telegram ID пользователя
         first_name: Имя пользователя
         username: Username пользователя (если есть)
     """
     try:
-        data = _load_analytics()
-        user_key = str(user_id)
-        now = datetime.now(TZ).strftime("%Y-%m-%d %H:%M:%S")
-        
-        if user_key not in data["users"]:
-            # Новый пользователь
-            data["users"][user_key] = {
-                "user_id": user_id,
-                "first_name": first_name,
-                "username": username,
-                "first_seen": now,
-                "last_seen": now,
-                "total_actions": 0
-            }
-            logger.info(f"👤 Новый пользователь зарегистрирован: {first_name} (ID: {user_id})")
-        else:
-            # Обновляем данные существующего пользователя
-            data["users"][user_key]["last_seen"] = now
-            data["users"][user_key]["first_name"] = first_name  # Обновляем имя (могло измениться)
-            if username:
-                data["users"][user_key]["username"] = username
-        
-        _save_analytics(data)
-    except Exception as e:
+        with _ANALYTICS_LOCK:
+            data = _load_analytics()
+            user_key = str(user_id)
+            now = datetime.now(TZ).strftime("%Y-%m-%d %H:%M:%S")
+
+            if user_key not in data["users"]:
+                # Новый пользователь
+                data["users"][user_key] = {
+                    "user_id": user_id,
+                    "first_name": first_name,
+                    "username": username,
+                    "first_seen": now,
+                    "last_seen": now,
+                    "total_actions": 0
+                }
+                logger.info(f"👤 Новый пользователь зарегистрирован: {first_name} (ID: {user_id})")
+            else:
+                # Обновляем данные существующего пользователя
+                data["users"][user_key]["last_seen"] = now
+                data["users"][user_key]["first_name"] = first_name  # Обновляем имя (могло измениться)
+                if username:
+                    data["users"][user_key]["username"] = username
+
+            _save_analytics(data)
+    except (OSError, json.JSONDecodeError, KeyError, TypeError) as e:
         logger.error(f"Ошибка отслеживания пользователя {user_id}: {e}")
 
 def track_action(user_id: int, action: str, details: str = None):
     """
     Записывает действие пользователя
-    
+
     Args:
         user_id: Telegram ID пользователя
         action: Тип действия (debt, sales, ai, back, etc.)
         details: Дополнительные детали действия
     """
     try:
-        data = _load_analytics()
-        user_key = str(user_id)
-        now = datetime.now(TZ).strftime("%Y-%m-%d %H:%M:%S")
-        
-        # Добавляем действие в историю
-        action_record = {
-            "user_id": user_id,
-            "action": action,
-            "timestamp": now
-        }
-        
-        if details:
-            action_record["details"] = details
-        
-        data["actions"].append(action_record)
-        
-        # Обновляем счётчик действий пользователя
-        if user_key in data["users"]:
-            data["users"][user_key]["total_actions"] += 1
-            data["users"][user_key]["last_seen"] = now
-        
-        # Ограничиваем историю действий (храним последние 10000)
-        if len(data["actions"]) > 10000:
-            data["actions"] = data["actions"][-10000:]
-        
-        _save_analytics(data)
-        
+        with _ANALYTICS_LOCK:
+            data = _load_analytics()
+            user_key = str(user_id)
+            now = datetime.now(TZ).strftime("%Y-%m-%d %H:%M:%S")
+
+            # Добавляем действие в историю
+            action_record = {
+                "user_id": user_id,
+                "action": action,
+                "timestamp": now
+            }
+
+            if details:
+                action_record["details"] = details
+
+            data["actions"].append(action_record)
+
+            # Обновляем счётчик действий пользователя
+            if user_key in data["users"]:
+                data["users"][user_key]["total_actions"] += 1
+                data["users"][user_key]["last_seen"] = now
+
+            # Ограничиваем историю действий (храним последние 10000)
+            if len(data["actions"]) > 10000:
+                data["actions"] = data["actions"][-10000:]
+
+            _save_analytics(data)
+
         logger.debug(f"📊 Действие записано: user={user_id}, action={action}")
-    except Exception as e:
+    except (OSError, json.JSONDecodeError, KeyError, TypeError) as e:
         logger.error(f"Ошибка записи действия для {user_id}: {e}")
 
 def get_stats() -> Dict[str, Any]:
@@ -168,7 +177,7 @@ def get_stats() -> Dict[str, Any]:
             "action_breakdown": action_counts,
             "users": users_list
         }
-    except Exception as e:
+    except (OSError, json.JSONDecodeError, KeyError, TypeError) as e:
         logger.error(f"Ошибка получения статистики: {e}")
         return {
             "total_users": 0,
@@ -247,7 +256,7 @@ def get_user_info(user_id: int) -> Dict[str, Any]:
             return data["users"][user_key]
         
         return None
-    except Exception as e:
+    except (OSError, json.JSONDecodeError, KeyError, TypeError) as e:
         logger.error(f"Ошибка получения информации о пользователе {user_id}: {e}")
         return None
 
