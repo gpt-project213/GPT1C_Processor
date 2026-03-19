@@ -835,16 +835,19 @@ def get_user_role(chat_id: int) -> str:
     return "unknown"
 
 # v9.4.6.1: Упрощено - удалены избыточные проверки на "Арман" (его нет в конфиге)
+_SYSTEM_ACCOUNTS: set[str] = set(
+    (ROLES.get("system_accounts") or [])
+)
+
 def get_managers_list() -> List[str]:
-    """Возвращает список активных менеджеров (без Минай)"""
+    """Возвращает список активных менеджеров (без системных аккаунтов)."""
     if MANAGERS_MAP and isinstance(MANAGERS_MAP, dict):
-        # Исключаем только Минай (системный аккаунт)
-        return sorted([k for k in MANAGERS_MAP.keys() if k != "Минай"])
+        return sorted([k for k in MANAGERS_MAP.keys() if k not in _SYSTEM_ACCOUNTS])
     return []
 
 def get_my_manager_name(chat_id: int) -> Optional[str]:
     for manager, m_chat_id in (MANAGERS_MAP or {}).items():
-        if m_chat_id == chat_id and manager != "Минай":
+        if m_chat_id == chat_id and manager not in _SYSTEM_ACCOUNTS:
             return manager
     return None
 

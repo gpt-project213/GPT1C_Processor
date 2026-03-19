@@ -80,7 +80,6 @@ class SilenceAlert:
         if not debt_str:
             return 0.0
         
-        import unicodedata
         cleaned = ''.join(debt_str.split())
         cleaned = cleaned.replace('₸', '').replace('₽', '').strip()
         cleaned = cleaned.replace(',', '.')
