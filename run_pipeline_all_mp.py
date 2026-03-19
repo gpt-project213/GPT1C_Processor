@@ -432,7 +432,7 @@ def _process_one(src: Path) -> Tuple[str, List[Path]]:
         return (routed_to, outs)
     except Exception as e:
         _log(f"[PROCESS] FAIL {src.name}: {e}", err=True)
-        return (routed_to, [])
+        return (routed_to, None)  # None отличает исключение от нормального пустого вывода
     finally:
         if moved:
             _release(work)
@@ -472,14 +472,14 @@ def run_once() -> Tuple[int, int]:
     for src in files:
         _log(f"START {src.name}")
         typ, outs = _process_one(src)
-        if outs:
+        if outs:                      # непустой список — успех
             processed += 1
-        else:
-            # отсутствие выходов не считаем фатальной ошибкой для SALES/GROSS/INVENTORY
-            # но для DEBT это чаще всего ошибка парсинга, считаем failed
-            if typ == "DEBT":
+        elif outs is None:            # исключение в _process_one — всегда считаем failed
+            failed += 1
+        else:                         # outs == [] — нормально для SALES/GROSS/INVENTORY
+            if typ == "DEBT":         # для DEBT пустой вывод = ошибка парсинга
                 failed += 1
-        _log(f"FINISH {src.name}: type={typ}, outs={len(outs)}")
+        _log(f"FINISH {src.name}: type={typ}, outs={len(outs) if outs else 0}")
     return (processed, failed)
 
 # ─────────────────────────────────────────────────────────────────────

@@ -160,6 +160,7 @@
 #
 
 # Блок 1_______________Импорты и настройка окружения_________________________
+import io
 import os
 import sys
 import re
@@ -293,11 +294,11 @@ def _check_single_instance() -> None:
         except (ValueError, OSError):
             old_pid = None
         if old_pid and old_pid != os.getpid() and _is_pid_running(old_pid):
-            print(f"[CRITICAL] Бот уже запущен (PID={old_pid}). Завершение. "
-                  f"Убейте старый процесс или удалите {PID_FILE}", flush=True)
+            logger.critical("Бот уже запущен (PID=%s). Завершение. Убейте старый процесс или удалите %s",
+                            old_pid, PID_FILE)
             sys.exit(1)
         else:
-            print(f"[WARNING] Устаревший PID-файл (PID={old_pid}), продолжаем.", flush=True)
+            logger.warning("Устаревший PID-файл (PID=%s), продолжаем.", old_pid)
     _write_pid()
     import atexit
     atexit.register(_clear_pid)
@@ -392,7 +393,9 @@ logging.basicConfig(
     format="%(asctime)s, %(levelname)s %(message)s",
     handlers=[
         logging.FileHandler(LOG_FILE, encoding='utf-8'),
-        logging.StreamHandler(open(sys.stdout.fileno(), mode='w', encoding='utf-8', errors='replace', closefd=False)),
+        logging.StreamHandler(
+            io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
+        ),
     ]
 )
 logger = logging.getLogger(__name__)
