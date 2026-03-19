@@ -1,9 +1,15 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-sales_parser.py · v1.0.5 (2026-03-10)
+sales_parser.py · v1.0.6 (2026-03-19)
 ────────────────────────────────────────────────────────────────────
 Парсер отчётов "Продажи" из 1С в JSON формат.
+
+ИСПРАВЛЕНИЯ v1.0.6:
+- БАГ #10: Двойной счёт при 3-уровневой иерархии 1С (Клиент→ТочкаОтгрузки→Товар).
+  Строки «точки отгрузки» (под-клиентов) имеют qty+price, но не содержат паттерна
+  даты партии вида (DDMMYY). Теперь такие строки пропускаются в parse_sales_grouped().
+  Добавлен _PRODUCT_DATE_RE = re.compile(r"\\(\\d{5,7}\\)").
 
 ИСПРАВЛЕНИЯ v1.0.5:
 - БАГ TZ: TZ = timezone(timedelta(hours=5)) заменён на ZoneInfo("Asia/Almaty").
@@ -84,9 +90,14 @@ logging.basicConfig(
 )
 LOG = logging.getLogger("sales_parser")
 
-__VERSION__ = "1.0.5"
+__VERSION__ = "1.0.6"
 
 NBSP = "\u202f"
+
+# Паттерн даты партии в названии товара: (DDMMYY) или (DMMYY) — 5–7 цифр.
+# Субклиенты (точки отгрузки) не содержат этого паттерна.
+# Используется для отличия строк товара от промежуточных итогов подклиентов.
+_PRODUCT_DATE_RE = re.compile(r"\(\d{5,7}\)")
 
 # ──────────────────────────────────────────────────────────────────
 # Регулярные выражения
@@ -377,6 +388,15 @@ def parse_sales_grouped(df: pd.DataFrame, colmap: Dict[str, int]) -> Dict[str, A
         sale = to_float(row[sale_j]) if sale_j != -1 and sale_j < len(row) else float("nan")
 
         if math.isnan(sale) or sale == 0:
+            continue
+
+        # v1.0.6: Промежуточный итог под-клиента (3-й уровень 1С-иерархии).
+        # В отчётах с группировкой Клиент→ТочкаОтгрузки→Товар строка точки отгрузки
+        # имеет qty и price (суммарные), но её имя не содержит паттерна партии (DDMMYY).
+        # Пропускаем её, чтобы не задвоить выручку.
+        if (not math.isnan(qty) and abs(qty) > 0.0001
+                and not math.isnan(price) and abs(price) > 0.0001
+                and not _PRODUCT_DATE_RE.search(name)):
             continue
 
         product = {
