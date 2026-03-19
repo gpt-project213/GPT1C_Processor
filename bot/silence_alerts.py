@@ -2,8 +2,8 @@
 Модуль для мониторинга дней молчания клиентов в дебиторке
 и отправки уведомлений менеджерам
 
-Версия: 1.5
-Дата: 2026-03-16
+Версия: 1.6
+Дата: 2026-03-19
 Изменения v1.4:
   - parse_html_silence_days(): добавлен парсинг cells[3] (Отгрузка/debit).
   - categorize_by_silence(): исправлена логика partial_payment:
@@ -167,18 +167,58 @@ class SilenceAlert:
             if not tbody:
                 logger.error(f"Не найден tbody в таблице {html_path}")
                 return []
-            
+
+            # v1.6: читаем заголовки из <thead> вместо жёстких индексов
+            # Ожидаемые колонки: Клиент, Долг, Нач.остаток, Отгрузка, Оплата, Операций, Дни молчания
+            _FALLBACK = {
+                "client": 0, "debt": 1, "initial": 2,
+                "debit": 3, "paid": 4, "silence": 6,
+            }
+            col_idx = dict(_FALLBACK)  # начинаем с fallback
+            thead = table.find('thead')
+            if thead:
+                ths = thead.find_all('th')
+                if ths:
+                    _header_map: Dict[str, int] = {}
+                    for idx, th in enumerate(ths):
+                        _header_map[th.get_text(strip=True).lower()] = idx
+                    # Сопоставляем ключевые заголовки (без учёта регистра/пробелов)
+                    _KNOWN = {
+                        "client":  ("клиент",),
+                        "debt":    ("долг",),
+                        "initial": ("нач.остаток", "нач. остаток", "начостаток"),
+                        "debit":   ("отгрузка",),
+                        "paid":    ("оплата",),
+                        "silence": ("дни молчания", "дни_молчания", "silence"),
+                    }
+                    for key, variants in _KNOWN.items():
+                        for variant in variants:
+                            if variant in _header_map:
+                                col_idx[key] = _header_map[variant]
+                                break
+                    logger.debug("Карта колонок из thead: %s", col_idx)
+                else:
+                    logger.warning("thead найден, но <th> отсутствуют — используются fallback индексы")
+            else:
+                logger.warning("thead не найден в таблице %s — используются fallback индексы", html_path.name)
+
+            min_cols = max(col_idx["client"], col_idx["debt"], col_idx["silence"]) + 1
+
             clients_data = []
-            
+
             for row in tbody.find_all('tr'):
                 cells = row.find_all('td')
-                
-                if len(cells) < 7:
+
+                if len(cells) < min_cols:
                     continue
-                
-                client_name = cells[0].get_text(strip=True)
-                debt_str = cells[1].get_text(strip=True)
-                silence_days_str = cells[6].get_text(strip=True)
+
+                def _cell(key: str) -> str:
+                    j = col_idx[key]
+                    return cells[j].get_text(strip=True) if j < len(cells) else ""
+
+                client_name = _cell("client")
+                debt_str = _cell("debt")
+                silence_days_str = _cell("silence")
 
                 try:
                     silence_days = int(silence_days_str)
@@ -188,11 +228,9 @@ class SilenceAlert:
 
                 debt_amount = self.parse_debt_amount(debt_str)
 
-                # v1.4: col0=Клиент, col1=Долг, col2=Нач.остаток,
-                #        col3=Отгрузка, col4=Оплата, col5=Операций, col6=Дни молчания
-                initial_str  = cells[2].get_text(strip=True) if len(cells) > 2 else ""
-                debit_str    = cells[3].get_text(strip=True) if len(cells) > 3 else ""
-                paid_str     = cells[4].get_text(strip=True) if len(cells) > 4 else ""
+                initial_str = _cell("initial")
+                debit_str   = _cell("debit")
+                paid_str    = _cell("paid")
                 initial_amount = self.parse_debt_amount(initial_str)
                 debit_amount   = self.parse_debt_amount(debit_str)
                 paid_amount    = self.parse_debt_amount(paid_str)
