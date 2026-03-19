@@ -2478,7 +2478,6 @@ def kb_main(user_role: str, chat_id: int = 0) -> InlineKeyboardMarkup:
             [InlineKeyboardButton("📦 Остатки", callback_data="direct|INVENTORY_SIMPLE|general")],
             [InlineKeyboardButton("🛒 Продажи", callback_data="menu_sales")],
             [InlineKeyboardButton("💰 Валовая", callback_data="submenu|GROSS_PCT")],
-            [InlineKeyboardButton("💸 Затраты", callback_data="menu_expenses")],
             [InlineKeyboardButton("📈 АНАЛИТИКА", callback_data="menu_analytics")],
             [InlineKeyboardButton("🔔 Уведомления сейчас", callback_data="menu_notify")],
             [InlineKeyboardButton("🗄️ Архив", callback_data="archive|root")],
