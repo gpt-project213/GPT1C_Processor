@@ -78,6 +78,7 @@ from collector.collections_db import (
     get_debt_days_since_first_seen,
     get_pending_promises,
     load_state,
+    save_state,
     mark_escalated,
     mark_manager_notified,
     mark_promise_broken,
@@ -103,6 +104,11 @@ from collector.voice_calls import (
 
 # Менеджеры — читаем из config/managers.json для notify_manager
 _MANAGERS_CACHE: Optional[Dict[str, Any]] = None
+
+
+def _today_str() -> str:
+    from datetime import date
+    return date.today().isoformat()
 
 
 def _load_managers() -> Dict[str, Any]:
@@ -311,6 +317,50 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
     debtors = classify_debtors(debt_data)
     contacts = load_contacts()
     processed: List[Dict] = []
+
+    # Уведомления о нарушениях: отгрузка при наличии долга — вина менеджера
+    if not dry_run:
+        for _client in debtors:
+            if not _client.get("violation_shipment"):
+                continue
+            _vname = _client["name"]
+            _vamount = _client["amount"]
+            _vdays = _client["days"]
+            _vmgr = _client.get("manager", "")
+            _vmgr_chat_id = _get_manager_chat_id(_vmgr) if _vmgr else None
+
+            _vkey = f"__violation_notified__{_vname}"
+            _vstate = load_state()
+            if _vstate.get(_vkey, {}).get("date") == _today_str():
+                continue  # уже уведомляли сегодня
+
+            # Менеджеру — личный сигнал о его нарушении
+            if _vmgr_chat_id:
+                _mgr_msg = (
+                    f"🚨 <b>Нарушение: отгрузка при наличии долга</b>\n\n"
+                    f"Клиент: <b>{_vname}</b>\n"
+                    f"Долг: <b>{_vamount:,.0f} тг</b> ({_vdays} дн.)\n\n"
+                    f"По данному клиенту была произведена отгрузка при существующей "
+                    f"задолженности. Это нарушение кредитной политики компании.\n\n"
+                    f"Прошу урегулировать ситуацию с клиентом лично."
+                )
+                from collector.communications import send_telegram
+                await send_telegram(_vmgr_chat_id, _mgr_msg)
+
+            # Тебе (админу) — сводный сигнал с именем менеджера
+            _admin_msg = (
+                f"🚨 <b>Нарушение кредитной политики</b>\n\n"
+                f"Менеджер: <b>{_vmgr or 'не указан'}</b>\n"
+                f"Клиент: <b>{_vname}</b>\n"
+                f"Долг: <b>{_vamount:,.0f} тг</b> ({_vdays} дн.)\n\n"
+                f"Была произведена отгрузка клиенту при наличии непогашенной задолженности."
+            )
+            await notify_admin(_admin_msg)
+
+            # Помечаем что уведомили сегодня
+            _vstate[_vkey] = {"date": _today_str()}
+            save_state(_vstate)
+            logger.warning("Нарушение — отгрузка при долге: клиент=%s менеджер=%s", _vname, _vmgr)
 
     # Сбрасываем счётчик дней для клиентов, чей долг погашен:
     # если клиент есть в нашем state (был должником), но пропал из текущих
