@@ -68,6 +68,9 @@ CLEAN   = REPORTS / "excel" / "clean"
 for p in (REPORTS, QUEUE, CLEAN):
     p.mkdir(parents=True, exist_ok=True)
 
+# Ранняя загрузка .env — чтобы TZ из .env был доступен до вызова _load_env_and_cfg()
+load_dotenv(dotenv_path=ROOT / ".env", encoding="utf-8-sig", override=True)
+
 # TZ из .env (если нет — дефолт Asia/Almaty)
 TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 
