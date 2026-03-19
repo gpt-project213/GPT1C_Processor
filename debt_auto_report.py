@@ -681,7 +681,7 @@ def build_report(xlsx_path: str | Path, *, force: Optional[str] = None) -> Path:
     ctx["generated"] = _generated_footer()
     html = render_html(ctx)
 
-    out_html_dir = getattr(config, "OUT_DIR", Path(__file__).parent / "reports" / "html")
+    out_html_dir = config.HTML_DIR
     out_html_dir.mkdir(parents=True, exist_ok=True)
 
     stem = src.stem
