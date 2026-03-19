@@ -124,6 +124,26 @@ def update_client_phone(name: str, phone: str) -> bool:
     return True
 
 
+def update_client_language(name: str, language: str) -> bool:
+    """Устанавливает язык общения с клиентом ('ru' или 'kz').
+
+    Возвращает True при успехе.
+    """
+    if language not in ("ru", "kz"):
+        logger.warning("update_client_language: неверный язык: %s", language)
+        return False
+    contacts = _load_contacts()
+    if name not in contacts:
+        logger.warning("update_client_language: клиент не найден: %s", name)
+        return False
+    contacts[name]["language"] = language
+    if not _save_contacts(contacts):
+        return False
+    logger.info("Язык обновлён для %s: %s", name, language)
+    export_registry_excel(contacts)
+    return True
+
+
 def update_client_display_name(name: str, display_name: str) -> bool:
     """Сохраняет откорректированное отображаемое имя клиента (псевдоним).
 

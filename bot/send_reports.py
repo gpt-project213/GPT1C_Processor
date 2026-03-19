@@ -4340,6 +4340,38 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error("collector callback error: %s", e)
         return
 
+    # Callback: менеджер выбрал язык клиента
+    if data in ("reg_lang_ru", "reg_lang_kz"):
+        try:
+            from collector.collections_db import get_phone_pending
+            from collector.registry_manager import update_client_language
+            pending_client = get_phone_pending(chat_id)
+            if pending_client:
+                lang = "ru" if data == "reg_lang_ru" else "kz"
+                lang_label = "🇷🇺 Русский" if lang == "ru" else "🇰🇿 Қазақша"
+                if update_client_language(pending_client, lang):
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=(
+                            f"✅ Язык сохранён: <b>{lang_label}</b>\n"
+                            f"Клиент: <b>{pending_client}</b>"
+                        ),
+                        parse_mode="HTML",
+                    )
+                else:
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text="⚠️ Не удалось сохранить язык.",
+                    )
+            else:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="⚠️ Запрос устарел. Клиент не найден.",
+                )
+        except Exception as e:
+            logger.error("reg_lang callback error: %s", e)
+        return
+
     # Callback: менеджер нажал "Исправить имя клиента"
     if data == "reg_name":
         try:

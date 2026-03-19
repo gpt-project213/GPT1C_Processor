@@ -450,16 +450,28 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
                     from collector.collections_db import set_name_pending as _set_name_pending
                     _set_name_pending(mgr_chat_id, name)
                     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-                    keyboard = InlineKeyboardMarkup([[
-                        InlineKeyboardButton(
-                            "📞 Внести телефон клиента",
-                            callback_data="reg_phone",
-                        ),
-                        InlineKeyboardButton(
-                            "✏️ Исправить имя",
-                            callback_data="reg_name",
-                        ),
-                    ]])
+                    keyboard = InlineKeyboardMarkup([
+                        [
+                            InlineKeyboardButton(
+                                "📞 Внести телефон клиента",
+                                callback_data="reg_phone",
+                            ),
+                            InlineKeyboardButton(
+                                "✏️ Исправить имя",
+                                callback_data="reg_name",
+                            ),
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "🇷🇺 Русский",
+                                callback_data="reg_lang_ru",
+                            ),
+                            InlineKeyboardButton(
+                                "🇰🇿 Қазақша",
+                                callback_data="reg_lang_kz",
+                            ),
+                        ],
+                    ])
                     from collector.communications import send_telegram_with_markup
                     await send_telegram_with_markup(mgr_chat_id, reg_msg, keyboard)
                     mark_manager_notified(name)

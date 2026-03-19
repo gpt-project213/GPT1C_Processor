@@ -33,6 +33,7 @@ load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env",
 
 TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 
+RETELL_ENABLED  = os.getenv("RETELL_ENABLED", "false").lower() == "true"
 RETELL_API_KEY  = os.getenv("RETELL_API_KEY", "")
 RETELL_AGENT_ID = os.getenv("RETELL_AGENT_ID", "")
 COMPANY_PHONE   = os.getenv("COMPANY_PHONE", "")
@@ -75,6 +76,11 @@ def initiate_call(
         {"call_id": "...", "status": "initiated"} или
         {"call_id": "", "status": "error: ..."}
     """
+    if not RETELL_ENABLED:
+        msg = "Голосовые звонки отключены (RETELL_ENABLED=false)"
+        logger.info(msg)
+        return {"call_id": "", "status": f"skipped: {msg}"}
+
     if not RETELL_API_KEY or not RETELL_AGENT_ID:
         msg = "RETELL_API_KEY / RETELL_AGENT_ID не заданы"
         logger.warning(msg)
