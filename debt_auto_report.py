@@ -52,7 +52,7 @@ RE_TOTAL_CELL = re.compile(r"(итогова|итог|^покупатели$|п�
 RE_LEVEL_CELL = re.compile(r"\bитог\b", re.I)
 RE_DOT_SUFFIX = re.compile(r"\.\d+$")
 RE_DATE_CELL  = re.compile(r"^\s*\d{2}\.\d{2}\.\d{4}\s*$")
-RE_MANAGER_FILTER = re.compile(r"контрагент\s+в\s+группе\s+из\s+списка\s*\(([^)]+)\)", re.I)
+RE_MANAGER_FILTER = re.compile(r"(?:контрагент|покупатель)\s+в\s+группе\s+из\s+списка\s*\(([^)]+)\)", re.I)
 
 def _build_internal_units_map() -> dict[str, list[str]]:
     """Динамически строит маппинг менеджер → [ОПТ подразделение] из managers.json."""
