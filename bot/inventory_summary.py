@@ -101,19 +101,16 @@ class InventorySummary:
             small_tag = soup.find('small')
             date_str = ""
             total_qty = 0.0
-            
+
             if small_tag:
                 text = small_tag.get_text()
-                if 'Период:' in text or 'период:' in text.lower():
-                    parts = text.split('Период:') if 'Период:' in text else text.split('период:')
-                    if len(parts) > 1:
-                        date_str = parts[1].split('\n')[0].strip()
-                
-                if 'количество:' in text.lower():
-                    parts = text.lower().split('количество:')
-                    if len(parts) > 1:
-                        qty_str = parts[1].split('\n')[0].strip()
-                        total_qty = self.parse_quantity(qty_str)
+                # v1.4: regex вместо хрупкого split('\n') / split('количество:')
+                _dm = re.search(r'[Пп]ериод[:\s]+(.+?)(?:\n|$)', text)
+                if _dm:
+                    date_str = _dm.group(1).strip()
+                _qm = re.search(r'[Вв]сего\s+количество[:\s]+([\d\s,.\u202f]+)', text)
+                if _qm:
+                    total_qty = self.parse_quantity(_qm.group(1))
             
             table = soup.find('table')
             if not table:
@@ -147,7 +144,7 @@ class InventorySummary:
             logger.info(f"📊 Распарсено {len(items)} товаров из {html_path.name}")
             return {'date': date_str, 'total_quantity': total_qty, 'items': items}
             
-        except Exception as e:
+        except (OSError, AttributeError, TypeError, ValueError) as e:
             logger.error(f"Ошибка при парсинге {html_path}: {e}", exc_info=True)
             return {'date': '', 'total_quantity': 0.0, 'items': []}
     
