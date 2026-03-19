@@ -31,14 +31,17 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import shutil
 import sys
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from pathlib import Path
+from dotenv import load_dotenv
 
-TZ = ZoneInfo("Asia/Almaty")
 ROOT = Path(__file__).resolve().parent
+load_dotenv(ROOT.parent / ".env", encoding="utf-8-sig", override=False)
+TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 
 QUEUE_DIR = ROOT / "reports" / "queue"
 CLEAN_DIR = ROOT / "reports" / "excel" / "clean"

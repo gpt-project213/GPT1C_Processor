@@ -114,7 +114,7 @@ def _get_manager_margin(html_dir: Path, manager_name: str) -> Tuple[float, str]:
             )
             return DEFAULT_MARGIN_PCT, f"по умолчанию ({DEFAULT_MARGIN_PCT}%, файл пустой)"
         return margin, gross_html.name
-    except Exception as e:
+    except (OSError, AttributeError, KeyError, TypeError, ValueError) as e:
         logger.warning(f"opportunity_loss: ошибка парсинга {gross_html.name}: {e}")
         return DEFAULT_MARGIN_PCT, f"по умолчанию ({DEFAULT_MARGIN_PCT}%)"
 

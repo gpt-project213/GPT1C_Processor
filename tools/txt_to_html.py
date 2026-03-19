@@ -8,14 +8,17 @@ v1.0.1: TZ timezone(timedelta(hours=5)) → ZoneInfo("Asia/Almaty") (Bug TZ)
 """
 
 from __future__ import annotations
-import json, re, html as _html
+import json, os, re, html as _html
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Union
+from dotenv import load_dotenv
 
-TZ = ZoneInfo("Asia/Almaty")
-OUT_DIR = Path(__file__).resolve().parent.parent / "reports" / "html"
+_ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(_ROOT / ".env", encoding="utf-8-sig", override=False)
+TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
+OUT_DIR = _ROOT / "reports" / "html"
 
 _CSS = """
 body{margin:0;font-family:Consolas,monospace,Menlo,Monaco,monospace;background:#fff;color:#111}
