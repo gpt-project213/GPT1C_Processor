@@ -112,7 +112,7 @@ def setup_logging(module_name: str, level: int = logging.INFO) -> Logger:
 # ── YAML (опционально) ────────────────────────────────────────
 try:
     import yaml  # PyYAML может отсутствовать
-except Exception:
+except ImportError:
     yaml = None  # type: ignore
 
 def _read_yaml(p: Path) -> Dict[str, Any]:

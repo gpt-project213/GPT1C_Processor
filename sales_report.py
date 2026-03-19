@@ -13,7 +13,7 @@ FIX v9.3.8: Исправлены жёстко прописанные пути E:
 
 from __future__ import annotations
 
-import math, re, logging, argparse, html as _html
+import math, os, re, logging, argparse, html as _html
 from pathlib import Path
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -25,7 +25,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Пути / окружение
-TZ = ZoneInfo("Asia/Almaty")
+TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 ROOT = Path(__file__).resolve().parent
 
 def _pick_dir(options: List[Path]) -> Path:
@@ -86,7 +86,7 @@ def to_float(x: Any) -> float:
     try:
         v = float(s)
         return -v if neg else v
-    except Exception:
+    except (ValueError, TypeError):
         return float("nan")
 
 def round_half_up_to_int(v: float | int) -> int:

@@ -59,6 +59,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 import logging
 import argparse
@@ -76,7 +77,7 @@ except ImportError:
 
 # ──────────────────────────────────────────────────────────────────
 # Настройки
-TZ = ZoneInfo("Asia/Almaty")
+TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 ROOT = Path(__file__).resolve().parent
 JSON_OUT = ROOT / "reports" / "json"
 LOGS = ROOT / "logs"
@@ -132,7 +133,7 @@ def _load_manager_aliases() -> list[tuple[str, str]]:
                 if out:
                     LOG.debug("Загружено %d менеджеров из managers.json", len(out))
                     return out
-    except Exception as e:
+    except (OSError, json.JSONDecodeError, KeyError, TypeError) as e:
         LOG.warning("Не удалось прочитать managers.json: %s — используется fallback", e)
 
     LOG.warning("managers.json недоступен — определение менеджера по имени файла отключено")
