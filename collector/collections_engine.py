@@ -72,10 +72,12 @@ from collector.debt_monitor import (
     match_client,
 )
 from collector.collections_db import (
+    _DEBT_DATE_PREFIX,
     already_contacted_today,
     already_notified_manager_today,
     get_debt_days_since_first_seen,
     get_pending_promises,
+    load_state,
     mark_escalated,
     mark_manager_notified,
     mark_promise_broken,
@@ -308,6 +310,22 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
     debtors = classify_debtors(debt_data)
     contacts = load_contacts()
     processed: List[Dict] = []
+
+    # Сбрасываем счётчик дней для клиентов, чей долг погашен:
+    # если клиент есть в нашем state (был должником), но пропал из текущих
+    # debt-файлов — значит долг закрыт. Без сброса уровень давления будет
+    # завышен при следующем появлении клиента в дебиторке.
+    _current_names = {
+        (c.get("name") or c.get("client") or "").strip()
+        for c in debt_data.get("clients", [])
+        if (c.get("name") or c.get("client") or "").strip()
+    }
+    for _key in list(load_state().keys()):
+        if _key.startswith(_DEBT_DATE_PREFIX):
+            _client_name = _key[len(_DEBT_DATE_PREFIX):]
+            if _client_name not in _current_names:
+                reset_debt_first_seen(_client_name)
+                logger.info("Долг погашен — сброс счётчика дней: %s", _client_name)
 
     for client in debtors:
         name = client["name"]
