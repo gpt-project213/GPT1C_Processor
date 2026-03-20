@@ -1,8 +1,14 @@
-import os, time, json
+import os, sys, time, json
 from pathlib import Path
 from datetime import datetime
 import asyncio
 from telegram import Bot
+
+# RNR-01: bot/ не пакет — добавляем в sys.path чтобы импорт работал из любой директории
+_BOT_DIR = Path(__file__).resolve().parent / "bot"
+if str(_BOT_DIR) not in sys.path:
+    sys.path.insert(0, str(_BOT_DIR))
+
 from send_reports import (
     _load_json_safe, _read_full, _extract_manager,
     ROLES, MANAGERS_MAP, ADMIN_CHAT_ID, TZ,
