@@ -52,7 +52,7 @@ from dotenv import load_dotenv, dotenv_values
 # Импорт для XML-очистки битых файлов 1С
 import utils_excel
 
-__version__ = "v4.4.3"
+__version__ = "v4.4.4"
 
 # ─────────────────────────────────────────────────────────────────────
 # Пути/каталоги
@@ -531,7 +531,7 @@ def run_once(since: Optional[str] = None, debug: int = 1) -> None:
                     # ★ ИСПРАВЛЕНО: фильтр по имени менеджера в названии файла с исключением для сводных отчетов
                     if (cfg.get("require_manager_in_name") and cfg.get("manager_names")):
                         if not _filename_has_manager(fname, cfg["manager_names"]):
-                            logger.info("SKIP no-manager-in-name: %s", fname)
+                            logger.debug("SKIP no-manager-in-name: %s", fname)
                             try:
                                 M.store(num, "+FLAGS", "\\Seen")
                             except (imaplib.IMAP4.error, OSError):

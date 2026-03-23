@@ -4,7 +4,7 @@
 collections/debt_monitor.py
 Анализ дебиторки, классификация должников по уровням давления.
 
-Версия: 1.0.0 (2026-03-16)
+Версия: 1.0.1 (2026-03-23)
 
 Уровни:
   0–9 дней   → level 0 (пропустить)
@@ -235,7 +235,7 @@ def classify_debtors(debt_data: Dict[str, Any]) -> List[Dict[str, Any]]:
             debit = float(str(client.get("debit") or 0).replace(" ", "").replace(",", "."))
         except (ValueError, TypeError):
             pass
-        violation_shipment = opening > 0 and debit > 0
+        violation_shipment = opening >= 100 and debit > 0
 
         level = _level_for_days(days)
         # Нарушение → минимум уровень 1, даже если дней молчания < 10

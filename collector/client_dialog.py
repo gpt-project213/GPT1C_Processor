@@ -4,7 +4,7 @@
 collector/client_dialog.py
 Управление диалогами с должниками через WhatsApp.
 
-Версия: 1.0.0 (2026-03-17)
+Версия: 1.0.1 (2026-03-23)
 
 Хранилище: logs/collector_client_dialogs.json
 Ключ: номер телефона (цифры, без +, без @c.us)
@@ -14,6 +14,7 @@ collector/client_dialog.py
   state: active | escalated | closed
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -328,11 +329,12 @@ async def handle_incoming(phone: str, text: str) -> None:
     # Определяем язык
     language = detect_language(text)
 
-    # Анализируем через DeepSeek
+    # Анализируем через DeepSeek (синхронный вызов — выносим в поток)
     try:
         from collector.collection_agent import analyze_response
         history = dialog.get("exchanges", [])
-        analysis = analyze_response(
+        analysis = await asyncio.to_thread(
+            analyze_response,
             response_text=text,
             manager_name=manager_name,
             conversation_history=history,

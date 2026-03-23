@@ -179,7 +179,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.35/19.03.2026"
+__VERSION__ = "v9.4.36/23.03.2026"
 
 from datetime import datetime, time as dt_time
 from zoneinfo import ZoneInfo
@@ -263,15 +263,19 @@ PID_FILE = LOGS_DIR / "bot.pid"
 
 # ── Защита от нескольких экземпляров (pid-файл) ───────────────────────────────
 def _is_pid_running(pid: int) -> bool:
-    """Проверяет, запущен ли процесс с указанным PID (Windows-safe через tasklist)."""
+    """Проверяет, запущен ли процесс с указанным PID (Windows-safe через tasklist).
+
+    При ошибке проверки возвращает True (fail-safe: считаем что запущен),
+    чтобы не допустить двойного запуска при сбое tasklist.
+    """
     try:
         result = subprocess.run(
             ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
             capture_output=True, text=True, timeout=5,
         )
         return str(pid) in result.stdout
-    except Exception:
-        return False
+    except (subprocess.TimeoutExpired, OSError, subprocess.SubprocessError):
+        return True  # fail-safe: не знаем → считаем запущен
 
 
 def _write_pid() -> None:
@@ -5754,11 +5758,11 @@ def main():
 
         job_queue.run_repeating(
             whatsapp_poller_task,
-            interval=10,
+            interval=30,
             first=60,
             name="whatsapp_poller",
         )
-        logger.info("📱 Настроен Green API поллер: каждые 10 сек")
+        logger.info("📱 Настроен Green API поллер: каждые 30 сек")
 
         logger.info(f"🗑️ Автоудаление сообщений через {AUTO_DELETE_HOURS} часов")
     

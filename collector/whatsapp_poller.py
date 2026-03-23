@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 """
 collector/whatsapp_poller.py
-Green API polling — получает входящие сообщения WhatsApp каждые 10 секунд.
+Green API polling — получает входящие сообщения WhatsApp каждые 30 секунд.
 
-Версия: 1.0.0 (2026-03-17)
+Версия: 1.0.1 (2026-03-23)
 
 Endpoints:
   GET  https://api.green-api.com/waInstance{ID}/receiveNotification/{TOKEN}
@@ -131,7 +131,7 @@ async def poll_once() -> None:
 
     receipt_id: Optional[int] = None
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with httpx.AsyncClient(timeout=8) as client:
             resp = await client.get(receive_url)
 
         if resp.status_code != 200:
