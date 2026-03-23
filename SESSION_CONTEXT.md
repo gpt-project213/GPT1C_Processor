@@ -1,23 +1,51 @@
 # SESSION_CONTEXT.md
-> Автоматически обновляется Claude Code. Последнее обновление: 2026-03-20 (sync C: ← F:)
+> Автоматически обновляется Claude Code. Последнее обновление: 2026-03-23
 
 ## Текущее состояние проекта
 
 **Ветка**: `master`
-**Последний коммит**: pending (не закоммичено — см. ниже)
-**Статус тестов**: 62/62 + 58/58 ✅ (на F: / ac234ab)
+**Последний коммит**: `81c0640` (2026-03-23)
+**Статус тестов**: 62/62 + все collector тесты ✅
 **Открытые баги**: 0 критических / 0 высоких / 2 архитектурных (не критично)
-**Платформа**: Synology DS224+ (18GB RAM, 20TB, UPS, Docker)
+**Платформа**: нетоп (мини-ПК), проект `E:\GPT1C_Processor_analitic`, GitHub как хранилище
+
+---
+
+### Сессия 2026-03-23 (аудит логов + фиксы)
+
+Полный аудит логов `send_reports_20260309–20260319.log` + `collector_*.log`.
+
+| Коммит | ID | Описание |
+|--------|-----|----------|
+| `81c0640` | BUG-B4 | `debt_monitor.py` — `opening >= 100` вместо `> 0` (артефакты округления 1C) |
+| `81c0640` | MED-1 | `whatsapp_poller` — timeout 15→8с, интервал 10→30с, `analyze_response` в `asyncio.to_thread()` |
+| `81c0640` | CRIT-1 | `send_reports.py` — `_is_pid_running` fail-safe: при ошибке tasklist → `True` (не `False`) |
+| `81c0640` | LOW-1 | `imap_fetcher.py` — SKIP no-manager-in-name → `DEBUG` уровень (не засоряет лог) |
+
+**Что НЕ баг:**
+- 137 должников в логе 19.03 05:00 — это ДО коммита `a5d311d` (09:23 того же дня). Сейчас порог 5000₸ в коде, ожидаемое число ~50–60.
+- Chat not found (Оксана/Магира/Ергали) — chat_id правильные, менеджеры не отправили `/start` боту.
+
+---
 
 ### Сессия 2026-03-20 (sync C: ← F:external)
 - `git fast-forward merge` C:/master ← F:/master (`bb80464` → `0333f30`)
 - Все 18 коммитов аудита из F: теперь в C: git
 - Дополнительно применено: `run_new_reports_now.py` RNR-01, `requirements.txt` numpy, удалены старые MD файлы
-- `CLAUDE.md` обновлён — полная история, SESSION_CONTEXT.md как источник истины
 
 ---
 
 ## ВСЕ ИСПРАВЛЕННЫЕ БАГИ (полный список)
+
+### Сессия 2026-03-23 (81c0640)
+| ID | Файл | Fix |
+|----|------|-----|
+| BUG-B4 | `collector/debt_monitor.py` | `opening >= 100` вместо `> 0` |
+| MED-1 | `collector/whatsapp_poller.py` | timeout 15→8с |
+| MED-1 | `collector/client_dialog.py` | `analyze_response` → `asyncio.to_thread()` |
+| MED-1 | `bot/send_reports.py` | whatsapp_poller interval 10→30с |
+| CRIT-1 | `bot/send_reports.py` | `_is_pid_running` fail-safe при ошибке |
+| LOW-1 | `imap_fetcher.py` | SKIP → DEBUG уровень |
 
 ### Сессия 1 (6383aa5–7877a87)
 | Коммит | Баги | Описание |
@@ -51,13 +79,22 @@
 
 ---
 
-## Что намеренно оставлено (не баги, а архитектурные решения)
+## Что намеренно оставлено (не баги)
 
 | ID | Почему оставлено |
 |----|-----------------|
-| ARCH-1 | `txt_to_html` в двух местах — разные интерфейсы, унификация ломает call sites без выгоды |
+| ARCH-1 | `txt_to_html` в двух местах — разные интерфейсы, унификация ломает call sites |
 | ARCH-3 | `expenses_parser.py` inline HTML — изолированный модуль, работает корректно |
-| BUG-M13 | Версия `send_reports.py` — косметика, не влияет на работу |
+
+---
+
+## Отложенные задачи
+
+| Задача | Статус | Детали |
+|--------|--------|--------|
+| **OpenClaw** | 🔵 отложено | Polling (не webhook), без Retell AI, с Whisper. См. `openclaw/SOUL.md` |
+| **Chat not found** | ⏳ организационное | Оксана/Магира/Ергали → написать `/start` боту |
+| **debtors_contacts.json** | ⏳ организационное | Заполнить телефоны/telegram должников (сейчас 0 из ~59 обработано) |
 
 ---
 
@@ -72,6 +109,7 @@
 7. **Sentinel print**: `print(f"AI saved: ...")` в `ai_analyzer.py` — НЕЛЬЗЯ трогать (subprocess парсинг)
 8. **Layer 5**: standalone — обязаны сами вызвать `load_dotenv()`
 9. **SESSION_CONTEXT.md**: обновлять после каждой сессии — ПРАВИЛО
+10. **Платформа**: бот на нетопе, Synology — только семейные бэкапы (не трогать)
 
 ---
 
@@ -79,20 +117,8 @@
 
 ```bash
 python -X utf8 tests/test_project.py    # 62 теста
-python -X utf8 tests/test_parsers.py    # 58 тестов
+python -X utf8 tests/test_collector.py  # все collector тесты
 
 origin: https://github.com/gpt-project213/GPT1C_Processor.git
-branch: master / HEAD: ac234ab
-```
-
-## Деплой (Synology DS224+)
-
-```
-/volume1/docker/gpt1c_CLIENT_NAME/
-  .env              ← токены, ключи AI, TZ=Asia/Almaty
-  managers.json     ← имена + chat_id менеджеров
-  config/
-    inventory_categories.json  ← (опционально) категории склада
-  reports/          ← очередь, html, json, ai
-  logs/
+branch: master / HEAD: 81c0640
 ```
