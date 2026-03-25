@@ -1,13 +1,79 @@
 # SESSION_CONTEXT.md
-> Автоматически обновляется Claude Code. Последнее обновление: 2026-03-23
+> Автоматически обновляется Claude Code. Последнее обновление: 2026-03-25
 
 ## Текущее состояние проекта
 
 **Ветка**: `master`
-**Последний коммит**: `81c0640` (2026-03-23)
-**Статус тестов**: 62/62 + все collector тесты ✅
+**Последний коммит analitic**: `81fae8d` (2026-03-25)
+**Последний коммит analitica**: `TBD` (2026-03-25)
+**Статус тестов**: 62/62 + 104/104 collector ✅
 **Открытые баги**: 0 критических / 0 высоких / 2 архитектурных (не критично)
-**Платформа**: нетоп (мини-ПК), проект `E:\GPT1C_Processor_analitic`, GitHub как хранилище
+**Платформа**: основной ПК — `E:\GPT1C_Processor_analitica` запущен и тестируется (2026-03-25)
+
+---
+
+### Сессия 2026-03-25 (silence_alerts v1.7 — полный рефакторинг дней молчания)
+
+**Изменено:**
+1. `bot/silence_alerts.py` v1.6 → v1.7:
+   - `MIN_DEBT_AMOUNT` 10 000 → 5 000 ₸
+   - Новые категории: `critical`(30+), `alarm`(15-29), `silence`(10-14), `overdue`(7-9), `partial_payment`, `on_stop`
+   - Удалена категория `warning` (заменена на `overdue` + `silence`)
+   - Добавлен `IMITATION_THRESHOLD = 0.10` (< 10% от долга = имитация)
+   - `on_stop` = debit==0 AND credit < 10% долга (стоп/имитация)
+   - `partial_payment` = debit==0 AND credit >= 10% долга (реальная частичная оплата)
+   - Активные клиенты (debit>0 или days<7) — скрыты из отчёта
+   - Шапагат клиенты (weekly_clients) исключены из `overdue`
+   - Обновлены форматтеры: `format_manager_alert`, `format_admin_summary`, `format_admin_detailed`
+2. `bot/send_reports.py` v9.4.37 → v9.4.38:
+   - `_load_weekly_clients()` / `_save_weekly_clients()` — загрузка/сохранение weekly_clients.json
+   - `_suggest_weekly_clients()` — Алена получает предложение добавить Шапагат клиента
+   - 4 callback-хендлера: `weekly_suggest|`, `weekly_reject|`, `weekly_confirm|`, `weekly_deny|`
+   - Все счётчики `total_silent` обновлены через `_SILENCE_CATS` кортеж
+3. `bot/opportunity_loss.py`: `MIN_DEBT_AMOUNT` 10 000 → 5 000 ₸ (синхронизирован)
+4. `config/weekly_clients.json` — новый файл (еженедельные клиенты)
+5. `tests/test_project.py` — обновлены тесты под новые категории
+
+**Результат**: список дней молчания сократился с 85 → ~35 клиентов по всем менеджерам
+
+---
+
+### Сессия 2026-03-25 (полный аудит двух проектов + синхронизация)
+
+**Контекст**: на диске E два проекта:
+- `E:\GPT1C_Processor_analitic` — основной (с исправлениями, не запущен в прод)
+- `E:\GPT1C_Processor_analitica` — реально работал на нетопе, имел свежие логи и баги
+
+**Проведено:**
+1. Полный аудит логов `analitica` (send_reports_20260320–23, collector_20260323–24)
+2. Выявлены и исправлены все баги, отсутствовавшие в `analitica`
+3. Оба проекта синхронизированы и идентичны (с точностью до CRLF)
+
+**Коммиты сессии:**
+
+| Коммит | Проект | Описание |
+|--------|--------|----------|
+| `81fae8d` | analitic | run_script_async kill + timeout 300→900s + BUG-B2 |
+| `2049ddf` | analitica | sync all fixes from analitic |
+| `defba2d` | analitica | cosmetic: asyncio import + version date alignment |
+
+**Исправлено в `analitica` (итог):**
+
+| ID | Файл | Правка | Источник |
+|----|------|--------|----------|
+| BUG-B4 | `collector/debt_monitor.py` | `opening >= 100` вместо `> 0` | коммит 81c0640 |
+| LOG-2/CRIT-1 | `bot/send_reports.py` | `_is_pid_running` fail-safe → `True` | коммит 81c0640 |
+| LOG-3 | `bot/send_reports.py` | whatsapp_poller interval 10→30s | коммит 81c0640 |
+| LOG-6 | `collector/whatsapp_poller.py` | httpx timeout 15→8s | коммит 81c0640 |
+| LOG-7 | `collector/client_dialog.py` | `asyncio.to_thread(analyze_response)` | коммит 81c0640 |
+| LOG-8 | `imap_fetcher.py` | SKIP → `logger.debug` | коммит 81c0640 |
+| NEW-1 | `bot/send_reports.py` | `run_script_async` убивает subprocess при timeout | новый |
+| LOG-4 | `bot/send_reports.py` | collector --send timeout 300→900s | новый |
+| BUG-B2 | `collector/collections_engine.py` | проверка "менеджер занят" до `generate_message()` | новый |
+
+**Исправлено в `analitic` (новые, не было раньше):**
+- `bot/send_reports.py` — run_script_async kill + timeout 900s
+- `collector/collections_engine.py` — BUG-B2 fix
 
 ---
 
@@ -29,13 +95,27 @@
 ---
 
 ### Сессия 2026-03-20 (sync C: ← F:external)
-- `git fast-forward merge` C:/master ← F:/master (`bb80464` → `0333f30`)
+- `git fast-forward merge` C:/master ← F:/master
 - Все 18 коммитов аудита из F: теперь в C: git
 - Дополнительно применено: `run_new_reports_now.py` RNR-01, `requirements.txt` numpy, удалены старые MD файлы
 
 ---
 
 ## ВСЕ ИСПРАВЛЕННЫЕ БАГИ (полный список)
+
+### Сессия 2026-03-25 (silence_alerts v1.7)
+| ID | Файл | Fix |
+|----|------|-----|
+| FEAT-1 | `bot/silence_alerts.py` | v1.7: 6 категорий + IMITATION_THRESHOLD + weekly_clients |
+| FEAT-2 | `bot/send_reports.py` | weekly_clients FSM (Алена→Вадим) |
+| SYNC-1 | `bot/opportunity_loss.py` | MIN_DEBT 10 000→5 000 ₸ |
+
+### Сессия 2026-03-25 (81fae8d + 2049ddf)
+| ID | Файл | Fix |
+|----|------|-----|
+| NEW-1 | `bot/send_reports.py` | `asyncio.wait_for` → kill subprocess на timeout |
+| LOG-4 | `bot/send_reports.py` | collector --send timeout 300→900s |
+| BUG-B2 | `collector/collections_engine.py` | manager-busy check ПЕРЕД generate_message() |
 
 ### Сессия 2026-03-23 (81c0640)
 | ID | Файл | Fix |
@@ -92,9 +172,11 @@
 
 | Задача | Статус | Детали |
 |--------|--------|--------|
+| **Тестирование analitica** | 🟢 в процессе | Запущен на нетопе 2026-03-25, мониторить логи |
+| **VS Code авторизация** | 🟡 в процессе | Extension установлен, credentials валидны, непонятно почему не подключается |
 | **OpenClaw** | 🔵 отложено | Polling (не webhook), без Retell AI, с Whisper. См. `openclaw/SOUL.md` |
 | **Chat not found** | ⏳ организационное | Оксана/Магира/Ергали → написать `/start` боту |
-| **debtors_contacts.json** | ⏳ организационное | Заполнить телефоны/telegram должников (сейчас 0 из ~59 обработано) |
+| **debtors_contacts.json** | ⏳ организационное | Заполнить телефоны/telegram должников (сейчас 0 из 83 заполнено) |
 
 ---
 
@@ -117,8 +199,8 @@
 
 ```bash
 python -X utf8 tests/test_project.py    # 62 теста
-python -X utf8 tests/test_collector.py  # все collector тесты
+python -X utf8 tests/test_collector.py  # 104 теста
 
 origin: https://github.com/gpt-project213/GPT1C_Processor.git
-branch: master / HEAD: 81c0640
+branch: master / HEAD analitic: 81fae8d / HEAD analitica: TBD
 ```

@@ -2,8 +2,8 @@
 Модуль для мониторинга дней молчания клиентов в дебиторке
 и отправки уведомлений менеджерам
 
-Версия: 1.6
-Дата: 2026-03-19
+Версия: 1.7
+Дата: 2026-03-25
 Изменения v1.4:
   - parse_html_silence_days(): добавлен парсинг cells[3] (Отгрузка/debit).
   - categorize_by_silence(): исправлена логика partial_payment:
@@ -48,17 +48,16 @@ class SilenceAlert:
     """Класс для работы с уведомлениями о днях молчания"""
     
     # Пороги дней молчания
-    WARNING_DAYS = 7   # 🟡 Внимание
-    ALARM_DAYS = 15    # 🟠 Тревога
-    CRITICAL_DAYS = 30 # 🔴 Критично
+    OVERDUE_DAYS  = 7   # ⚡ Просрочка (7-9 дн) — не рассчитался в срок
+    SILENCE_DAYS  = 10  # 🟡 Молчание (10-14 дн) — не реагирует
+    ALARM_DAYS    = 15  # 🟠 Тревога (15-29 дн)
+    CRITICAL_DAYS = 30  # 🔴 Критично (30+ дн)
 
-    # Минимальный долг для стандартных категорий (7+ дней)
-    MIN_DEBT_AMOUNT = 10_000.0
+    # Минимальный долг для отображения (все категории)
+    MIN_DEBT_AMOUNT = 5_000.0
 
-    # Минимальный долг для категории "частичная оплата" (days < 7).
-    # Клиент с days < 7, любой отгрузкой, но ДОЛГОМ >= этого порога
-    # остаётся виден — ситуация "берут и платят, но большой долг не гасится".
-    PARTIAL_PAYMENT_MIN_DEBT = 100_000.0
+    # Порог "имитации оплаты": оплата < IMITATION_THRESHOLD * долг
+    IMITATION_THRESHOLD = 0.10  # 10%
     
     def __init__(self):
         self.stats = {
@@ -256,184 +255,217 @@ class SilenceAlert:
             return []
     
     def categorize_by_silence(self, clients_data: List[Dict],
-                              historical_map: Optional[Dict[str, int]] = None) -> Dict[str, List[Dict]]:
+                              historical_map: Optional[Dict[str, int]] = None,
+                              weekly_clients: Optional[List[str]] = None) -> Dict[str, List[Dict]]:
         """
-        v1.4: Группирует клиентов по критичности дней молчания.
-        Учитываются только клиенты с долгом >= MIN_DEBT_AMOUNT.
+        v1.7: Классификация клиентов по дням молчания с анализом
+        ОБОИХ направлений: debit (отгрузки) и credit (оплаты).
 
-        Основной критерий молчания — days_silence:
-          days >= 30 → 'critical'
-          days >= 15 → 'alarm'
-          days >= 7  → 'warning'
+        Категории:
+          'critical'        — 30+ дней
+          'alarm'           — 15-29 дней
+          'silence'         — 10-14 дней (молчание)
+          'overdue'         — 7-9 дней (просрочка, не рассчитался в срок)
+          'partial_payment' — days < 7, debit==0, credit >= 10% долга
+                              (платит значимо, но не закрыл — следим)
+          'on_stop'         — debit==0, credit < 10% долга ИЛИ credit==0,
+                              debt > 0, days < 7 (имитация / заморожен)
+                              Если days >= 7 — уже попал в overdue/silence/
+                              alarm/critical с флагом is_imitation.
 
-        Флаг partial_payment (⚠️ в строке клиента) ставится когда:
-          debit_amount == 0 AND paid_amount > 0
-          → клиент НЕ БРАЛ товар в периоде, но что-то оплатил
-          → это паттерн "имитация активности": платит мало, чтобы сбросить
-            счётчик days_silence в 1С и исчезнуть из контроля.
+        Флаг is_imitation добавляется клиентам в любой категории когда:
+          debit == 0 AND (credit == 0 OR credit < debt * IMITATION_THRESHOLD)
+          → нет отгрузок, оплата отсутствует или < 10% долга.
 
-        Отдельная категория 'partial_payment' (days < 7):
-          debit == 0 AND days < 7 AND paid > 0 AND debt > 0
-          → счётчик сброшен платежом (days стал 0-6), товар не брали
-          → клиент выжил из стандартной выборки, показываем отдельно.
-
-        Клиенты с debit > 0: берут товар → нормальная торговая задолженность,
-          флаг НЕ ставим (они не "имитируют", а реально работают).
+        Еженедельные клиенты (weekly_clients): исключаются из 'overdue'
+        (7-9 дн) — у них нормальный недельный цикл оплаты.
+        При days >= SILENCE_DAYS (10+) исключение не действует.
         """
         categorized: Dict[str, List[Dict]] = {
-            'critical':        [],   # 30+ дней
-            'alarm':           [],   # 15-29 дней
-            'warning':         [],   # 7-14 дней
-            'partial_payment': [],   # days < 7, нет заказов, но платит (имитация)
+            'critical':        [],
+            'alarm':           [],
+            'silence':         [],
+            'overdue':         [],
+            'partial_payment': [],
+            'on_stop':         [],
         }
 
+        weekly_set = set(weekly_clients or [])
+
         for client in clients_data:
-            days         = client['silence_days']
-            debt         = client['debt']
-            debit_amount = client.get('debit_amount', 0.0)
-            paid_amount  = client.get('paid_amount', 0.0)
+            days   = client['silence_days']
+            debt   = client['debt']
+            debit  = client.get('debit_amount', 0.0)
+            credit = client.get('paid_amount', 0.0)
 
             if debt < self.MIN_DEBT_AMOUNT:
                 continue
 
-            # Флаг "имитация оплаты": нет заказов, но что-то заплатил
-            is_fake_payment = (debit_amount == 0 and paid_amount > 0 and debt > 0)
+            # Флаг имитации: нет отгрузок + оплата отсутствует или < 10% долга
+            is_imitation = (
+                debit == 0
+                and (credit == 0 or credit < debt * self.IMITATION_THRESHOLD)
+                and debt > 0
+            )
 
-            # Крупный должник: берёт товар И платит, но долг >= PARTIAL_PAYMENT_MIN_DEBT
-            # и days < 7 (счётчик обнулён оплатой или недавней отгрузкой).
-            # Такие клиенты должны оставаться видимыми, пока долг не погашен полностью.
-            is_large_partial = (
-                paid_amount > 0
-                and debt >= self.PARTIAL_PAYMENT_MIN_DEBT
+            # Флаг реальной частичной оплаты: нет отгрузок, но платит >= 10%
+            is_genuine_partial = (
+                debit == 0
+                and credit >= debt * self.IMITATION_THRESHOLD
+                and debt > 0
+            )
+
+            # Исторические данные (счётчик мог быть сброшен оплатой в 1С)
+            _raw_hist = (historical_map or {}).get(client['client']) if historical_map else None
+            _counter_reset = bool(_raw_hist and _raw_hist > days + 2)
+            effective_days = (_raw_hist + days) if _counter_reset else days
+
+            base = dict(
+                client,
+                is_imitation=is_imitation,
+                historical_days=_raw_hist if _counter_reset else None,
+                effective_days=effective_days,
             )
 
             if days >= self.CRITICAL_DAYS:
-                categorized['critical'].append(dict(client, partial_payment=is_fake_payment))
+                categorized['critical'].append(base)
             elif days >= self.ALARM_DAYS:
-                categorized['alarm'].append(dict(client, partial_payment=is_fake_payment))
-            elif days >= self.WARNING_DAYS:
-                categorized['warning'].append(dict(client, partial_payment=is_fake_payment))
-            elif is_fake_payment or is_large_partial:
-                # days < 7: либо нет заказов + платит (имитация),
-                # либо крупный долг >= 100K + оплата (не гасится полностью).
-                # Ищем исторические дни молчания в предыдущем отчёте:
-                # показываем "оплачено (N дн)" — сколько дней клиент числился
-                # молчащим до того, как оплата сбросила счётчик в 1С.
-                _raw_hist = (historical_map or {}).get(client['client']) if historical_map else None
-                # Счётчик был сброшен оплатой когда historical >> silence_days.
-                # effective_days = historical + silence: непрерывный счётчик долга,
-                # который НЕ сбрасывается при частичной оплате.
-                # Пример: молчал 20 дн → оплатил → 1С сбросил до 1 дн →
-                #   effective = 20 + 1 = ~21 дн (долг висит уже 21 день).
-                _counter_reset = bool(_raw_hist and _raw_hist > client['silence_days'] + 2)
-                effective_days = (_raw_hist + client['silence_days']) if _counter_reset else client['silence_days']
-                categorized['partial_payment'].append(dict(
-                    client,
-                    partial_payment=True,
-                    historical_days=_raw_hist if _counter_reset else None,
-                    effective_days=effective_days,
-                ))
-            # else: days < 7, маленький долг или нет оплаты → пропускаем
+                categorized['alarm'].append(base)
+            elif days >= self.SILENCE_DAYS:
+                categorized['silence'].append(base)
+            elif days >= self.OVERDUE_DAYS:
+                # Еженедельные клиенты пропускаем в overdue (7-9 дн)
+                if client['client'] in weekly_set:
+                    continue
+                categorized['overdue'].append(base)
+            else:
+                # days < 7
+                if is_genuine_partial:
+                    categorized['partial_payment'].append(dict(base, partial_payment=True))
+                elif is_imitation:
+                    categorized['on_stop'].append(dict(base, partial_payment=True))
+                # else: debit > 0, days < 7 — нормальный активный клиент, пропускаем
 
         return categorized
     
     def format_manager_alert(self, manager_name: str, categorized: Dict[str, List[Dict]], report_date: str = "") -> str:
         """
-        v1.3: Формирует текст уведомления для менеджера.
-        report_date — строка с датой отчёта (опционально).
-        Включает блок "💛 ЧАСТИЧНАЯ ОПЛАТА" для клиентов с долгом и частичной оплатой.
+        v1.7: Формирует текст уведомления для менеджера.
+        Категории: critical / alarm / silence / overdue / partial_payment / on_stop.
+        on_stop — в конце сводки каждого менеджера.
         """
-        total_silent = (
-            len(categorized.get('critical', []))
-            + len(categorized.get('alarm', []))
-            + len(categorized.get('warning', []))
-            + len(categorized.get('partial_payment', []))
+        total_silent = sum(
+            len(categorized.get(k, []))
+            for k in ('critical', 'alarm', 'silence', 'overdue', 'partial_payment', 'on_stop')
         )
 
         if total_silent == 0:
             return None
-        
+
         date_line = f"\n📅 Отчёт за: {report_date}" if report_date else ""
-        
+
         msg_lines = [
             f"⚠️ ОТЧЁТ ПО ДНЯМ МОЛЧАНИЯ{date_line}",
             "",
             f"👨‍💼 {manager_name}, у вас клиенты молчат:",
             ""
         ]
-        
-        if categorized['critical']:
-            msg_lines.append("🔴 КРИТИЧНО (30+ дней):")
-            total_critical_debt = 0.0
-            for client in categorized['critical'][:10]:
-                msg_lines.append(f"  • {client['client']} — {client['debt_str']} ({client['silence_days']} дн)")
-                total_critical_debt += client['debt']
-            
-            if len(categorized['critical']) > 10:
-                msg_lines.append(f"  ... и ещё {len(categorized['critical']) - 10} клиентов")
-            
-            msg_lines.append(f"  💰 Сумма: {self.format_amount(total_critical_debt)} ₸")
-            msg_lines.append("")
-        
-        if categorized['alarm']:
-            msg_lines.append("🟠 ТРЕВОГА (15-29 дней):")
-            total_alarm_debt = 0.0
-            for client in categorized['alarm'][:5]:
-                msg_lines.append(f"  • {client['client']} — {client['debt_str']} ({client['silence_days']} дн)")
-                total_alarm_debt += client['debt']
-            
-            if len(categorized['alarm']) > 5:
-                msg_lines.append(f"  ... и ещё {len(categorized['alarm']) - 5} клиентов")
-            
-            msg_lines.append(f"  💰 Сумма: {self.format_amount(total_alarm_debt)} ₸")
-            msg_lines.append("")
-        
-        if categorized.get('warning'):
-            msg_lines.append("🟡 ВНИМАНИЕ (7-14 дней):")
-            total_warning_debt = 0.0
-            for client in categorized['warning'][:5]:
-                msg_lines.append(f"  • {client['client']} — {client['debt_str']} ({client['silence_days']} дн)")
-                total_warning_debt += client['debt']
 
-            if len(categorized['warning']) > 5:
-                msg_lines.append(f"  ... и ещё {len(categorized['warning']) - 5} клиентов")
+        def _imitation_suffix(c: Dict) -> str:
+            return " ⚠️ имитация" if c.get('is_imitation') else ""
 
-            msg_lines.append(f"  💰 Сумма: {self.format_amount(total_warning_debt)} ₸")
+        def _append_block(label: str, clients: List[Dict], limit: int = 10) -> float:
+            if not clients:
+                return 0.0
+            msg_lines.append(label)
+            total = 0.0
+            for c in clients[:limit]:
+                suffix = _imitation_suffix(c)
+                msg_lines.append(
+                    f"  • {c['client']} — {c['debt_str']} ({c['silence_days']} дн){suffix}"
+                )
+                total += c['debt']
+            if len(clients) > limit:
+                rest_debt = sum(x['debt'] for x in clients[limit:])
+                msg_lines.append(
+                    f"  ... и ещё {len(clients) - limit} клиент(ов) на {self.format_amount(rest_debt)} ₸"
+                )
+                total += rest_debt
+            return total
+
+        if categorized.get('critical'):
+            debt = _append_block("🔴 КРИТИЧНО (30+ дней):", categorized['critical'])
+            msg_lines.append(f"  💰 Итого: {self.format_amount(debt)} ₸")
             msg_lines.append("")
 
-        # v1.5: блок частичных оплат с расшифровкой скобок.
-        # "было N дн молчания" = из предыдущего отчёта (historical_days): сколько дней
-        # клиент числился молчащим ДО того, как оплата сбросила счётчик в 1С.
-        # "сейчас Y дн" = текущие дни молчания после оплаты.
+        if categorized.get('alarm'):
+            debt = _append_block("🟠 ТРЕВОГА (15-29 дней):", categorized['alarm'])
+            msg_lines.append(f"  💰 Итого: {self.format_amount(debt)} ₸")
+            msg_lines.append("")
+
+        if categorized.get('silence'):
+            debt = _append_block("🟡 МОЛЧАНИЕ (10-14 дней):", categorized['silence'])
+            msg_lines.append(f"  💰 Итого: {self.format_amount(debt)} ₸")
+            msg_lines.append("")
+
+        if categorized.get('overdue'):
+            debt = _append_block("⚡ ПРОСРОЧКА (7-9 дней):", categorized['overdue'])
+            msg_lines.append(f"  💰 Итого: {self.format_amount(debt)} ₸")
+            msg_lines.append("")
+
         if categorized.get('partial_payment'):
             msg_lines.append("💛 ЧАСТИЧНАЯ ОПЛАТА (долг не закрыт):")
-            total_partial_debt = 0.0
-            for client in categorized['partial_payment'][:5]:
-                paid_str    = client.get('paid_str', '') or self.format_amount(client.get('paid_amount', 0))
-                initial_str = client.get('initial_str', '') or self.format_amount(client.get('initial_amount', 0))
-                eff = client.get('effective_days', client['silence_days'])
+            total_partial = 0.0
+            for c in categorized['partial_payment'][:5]:
+                paid_str    = c.get('paid_str', '') or self.format_amount(c.get('paid_amount', 0))
+                initial_str = c.get('initial_str', '') or self.format_amount(c.get('initial_amount', 0))
+                eff = c.get('effective_days', c['silence_days'])
                 msg_lines.append(
-                    f"  • {client['client']} — "
-                    f"нач: {initial_str} → оплачено: {paid_str} → остаток: {client['debt_str']} (~{eff} дн)"
+                    f"  • {c['client']} — "
+                    f"нач: {initial_str} → оплачено: {paid_str} → остаток: {c['debt_str']} (~{eff} дн)"
                 )
-                total_partial_debt += client['debt']
-
+                total_partial += c['debt']
             if len(categorized['partial_payment']) > 5:
-                msg_lines.append(f"  ... и ещё {len(categorized['partial_payment']) - 5} клиентов")
-
-            msg_lines.append(f"  💰 Остаток долга: {self.format_amount(total_partial_debt)} ₸")
+                rest = len(categorized['partial_payment']) - 5
+                rest_debt = sum(x['debt'] for x in categorized['partial_payment'][5:])
+                msg_lines.append(f"  ... и ещё {rest} клиент(ов) на {self.format_amount(rest_debt)} ₸")
+                total_partial += rest_debt
+            msg_lines.append(f"  💰 Остаток: {self.format_amount(total_partial)} ₸")
             msg_lines.append("")
 
-        total_debt = sum(c['debt'] for cats in categorized.values() for c in cats)
-        msg_lines.append(f"💰 Общий долг молчащих: {self.format_amount(total_debt)} ₸")
+        if categorized.get('on_stop'):
+            msg_lines.append("🛑 СТОП / ИМИТАЦИЯ ОПЛАТЫ:")
+            total_stop = 0.0
+            for c in categorized['on_stop'][:5]:
+                paid_str = c.get('paid_str', '') or self.format_amount(c.get('paid_amount', 0))
+                credit = c.get('paid_amount', 0.0)
+                pct = (credit / c['debt'] * 100) if c['debt'] > 0 else 0
+                msg_lines.append(
+                    f"  • {c['client']} — долг: {c['debt_str']}, "
+                    f"оплата: {paid_str} ({pct:.0f}%)"
+                )
+                total_stop += c['debt']
+            if len(categorized['on_stop']) > 5:
+                rest = len(categorized['on_stop']) - 5
+                rest_debt = sum(x['debt'] for x in categorized['on_stop'][5:])
+                msg_lines.append(f"  ... и ещё {rest} клиент(ов) на {self.format_amount(rest_debt)} ₸")
+                total_stop += rest_debt
+            msg_lines.append(f"  💰 Заморожено: {self.format_amount(total_stop)} ₸")
+            msg_lines.append("")
+
+        total_debt = sum(
+            c['debt']
+            for k in ('critical', 'alarm', 'silence', 'overdue', 'partial_payment', 'on_stop')
+            for c in categorized.get(k, [])
+        )
+        msg_lines.append(f"💰 Общий долг: {self.format_amount(total_debt)} ₸")
         msg_lines.append("")
         msg_lines.append("📊 Открыть детальный отчёт → /debt")
 
         return "\n".join(msg_lines)
     
     def format_admin_summary(self, all_managers_data: Dict[str, Dict]) -> str:
-        """Формирует сводку для админа по всем менеджерам.
-        v1.3: учитывает категорию partial_payment."""
+        """v1.7: Краткая сводка для админа по всем менеджерам."""
         msg_lines = [
             "⚠️ СВОДКА: ДНИ МОЛЧАНИЯ ПО ВСЕМ МЕНЕДЖЕРАМ",
             ""
@@ -442,180 +474,171 @@ class SilenceAlert:
         total_overall_debt = 0.0
         managers_with_issues = 0
 
-        for manager_name, categorized in sorted(all_managers_data.items()):
-            critical_count = len(categorized.get('critical', []))
-            alarm_count = len(categorized.get('alarm', []))
-            warning_count = len(categorized.get('warning', []))
-            partial_count = len(categorized.get('partial_payment', []))
-            total_count = critical_count + alarm_count + warning_count + partial_count
+        _CATS = ('critical', 'alarm', 'silence', 'overdue', 'partial_payment', 'on_stop')
 
+        for manager_name, categorized in sorted(all_managers_data.items()):
+            total_count = sum(len(categorized.get(k, [])) for k in _CATS)
             if total_count == 0:
                 continue
 
             managers_with_issues += 1
             msg_lines.append(f"👨‍💼 {manager_name}:")
 
-            if critical_count > 0:
-                critical_debt = sum(c['debt'] for c in categorized['critical'])
-                msg_lines.append(f"  🔴 {critical_count} клиент(ов) (30+ дн) — {self.format_amount(critical_debt)} ₸")
-                total_overall_debt += critical_debt
-
-            if alarm_count > 0:
-                alarm_debt = sum(c['debt'] for c in categorized['alarm'])
-                msg_lines.append(f"  🟠 {alarm_count} клиент(ов) (15-29 дн) — {self.format_amount(alarm_debt)} ₸")
-                total_overall_debt += alarm_debt
-
-            if warning_count > 0:
-                warning_debt = sum(c['debt'] for c in categorized['warning'])
-                msg_lines.append(f"  🟡 {warning_count} клиент(ов) (7-14 дн) — {self.format_amount(warning_debt)} ₸")
-                total_overall_debt += warning_debt
-
-            # v1.3: частичная оплата
-            if partial_count > 0:
-                partial_debt = sum(c['debt'] for c in categorized['partial_payment'])
-                msg_lines.append(f"  💛 {partial_count} клиент(ов) частичная оплата — {self.format_amount(partial_debt)} ₸")
-                total_overall_debt += partial_debt
+            for key, icon, label in [
+                ('critical',        '🔴', '30+ дн'),
+                ('alarm',           '🟠', '15-29 дн'),
+                ('silence',         '🟡', '10-14 дн'),
+                ('overdue',         '⚡', '7-9 дн'),
+                ('partial_payment', '💛', 'частичная оплата'),
+                ('on_stop',         '🛑', 'стоп/имитация'),
+            ]:
+                clients = categorized.get(key, [])
+                if not clients:
+                    continue
+                debt = sum(c['debt'] for c in clients)
+                msg_lines.append(
+                    f"  {icon} {len(clients)} кл. ({label}) — {self.format_amount(debt)} ₸"
+                )
+                total_overall_debt += debt
 
             msg_lines.append("")
 
         if managers_with_issues == 0:
             return "✅ У всех менеджеров нет критичных дней молчания!"
 
-        msg_lines.append(f"💰 Всего молчащих: {self.format_amount(total_overall_debt)} ₸")
+        msg_lines.append(f"💰 Всего: {self.format_amount(total_overall_debt)} ₸")
         msg_lines.append(f"📊 Менеджеров с проблемами: {managers_with_issues}")
 
         return "\n".join(msg_lines)
 
     def format_admin_detailed(self, all_managers_data: Dict[str, Dict], manager_dates: Dict[str, str] = None) -> str:
         """
-        v1.1: Формирует ДЕТАЛЬНУЮ сводку для админа с именами клиентов, суммами и днями.
-        manager_dates — словарь {manager_name: report_date_str} (опционально).
+        v1.7: ДЕТАЛЬНАЯ сводка для админа.
+        Категории: critical / alarm / silence / overdue / partial_payment / on_stop.
+        on_stop — в конце раздела каждого менеджера.
         """
         msg_lines = [
             "⚠️ ДЕТАЛЬНАЯ СВОДКА: ДНИ МОЛЧАНИЯ",
             ""
         ]
-        
+
         total_overall_debt = 0.0
         managers_with_issues = 0
         total_overall_clients = 0
-        
-        for manager_name, categorized in sorted(all_managers_data.items()):
-            critical_count = len(categorized.get('critical', []))
-            alarm_count = len(categorized.get('alarm', []))
-            warning_count = len(categorized.get('warning', []))
-            partial_count = len(categorized.get('partial_payment', []))
-            total_count = critical_count + alarm_count + warning_count + partial_count
 
+        _CATS = ('critical', 'alarm', 'silence', 'overdue', 'partial_payment', 'on_stop')
+
+        def _imitation_suffix(c: Dict) -> str:
+            return " ⚠️ имитация" if c.get('is_imitation') else ""
+
+        def _append_std_block(label: str, clients: List[Dict], limit: int = 10) -> float:
+            msg_lines.append(label)
+            total = 0.0
+            for c in clients[:limit]:
+                suffix = _imitation_suffix(c)
+                msg_lines.append(
+                    f"  • {c['client']} — {c['debt_str']} ({c['silence_days']} дн){suffix}"
+                )
+                total += c['debt']
+            if len(clients) > limit:
+                rest = len(clients) - limit
+                rest_debt = sum(x['debt'] for x in clients[limit:])
+                msg_lines.append(
+                    f"  ... и ещё {rest} клиент(ов) на {self.format_amount(rest_debt)} ₸"
+                )
+                total += rest_debt
+            return total
+
+        for manager_name, categorized in sorted(all_managers_data.items()):
+            total_count = sum(len(categorized.get(k, [])) for k in _CATS)
             if total_count == 0:
                 continue
 
             managers_with_issues += 1
             total_overall_clients += total_count
 
-            # v1.1: дата отчёта по менеджеру
             report_date = (manager_dates or {}).get(manager_name, "")
             date_suffix = f" | 📅 {report_date}" if report_date else ""
 
             msg_lines.append(f"👨‍💼 {manager_name.upper()}{date_suffix}")
             msg_lines.append("━" * 50)
 
-            if critical_count > 0:
-                msg_lines.append("🔴 КРИТИЧНО (30+ дней):")
-                critical_debt_total = 0.0
-
-                show_count = min(20, critical_count)
-                for client in categorized['critical'][:show_count]:
-                    suffix = " ⚠️ частичная оплата" if client.get('partial_payment') else ""
-                    msg_lines.append(f"  • {client['client']} — {client['debt_str']} ({client['silence_days']} дн){suffix}")
-                    critical_debt_total += client['debt']
-
-                if critical_count > 20:
-                    remaining = critical_count - 20
-                    remaining_debt = sum(c['debt'] for c in categorized['critical'][20:])
-                    msg_lines.append(f"  ... и ещё {remaining} клиент(ов) на {self.format_amount(remaining_debt)} ₸")
-                    critical_debt_total += remaining_debt
-
-                msg_lines.append(f"  💰 Итого критично: {self.format_amount(critical_debt_total)} ₸")
+            if categorized.get('critical'):
+                d = _append_std_block("🔴 КРИТИЧНО (30+ дней):", categorized['critical'], 20)
+                msg_lines.append(f"  💰 Итого критично: {self.format_amount(d)} ₸")
                 msg_lines.append("")
-                total_overall_debt += critical_debt_total
+                total_overall_debt += d
 
-            if alarm_count > 0:
-                msg_lines.append("🟠 ТРЕВОГА (15-29 дней):")
-                alarm_debt_total = 0.0
-
-                show_count = min(10, alarm_count)
-                for client in categorized['alarm'][:show_count]:
-                    suffix = " ⚠️ частичная оплата" if client.get('partial_payment') else ""
-                    msg_lines.append(f"  • {client['client']} — {client['debt_str']} ({client['silence_days']} дн){suffix}")
-                    alarm_debt_total += client['debt']
-
-                if alarm_count > 10:
-                    remaining = alarm_count - 10
-                    remaining_debt = sum(c['debt'] for c in categorized['alarm'][10:])
-                    msg_lines.append(f"  ... и ещё {remaining} клиент(ов) на {self.format_amount(remaining_debt)} ₸")
-                    alarm_debt_total += remaining_debt
-
-                msg_lines.append(f"  💰 Итого тревога: {self.format_amount(alarm_debt_total)} ₸")
+            if categorized.get('alarm'):
+                d = _append_std_block("🟠 ТРЕВОГА (15-29 дней):", categorized['alarm'])
+                msg_lines.append(f"  💰 Итого тревога: {self.format_amount(d)} ₸")
                 msg_lines.append("")
-                total_overall_debt += alarm_debt_total
+                total_overall_debt += d
 
-            if warning_count > 0:
-                msg_lines.append("🟡 ВНИМАНИЕ (7-14 дней):")
-                warning_debt_total = 0.0
-
-                show_count = min(10, warning_count)
-                for client in categorized['warning'][:show_count]:
-                    suffix = " ⚠️ частичная оплата" if client.get('partial_payment') else ""
-                    msg_lines.append(f"  • {client['client']} — {client['debt_str']} ({client['silence_days']} дн){suffix}")
-                    warning_debt_total += client['debt']
-
-                if warning_count > 10:
-                    remaining = warning_count - 10
-                    remaining_debt = sum(c['debt'] for c in categorized['warning'][10:])
-                    msg_lines.append(f"  ... и ещё {remaining} клиент(ов) на {self.format_amount(remaining_debt)} ₸")
-                    warning_debt_total += remaining_debt
-
-                msg_lines.append(f"  💰 Итого внимание: {self.format_amount(warning_debt_total)} ₸")
+            if categorized.get('silence'):
+                d = _append_std_block("🟡 МОЛЧАНИЕ (10-14 дней):", categorized['silence'])
+                msg_lines.append(f"  💰 Итого молчание: {self.format_amount(d)} ₸")
                 msg_lines.append("")
-                total_overall_debt += warning_debt_total
+                total_overall_debt += d
 
-            # v1.6: непрерывный счётчик долга — effective_days не сбрасывается при оплате
-            if partial_count > 0:
+            if categorized.get('overdue'):
+                d = _append_std_block("⚡ ПРОСРОЧКА (7-9 дней):", categorized['overdue'])
+                msg_lines.append(f"  💰 Итого просрочка: {self.format_amount(d)} ₸")
+                msg_lines.append("")
+                total_overall_debt += d
+
+            if categorized.get('partial_payment'):
                 msg_lines.append("💛 ЧАСТИЧНАЯ ОПЛАТА (долг не закрыт):")
-                partial_debt_total = 0.0
-
-                show_count = min(10, partial_count)
-                for client in categorized['partial_payment'][:show_count]:
-                    paid_str    = client.get('paid_str', '') or self.format_amount(client.get('paid_amount', 0))
-                    initial_str = client.get('initial_str', '') or self.format_amount(client.get('initial_amount', 0))
-                    eff = client.get('effective_days', client['silence_days'])
+                partial_total = 0.0
+                for c in categorized['partial_payment'][:10]:
+                    paid_str    = c.get('paid_str', '') or self.format_amount(c.get('paid_amount', 0))
+                    initial_str = c.get('initial_str', '') or self.format_amount(c.get('initial_amount', 0))
+                    eff = c.get('effective_days', c['silence_days'])
                     msg_lines.append(
-                        f"  • {client['client']} — "
-                        f"нач: {initial_str} → оплачено: {paid_str} → остаток: {client['debt_str']} (~{eff} дн)"
+                        f"  • {c['client']} — "
+                        f"нач: {initial_str} → оплачено: {paid_str} → остаток: {c['debt_str']} (~{eff} дн)"
                     )
-                    partial_debt_total += client['debt']
-
-                if partial_count > 10:
-                    remaining = partial_count - 10
-                    remaining_debt = sum(c['debt'] for c in categorized['partial_payment'][10:])
-                    msg_lines.append(f"  ... и ещё {remaining} клиент(ов) на {self.format_amount(remaining_debt)} ₸")
-                    partial_debt_total += remaining_debt
-
-                msg_lines.append(f"  💰 Остаток долга: {self.format_amount(partial_debt_total)} ₸")
+                    partial_total += c['debt']
+                rest = categorized['partial_payment'][10:]
+                if rest:
+                    rest_debt = sum(x['debt'] for x in rest)
+                    msg_lines.append(f"  ... и ещё {len(rest)} клиент(ов) на {self.format_amount(rest_debt)} ₸")
+                    partial_total += rest_debt
+                msg_lines.append(f"  💰 Остаток долга: {self.format_amount(partial_total)} ₸")
                 msg_lines.append("")
-                total_overall_debt += partial_debt_total
+                total_overall_debt += partial_total
+
+            if categorized.get('on_stop'):
+                msg_lines.append("🛑 СТОП / ИМИТАЦИЯ ОПЛАТЫ:")
+                stop_total = 0.0
+                for c in categorized['on_stop'][:10]:
+                    paid_str = c.get('paid_str', '') or self.format_amount(c.get('paid_amount', 0))
+                    credit = c.get('paid_amount', 0.0)
+                    pct = (credit / c['debt'] * 100) if c['debt'] > 0 else 0
+                    msg_lines.append(
+                        f"  • {c['client']} — долг: {c['debt_str']}, "
+                        f"оплата: {paid_str} ({pct:.0f}%)"
+                    )
+                    stop_total += c['debt']
+                rest = categorized['on_stop'][10:]
+                if rest:
+                    rest_debt = sum(x['debt'] for x in rest)
+                    msg_lines.append(f"  ... и ещё {len(rest)} клиент(ов) на {self.format_amount(rest_debt)} ₸")
+                    stop_total += rest_debt
+                msg_lines.append(f"  💰 Заморожено: {self.format_amount(stop_total)} ₸")
+                msg_lines.append("")
+                total_overall_debt += stop_total
 
             msg_lines.append("")
-        
+
         if managers_with_issues == 0:
             return "✅ У всех менеджеров нет критичных дней молчания!"
-        
+
         msg_lines.append("━" * 50)
         msg_lines.append(f"💰 ВСЕГО МОЛЧАЩИХ: {self.format_amount(total_overall_debt)} ₸")
         msg_lines.append(f"📊 Менеджеров с проблемами: {managers_with_issues}")
         msg_lines.append(f"👥 Всего молчащих клиентов: {total_overall_clients}")
-        
+
         return "\n".join(msg_lines)
     
     @staticmethod

@@ -8,7 +8,7 @@ fallback — возвращает None, _get_manager_margin использует
 
 Фильтры:
   - молчание >= 15 дней (ALARM_DAYS из silence_alerts)
-  - долг >= 10 000 ₸ (MIN_DEBT_AMOUNT из silence_alerts)
+  - долг >= 5 000 ₸ (MIN_DEBT_AMOUNT из silence_alerts)
 
 Зоны риска:
   8–15 дней  → ⚡ рабочая просрочка
@@ -50,7 +50,7 @@ TURNOVER_DAYS = 15  # дней на один оборот капитала
 DEFAULT_MARGIN_PCT = 10.0
 
 # Минимальная сумма долга для расчёта (берём из silence_alerts.MIN_DEBT_AMOUNT)
-MIN_DEBT_AMOUNT = 10_000.0
+MIN_DEBT_AMOUNT = 5_000.0
 
 # ── Утилиты форматирования ───────────────────────────────────────────────────
 

@@ -195,14 +195,14 @@ clients = [
     # тревога
     {"client": "ИП Бета",     "debt": 200_000, "debt_str": "200 000,00", "silence_days": 20,
      "debit_amount": 0, "paid_amount": 50_000},
-    # внимание
+    # молчание (10-14 дн) — было "warning" (7-14), теперь категория silence
     {"client": "ИП Гамма",    "debt": 150_000, "debt_str": "150 000,00", "silence_days": 10,
      "debit_amount": 0, "paid_amount": 0},
-    # частичная оплата (days < 7, нет товара, платит, крупный долг)
+    # частичная оплата (days < 7, нет товара, credit >= 10% долга)
     {"client": "ТОО Дельта",  "debt": 300_000, "debt_str": "300 000,00", "silence_days": 0,
      "debit_amount": 0, "paid_amount": 100_000},
-    # мелкий долг — должен быть пропущен
-    {"client": "Мелкий",      "debt": 5_000,   "debt_str": "5 000,00",   "silence_days": 60,
+    # мелкий долг (< MIN_DEBT_AMOUNT=5000) — должен быть пропущен
+    {"client": "Мелкий",      "debt": 4_000,   "debt_str": "4 000,00",   "silence_days": 60,
      "debit_amount": 0, "paid_amount": 0},
 ]
 
@@ -212,13 +212,15 @@ check("critical содержит ТОО Альфа",
       any(c["client"] == "ТОО Альфа" for c in cat["critical"]))
 check("alarm содержит ИП Бета",
       any(c["client"] == "ИП Бета" for c in cat["alarm"]))
-check("warning содержит ИП Гамма",
-      any(c["client"] == "ИП Гамма" for c in cat["warning"]))
+# v1.7: days=10 → silence (10-14 дн), не overdue
+check("silence содержит ИП Гамма",
+      any(c["client"] == "ИП Гамма" for c in cat["silence"]))
 check("partial_payment содержит ТОО Дельта",
       any(c["client"] == "ТОО Дельта" for c in cat["partial_payment"]))
+_all_cats = (cat.get("critical", []) + cat.get("alarm", []) + cat.get("silence", []) +
+             cat.get("overdue", []) + cat.get("partial_payment", []) + cat.get("on_stop", []))
 check("Мелкий долг пропущен",
-      not any(c["client"] == "Мелкий" for c in cat.get("critical", []) +
-              cat.get("alarm", []) + cat.get("warning", []) + cat.get("partial_payment", [])))
+      not any(c["client"] == "Мелкий" for c in _all_cats))
 
 # Проверяем формат строки: непрерывный счётчик effective_days
 # ТОО Тест: historical_days=19, silence_days=2 → effective=21

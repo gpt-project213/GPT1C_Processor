@@ -179,7 +179,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.37/25.03.2026"
+__VERSION__ = "v9.4.38/25.03.2026"
 
 from datetime import datetime, time as dt_time
 from zoneinfo import ZoneInfo
@@ -776,6 +776,28 @@ def _save_json_atomic(path: Path, payload: dict) -> None:
 
 ROLES = _load_json_safe(CONFIG_DIR / "roles.json")
 MANAGERS_MAP = _load_json_safe(CONFIG_DIR / "managers.json")
+
+def _load_weekly_clients() -> list:
+    """Загружает список еженедельных клиентов из config/weekly_clients.json."""
+    try:
+        data = _load_json_safe(CONFIG_DIR / "weekly_clients.json")
+        return data.get("clients", []) if isinstance(data, dict) else []
+    except Exception:
+        return []
+
+def _save_weekly_clients(clients: list) -> None:
+    """Атомарно сохраняет список еженедельных клиентов."""
+    import tempfile, os
+    path = CONFIG_DIR / "weekly_clients.json"
+    payload = {
+        "_comment": "Список еженедельных клиентов. Управляется через бот.",
+        "clients": clients,
+    }
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=path.parent,
+                                    delete=False, suffix=".tmp") as tmp:
+        json.dump(payload, tmp, ensure_ascii=False, indent=2)
+        tmp_path = tmp.name
+    os.replace(tmp_path, path)
 
 # v9.4.6: Нормализация chat_id к int (критично для сравнений!)
 if isinstance(MANAGERS_MAP, dict):
@@ -3318,6 +3340,42 @@ async def pipeline_task(context: ContextTypes.DEFAULT_TYPE):
         log_event("archive_error", error=str(e), level="ERROR")
     log_event("pipeline_cycle_finish")
 
+async def _suggest_weekly_clients(context, chat_id: int, categorized: dict, weekly_clients: list) -> None:
+    """
+    Предлагает Алене добавить клиентов-кандидатов (Шапагат и аналогичные)
+    в список еженедельных. Срабатывает только если клиент попал в overdue (7-9 дн)
+    и ещё не добавлен в weekly_clients.json.
+    """
+    from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+    overdue = categorized.get('overdue', [])
+    if not overdue:
+        return
+    weekly_set = set(weekly_clients)
+    candidates = [
+        c for c in overdue
+        if c['client'] not in weekly_set
+        and 'шапагат' in c['client'].lower()
+    ]
+    for c in candidates[:5]:  # не более 5 предложений за раз
+        client_name = c['client']
+        kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton("✅ Да, исключить", callback_data=f"weekly_suggest|{client_name}"),
+            InlineKeyboardButton("❌ Нет",           callback_data=f"weekly_reject|{client_name}"),
+        ]])
+        try:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=(
+                    f"❓ <b>{client_name}</b> — долг {c.get('debt_str','')}, {c['silence_days']} дн.\n"
+                    f"Это еженедельный клиент? Исключить из просрочки?"
+                ),
+                parse_mode="HTML",
+                reply_markup=kb,
+            )
+        except Exception as e:
+            logger.warning("_suggest_weekly_clients send error: %s", e)
+
+
 async def check_and_send_silence_alerts(context=None):
     """Проверяет дни молчания у всех менеджеров и отправляет уведомления"""
     logger.info("🔔 Начинается проверка дней молчания...")
@@ -3339,10 +3397,13 @@ async def check_and_send_silence_alerts(context=None):
             # v1.4: исторические дни молчания из предыдущего файла
             prev_report = alert.get_prev_debt_report(reports_dir, manager)
             hist_map = alert.build_historical_silence_map(prev_report) if prev_report else {}
-            categorized = alert.categorize_by_silence(clients_data, historical_map=hist_map)
+            weekly = _load_weekly_clients()
+            categorized = alert.categorize_by_silence(clients_data, historical_map=hist_map,
+                                                      weekly_clients=weekly)
             all_managers_data[manager] = categorized
-            manager_dates[manager] = alert.parse_report_date(latest_report)  # v9.4.23
-            total_silent = (len(categorized['critical']) + len(categorized['alarm']) + len(categorized['warning']))
+            manager_dates[manager] = alert.parse_report_date(latest_report)
+            _SILENCE_CATS = ('critical', 'alarm', 'silence', 'overdue', 'partial_payment', 'on_stop')
+            total_silent = sum(len(categorized.get(k, [])) for k in _SILENCE_CATS)
             if total_silent == 0:
                 logger.info(f"✅ У {manager} нет молчащих клиентов")
             else:
@@ -3350,8 +3411,9 @@ async def check_and_send_silence_alerts(context=None):
         except Exception as e:
             logger.error(f"❌ Ошибка обработки {manager}: {e}", exc_info=True)
     
+    _SILENCE_CATS = ('critical', 'alarm', 'silence', 'overdue', 'partial_payment', 'on_stop')
     for manager, categorized in all_managers_data.items():
-        total_silent = (len(categorized['critical']) + len(categorized['alarm']) + len(categorized['warning']))
+        total_silent = sum(len(categorized.get(k, [])) for k in _SILENCE_CATS)
         
         chat_id = MANAGERS_MAP.get(manager)
         if not chat_id:
@@ -3369,7 +3431,7 @@ async def check_and_send_silence_alerts(context=None):
             for sub_manager in subordinates:
                 sub_cat = all_managers_data.get(sub_manager)
                 if sub_cat:
-                    sub_total = (len(sub_cat['critical']) + len(sub_cat['alarm']) + len(sub_cat['warning']))
+                    sub_total = sum(len(sub_cat.get(k, [])) for k in _SILENCE_CATS)
                     if sub_total > 0:
                         sub_has_silent = True
                         break
@@ -3393,7 +3455,7 @@ async def check_and_send_silence_alerts(context=None):
             for sub_manager in subordinates:
                 if sub_manager in all_managers_data:
                     sub_categorized = all_managers_data[sub_manager]
-                    sub_total = (len(sub_categorized['critical']) + len(sub_categorized['alarm']) + len(sub_categorized['warning']))
+                    sub_total = sum(len(sub_categorized.get(k, [])) for k in _SILENCE_CATS)
                     if sub_total > 0:
                         has_subordinate_alerts = True
                         message_parts.append(f"\n{'='*50}\n\n")
@@ -3420,6 +3482,10 @@ async def check_and_send_silence_alerts(context=None):
                     await send_main_menu(context, chat_id, get_user_role(chat_id))  # Fix #MENU-SILENCE
                 except Exception as e:
                     logger.error(f"❌ Ошибка отправки {manager}: {e}")
+
+            # Предложить Алене добавить Шапагат-клиентов как еженедельных
+            if context and manager == "Алена":
+                await _suggest_weekly_clients(context, chat_id, categorized, _load_weekly_clients())
     
     if all_managers_data and context:
         try:
@@ -3595,8 +3661,10 @@ async def force_report_to_user(report_type: str, chat_id: int, context) -> str:
                 # v1.4: исторические дни молчания из предыдущего файла
                 prev = alert.get_prev_debt_report(HTML_DIR, mgr)
                 hist_map = alert.build_historical_silence_map(prev) if prev else {}
-                all_managers_data[mgr] = alert.categorize_by_silence(clients, historical_map=hist_map)
-                manager_dates[mgr]     = alert.parse_report_date(latest) or ""
+                weekly = _load_weekly_clients()
+                all_managers_data[mgr] = alert.categorize_by_silence(clients, historical_map=hist_map,
+                                                                      weekly_clients=weekly)
+                manager_dates[mgr] = alert.parse_report_date(latest) or ""
 
             if not all_managers_data:
                 return f"{label}: нет данных дебиторки."
@@ -4757,6 +4825,91 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "back_submenu":
         await send_main_menu(context, chat_id, user_role, text="📋 Выберите раздел:")
         return
+
+    # ── Еженедельные клиенты: Алена предлагает → Вадим подтверждает ──────────
+    # weekly_suggest|<client_name>  — Алена нажала "Да, исключить"
+    # weekly_reject|<client_name>   — Алена нажала "Нет"
+    # weekly_confirm|<client_name>  — Вадим подтвердил
+    # weekly_deny|<client_name>     — Вадим отклонил
+    if data.startswith("weekly_suggest|"):
+        client_name = data.split("|", 1)[1]
+        admin_chat_id = ADMIN_CHAT_ID
+        if not admin_chat_id:
+            await q.answer("Ошибка: admin chat_id не настроен")
+            return
+        from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+        kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton("✅ Подтвердить", callback_data=f"weekly_confirm|{client_name}"),
+            InlineKeyboardButton("❌ Отклонить",   callback_data=f"weekly_deny|{client_name}"),
+        ]])
+        try:
+            await context.bot.send_message(
+                chat_id=admin_chat_id,
+                text=(
+                    f"📋 <b>Алена</b> предлагает добавить еженедельного клиента:\n\n"
+                    f"<b>{client_name}</b>\n\n"
+                    f"Такие клиенты исключаются из ПРОСРОЧКИ (7-9 дн).\n"
+                    f"Подтвердить?"
+                ),
+                parse_mode="HTML",
+                reply_markup=kb,
+            )
+            await q.answer("✅ Запрос отправлен Вадиму")
+            await q.message.edit_text(
+                f"⏳ Запрос на исключение <b>{client_name}</b> отправлен администратору.",
+                parse_mode="HTML",
+            )
+        except Exception as e:
+            logger.error("weekly_suggest send error: %s", e)
+            await q.answer("❌ Ошибка отправки")
+        return
+
+    if data.startswith("weekly_reject|"):
+        client_name = data.split("|", 1)[1]
+        await q.answer("Понятно, клиент остаётся в общем списке")
+        try:
+            await q.message.edit_text(f"❌ {client_name} — оставлен в общем списке.", parse_mode="HTML")
+        except Exception:
+            pass
+        return
+
+    if data.startswith("weekly_confirm|"):
+        if user_role != "admin":
+            await q.answer("Только администратор может подтверждать")
+            return
+        client_name = data.split("|", 1)[1]
+        try:
+            clients = _load_weekly_clients()
+            if client_name not in clients:
+                clients.append(client_name)
+                _save_weekly_clients(clients)
+            await q.answer("✅ Клиент добавлен в еженедельные")
+            await q.message.edit_text(
+                f"✅ <b>{client_name}</b> добавлен в список еженедельных клиентов.\n"
+                f"Он не будет попадать в ПРОСРОЧКУ (7-9 дн).",
+                parse_mode="HTML",
+            )
+            logger.info("weekly_clients: добавлен %s", client_name)
+        except Exception as e:
+            logger.error("weekly_confirm error: %s", e)
+            await q.answer("❌ Ошибка сохранения")
+        return
+
+    if data.startswith("weekly_deny|"):
+        if user_role != "admin":
+            await q.answer("Только администратор может отклонять")
+            return
+        client_name = data.split("|", 1)[1]
+        await q.answer("Отклонено")
+        try:
+            await q.message.edit_text(
+                f"❌ Запрос на исключение <b>{client_name}</b> отклонён.",
+                parse_mode="HTML",
+            )
+        except Exception:
+            pass
+        return
+    # ─────────────────────────────────────────────────────────────────────────
 
     await q.answer("Неизвестная команда")
 
