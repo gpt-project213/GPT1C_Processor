@@ -283,25 +283,86 @@ def get_clients_without_phones(manager: str, limit: int = 5) -> List[str]:
     return [name for _, name in no_phone[:limit]]
 
 
-def set_client_phone(client_name: str, phone: str, manager: str = "") -> bool:
+def _strip_legal(name: str) -> str:
+    """Убирает ТОО/ИП/АО/LLP префиксы для нечёткого сравнения."""
+    return re.sub(
+        r"^\s*(ТОО|ИП|АО|ОАО|ООО|LLP|LLC|ЧП)\s+",
+        "", name, flags=re.IGNORECASE,
+    ).strip().lower()
+
+
+def find_similar_clients(query: str, manager: str = "", limit: int = 5) -> List[str]:
+    """
+    Ищет похожих клиентов в базе по запросу менеджера.
+
+    Алгоритм (в порядке приоритета):
+      1. Точное совпадение (lower)
+      2. display_name совпадает
+      3. Все слова запроса входят в имя клиента
+      4. Хотя бы одно слово из запроса совпадает (≥ 3 символа)
+      5. Подстрока запроса в имени (без правовой формы)
+
+    Если задан manager — приоритет клиентам этого менеджера.
+    Возвращает список ключей (имён из 1С), не более `limit`.
+    """
+    data = load_clients()
+    clients_db = data.get("clients", {})
+    if not clients_db or not query:
+        return []
+
+    q = query.lower().strip()
+    q_stripped = _strip_legal(query)
+    q_words = [w for w in q.split() if len(w) >= 3]
+
+    scores: List[Tuple[int, str]] = []  # (score, key)  — чем меньше, тем лучше
+
+    for key, info in clients_db.items():
+        if not isinstance(info, dict):
+            continue
+        # Фильтр по менеджеру — не жёсткий, просто снижает приоритет
+        mgr_match = (not manager) or (info.get("manager", "").lower() == manager.lower())
+
+        key_l = key.lower().strip()
+        key_stripped = _strip_legal(key)
+        display = info.get("display_name", "").lower().strip()
+
+        score = 100
+        if key_l == q:
+            score = 0
+        elif display and display == q:
+            score = 1
+        elif key_stripped == q_stripped and q_stripped:
+            score = 2
+        elif q_words and all(w in key_l for w in q_words):
+            score = 3
+        elif q_words and any(w in key_l for w in q_words):
+            score = 4
+        elif q_stripped and q_stripped in key_stripped:
+            score = 5
+        else:
+            continue  # нет совпадения
+
+        if not mgr_match:
+            score += 10  # откладываем чужих менеджеров вниз
+
+        scores.append((score, key))
+
+    scores.sort()
+    return [key for _, key in scores[:limit]]
+
+
+def set_client_phone(client_name: str, phone: str, manager: str = "",
+                     alias: str = "") -> bool:
     """
     Записывает телефон (WhatsApp) клиента в clients.json.
+    client_name — точный ключ из 1С (после подтверждения менеджером).
+    alias — как менеджер назвал клиента (display_name), если отличается.
     Возвращает True если клиент найден и обновлён.
     """
     data = load_clients()
     clients_db = data.get("clients", {})
 
-    # Точное совпадение
     entry = clients_db.get(client_name)
-    if entry is None:
-        # Нечёткий поиск по первым 3 словам
-        target_words = client_name.lower().split()[:3]
-        for key in clients_db:
-            if key.lower().split()[:3] == target_words:
-                entry = clients_db[key]
-                client_name = key
-                break
-
     if entry is None:
         logger.warning("set_client_phone: клиент не найден: %s", client_name)
         return False
@@ -309,9 +370,32 @@ def set_client_phone(client_name: str, phone: str, manager: str = "") -> bool:
     entry["whatsapp"] = phone.strip()
     if manager and not entry.get("manager"):
         entry["manager"] = manager
+    # Псевдоним: сохраняем если отличается от ключа 1С
+    if alias and alias.lower().strip() != client_name.lower().strip():
+        entry["display_name"] = alias.strip()
+        logger.info("display_name сохранён: %s → «%s»", client_name, alias)
+
     data["clients"] = clients_db
     save_clients(data)
     logger.info("Телефон записан: %s → %s", client_name, phone)
+    return True
+
+
+def set_client_alias(client_name: str, alias: str) -> bool:
+    """
+    Сохраняет display_name (псевдоним) для клиента без изменения телефона.
+    Используется когда менеджер исправляет только имя.
+    """
+    data = load_clients()
+    clients_db = data.get("clients", {})
+    entry = clients_db.get(client_name)
+    if entry is None:
+        logger.warning("set_client_alias: клиент не найден: %s", client_name)
+        return False
+    entry["display_name"] = alias.strip()
+    data["clients"] = clients_db
+    save_clients(data)
+    logger.info("Псевдоним сохранён: %s → «%s»", client_name, alias)
     return True
 
 

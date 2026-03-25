@@ -4362,10 +4362,19 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Ошибка в cmd_stats: {e}", exc_info=True)
         await _send_auto(context, chat_id, f"❌ Ошибка при получении статистики: {e}")
 
+# Хранит временные данные выбора клиента: {chat_id: {"phone": str, "alias": str, "candidates": [str]}}
+_CRM_PHONE_PENDING: Dict[int, Dict[str, Any]] = {}
+
+
 async def cmd_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """CRM: /phone <имя клиента> <номер>  — внести телефон клиента в базу."""
+    """CRM: /phone <имя клиента> <номер>  — внести телефон клиента в базу.
+
+    Если имя точно совпадает — сохраняет сразу.
+    Если нет — находит похожих клиентов и предлагает выбор кнопками.
+    Если менеджер написал псевдоним («Вася» вместо «ТОО Василий») — псевдоним
+    сохраняется как display_name; ключ 1С остаётся неизменным.
+    """
     chat_id = update.effective_chat.id
-    # Разрешено менеджерам и администратору
     manager = _chat_to_manager(chat_id)
     if not manager and not is_admin(chat_id):
         await _send_auto(context, chat_id, "⛔ Доступ запрещён.")
@@ -4381,42 +4390,82 @@ async def cmd_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # Последний аргумент — номер, всё остальное — имя клиента
-    phone = args[-1].strip()
-    client_name = " ".join(args[:-1]).strip()
+    phone_raw = args[-1].strip()
+    alias = " ".join(args[:-1]).strip()
 
-    if not phone.startswith("+") or not phone[1:].isdigit():
+    # Нормализуем номер
+    import re as _re
+    phone_digits = _re.sub(r"\D", "", phone_raw)
+    if _re.fullmatch(r"8\d{10}", phone_digits):
+        phone_digits = "7" + phone_digits[1:]
+    if not _re.fullmatch(r"7\d{10}", phone_digits):
         await _send_auto(
             context, chat_id,
-            "⚠️ Номер должен быть в формате +77001234567 (с плюсом и цифрами)."
+            "⚠️ Неверный формат номера.\n"
+            "Допустимо: <code>+77001234567</code> / <code>77001234567</code> / <code>87001234567</code>",
+            parse_mode="HTML",
         )
         return
+    phone = "+" + phone_digits
 
     try:
-        from bot.crm_clients import set_client_phone as _set_phone
-        ok = _set_client_phone_wrapper(client_name, phone, manager or "")
-        if ok:
+        from bot.crm_clients import set_client_phone as _set_phone, find_similar_clients as _find_similar
+
+        # 1. Пробуем сохранить напрямую (точное совпадение внутри set_client_phone)
+        if _set_phone(alias, phone, manager or "", alias=""):
             await _send_auto(
                 context, chat_id,
-                f"✅ Телефон <b>{phone}</b> записан для клиента <b>{client_name}</b>.",
+                f"✅ Телефон <b>{phone}</b> записан для <b>{alias}</b>.",
                 parse_mode="HTML",
             )
-            log_event("crm_phone_set", client=client_name, phone=phone, manager=manager)
-        else:
+            log_event("crm_phone_set", client=alias, phone=phone, manager=manager)
+            return
+
+        # 2. Точного совпадения нет — ищем похожих
+        candidates = _find_similar(alias, manager=manager or "", limit=5)
+        if not candidates:
             await _send_auto(
                 context, chat_id,
-                f"⚠️ Клиент <b>{client_name}</b> не найден в базе.\n"
-                f"Проверьте имя — оно должно совпадать с названием в отчёте.",
+                f"⚠️ Клиент <b>{alias}</b> не найден в базе.\n\n"
+                f"Возможно, он появится после следующего обновления в 18:00.",
                 parse_mode="HTML",
             )
+            return
+
+        # 3. Сохраняем pending и показываем кнопки выбора
+        _CRM_PHONE_PENDING[chat_id] = {
+            "phone": phone,
+            "alias": alias,
+            "candidates": candidates,
+        }
+        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+        rows = [
+            [InlineKeyboardButton(f"{i+1}. {c[:40]}", callback_data=f"crm_psel|{i}")]
+            for i, c in enumerate(candidates)
+        ]
+        rows.append([InlineKeyboardButton("❌ Нет нужного", callback_data="crm_psel|cancel")])
+        kb = InlineKeyboardMarkup(rows)
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=(
+                f"🔍 Клиент <b>{alias}</b> не найден точно.\n\n"
+                f"Выберите нужного из похожих:\n"
+                f"(Телефон <b>{phone}</b> будет сохранён для выбранного;\n"
+                f"«{alias}» запомнится как псевдоним)"
+            ),
+            parse_mode="HTML",
+            reply_markup=kb,
+        )
     except Exception as e:
         logger.error("cmd_phone error: %s", e)
         await _send_auto(context, chat_id, f"❌ Ошибка: {e}")
 
 
-def _set_client_phone_wrapper(client_name: str, phone: str, manager: str) -> bool:
+def _set_client_phone_wrapper(client_name: str, phone: str, manager: str,
+                               alias: str = "") -> bool:
     """Обёртка для set_client_phone без async."""
     from bot.crm_clients import set_client_phone as _set_phone
-    return _set_phone(client_name, phone, manager)
+    return _set_phone(client_name, phone, manager, alias=alias)
 
 
 def _chat_to_manager(chat_id: int) -> str:
@@ -4550,6 +4599,45 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = q.data or ""
     chat_id = q.message.chat.id
 
+    # CRM: выбор клиента при несовпадении имени (/phone алиас +7...)
+    if data.startswith("crm_psel|"):
+        try:
+            from bot.crm_clients import set_client_phone as _crm_set_phone
+            pending = _CRM_PHONE_PENDING.get(chat_id)
+            if not pending:
+                await q.edit_message_text("⚠️ Сессия истекла. Повторите /phone заново.")
+                return
+            idx_str = data.split("|", 1)[1]
+            if idx_str == "cancel":
+                _CRM_PHONE_PENDING.pop(chat_id, None)
+                await q.edit_message_text("❌ Отменено. Клиент не добавлен.")
+                return
+            idx = int(idx_str)
+            candidates = pending["candidates"]
+            if idx >= len(candidates):
+                await q.edit_message_text("⚠️ Неверный выбор.")
+                return
+            client_key = candidates[idx]
+            phone = pending["phone"]
+            alias = pending["alias"]
+            manager = _chat_to_manager(chat_id)
+            ok = _crm_set_phone(client_key, phone, manager or "", alias=alias)
+            _CRM_PHONE_PENDING.pop(chat_id, None)
+            if ok:
+                alias_note = f"\n👤 Псевдоним «{alias}» сохранён." if alias.lower() != client_key.lower() else ""
+                await q.edit_message_text(
+                    f"✅ Телефон <b>{phone}</b> записан для:\n"
+                    f"<b>{client_key}</b>{alias_note}",
+                    parse_mode="HTML",
+                )
+                log_event("crm_phone_set", client=client_key, phone=phone,
+                          alias=alias, manager=manager)
+            else:
+                await q.edit_message_text(f"⚠️ Не удалось сохранить для {client_key}.")
+        except (ValueError, KeyError) as e:
+            logger.error("crm_psel callback error: %s", e)
+        return
+
     # Collector dialog callbacks
     if data.startswith("col_"):
         try:
@@ -4561,91 +4649,61 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error("collector callback error: %s", e)
         return
 
-    # Callback: менеджер выбрал язык клиента
-    if data in ("reg_lang_ru", "reg_lang_kz"):
-        try:
-            from collector.collections_db import get_phone_pending
-            from collector.registry_manager import update_client_language
-            pending_client = get_phone_pending(chat_id)
-            if pending_client:
-                lang = "ru" if data == "reg_lang_ru" else "kz"
-                lang_label = "🇷🇺 Русский" if lang == "ru" else "🇰🇿 Қазақша"
-                if update_client_language(pending_client, lang):
-                    await context.bot.send_message(
-                        chat_id=chat_id,
-                        text=(
-                            f"✅ Язык сохранён: <b>{lang_label}</b>\n"
-                            f"Клиент: <b>{pending_client}</b>"
-                        ),
-                        parse_mode="HTML",
-                    )
-                else:
-                    await context.bot.send_message(
-                        chat_id=chat_id,
-                        text="⚠️ Не удалось сохранить язык.",
-                    )
-            else:
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text="⚠️ Запрос устарел. Клиент не найден.",
-                )
-        except Exception as e:
-            logger.error("reg_lang callback error: %s", e)
-        return
-
-    # Callback: менеджер нажал "Исправить имя клиента"
-    if data == "reg_name":
-        try:
-            from collector.collections_db import get_name_pending, set_name_pending
-            pending_client = get_name_pending(chat_id)
-            if pending_client:
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=(
-                        f"✏️ <b>Введите правильное имя</b> для клиента:\n"
-                        f"<b>{pending_client}</b>\n\n"
-                        f"Имя из 1С останется как ключ для матчинга.\n"
-                        f"Введённое имя будет использоваться в сообщениях должнику."
-                    ),
-                    parse_mode="HTML",
-                )
-            else:
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text="⚠️ Запрос на исправление имени устарел.",
-                )
-        except Exception as e:
-            logger.error("reg_name callback error: %s", e)
-        return
-
-    # Callback: менеджер нажал "Внести телефон клиента"
-    if data == "reg_phone":
-        try:
-            from collector.collections_db import get_phone_pending
-            pending_client = get_phone_pending(chat_id)
-            if pending_client:
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=(
-                        f"📞 <b>Введите номер WhatsApp</b> для клиента:\n"
-                        f"<b>{pending_client}</b>\n\n"
-                        f"Принимается любой формат:\n"
-                        f"• <code>+77001234567</code>\n"
-                        f"• <code>77001234567</code>\n"
-                        f"• <code>87001234567</code>\n\n"
-                        f"🔴 <b>Проверьте номер дважды!</b> Ошибочный номер — "
-                        f"и бот будет тревожить постороннего человека."
-                    ),
-                    parse_mode="HTML",
-                )
-            else:
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text="⚠️ Запрос на ввод телефона устарел. Номер клиента не найден.",
-                )
-        except Exception as e:
-            logger.error("reg_phone callback error: %s", e)
-        return
+    # [DISABLED v9.4.39] Старый flow: коллектор → reg_lang/reg_name/reg_phone.
+    # Заменён на CRM 18:00 + /phone команда (crm_psel|).
+    # Оставлен закомментированным на случай отката.
+    #
+    # if data in ("reg_lang_ru", "reg_lang_kz"):
+    #     try:
+    #         from collector.collections_db import get_phone_pending
+    #         from collector.registry_manager import update_client_language
+    #         pending_client = get_phone_pending(chat_id)
+    #         if pending_client:
+    #             lang = "ru" if data == "reg_lang_ru" else "kz"
+    #             lang_label = "🇷🇺 Русский" if lang == "ru" else "🇰🇿 Қазақша"
+    #             if update_client_language(pending_client, lang):
+    #                 await context.bot.send_message(chat_id=chat_id,
+    #                     text=f"✅ Язык сохранён: <b>{lang_label}</b>\nКлиент: <b>{pending_client}</b>",
+    #                     parse_mode="HTML")
+    #             else:
+    #                 await context.bot.send_message(chat_id=chat_id, text="⚠️ Не удалось сохранить язык.")
+    #         else:
+    #             await context.bot.send_message(chat_id=chat_id, text="⚠️ Запрос устарел.")
+    #     except Exception as e:
+    #         logger.error("reg_lang callback error: %s", e)
+    #     return
+    #
+    # if data == "reg_name":
+    #     try:
+    #         from collector.collections_db import get_name_pending, set_name_pending
+    #         pending_client = get_name_pending(chat_id)
+    #         if pending_client:
+    #             await context.bot.send_message(chat_id=chat_id,
+    #                 text=(f"✏️ <b>Введите правильное имя</b> для клиента:\n<b>{pending_client}</b>\n\n"
+    #                       f"Имя из 1С останется как ключ для матчинга.\n"
+    #                       f"Введённое имя будет использоваться в сообщениях должнику."),
+    #                 parse_mode="HTML")
+    #         else:
+    #             await context.bot.send_message(chat_id=chat_id, text="⚠️ Запрос на исправление имени устарел.")
+    #     except Exception as e:
+    #         logger.error("reg_name callback error: %s", e)
+    #     return
+    #
+    # if data == "reg_phone":
+    #     try:
+    #         from collector.collections_db import get_phone_pending
+    #         pending_client = get_phone_pending(chat_id)
+    #         if pending_client:
+    #             await context.bot.send_message(chat_id=chat_id,
+    #                 text=(f"📞 <b>Введите номер WhatsApp</b> для клиента:\n<b>{pending_client}</b>\n\n"
+    #                       f"Принимается любой формат:\n• +77001234567\n• 77001234567\n• 87001234567\n\n"
+    #                       f"🔴 <b>Проверьте номер дважды!</b>"),
+    #                 parse_mode="HTML")
+    #         else:
+    #             await context.bot.send_message(chat_id=chat_id, text="⚠️ Запрос на ввод телефона устарел.")
+    #     except Exception as e:
+    #         logger.error("reg_phone callback error: %s", e)
+    #     return
 
     user_role = get_user_role(chat_id)
     scopes = user_scopes(chat_id)
@@ -5777,66 +5835,54 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
     text = update.message.text
     chat_id = update.effective_chat.id
 
-    # Ввод исправленного имени для реестра должников
-    try:
-        from collector.collections_db import clear_name_pending, get_name_pending
-        pending_name_client = get_name_pending(chat_id)
-        if pending_name_client:
-            new_name = text.strip()
-            if len(new_name) >= 2:
-                from collector.registry_manager import update_client_display_name
-                if update_client_display_name(pending_name_client, new_name):
-                    clear_name_pending(chat_id)
-                    await update.message.reply_text(
-                        f"✅ Имя сохранено.\n"
-                        f"В 1С (ключ): <b>{pending_name_client}</b>\n"
-                        f"В сообщениях: <b>{new_name}</b>",
-                        parse_mode="HTML",
-                    )
-                else:
-                    await update.message.reply_text("⚠️ Не удалось сохранить. Попробуйте ещё раз.")
-            else:
-                await update.message.reply_text("❌ Слишком короткое имя. Введите полное имя клиента.")
-            return
-    except Exception as e:
-        logger.error("name input handler error: %s", e)
-
-    # Ввод телефона для реестра должников (если менеджер в режиме ожидания)
-    try:
-        from collector.collections_db import clear_phone_pending, get_phone_pending
-        pending_client = get_phone_pending(chat_id)
-        if pending_client:
-            import re as _re
-            phone_clean = _re.sub(r"\D", "", text.strip())
-            # Принимаем +7..., 7..., 8... (Казахстан/Россия)
-            if _re.fullmatch(r"8\d{10}", phone_clean):
-                phone_clean = "7" + phone_clean[1:]
-            if _re.fullmatch(r"7\d{10}", phone_clean):
-                from collector.registry_manager import update_client_phone
-                if update_client_phone(pending_client, phone_clean):
-                    clear_phone_pending(chat_id)
-                    await update.message.reply_text(
-                        f"✅ Телефон <b>+{phone_clean}</b> сохранён для клиента:\n"
-                        f"<b>{pending_client}</b>\n\n"
-                        f"ИИ-помощник подключится к нему при следующем цикле.",
-                        parse_mode="HTML",
-                    )
-                else:
-                    await update.message.reply_text(
-                        "⚠️ Не удалось сохранить. Попробуйте ещё раз.",
-                    )
-            else:
-                await update.message.reply_text(
-                    f"❌ Неверный формат: <code>{text.strip()}</code>\n\n"
-                    f"Введите номер в любом формате:\n"
-                    f"• <code>+77001234567</code>\n"
-                    f"• <code>77001234567</code>\n"
-                    f"• <code>87001234567</code>",
-                    parse_mode="HTML",
-                )
-            return
-    except Exception as e:
-        logger.error("phone input handler error: %s", e)
+    # [DISABLED v9.4.39] Старый flow: коллектор → pending → ввод текстом.
+    # Заменён на CRM /phone + crm_psel| callback.
+    # Оставлен закомментированным на случай отката.
+    #
+    # try:
+    #     from collector.collections_db import clear_name_pending, get_name_pending
+    #     pending_name_client = get_name_pending(chat_id)
+    #     if pending_name_client:
+    #         new_name = text.strip()
+    #         if len(new_name) >= 2:
+    #             from collector.registry_manager import update_client_display_name
+    #             if update_client_display_name(pending_name_client, new_name):
+    #                 clear_name_pending(chat_id)
+    #                 await update.message.reply_text(
+    #                     f"✅ Имя сохранено.\nВ 1С (ключ): <b>{pending_name_client}</b>\n"
+    #                     f"В сообщениях: <b>{new_name}</b>", parse_mode="HTML")
+    #             else:
+    #                 await update.message.reply_text("⚠️ Не удалось сохранить. Попробуйте ещё раз.")
+    #         else:
+    #             await update.message.reply_text("❌ Слишком короткое имя.")
+    #         return
+    # except Exception as e:
+    #     logger.error("name input handler error: %s", e)
+    #
+    # try:
+    #     from collector.collections_db import clear_phone_pending, get_phone_pending
+    #     pending_client = get_phone_pending(chat_id)
+    #     if pending_client:
+    #         import re as _re
+    #         phone_clean = _re.sub(r"\D", "", text.strip())
+    #         if _re.fullmatch(r"8\d{10}", phone_clean):
+    #             phone_clean = "7" + phone_clean[1:]
+    #         if _re.fullmatch(r"7\d{10}", phone_clean):
+    #             from collector.registry_manager import update_client_phone
+    #             if update_client_phone(pending_client, phone_clean):
+    #                 clear_phone_pending(chat_id)
+    #                 await update.message.reply_text(
+    #                     f"✅ Телефон <b>+{phone_clean}</b> сохранён для <b>{pending_client}</b>\n\n"
+    #                     f"ИИ-помощник подключится при следующем цикле.", parse_mode="HTML")
+    #             else:
+    #                 await update.message.reply_text("⚠️ Не удалось сохранить. Попробуйте ещё раз.")
+    #         else:
+    #             await update.message.reply_text(
+    #                 f"❌ Неверный формат: <code>{text.strip()}</code>\n"
+    #                 f"Введите: +77001234567 / 77001234567 / 87001234567", parse_mode="HTML")
+    #         return
+    # except Exception as e:
+    #     logger.error("phone input handler error: %s", e)
 
     # Check active collector dialog first
     try:
