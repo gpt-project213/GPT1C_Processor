@@ -179,7 +179,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.36/23.03.2026"
+__VERSION__ = "v9.4.37/25.03.2026"
 
 from datetime import datetime, time as dt_time
 from zoneinfo import ZoneInfo
@@ -1046,7 +1046,7 @@ async def debt_collector_daily(context: ContextTypes.DEFAULT_TYPE):
         rc, stdout, stderr = await run_script_async(
             "collector/collections_engine.py",
             "--send" if not dry_run else "--dry-run",
-            timeout=300,
+            timeout=900,
         )
         if rc != 0:
             log_event("collector_daily_error", rc=rc, stderr=stderr[:300], level="WARNING")
@@ -2830,7 +2830,16 @@ async def run_script_async(script_name: str, *args: str, timeout: int = 600) -> 
             stderr=asyncio.subprocess.PIPE, 
             cwd=ROOT_DIR
         )
-        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
+        try:
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
+        except asyncio.TimeoutError:
+            try:
+                process.kill()
+                await process.wait()
+            except (ProcessLookupError, PermissionError, OSError):
+                pass
+            log_event("script_timeout", script=script_name, timeout=timeout, level="WARNING")
+            return -1, "", f"Timeout after {timeout}s"
         rc = process.returncode or 0
         stdout_str = stdout.decode('utf-8', 'replace').strip()
         stderr_str = stderr.decode('utf-8', 'replace').strip()

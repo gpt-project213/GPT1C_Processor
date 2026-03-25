@@ -4,7 +4,7 @@
 collections/collections_engine.py
 Главный оркестратор AI-Коллектора долгов.
 
-Версия: 1.0.0 (2026-03-16)
+Версия: 1.0.1 (2026-03-25)
 
 CLI:
   python -m collector.collections_engine --dry-run
@@ -196,7 +196,34 @@ async def _process_single(
         "no_contacts": False,
     }
 
-    # Генерируем текст сообщения (всегда — для dry-run и логирования)
+    # Проверяем занятость менеджера ДО дорогого API-вызова (BUG-B2 fix)
+    if manager_chat_id:
+        from collector.dialog_store import get_dialog as _get_dialog_state
+        _dialog_pre = _get_dialog_state(manager_chat_id)
+
+        if _dialog_pre and _dialog_pre.get("client_name") == name:
+            _state_pre = _dialog_pre.get("state", "")
+            if _state_pre in ("CONFIRMED", "DONE"):
+                # WhatsApp уже отправлен через диалог
+                result["sent"] = True
+                result["via_dialog"] = True
+                return result
+            else:
+                # Диалог в процессе — ждём менеджера
+                logger.info(
+                    "[%s] диалог в состоянии %s — ожидаем менеджера", name, _state_pre
+                )
+                return result
+
+        elif _dialog_pre and _dialog_pre.get("state") not in ("CONFIRMED", "DONE", None):
+            # Менеджер занят диалогом по другому клиенту — пропуск без API-вызова
+            logger.info(
+                "[%s] менеджер %s занят диалогом по %s — пропуск",
+                name, manager_name, _dialog_pre.get("client_name"),
+            )
+            return result
+
+    # Генерируем текст сообщения (только когда реально нужен)
     text = generate_message(
         client_name=display_name,
         debt_amount=amount,
@@ -242,40 +269,12 @@ async def _process_single(
                 except Exception as e:
                     logger.error("[%s] start_client_dialog ошибка: %s", name, e)
     else:
-        # Используем диалог с менеджером
-        from collector.dialog_store import get_dialog as _get_dialog_state
+        # Запускаем новый диалог (предпроверка выше прошла — менеджер свободен)
         from collector.manager_dialog import start_dialog as _start_manager_dialog
-
-        dialog = _get_dialog_state(manager_chat_id)
-
-        if dialog and dialog.get("client_name") == name:
-            state = dialog.get("state", "")
-            if state in ("CONFIRMED", "DONE"):
-                # WhatsApp уже отправлен через диалог
-                result["sent"] = True
-                result["via_dialog"] = True
-                return result
-            else:
-                # Диалог в процессе — ждём менеджера
-                logger.info(
-                    "[%s] диалог в состоянии %s — ожидаем менеджера", name, state
-                )
-                return result
-
-        elif dialog and dialog.get("state") not in ("CONFIRMED", "DONE", None):
-            # Менеджер занят диалогом по другому клиенту
-            logger.info(
-                "[%s] менеджер %s занят диалогом по %s — пропуск",
-                name, manager_name, dialog.get("client_name"),
-            )
-            return result
-
-        else:
-            # Запускаем новый диалог
-            await _start_manager_dialog(client, contact, manager_name, manager_chat_id)
-            result["dialog_started"] = True
-            logger.info("[%s] диалог запущен с менеджером %s", name, manager_name)
-            return result
+        await _start_manager_dialog(client, contact, manager_name, manager_chat_id)
+        result["dialog_started"] = True
+        logger.info("[%s] диалог запущен с менеджером %s", name, manager_name)
+        return result
 
     # Звонок только когда диалог подтверждён (state CONFIRMED) или прямая отправка
     if not do_not_call and phone and is_call_allowed_time():
