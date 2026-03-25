@@ -1062,8 +1062,11 @@ async def janitor_task(context: ContextTypes.DEFAULT_TYPE):
 
 async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
     """
-    Ежедневно в 18:00: обновить CRM из отчётов, уведомить об новых клиентах,
-    попросить каждого менеджера внести телефоны для клиентов без контакта (до 5 шт).
+    Ежедневно в 18:00:
+    1. Обновляет CRM из последних JSON-отчётов.
+    2. Каждому менеджеру — уведомление о новых клиентах (если есть).
+    3. Каждому менеджеру — точечный запрос данных для ОДНОГО клиента без телефона:
+       бот называет имя из 1С и просит по шагам: как обращаться → телефон → адрес.
     """
     from bot.crm_clients import (
         update_from_reports as _crm_update,
@@ -1080,43 +1083,44 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
             if not chat_id or not new_clients:
                 continue
             names_str = "\n".join(f"  · {n}" for n in new_clients[:10])
-            more = f"\n  ...и ещё {len(new_clients)-10}" if len(new_clients) > 10 else ""
+            more = f"\n  ...и ещё {len(new_clients) - 10}" if len(new_clients) > 10 else ""
             try:
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text=(
                         f"🆕 <b>Новые клиенты в вашей базе</b>\n\n"
-                        f"{names_str}{more}\n\n"
-                        f"Добавьте их телефоны — бот напомнит об оплате."
+                        f"{names_str}{more}"
                     ),
                     parse_mode="HTML",
                 )
             except Exception as _e:
                 logger.warning("crm_daily_task: уведомление %s: %s", manager, _e)
 
-        # 3. Запрос телефонов — до 5 клиентов на каждого менеджера
+        # 3. Точечный запрос — один клиент на менеджера, три шага (имя → телефон → адрес)
         for manager, chat_id in MANAGERS_MAP.items():
             if manager == "Минай" or chat_id == ADMIN_CHAT_ID:
                 continue
-            no_phone = _crm_no_phone(manager, limit=5)
+            no_phone = _crm_no_phone(manager, limit=1)
             if not no_phone:
                 continue
-            names_str = "\n".join(f"  {i+1}. {n}" for i, n in enumerate(no_phone))
+            client_key = no_phone[0]
+            # Запускаем FSM: clarify_name
+            _CRM_PHONE_PENDING[chat_id] = {
+                "state": "clarify_name",
+                "client_key": client_key,
+            }
             try:
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text=(
-                        f"📞 <b>Актуализация базы клиентов</b>\n\n"
-                        f"У следующих клиентов нет телефона в базе:\n"
-                        f"{names_str}\n\n"
-                        f"Пожалуйста, внесите номера WhatsApp.\n"
-                        f"Это нужно для работы коллектора долгов.\n\n"
-                        f"Напишите: <code>/phone Имя клиента +77001234567</code>"
+                        f"📋 <b>{client_key}</b>\n\n"
+                        f"Как к нему обращаться?"
                     ),
                     parse_mode="HTML",
                 )
             except Exception as _e:
-                logger.warning("crm_daily_task: запрос телефонов %s: %s", manager, _e)
+                _CRM_PHONE_PENDING.pop(chat_id, None)
+                logger.warning("crm_daily_task: запрос данных %s: %s", manager, _e)
 
         log_event("crm_daily_done",
                   new_total=sum(len(v) for v in new_by_manager.values()))
@@ -4367,13 +4371,7 @@ _CRM_PHONE_PENDING: Dict[int, Dict[str, Any]] = {}
 
 
 async def cmd_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """CRM: /phone <имя клиента> <номер>  — внести телефон клиента в базу.
-
-    Если имя точно совпадает — сохраняет сразу.
-    Если нет — находит похожих клиентов и предлагает выбор кнопками.
-    Если менеджер написал псевдоним («Вася» вместо «ТОО Василий») — псевдоним
-    сохраняется как display_name; ключ 1С остаётся неизменным.
-    """
+    """CRM: /phone <имя клиента> <номер> — прямая запись телефона если имя совпадает точно."""
     chat_id = update.effective_chat.id
     manager = _chat_to_manager(chat_id)
     if not manager and not is_admin(chat_id):
@@ -4389,12 +4387,10 @@ async def cmd_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Последний аргумент — номер, всё остальное — имя клиента
-    phone_raw = args[-1].strip()
-    alias = " ".join(args[:-1]).strip()
-
-    # Нормализуем номер
     import re as _re
+    phone_raw = args[-1].strip()
+    client_name = " ".join(args[:-1]).strip()
+
     phone_digits = _re.sub(r"\D", "", phone_raw)
     if _re.fullmatch(r"8\d{10}", phone_digits):
         phone_digits = "7" + phone_digits[1:]
@@ -4409,53 +4405,21 @@ async def cmd_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     phone = "+" + phone_digits
 
     try:
-        from bot.crm_clients import set_client_phone as _set_phone, find_similar_clients as _find_similar
-
-        # 1. Пробуем сохранить напрямую (точное совпадение внутри set_client_phone)
-        if _set_phone(alias, phone, manager or "", alias=""):
+        from bot.crm_clients import set_client_phone as _set_phone
+        if _set_phone(client_name, phone, manager or ""):
             await _send_auto(
                 context, chat_id,
-                f"✅ Телефон <b>{phone}</b> записан для <b>{alias}</b>.",
+                f"✅ Телефон <b>{phone}</b> записан для <b>{client_name}</b>.",
                 parse_mode="HTML",
             )
-            log_event("crm_phone_set", client=alias, phone=phone, manager=manager)
-            return
-
-        # 2. Точного совпадения нет — ищем похожих
-        candidates = _find_similar(alias, manager=manager or "", limit=5)
-        if not candidates:
+            log_event("crm_phone_set", client=client_name, phone=phone, manager=manager)
+        else:
             await _send_auto(
                 context, chat_id,
-                f"⚠️ Клиент <b>{alias}</b> не найден в базе.\n\n"
-                f"Возможно, он появится после следующего обновления в 18:00.",
+                f"⚠️ Клиент <b>{client_name}</b> не найден.\n"
+                f"Имя должно совпадать с названием в отчёте 1С.",
                 parse_mode="HTML",
             )
-            return
-
-        # 3. Сохраняем pending и показываем кнопки выбора
-        _CRM_PHONE_PENDING[chat_id] = {
-            "phone": phone,
-            "alias": alias,
-            "candidates": candidates,
-        }
-        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-        rows = [
-            [InlineKeyboardButton(f"{i+1}. {c[:40]}", callback_data=f"crm_psel|{i}")]
-            for i, c in enumerate(candidates)
-        ]
-        rows.append([InlineKeyboardButton("❌ Нет нужного", callback_data="crm_psel|cancel")])
-        kb = InlineKeyboardMarkup(rows)
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text=(
-                f"🔍 Клиент <b>{alias}</b> не найден точно.\n\n"
-                f"Выберите нужного из похожих:\n"
-                f"(Телефон <b>{phone}</b> будет сохранён для выбранного;\n"
-                f"«{alias}» запомнится как псевдоним)"
-            ),
-            parse_mode="HTML",
-            reply_markup=kb,
-        )
     except Exception as e:
         logger.error("cmd_phone error: %s", e)
         await _send_auto(context, chat_id, f"❌ Ошибка: {e}")
@@ -4599,64 +4563,6 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = q.data or ""
     chat_id = q.message.chat.id
 
-    # CRM: выбор клиента при несовпадении имени (/phone алиас +7...)
-    if data.startswith("crm_psel|"):
-        try:
-            from bot.crm_clients import set_client_phone as _crm_set_phone
-            pending = _CRM_PHONE_PENDING.get(chat_id)
-            if not pending:
-                await q.edit_message_text("⚠️ Сессия истекла. Повторите /phone заново.")
-                return
-            idx_str = data.split("|", 1)[1]
-            if idx_str == "cancel":
-                # "Нет нужного" → берём первого из списка без телефона у этого менеджера
-                # и запускаем точечный уточняющий диалог по шагам
-                from bot.crm_clients import get_clients_without_phones as _no_phone
-                mgr = _chat_to_manager(chat_id)
-                no_phone_list = _no_phone(mgr or "", limit=1) if mgr else []
-                if no_phone_list:
-                    target = no_phone_list[0]
-                    _CRM_PHONE_PENDING[chat_id] = {
-                        "state": "clarify_name",
-                        "client_key": target,
-                    }
-                    await q.edit_message_text(
-                        f"Уточните данные для клиента из базы:\n\n"
-                        f"📋 <b>{target}</b>\n\n"
-                        f"Как к нему обращаться? Введите имя:",
-                        parse_mode="HTML",
-                    )
-                else:
-                    _CRM_PHONE_PENDING.pop(chat_id, None)
-                    await q.edit_message_text(
-                        "✅ У всех ваших клиентов уже есть телефон в базе."
-                    )
-                return
-            idx = int(idx_str)
-            candidates = pending["candidates"]
-            if idx >= len(candidates):
-                await q.edit_message_text("⚠️ Неверный выбор.")
-                return
-            client_key = candidates[idx]
-            phone = pending["phone"]
-            alias = pending["alias"]
-            manager = _chat_to_manager(chat_id)
-            ok = _crm_set_phone(client_key, phone, manager or "", alias=alias)
-            _CRM_PHONE_PENDING.pop(chat_id, None)
-            if ok:
-                alias_note = f"\n👤 Псевдоним «{alias}» сохранён." if alias.lower() != client_key.lower() else ""
-                await q.edit_message_text(
-                    f"✅ Телефон <b>{phone}</b> записан для:\n"
-                    f"<b>{client_key}</b>{alias_note}",
-                    parse_mode="HTML",
-                )
-                log_event("crm_phone_set", client=client_key, phone=phone,
-                          alias=alias, manager=manager)
-            else:
-                await q.edit_message_text(f"⚠️ Не удалось сохранить для {client_key}.")
-        except (ValueError, KeyError) as e:
-            logger.error("crm_psel callback error: %s", e)
-        return
 
     # Collector dialog callbacks
     if data.startswith("col_"):
