@@ -1114,7 +1114,8 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
                     chat_id=chat_id,
                     text=(
                         f"📋 <b>{client_key}</b>\n\n"
-                        f"Как к нему обращаться?"
+                        f"Как к нему обращаться?\n"
+                        f"(введите имя или имя и отчество)"
                     ),
                     parse_mode="HTML",
                 )
@@ -5773,13 +5774,15 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
             if state == "clarify_name":
                 display_name = text.strip()
                 if len(display_name) < 2:
-                    await update.message.reply_text("❌ Слишком короткое имя. Введите снова:")
+                    await update.message.reply_text(
+                        "❌ Слишком коротко. Введите имя или имя и отчество:"
+                    )
                     return
                 pending["display_name"] = display_name
                 pending["state"] = "clarify_phone"
                 await update.message.reply_text(
-                    f"Телефон WhatsApp для <b>{display_name}</b>?\n\n"
-                    f"Формат: <code>+77001234567</code>",
+                    f"Телефон WhatsApp?\n"
+                    f"(формат: <code>+77001234567</code>)",
                     parse_mode="HTML",
                 )
                 return
