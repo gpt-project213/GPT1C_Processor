@@ -5,7 +5,7 @@
 
 **Ветка**: `master`
 **Последний коммит analitic**: `81fae8d` (2026-03-25)
-**Последний коммит analitica**: `39f6bd3` (2026-03-25)
+**Последний коммит analitica**: `397bf76` (2026-03-25)
 **Статус тестов**: 62/62 + все collector ✅
 **Открытые баги**: 0 критических / 0 высоких / 2 архитектурных (не критично)
 **Платформа**: основной ПК — `E:\GPT1C_Processor_analitica` запущен и тестируется (2026-03-25)
@@ -32,7 +32,12 @@
    - Контакты из CRM (`load_contacts_compat`)
    - Клиент без телефона — тихий пропуск
 
-**Коммит**: `39f6bd3` (analitica)
+**Коммиты**: `39f6bd3` → `a039d91` → `cba2218` → `fff16c3` → `8af8b4f` → `397bf76`
+
+**Дополнительно (в рамках той же сессии):**
+5. `bot/crm_clients.py`: `find_similar_clients()` (5-уровневый нечёткий поиск), `set_client_details()` (имя+телефон+адрес), `set_client_alias()`
+6. `bot/send_reports.py`: FSM clarify_name→phone→address в `handle_persistent_menu`; `crm_daily_task` — один клиент на менеджера, точечный диалог; мёртвый код `reg_phone/reg_name/reg_lang` закомментирован
+7. `collector/collection_agent.py`: ИИ представляется «ИИ-помощник менеджера [Имя]»; город Алматы → Астана
 
 ---
 
