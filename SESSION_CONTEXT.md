@@ -5,7 +5,7 @@
 
 **Ветка**: `master`
 **Последний коммит analitic**: `81fae8d` (2026-03-25)
-**Последний коммит analitica**: `9033d9f` (2026-03-25)
+**Последний коммит analitica**: `f88b398` (2026-03-25)
 **Статус тестов**: 62/62 + 104/104 collector ✅
 **Открытые баги**: 0 критических / 0 высоких / 2 архитектурных (не критично)
 **Платформа**: основной ПК — `E:\GPT1C_Processor_analitica` запущен и тестируется (2026-03-25)
@@ -35,6 +35,22 @@
 5. `tests/test_project.py` — обновлены тесты под новые категории
 
 **Результат**: список дней молчания сократился с 85 → ~35 клиентов по всем менеджерам
+
+---
+
+### Сессия 2026-03-25 (аудит коллектора — BUG-C1..C5)
+
+| ID | Файл | Fix |
+|----|------|-----|
+| BUG-C1 | `collector/debt_monitor.py` | `violation_shipment` добавлен порог `days >= 7` — было 55+ ложных нарушений/день |
+| BUG-C2 | `collector/collections_engine.py` | Батчинг violation-уведомлений: 1 сообщение на менеджера + 1 сводка админу (вместо 110/день) |
+| BUG-C3 | `collector/collections_engine.py` | `load_state()` 1 раз до цикла, `save_state()` 1 раз после (было N раз) |
+| BUG-C4 | `collector/collections_engine.py` | Убран дубль `violation_flag` в no-contact сообщении |
+| BUG-C5 | `collector/collections_engine.py` | `dry_run` не пишет `first_seen` в state |
+
+**Архитектурные наблюдения (не баги):**
+- BUG-C6 (ARCH): порог коллектора 10 дней vs silence_alerts OVERDUE=7 дней — намеренно (7-9 дн = мониторинг, 10+ = активное взыскание)
+- Лог timestamps 05:00 на 23-24 марта — старое расписание (текущее: 09:00 Almaty)
 
 ---
 
@@ -202,5 +218,5 @@ python -X utf8 tests/test_project.py    # 62 теста
 python -X utf8 tests/test_collector.py  # 104 теста
 
 origin: https://github.com/gpt-project213/GPT1C_Processor.git
-branch: master / HEAD analitic: 81fae8d / HEAD analitica: 9033d9f
+branch: master / HEAD analitic: 81fae8d / HEAD analitica: f88b398
 ```
