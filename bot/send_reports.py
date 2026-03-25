@@ -179,7 +179,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.38/25.03.2026"
+__VERSION__ = "v9.4.39/25.03.2026"
 
 from datetime import datetime, time as dt_time
 from zoneinfo import ZoneInfo
@@ -1057,11 +1057,80 @@ async def janitor_task(context: ContextTypes.DEFAULT_TYPE):
         log_event("janitor_error", error=str(e))
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# CRM — обновление базы клиентов и запрос телефонов (18:00)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
+    """
+    Ежедневно в 18:00: обновить CRM из отчётов, уведомить об новых клиентах,
+    попросить каждого менеджера внести телефоны для клиентов без контакта (до 5 шт).
+    """
+    from bot.crm_clients import (
+        update_from_reports as _crm_update,
+        get_clients_without_phones as _crm_no_phone,
+    )
+    log_event("crm_daily_start")
+    try:
+        # 1. Обновляем CRM из последних JSON-отчётов
+        new_by_manager = _crm_update()
+
+        # 2. Уведомления о новых клиентах → менеджерам
+        for manager, new_clients in new_by_manager.items():
+            chat_id = MANAGERS_MAP.get(manager)
+            if not chat_id or not new_clients:
+                continue
+            names_str = "\n".join(f"  · {n}" for n in new_clients[:10])
+            more = f"\n  ...и ещё {len(new_clients)-10}" if len(new_clients) > 10 else ""
+            try:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=(
+                        f"🆕 <b>Новые клиенты в вашей базе</b>\n\n"
+                        f"{names_str}{more}\n\n"
+                        f"Добавьте их телефоны — бот напомнит об оплате."
+                    ),
+                    parse_mode="HTML",
+                )
+            except Exception as _e:
+                logger.warning("crm_daily_task: уведомление %s: %s", manager, _e)
+
+        # 3. Запрос телефонов — до 5 клиентов на каждого менеджера
+        for manager, chat_id in MANAGERS_MAP.items():
+            if manager == "Минай" or chat_id == ADMIN_CHAT_ID:
+                continue
+            no_phone = _crm_no_phone(manager, limit=5)
+            if not no_phone:
+                continue
+            names_str = "\n".join(f"  {i+1}. {n}" for i, n in enumerate(no_phone))
+            try:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=(
+                        f"📞 <b>Актуализация базы клиентов</b>\n\n"
+                        f"У следующих клиентов нет телефона в базе:\n"
+                        f"{names_str}\n\n"
+                        f"Пожалуйста, внесите номера WhatsApp.\n"
+                        f"Это нужно для работы коллектора долгов.\n\n"
+                        f"Напишите: <code>/phone Имя клиента +77001234567</code>"
+                    ),
+                    parse_mode="HTML",
+                )
+            except Exception as _e:
+                logger.warning("crm_daily_task: запрос телефонов %s: %s", manager, _e)
+
+        log_event("crm_daily_done",
+                  new_total=sum(len(v) for v in new_by_manager.values()))
+    except Exception as e:
+        log_event("crm_daily_error", error=str(e), level="ERROR")
+        logger.error("crm_daily_task error: %s", e)
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # AI DEBT COLLECTOR — job-обёртки для scheduler
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 async def debt_collector_daily(context: ContextTypes.DEFAULT_TYPE):
-    """Ежедневный запуск AI-коллектора в 09:00 Asia/Almaty."""
+    """Ежедневный запуск AI-коллектора в 18:00 Asia/Almaty."""
     dry_run = os.getenv("COLLECTOR_DRY_RUN", "false").lower() == "true"
     log_event("collector_daily_start", dry_run=dry_run)
     try:
@@ -4293,6 +4362,71 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Ошибка в cmd_stats: {e}", exc_info=True)
         await _send_auto(context, chat_id, f"❌ Ошибка при получении статистики: {e}")
 
+async def cmd_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """CRM: /phone <имя клиента> <номер>  — внести телефон клиента в базу."""
+    chat_id = update.effective_chat.id
+    # Разрешено менеджерам и администратору
+    manager = _chat_to_manager(chat_id)
+    if not manager and not is_admin(chat_id):
+        await _send_auto(context, chat_id, "⛔ Доступ запрещён.")
+        return
+
+    args = context.args or []
+    if len(args) < 2:
+        await _send_auto(
+            context, chat_id,
+            "ℹ️ Использование: /phone <Имя клиента> <+77001234567>\n\n"
+            "Пример: /phone ТОО Асем +77771234567",
+        )
+        return
+
+    # Последний аргумент — номер, всё остальное — имя клиента
+    phone = args[-1].strip()
+    client_name = " ".join(args[:-1]).strip()
+
+    if not phone.startswith("+") or not phone[1:].isdigit():
+        await _send_auto(
+            context, chat_id,
+            "⚠️ Номер должен быть в формате +77001234567 (с плюсом и цифрами)."
+        )
+        return
+
+    try:
+        from bot.crm_clients import set_client_phone as _set_phone
+        ok = _set_client_phone_wrapper(client_name, phone, manager or "")
+        if ok:
+            await _send_auto(
+                context, chat_id,
+                f"✅ Телефон <b>{phone}</b> записан для клиента <b>{client_name}</b>.",
+                parse_mode="HTML",
+            )
+            log_event("crm_phone_set", client=client_name, phone=phone, manager=manager)
+        else:
+            await _send_auto(
+                context, chat_id,
+                f"⚠️ Клиент <b>{client_name}</b> не найден в базе.\n"
+                f"Проверьте имя — оно должно совпадать с названием в отчёте.",
+                parse_mode="HTML",
+            )
+    except Exception as e:
+        logger.error("cmd_phone error: %s", e)
+        await _send_auto(context, chat_id, f"❌ Ошибка: {e}")
+
+
+def _set_client_phone_wrapper(client_name: str, phone: str, manager: str) -> bool:
+    """Обёртка для set_client_phone без async."""
+    from bot.crm_clients import set_client_phone as _set_phone
+    return _set_phone(client_name, phone, manager)
+
+
+def _chat_to_manager(chat_id: int) -> str:
+    """Возвращает имя менеджера по chat_id или пустую строку."""
+    for name, cid in (MANAGERS_MAP or {}).items():
+        if cid == chat_id:
+            return name
+    return ""
+
+
 async def _safe_edit_text(msg, text: str, reply_markup=None, parse_mode: Optional[str] = None):
     try:
         await msg.edit_text(text, reply_markup=reply_markup, parse_mode=parse_mode)
@@ -4950,8 +5084,10 @@ async def post_init(app: Application):
                 f"📊 Отчётов в базе: {report_count}\n"
                 f"\n"
                 f"⏰ Расписание сегодня:\n"
-                f"· 09:00 — остатки + коллектор\n"
+                f"· 09:00 — остатки\n"
                 f"· 14:00 — молчание{_oploss_line}\n"
+                f"· 18:00 — база клиентов (CRM)\n"
+                f"· 18:05 — коллектор\n"
                 f"· 20:00 — валовая\n"
                 f"· 21:00 — продажи + молчание\n"
                 f"· 22:00 — аналитика\n"
@@ -5780,6 +5916,7 @@ def main():
     application.add_handler(CommandHandler("health", cmd_health))
     application.add_handler(CommandHandler("stats", cmd_stats))
     application.add_handler(CommandHandler("analytics", cmd_analytics))  # 🆕 v9.4.9  # v2.0
+    application.add_handler(CommandHandler("phone", cmd_phone))  # CRM: внести телефон клиента
     application.add_handler(CallbackQueryHandler(cb_data))
     job_queue = application.job_queue
     if job_queue:
@@ -5895,13 +6032,21 @@ def main():
         )
         logger.info("🧹 Настроена автоочистка файлов: логи 2д, AI 7д, HTML 30д, JSON 7д, Excel 14д | Запуск в 03:00")
 
-        # AI Debt Collector
+        # CRM: обновление базы клиентов + запрос телефонов в 18:00
+        job_queue.run_daily(
+            crm_daily_task,
+            time=dt_time(18, 0, tzinfo=TZ),
+            name="crm_daily",
+        )
+        logger.info("👥 Настроена CRM: обновление базы + запрос телефонов ежедневно 18:00")
+
+        # AI Debt Collector (18:05 — после CRM)
         job_queue.run_daily(
             debt_collector_daily,
-            time=dt_time(9, 0, tzinfo=TZ),
+            time=dt_time(18, 5, tzinfo=TZ),
             name="debt_collector_daily",
         )
-        logger.info("💰 Настроен AI Debt Collector: ежедневно 09:00")
+        logger.info("💰 Настроен AI Debt Collector: ежедневно 18:05")
 
         job_queue.run_daily(
             debt_collector_promises,

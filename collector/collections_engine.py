@@ -4,7 +4,7 @@
 collections/collections_engine.py
 Главный оркестратор AI-Коллектора долгов.
 
-Версия: 1.0.1 (2026-03-25)
+Версия: 1.0.2 (2026-03-25)
 
 CLI:
   python -m collector.collections_engine --dry-run
@@ -74,18 +74,15 @@ from collector.debt_monitor import (
 from collector.collections_db import (
     _DEBT_DATE_PREFIX,
     already_contacted_today,
-    already_notified_manager_today,
     get_debt_days_since_first_seen,
     get_pending_promises,
     load_state,
     save_state,
     mark_escalated,
-    mark_manager_notified,
     mark_promise_broken,
     reset_debt_first_seen,
     save_call_result,
     save_promise,
-    set_phone_pending,
     update_after_contact,
 )
 from collector.collection_agent import analyze_response, generate_message
@@ -314,7 +311,12 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
         return
 
     debtors = classify_debtors(debt_data)
-    contacts = load_contacts()
+    # CRM: объединяем clients.json + debtors_contacts.json для поиска телефонов
+    try:
+        from bot.crm_clients import load_contacts_compat as _crm_contacts
+        contacts = _crm_contacts()
+    except Exception:
+        contacts = load_contacts()
     processed: List[Dict] = []
 
     # Уведомления о нарушениях: отгрузка при наличии долга — вина менеджера
@@ -421,81 +423,14 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
             logger.info("[%s] уже обработан сегодня — пропуск", name)
             continue
 
-        # Ищем контакты
+        # Ищем контакты (из CRM — clients.json + debtors_contacts.json)
         contact = match_client(name, contacts)
         if not contact:
-            logger.info("[%s] нет в справочнике контактов — пропуск", name)
+            # Телефон менеджер вносит через CRM-поток в 18:00, не из коллектора
+            logger.info("[%s] нет телефона в базе — пропуск (CRM запросит в 18:00)", name)
             processed.append({"name": name, "level": level, "no_contacts": True,
                                "sent": False, "promise_received": False,
                                "promise_broken": False, "escalated": False})
-            # Авторегистрация + уведомление менеджера (не чаще 1 раза в день)
-            if not dry_run and not already_notified_manager_today(name):
-                mgr_name = client.get("manager", "")
-                mgr_chat_id = _get_manager_chat_id(mgr_name) if mgr_name else None
-
-                # Авторегистрируем клиента в реестре без телефона
-                from collector.registry_manager import auto_register_client
-                auto_register_client(
-                    name=name,
-                    manager=mgr_name,
-                    amount=client["amount"],
-                    days=client["days"],
-                    violation=bool(client.get("violation_shipment")),
-                )
-
-                if mgr_chat_id:
-                    # BUG-C4 fix: violation_flag убран — о нарушении менеджер уже
-                    # получил батч-уведомление выше (блок _violations_by_mgr).
-                    # Здесь только запрос контакта, без дубля.
-                    violation_flag = ""
-                    reg_msg = (
-                        f"🤖 <b>Новый должник внесён в реестр автоматически</b>\n\n"
-                        f"{violation_flag}"
-                        f"Клиент: <b>{name}</b>\n"
-                        f"Долг: <b>{client['amount']:,.0f} тг</b>\n"
-                        f"Дней просрочки: <b>{client['days']}</b> (уровень {level})\n\n"
-                        f"📞 Чтобы бот мог подготовить напоминание для этого клиента, "
-                        f"нужен его номер WhatsApp.\n\n"
-                        f"⚠️ <b>Без вашего одобрения клиенту ничего не уйдёт.</b> "
-                        f"Бот пришлёт вам текст на проверку — вы сами решаете, отправлять или нет.\n\n"
-                        f"🔴 <b>ВАЖНО:</b> Убедитесь, что номер принадлежит именно "
-                        f"этому клиенту — ошибка приведёт к тому, что бот будет "
-                        f"беспокоить постороннего человека!"
-                    )
-                    # Сохраняем pending-состояние и отправляем с кнопками
-                    set_phone_pending(mgr_chat_id, name)
-                    from collector.collections_db import set_name_pending as _set_name_pending
-                    _set_name_pending(mgr_chat_id, name)
-                    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-                    keyboard = InlineKeyboardMarkup([
-                        [
-                            InlineKeyboardButton(
-                                "📞 Внести телефон клиента",
-                                callback_data="reg_phone",
-                            ),
-                            InlineKeyboardButton(
-                                "✏️ Исправить имя",
-                                callback_data="reg_name",
-                            ),
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "🇷🇺 Русский",
-                                callback_data="reg_lang_ru",
-                            ),
-                            InlineKeyboardButton(
-                                "🇰🇿 Қазақша",
-                                callback_data="reg_lang_kz",
-                            ),
-                        ],
-                    ])
-                    from collector.communications import send_telegram_with_markup
-                    await send_telegram_with_markup(mgr_chat_id, reg_msg, keyboard)
-                    mark_manager_notified(name)
-                    logger.info(
-                        "[%s] авторегистрация + уведомление менеджеру %s отправлено",
-                        name, mgr_name,
-                    )
             continue
 
         result = await _process_single(client, contact, dry_run)
@@ -516,7 +451,11 @@ async def check_promises() -> None:
         return
 
     logger.info("Просроченных обещаний: %d", len(pending))
-    contacts = load_contacts()
+    try:
+        from bot.crm_clients import load_contacts_compat as _crm_contacts
+        contacts = _crm_contacts()
+    except Exception:
+        contacts = load_contacts()
 
     for item in pending:
         name = item["name"]

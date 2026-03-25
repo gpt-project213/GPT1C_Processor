@@ -1,0 +1,369 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+bot/crm_clients.py
+Универсальная база клиентов Минбаракат (CRM).
+
+Версия: 1.0.0 (2026-03-25)
+
+Источники данных:
+  - reports/json/debt_ext_*.json   → должники по менеджерам
+  - reports/json/sales_*.json      → покупатели по менеджерам
+
+Функции:
+  load_clients()                  → загрузить config/clients.json
+  save_clients(data)              → атомарная запись
+  update_from_reports()           → обновить из последних JSON-отчётов
+  get_clients_without_phones()    → список клиентов без телефона (для 18:00 задачи)
+  set_client_phone()              → записать телефон клиента
+  load_contacts_compat()          → формат, совместимый с debtors_contacts.json
+  get_new_clients_since()         → новые клиенты с даты (для уведомлений)
+"""
+
+import json
+import logging
+import os
+import re
+import tempfile
+from datetime import date, datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+from dotenv import load_dotenv
+from zoneinfo import ZoneInfo
+
+load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env",
+            encoding="utf-8-sig", override=False)
+
+TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
+
+ROOT_DIR   = Path(__file__).resolve().parent.parent
+JSON_DIR   = ROOT_DIR / "reports" / "json"
+CONFIG_DIR = ROOT_DIR / "config"
+CLIENTS_PATH = CONFIG_DIR / "clients.json"
+
+logger = logging.getLogger(__name__)
+
+
+# ─────────────────────────────────────────────
+# Загрузка / сохранение
+# ─────────────────────────────────────────────
+
+def load_clients() -> Dict[str, Any]:
+    """Загружает config/clients.json. Возвращает {'clients': {...}}."""
+    if not CLIENTS_PATH.exists():
+        return {"clients": {}}
+    try:
+        with open(CLIENTS_PATH, encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data.get("clients"), dict):
+            data["clients"] = {}
+        return data
+    except (OSError, json.JSONDecodeError) as e:
+        logger.error("Ошибка чтения clients.json: %s", e)
+        return {"clients": {}}
+
+
+def save_clients(data: Dict[str, Any]) -> None:
+    """Атомарная запись config/clients.json."""
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        tmp = tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8",
+            dir=CONFIG_DIR, suffix=".tmp", delete=False,
+        )
+        json.dump(data, tmp, ensure_ascii=False, indent=2)
+        tmp.close()
+        os.replace(tmp.name, CLIENTS_PATH)
+        logger.debug("clients.json сохранён (%d клиентов)", len(data.get("clients", {})))
+    except OSError as e:
+        logger.error("Ошибка записи clients.json: %s", e)
+
+
+# ─────────────────────────────────────────────
+# Вспомогательные функции разбора JSON отчётов
+# ─────────────────────────────────────────────
+
+def _safe_mtime(p: Path) -> float:
+    try:
+        return p.stat().st_mtime
+    except (FileNotFoundError, OSError):
+        return 0.0
+
+
+def _today() -> str:
+    return date.today().isoformat()
+
+
+def _parse_manager_from_filename(filename: str) -> str:
+    """Пытается извлечь имя менеджера из имени файла sales_продажи_МЕНЕДЖЕР_..."""
+    managers = ("алена", "ергали", "магира", "оксана")
+    name_lower = filename.lower()
+    for mgr in managers:
+        if mgr in name_lower:
+            return mgr.capitalize()
+    return ""
+
+
+def _load_latest_debt_clients() -> List[Tuple[str, str]]:
+    """
+    Читает последние debt_ext_*.json по каждому менеджеру.
+    Возвращает список (client_name, manager).
+    """
+    candidates = list(JSON_DIR.glob("debt_ext_*.json"))
+    if not candidates:
+        return []
+
+    # Группируем по базовому имени (без суффикса ' (NNN)')
+    groups: Dict[str, List[Path]] = {}
+    for p in candidates:
+        base = re.sub(r"\s*\(\d+\)$", "", p.stem)
+        groups.setdefault(base, []).append(p)
+
+    result: List[Tuple[str, str]] = []
+    for _base, paths in groups.items():
+        latest = max(paths, key=_safe_mtime)
+        try:
+            with open(latest, encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError) as e:
+            logger.error("debt JSON read error %s: %s", latest.name, e)
+            continue
+
+        manager = (data.get("manager") or "") if isinstance(data, dict) else ""
+        if not manager or manager in ("?", "-", "—", "ABSENT"):
+            continue
+
+        clients: List[Dict[str, Any]] = []
+        if isinstance(data, dict):
+            for key in ("clients", "rows", "data"):
+                if key in data and isinstance(data[key], list):
+                    clients = data[key]
+                    break
+
+        for c in clients:
+            if not isinstance(c, dict):
+                continue
+            name = (c.get("name") or c.get("client") or "").strip()
+            if name:
+                result.append((name, manager))
+
+    return result
+
+
+def _load_latest_sales_clients() -> List[Tuple[str, str]]:
+    """
+    Читает последние sales_*.json по каждому менеджеру.
+    Возвращает список (client_name, manager).
+    """
+    candidates = list(JSON_DIR.glob("sales_*.json"))
+    if not candidates:
+        return []
+
+    # Группируем по слагу менеджера: sales_продажи_<manager>_...
+    # Файлы без менеджера в имени (общие) группируем в ""
+    groups: Dict[str, List[Path]] = {}
+    for p in candidates:
+        mgr = _parse_manager_from_filename(p.stem)
+        key = mgr if mgr else "__общий__"
+        groups.setdefault(key, []).append(p)
+
+    result: List[Tuple[str, str]] = []
+    for _key, paths in groups.items():
+        latest = max(paths, key=_safe_mtime)
+        try:
+            with open(latest, encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError) as e:
+            logger.error("sales JSON read error %s: %s", latest.name, e)
+            continue
+
+        manager = (data.get("manager") or "").strip() if isinstance(data, dict) else ""
+        if not manager:
+            continue
+
+        clients_list: List[Dict[str, Any]] = data.get("clients", []) if isinstance(data, dict) else []
+        for c in clients_list:
+            if not isinstance(c, dict):
+                continue
+            name = (c.get("client") or c.get("name") or "").strip()
+            if name:
+                result.append((name, manager))
+
+    return result
+
+
+# ─────────────────────────────────────────────
+# Обновление базы из отчётов
+# ─────────────────────────────────────────────
+
+def update_from_reports() -> Dict[str, List[str]]:
+    """
+    Сканирует последние debt и sales JSON, добавляет новых клиентов.
+    Обновляет last_seen, sources для существующих.
+
+    Возвращает словарь новых клиентов по менеджерам:
+      {"Алена": ["Клиент А", "Клиент Б"], "Ергали": [...]}
+    """
+    data = load_clients()
+    clients_db: Dict[str, Any] = data.get("clients", {})
+    today = _today()
+    new_by_manager: Dict[str, List[str]] = {}
+
+    def _upsert(name: str, manager: str, source: str) -> bool:
+        """Добавляет/обновляет клиента. Возвращает True если клиент новый."""
+        existing = clients_db.get(name)
+        if existing is None:
+            clients_db[name] = {
+                "manager": manager,
+                "whatsapp": "",
+                "telegram_id": "",
+                "language": "ru",
+                "do_not_call": False,
+                "sources": [source],
+                "first_seen": today,
+                "last_seen": today,
+            }
+            return True
+        else:
+            # Обновляем last_seen и sources
+            existing["last_seen"] = today
+            if source not in existing.get("sources", []):
+                existing.setdefault("sources", []).append(source)
+            # Обновляем менеджера если был пустым
+            if not existing.get("manager") and manager:
+                existing["manager"] = manager
+            return False
+
+    # Из дебиторки
+    for name, manager in _load_latest_debt_clients():
+        is_new = _upsert(name, manager, "debt")
+        if is_new and manager:
+            new_by_manager.setdefault(manager, []).append(name)
+
+    # Из продаж
+    for name, manager in _load_latest_sales_clients():
+        is_new = _upsert(name, manager, "sales")
+        if is_new and manager:
+            new_by_manager.setdefault(manager, []).append(name)
+
+    data["clients"] = clients_db
+    save_clients(data)
+
+    total_new = sum(len(v) for v in new_by_manager.values())
+    logger.info("CRM обновлена: %d клиентов всего, %d новых", len(clients_db), total_new)
+    return new_by_manager
+
+
+# ─────────────────────────────────────────────
+# Работа с телефонами
+# ─────────────────────────────────────────────
+
+def get_clients_without_phones(manager: str, limit: int = 5) -> List[str]:
+    """
+    Возвращает до `limit` имён клиентов данного менеджера без телефона.
+    Приоритет: сначала клиенты из дебиторки.
+    """
+    data = load_clients()
+    clients_db = data.get("clients", {})
+    no_phone = []
+    for name, info in clients_db.items():
+        if not isinstance(info, dict):
+            continue
+        if info.get("manager", "").lower() != manager.lower():
+            continue
+        if info.get("whatsapp") or info.get("telegram_id"):
+            continue
+        # Приоритет — дебиторка
+        sources = info.get("sources", [])
+        priority = 0 if "debt" in sources else 1
+        no_phone.append((priority, name))
+
+    no_phone.sort()
+    return [name for _, name in no_phone[:limit]]
+
+
+def set_client_phone(client_name: str, phone: str, manager: str = "") -> bool:
+    """
+    Записывает телефон (WhatsApp) клиента в clients.json.
+    Возвращает True если клиент найден и обновлён.
+    """
+    data = load_clients()
+    clients_db = data.get("clients", {})
+
+    # Точное совпадение
+    entry = clients_db.get(client_name)
+    if entry is None:
+        # Нечёткий поиск по первым 3 словам
+        target_words = client_name.lower().split()[:3]
+        for key in clients_db:
+            if key.lower().split()[:3] == target_words:
+                entry = clients_db[key]
+                client_name = key
+                break
+
+    if entry is None:
+        logger.warning("set_client_phone: клиент не найден: %s", client_name)
+        return False
+
+    entry["whatsapp"] = phone.strip()
+    if manager and not entry.get("manager"):
+        entry["manager"] = manager
+    data["clients"] = clients_db
+    save_clients(data)
+    logger.info("Телефон записан: %s → %s", client_name, phone)
+    return True
+
+
+# ─────────────────────────────────────────────
+# Совместимость с коллектором
+# ─────────────────────────────────────────────
+
+def load_contacts_compat() -> Dict[str, Any]:
+    """
+    Возвращает словарь контактов в формате, совместимом с debtors_contacts.json:
+      {client_name: {"whatsapp": ..., "telegram_id": ..., "manager": ..., ...}}
+
+    Коллектор использует этот формат через match_client().
+    Сначала приоритет у clients.json, как fallback — debtors_contacts.json.
+    """
+    from collector.debt_monitor import load_contacts as _load_legacy_contacts
+    legacy = _load_legacy_contacts()
+
+    data = load_clients()
+    clients_db = data.get("clients", {})
+
+    # Начинаем с legacy (debtors_contacts.json), перекрываем данными CRM
+    merged: Dict[str, Any] = dict(legacy)
+    for name, info in clients_db.items():
+        if not isinstance(info, dict):
+            continue
+        merged[name] = {
+            "whatsapp": info.get("whatsapp", ""),
+            "telegram_id": info.get("telegram_id", ""),
+            "manager": info.get("manager", ""),
+            "language": info.get("language", "ru"),
+            "do_not_call": info.get("do_not_call", False),
+        }
+
+    return merged
+
+
+# ─────────────────────────────────────────────
+# Уведомления о новых клиентах
+# ─────────────────────────────────────────────
+
+def get_new_clients_since(since_date: str) -> Dict[str, List[str]]:
+    """
+    Возвращает клиентов с first_seen >= since_date, сгруппированных по менеджеру.
+    since_date: "YYYY-MM-DD"
+    """
+    data = load_clients()
+    result: Dict[str, List[str]] = {}
+    for name, info in data.get("clients", {}).items():
+        if not isinstance(info, dict):
+            continue
+        if info.get("first_seen", "0000-00-00") >= since_date:
+            mgr = info.get("manager", "")
+            result.setdefault(mgr, []).append(name)
+    return result
