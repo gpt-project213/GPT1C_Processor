@@ -381,6 +381,31 @@ def set_client_phone(client_name: str, phone: str, manager: str = "",
     return True
 
 
+def set_client_details(client_name: str, display_name: str = "",
+                        phone: str = "", address: str = "") -> bool:
+    """
+    Сохраняет display_name, телефон и/или адрес торговой точки для клиента.
+    Обновляет только переданные (непустые) поля.
+    """
+    data = load_clients()
+    clients_db = data.get("clients", {})
+    entry = clients_db.get(client_name)
+    if entry is None:
+        logger.warning("set_client_details: клиент не найден: %s", client_name)
+        return False
+    if display_name and display_name.strip().lower() != client_name.lower():
+        entry["display_name"] = display_name.strip()
+    if phone:
+        entry["whatsapp"] = phone.strip()
+    if address:
+        entry["address"] = address.strip()
+    data["clients"] = clients_db
+    save_clients(data)
+    logger.info("Данные обновлены: %s (name=%r phone=%r address=%r)",
+                client_name, display_name or "-", phone or "-", address or "-")
+    return True
+
+
 def set_client_alias(client_name: str, alias: str) -> bool:
     """
     Сохраняет display_name (псевдоним) для клиента без изменения телефона.

@@ -4609,8 +4609,28 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
             idx_str = data.split("|", 1)[1]
             if idx_str == "cancel":
-                _CRM_PHONE_PENDING.pop(chat_id, None)
-                await q.edit_message_text("❌ Отменено. Клиент не добавлен.")
+                # "Нет нужного" → берём первого из списка без телефона у этого менеджера
+                # и запускаем точечный уточняющий диалог по шагам
+                from bot.crm_clients import get_clients_without_phones as _no_phone
+                mgr = _chat_to_manager(chat_id)
+                no_phone_list = _no_phone(mgr or "", limit=1) if mgr else []
+                if no_phone_list:
+                    target = no_phone_list[0]
+                    _CRM_PHONE_PENDING[chat_id] = {
+                        "state": "clarify_name",
+                        "client_key": target,
+                    }
+                    await q.edit_message_text(
+                        f"Уточните данные для клиента из базы:\n\n"
+                        f"📋 <b>{target}</b>\n\n"
+                        f"Как к нему обращаться? Введите имя:",
+                        parse_mode="HTML",
+                    )
+                else:
+                    _CRM_PHONE_PENDING.pop(chat_id, None)
+                    await q.edit_message_text(
+                        "✅ У всех ваших клиентов уже есть телефон в базе."
+                    )
                 return
             idx = int(idx_str)
             candidates = pending["candidates"]
@@ -5834,6 +5854,72 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
     """Обработчик команд от постоянного меню (v9.4.12)"""
     text = update.message.text
     chat_id = update.effective_chat.id
+
+    # CRM: уточняющий диалог по шагам (clarify_name → clarify_phone → clarify_address)
+    pending = _CRM_PHONE_PENDING.get(chat_id)
+    if pending and pending.get("state", "").startswith("clarify_"):
+        state = pending["state"]
+        client_key = pending["client_key"]
+        try:
+            from bot.crm_clients import set_client_details as _set_details
+            import re as _re
+
+            if state == "clarify_name":
+                display_name = text.strip()
+                if len(display_name) < 2:
+                    await update.message.reply_text("❌ Слишком короткое имя. Введите снова:")
+                    return
+                pending["display_name"] = display_name
+                pending["state"] = "clarify_phone"
+                await update.message.reply_text(
+                    f"Телефон WhatsApp для <b>{display_name}</b>?\n\n"
+                    f"Формат: <code>+77001234567</code>",
+                    parse_mode="HTML",
+                )
+                return
+
+            if state == "clarify_phone":
+                phone_digits = _re.sub(r"\D", "", text.strip())
+                if _re.fullmatch(r"8\d{10}", phone_digits):
+                    phone_digits = "7" + phone_digits[1:]
+                if not _re.fullmatch(r"7\d{10}", phone_digits):
+                    await update.message.reply_text(
+                        f"❌ Неверный формат.\n"
+                        f"Введите: <code>+77001234567</code>",
+                        parse_mode="HTML",
+                    )
+                    return
+                pending["phone"] = "+" + phone_digits
+                pending["state"] = "clarify_address"
+                await update.message.reply_text("Адрес торговой точки?")
+                return
+
+            if state == "clarify_address":
+                address = text.strip()
+                pending["address"] = address
+                display_name = pending.get("display_name", "")
+                phone = pending.get("phone", "")
+                ok = _set_details(client_key, display_name=display_name,
+                                  phone=phone, address=address)
+                _CRM_PHONE_PENDING.pop(chat_id, None)
+                if ok:
+                    await update.message.reply_text(
+                        f"✅ Данные сохранены:\n"
+                        f"👤 <b>{display_name}</b>\n"
+                        f"📞 {phone}\n"
+                        f"📍 {address}",
+                        parse_mode="HTML",
+                    )
+                    log_event("crm_details_set", client=client_key,
+                              display_name=display_name, phone=phone, address=address)
+                else:
+                    await update.message.reply_text("⚠️ Не удалось сохранить. Клиент не найден.")
+                return
+
+        except Exception as e:
+            logger.error("crm clarify handler error: %s", e)
+            _CRM_PHONE_PENDING.pop(chat_id, None)
+        return
 
     # [DISABLED v9.4.39] Старый flow: коллектор → pending → ввод текстом.
     # Заменён на CRM /phone + crm_psel| callback.
