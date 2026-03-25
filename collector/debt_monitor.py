@@ -235,7 +235,10 @@ def classify_debtors(debt_data: Dict[str, Any]) -> List[Dict[str, Any]]:
             debit = float(str(client.get("debit") or 0).replace(" ", "").replace(",", "."))
         except (ValueError, TypeError):
             pass
-        violation_shipment = opening >= 100 and debit > 0
+        # BUG-C1 fix: violation только при просрочке >= 7 дней (OVERDUE_DAYS).
+        # Без порога дней условие срабатывало для ВСЕХ активных торговых клиентов
+        # (opening>=100 просто означает «была задолженность на начало периода»).
+        violation_shipment = opening >= 100 and debit > 0 and days >= 7
 
         level = _level_for_days(days)
         # Нарушение → минимум уровень 1, даже если дней молчания < 10

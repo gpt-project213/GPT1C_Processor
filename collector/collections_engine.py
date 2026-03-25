@@ -318,48 +318,65 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
     processed: List[Dict] = []
 
     # Уведомления о нарушениях: отгрузка при наличии долга — вина менеджера
+    # BUG-C2/C3 fix: батчинг — одна загрузка state, один save, одно сообщение
+    # на менеджера и одна сводка для админа (вместо N отдельных сообщений).
     if not dry_run:
+        _vstate = load_state()  # загружаем state ОДИН раз до цикла
+
+        # Группируем ненотифицированные нарушения по менеджеру
+        _violations_by_mgr: Dict[str, List[Dict[str, Any]]] = {}
+        _violations_no_mgr: List[Dict[str, Any]] = []
         for _client in debtors:
             if not _client.get("violation_shipment"):
                 continue
-            _vname = _client["name"]
-            _vamount = _client["amount"]
-            _vdays = _client["days"]
-            _vmgr = _client.get("manager", "")
-            _vmgr_chat_id = _get_manager_chat_id(_vmgr) if _vmgr else None
-
-            _vkey = f"__violation_notified__{_vname}"
-            _vstate = load_state()
+            _vkey = f"__violation_notified__{_client['name']}"
             if _vstate.get(_vkey, {}).get("date") == _today_str():
                 continue  # уже уведомляли сегодня
+            _vmgr = _client.get("manager", "")
+            if _vmgr:
+                _violations_by_mgr.setdefault(_vmgr, []).append(_client)
+            else:
+                _violations_no_mgr.append(_client)
 
-            # Менеджеру — личный сигнал о его нарушении
+        # Отправляем одно сообщение каждому менеджеру со списком его нарушений
+        from collector.communications import send_telegram as _send_tg
+        for _vmgr, _vclients in _violations_by_mgr.items():
+            _vmgr_chat_id = _get_manager_chat_id(_vmgr)
             if _vmgr_chat_id:
-                _mgr_msg = (
-                    f"🚨 <b>Нарушение: отгрузка при наличии долга</b>\n\n"
-                    f"Клиент: <b>{_vname}</b>\n"
-                    f"Долг: <b>{_vamount:,.0f} тг</b> ({_vdays} дн.)\n\n"
-                    f"По данному клиенту была произведена отгрузка при существующей "
-                    f"задолженности. Это нарушение кредитной политики компании.\n\n"
-                    f"Прошу урегулировать ситуацию с клиентом лично."
+                _lines = [
+                    f"🚨 <b>Нарушение кредитной политики — {len(_vclients)} клиент(ов)</b>\n",
+                    "Отгрузка произведена при непогашенной задолженности:\n",
+                ]
+                for _vc in _vclients:
+                    _lines.append(
+                        f"  • <b>{_vc['name']}</b> — {_vc['amount']:,.0f} тг ({_vc['days']} дн.)"
+                    )
+                _lines.append("\nПрошу урегулировать ситуацию с каждым клиентом лично.")
+                await _send_tg(_vmgr_chat_id, "\n".join(_lines))
+
+        # Одна сводка для админа по всем нарушениям
+        _all_violations = [
+            _c for _vl in _violations_by_mgr.values() for _c in _vl
+        ] + _violations_no_mgr
+        if _all_violations:
+            _admin_lines = [
+                f"🚨 <b>Нарушения кредитной политики — {len(_all_violations)} случай</b>\n",
+            ]
+            for _vc in _all_violations:
+                _admin_lines.append(
+                    f"  • {_vc.get('manager', '?')}: <b>{_vc['name']}</b>"
+                    f" — {_vc['amount']:,.0f} тг ({_vc['days']} дн.)"
                 )
-                from collector.communications import send_telegram
-                await send_telegram(_vmgr_chat_id, _mgr_msg)
+            await notify_admin("\n".join(_admin_lines))
 
-            # Тебе (админу) — сводный сигнал с именем менеджера
-            _admin_msg = (
-                f"🚨 <b>Нарушение кредитной политики</b>\n\n"
-                f"Менеджер: <b>{_vmgr or 'не указан'}</b>\n"
-                f"Клиент: <b>{_vname}</b>\n"
-                f"Долг: <b>{_vamount:,.0f} тг</b> ({_vdays} дн.)\n\n"
-                f"Была произведена отгрузка клиенту при наличии непогашенной задолженности."
-            )
-            await notify_admin(_admin_msg)
-
-            # Помечаем что уведомили сегодня
-            _vstate[_vkey] = {"date": _today_str()}
-            save_state(_vstate)
-            logger.warning("Нарушение — отгрузка при долге: клиент=%s менеджер=%s", _vname, _vmgr)
+            # Помечаем всех сразу — одна запись state
+            for _vc in _all_violations:
+                _vstate[f"__violation_notified__{_vc['name']}"] = {"date": _today_str()}
+                logger.warning(
+                    "Нарушение — отгрузка при долге: клиент=%s менеджер=%s",
+                    _vc["name"], _vc.get("manager", ""),
+                )
+            save_state(_vstate)  # ОДИН save после всего цикла
 
     # Сбрасываем счётчик дней для клиентов, чей долг погашен:
     # если клиент есть в нашем state (был должником), но пропал из текущих
@@ -384,7 +401,8 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
         # days_silence из 1С сбрасывается на любую оплату — это ненадёжно.
         # Наш счётчик считает дни с момента ПЕРВОГО обнаружения долга у клиента
         # и сбрасывается только при полном погашении (debt=0).
-        real_days = get_debt_days_since_first_seen(name)
+        # BUG-C5 fix: dry-run не должен регистрировать first_seen в state.
+        real_days = 0 if dry_run else get_debt_days_since_first_seen(name)
         # Уровень — максимум из 1С-дней и наших дней (берём наибольший)
         from collector.debt_monitor import _level_for_days
         level = max(client["level"], _level_for_days(real_days))
@@ -426,10 +444,10 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
                 )
 
                 if mgr_chat_id:
-                    violation_flag = (
-                        "⚠️ <b>НАРУШЕНИЕ: отгрузка при наличии долга!</b>\n\n"
-                        if client.get("violation_shipment") else ""
-                    )
+                    # BUG-C4 fix: violation_flag убран — о нарушении менеджер уже
+                    # получил батч-уведомление выше (блок _violations_by_mgr).
+                    # Здесь только запрос контакта, без дубля.
+                    violation_flag = ""
                     reg_msg = (
                         f"🤖 <b>Новый должник внесён в реестр автоматически</b>\n\n"
                         f"{violation_flag}"
