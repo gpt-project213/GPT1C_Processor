@@ -1068,6 +1068,10 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
     3. Каждому менеджеру — точечный запрос данных для ОДНОГО клиента без телефона:
        бот называет имя из 1С и просит по шагам: как обращаться → телефон → адрес.
     """
+    from bot.workday_checker import is_holiday_today
+    if is_holiday_today():
+        logger.info("crm_daily_task: выходной — пропуск")
+        return
     from bot.crm_clients import (
         update_from_reports as _crm_update,
         get_clients_without_phones as _crm_no_phone,
@@ -1131,11 +1135,48 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# WORKDAY CHECK — запрос выходного дня у администратора (12:00)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+async def check_workday_task(context: ContextTypes.DEFAULT_TYPE):
+    """
+    В 12:00: если xlsx от whitelist сегодня не пришли и флаг не установлен —
+    спрашивает администратора: выходной или ждать?
+    """
+    from bot.workday_checker import needs_admin_confirmation
+    if not needs_admin_confirmation():
+        return
+    if not ADMIN_CHAT_ID:
+        return
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Да, выходной",    callback_data="workday|holiday"),
+        InlineKeyboardButton("❌ Нет, рабочий день", callback_data="workday|workday"),
+    ]])
+    try:
+        await context.bot.send_message(
+            chat_id=ADMIN_CHAT_ID,
+            text=(
+                "📭 До 12:00 не поступило ни одного отчёта.\n\n"
+                "Сегодня выходной?"
+            ),
+            reply_markup=kb,
+        )
+        log_event("workday_check_sent")
+    except Exception as e:
+        logger.warning("check_workday_task error: %s", e)
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # AI DEBT COLLECTOR — job-обёртки для scheduler
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 async def debt_collector_daily(context: ContextTypes.DEFAULT_TYPE):
     """Ежедневный запуск AI-коллектора в 18:00 Asia/Almaty."""
+    from bot.workday_checker import is_holiday_today
+    if is_holiday_today():
+        logger.info("debt_collector_daily: выходной — пропуск")
+        return
     dry_run = os.getenv("COLLECTOR_DRY_RUN", "false").lower() == "true"
     log_event("collector_daily_start", dry_run=dry_run)
     try:
@@ -1152,6 +1193,10 @@ async def debt_collector_daily(context: ContextTypes.DEFAULT_TYPE):
 
 async def debt_collector_promises(context: ContextTypes.DEFAULT_TYPE):
     """Ежедневная проверка просроченных обещаний оплаты в 10:00 Asia/Almaty."""
+    from bot.workday_checker import is_holiday_today
+    if is_holiday_today():
+        logger.info("debt_collector_promises: выходной — пропуск")
+        return
     log_event("collector_promises_start")
     try:
         rc, stdout, stderr = await run_script_async(
@@ -1786,10 +1831,14 @@ async def send_weekly_ai_to_recipients(results: list, context):
 
 async def send_inventory_summary(context: ContextTypes.DEFAULT_TYPE):
     """v9.4.10: Краткая сводка остатков ТОЛЬКО АДМИНУ (09:00)"""
+    from bot.workday_checker import is_holiday_today
+    if is_holiday_today():
+        logger.info("send_inventory_summary: выходной — пропуск")
+        return
     if not InventorySummary:
         logger.error("InventorySummary не импортирован")
         return
-    
+
     log_event("inventory_summary_start")
     
     try:
@@ -1820,6 +1869,10 @@ async def send_inventory_summary(context: ContextTypes.DEFAULT_TYPE):
 
 async def send_sales_summary(context: ContextTypes.DEFAULT_TYPE):
     """v9.4.32: Краткая сводка продаж ТОЛЬКО АДМИНУ (21:00) — агрегация ВСЕХ менеджеров из JSON."""
+    from bot.workday_checker import is_holiday_today
+    if is_holiday_today():
+        logger.info("send_sales_summary: выходной — пропуск")
+        return
     if not SalesSummary:
         logger.error("SalesSummary не импортирован")
         return
@@ -1949,10 +2002,14 @@ async def send_sales_pipeline_summary(context, json_path: "Path", manager_name: 
 
 async def send_gross_summary(context: ContextTypes.DEFAULT_TYPE):
     """Краткая сводка валовой админу (20:00)"""
+    from bot.workday_checker import is_holiday_today
+    if is_holiday_today():
+        logger.info("send_gross_summary: выходной — пропуск")
+        return
     if not GrossSummary:
         logger.error("GrossSummary не импортирован")
         return
-    
+
     log_event("gross_summary_start")
     
     try:
@@ -3452,6 +3509,10 @@ async def _suggest_weekly_clients(context, chat_id: int, categorized: dict, week
 
 async def check_and_send_silence_alerts(context=None):
     """Проверяет дни молчания у всех менеджеров и отправляет уведомления"""
+    from bot.workday_checker import is_holiday_today
+    if is_holiday_today():
+        logger.info("check_and_send_silence_alerts: выходной — пропуск")
+        return
     logger.info("🔔 Начинается проверка дней молчания...")
     alert = SilenceAlert()
     reports_dir = HTML_DIR
@@ -4564,6 +4625,30 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = q.data or ""
     chat_id = q.message.chat.id
 
+
+    # Выходной / рабочий день — ответ администратора
+    if data.startswith("workday|"):
+        if not is_admin(chat_id):
+            return
+        from bot.workday_checker import set_holiday, clear_holiday
+        from datetime import datetime
+        today = datetime.now(TZ).strftime("%Y-%m-%d")
+        choice = data.split("|", 1)[1]
+        if choice == "holiday":
+            set_holiday(today)
+            await q.edit_message_text(
+                f"✅ Сегодня ({today}) — выходной.\n"
+                f"Уведомления менеджерам не отправляются."
+            )
+            log_event("workday_set_holiday", date=today)
+        else:
+            clear_holiday(today)
+            await q.edit_message_text(
+                f"✅ Сегодня ({today}) — рабочий день.\n"
+                f"Все уведомления активны."
+            )
+            log_event("workday_set_workday", date=today)
+        return
 
     # Collector dialog callbacks
     if data.startswith("col_"):
@@ -6072,6 +6157,14 @@ def main():
             name="cleanup_old_files"
         )
         logger.info("🧹 Настроена автоочистка файлов: логи 2д, AI 7д, HTML 30д, JSON 7д, Excel 14д | Запуск в 03:00")
+
+        # Проверка рабочего дня в 12:00 (если нет xlsx — спросить админа)
+        job_queue.run_daily(
+            check_workday_task,
+            time=dt_time(12, 0, tzinfo=TZ),
+            name="check_workday",
+        )
+        logger.info("📅 Настроена проверка рабочего дня: ежедневно 12:00")
 
         # CRM: обновление базы клиентов + запрос телефонов в 18:00
         job_queue.run_daily(
