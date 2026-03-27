@@ -4432,6 +4432,26 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 _CRM_PHONE_PENDING: Dict[int, Dict[str, Any]] = {}
 
 
+async def cmd_guide(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отправляет HTML-инструкцию менеджеру."""
+    chat_id = update.effective_chat.id
+    guide_path = ROOT_DIR / "docs" / "manager_guide.html"
+    if not guide_path.exists():
+        await context.bot.send_message(chat_id=chat_id, text="❌ Файл инструкции не найден.")
+        return
+    try:
+        with open(guide_path, "rb") as f:
+            await context.bot.send_document(
+                chat_id=chat_id,
+                document=f,
+                filename="manager_guide.html",
+                caption="📖 Инструкция по работе с ботом Минбаракат",
+            )
+    except Exception as e:
+        logger.error("cmd_guide error: %s", e)
+        await context.bot.send_message(chat_id=chat_id, text=f"❌ Ошибка отправки: {e}")
+
+
 async def cmd_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """CRM: /phone <имя клиента> <номер> — прямая запись телефона если имя совпадает точно."""
     chat_id = update.effective_chat.id
@@ -6043,6 +6063,7 @@ def main():
     application.add_handler(CommandHandler("stats", cmd_stats))
     application.add_handler(CommandHandler("analytics", cmd_analytics))  # 🆕 v9.4.9  # v2.0
     application.add_handler(CommandHandler("phone", cmd_phone))  # CRM: внести телефон клиента
+    application.add_handler(CommandHandler("guide", cmd_guide))  # Инструкция для менеджеров
     application.add_handler(CallbackQueryHandler(cb_data))
     job_queue = application.job_queue
     if job_queue:
