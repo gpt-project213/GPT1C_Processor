@@ -134,7 +134,7 @@ def save_promise(name: str, promise_date: str, amount: Optional[float]) -> None:
     record["promise_kept"] = None  # сбрасываем — новое обещание
     state[name] = record
     save_state(state)
-    logger.info("Обещание сохранено для %s: дата=%s, сумма=%s", name, promise_date, amount)
+    logger.info("Обещание сохранено: дата=%s", promise_date)
 
 
 def already_contacted_today(name: str) -> bool:

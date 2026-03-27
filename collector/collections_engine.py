@@ -64,6 +64,8 @@ logging.basicConfig(
     ],
 )
 logger = logging.getLogger(__name__)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 from collector.debt_monitor import (
     classify_debtors,
@@ -484,8 +486,8 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
             for _vc in _all_violations:
                 _vstate[f"__violation_notified__{_vc['name']}"] = {"date": _today_str()}
                 logger.warning(
-                    "Нарушение — отгрузка при долге: клиент=%s менеджер=%s",
-                    _vc["name"], _vc.get("manager", ""),
+                    "Нарушение — отгрузка при долге: менеджер=%s",
+                    _vc.get("manager", ""),
                 )
             save_state(_vstate)  # ОДИН save после всего цикла
 

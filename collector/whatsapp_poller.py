@@ -207,7 +207,7 @@ async def poll_once() -> None:
             logger.debug("Игнорируем webhook type=%s", webhook_type)
 
     except (httpx.RequestError, httpx.TimeoutException) as e:
-        logger.error("Green API сетевая ошибка: %s", e)
+        logger.debug("Green API сетевая ошибка: %s", e)
     except (KeyError, ValueError, TypeError) as e:
         logger.error("Ошибка разбора уведомления Green API: %s", e)
     finally:

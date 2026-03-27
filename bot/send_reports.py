@@ -652,6 +652,13 @@ class SensitiveDataFilter(logging.Filter):
             rules.append((re.escape(imap_user), "IMAP_EMAIL"))
         # Generic email fallback
         rules.append((r"[\w.+\-]+@[\w.\-]+\.[a-z]{2,6}", "EMAIL_HIDDEN"))
+        # Телефонные номера (казахстанский/российский формат)
+        rules.append((r'\+?[78]\d{10}\b', "PHONE_HIDDEN"))
+        rules.append((r'\b[78]\d{10}\b', "PHONE_HIDDEN"))
+        # DeepSeek / OpenAI API keys
+        rules.append((r'sk-[A-Za-z0-9\-_]{20,}', "API_KEY_HIDDEN"))
+        # Green API token (32+ hex chars)
+        rules.append((r'\b[0-9a-f]{32,}\b', "TOKEN_HIDDEN"))
         cls._MASK_RULES = [(re.compile(pat), repl) for pat, repl in rules]
         logger.info(f"🔒 SensitiveDataFilter: зарегистрировано {len(rules)} масок")
 
