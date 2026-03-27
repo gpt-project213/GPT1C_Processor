@@ -3736,7 +3736,7 @@ async def send_opportunity_loss_report(context=None):
                 all_data.append(data)
                 logger.info(
                     f"💸 {manager}: upущено {data['total_loss']:,.0f} ₸ "
-                    f"(☠️{len(data['zones']['dead'])} 🔴{len(data['zones']['red'])} "
+                    f"(🔴{len(data['zones']['red'])} "
                     f"⚡{len(data['zones']['yellow'])})"
                 )
             else:
