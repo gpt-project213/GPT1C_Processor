@@ -274,8 +274,9 @@ class SilenceAlert:
                               alarm/critical с флагом is_imitation.
 
         Флаг is_imitation добавляется клиентам в любой категории когда:
-          debit == 0 AND (credit == 0 OR credit < debt * IMITATION_THRESHOLD)
-          → нет отгрузок, оплата отсутствует или < 10% долга.
+          debit == 0 AND credit > 0 AND credit < debt * IMITATION_THRESHOLD
+          → нет отгрузок, платит что-то, но < 10% долга (сброс счётчика).
+          credit == 0 — НЕ имитация: просто не платит (обычная задолженность).
 
         Еженедельные клиенты (weekly_clients): исключаются из 'overdue'
         (7-9 дн) — у них нормальный недельный цикл оплаты.
@@ -301,10 +302,12 @@ class SilenceAlert:
             if debt < self.MIN_DEBT_AMOUNT:
                 continue
 
-            # Флаг имитации: нет отгрузок + оплата отсутствует или < 10% долга
+            # Флаг имитации: нет отгрузок + платит, но < 10% долга (сброс счётчика).
+            # credit == 0 — НЕ имитация: клиент просто не платит (обычная задолженность).
             is_imitation = (
                 debit == 0
-                and (credit == 0 or credit < debt * self.IMITATION_THRESHOLD)
+                and credit > 0
+                and credit < debt * self.IMITATION_THRESHOLD
                 and debt > 0
             )
 
