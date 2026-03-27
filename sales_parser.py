@@ -106,8 +106,8 @@ TOTAL_RE = re.compile(r"\b(итог(?:о)?|всего|итоги|общий ит
 PERIOD_RE = re.compile(r"период[:\s]*([^\n|;]+)", re.I)
 MANAGER_RE = re.compile(r"(менеджер|manager)[:\s]*([^\n|;]+)", re.I)
 
-# Системный менеджер — исключаем из всех списков
-_SYSTEM_MANAGERS = {"Минай"}
+# Системные менеджеры — исключаем из всех списков (читаем из config, lower)
+from config import _SYSTEM_MANAGER_NAMES as _SYSTEM_MANAGERS
 
 # ──────────────────────────────────────────────────────────────────
 # Fallback: менеджер из имени файла (если в Excel нет строки "Менеджер:")
@@ -127,7 +127,7 @@ def _load_manager_aliases() -> list[tuple[str, str]]:
                 out = []
                 for name, _chat_id in data.items():
                     name = str(name).strip()
-                    if not name or name in _SYSTEM_MANAGERS:
+                    if not name or name.lower() in _SYSTEM_MANAGERS:
                         continue
                     out.append((name.lower(), name))
                 if out:

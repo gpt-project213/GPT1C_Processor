@@ -166,7 +166,7 @@ MANAGERS_CFG: Dict[str, Any] = {
 }
 
 _SYSTEM_MANAGER_NAMES: frozenset = frozenset(
-    n.strip().lower() for n in os.getenv("SYSTEM_MANAGERS", "Минай").split(",") if n.strip()
+    n.strip().lower() for n in os.getenv("SYSTEM_MANAGERS", "").split(",") if n.strip()
 )
 
 _PREFIX_MAP: Dict[str, str] = {}

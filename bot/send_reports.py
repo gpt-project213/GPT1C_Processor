@@ -890,7 +890,7 @@ def get_subordinates_for_subadmin(manager_name: str) -> List[str]:
     subadmin_scopes = ROLES.get("subadmin_scopes", {})
     subordinates = subadmin_scopes.get(str(chat_id), [])
     if isinstance(subordinates, list):
-        return [s for s in subordinates if s != "Минай"]
+        return [s for s in subordinates if s not in _SYSTEM_ACCOUNTS]
     return []
 
 def user_scopes(chat_id: int) -> List[str]:
@@ -900,11 +900,11 @@ def user_scopes(chat_id: int) -> List[str]:
     scopes = []
     if role == "subadmin":
         subadmin_scopes = ROLES.get("subadmin_scopes", {}).get(str(chat_id), [])
-        scopes.extend([s for s in subadmin_scopes if s != "Минай"])
+        scopes.extend([s for s in subadmin_scopes if s not in _SYSTEM_ACCOUNTS])
     my_name = get_my_manager_name(chat_id)
     if my_name:
         scopes.append(my_name)
-    return sorted([s for s in list(set(scopes)) if s != "Минай"])
+    return sorted([s for s in list(set(scopes)) if s not in _SYSTEM_ACCOUNTS])
 
 # Блок 4.1_____________Система автоудаления сообщений (v9.4.5)________________
 def _load_deletion_queue() -> Dict[str, Any]:
@@ -1104,7 +1104,7 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
         #    после каждого сохранения (один заполнил → сразу следующий).
         #    Включает admin (Вадим) — у него тоже могут быть свои клиенты.
         for manager, chat_id in _all_crm_participants().items():
-            if manager == "Минай":
+            if manager in _SYSTEM_ACCOUNTS:
                 continue
             no_phone = _crm_no_phone(manager, limit=1)
             if not no_phone:
@@ -4515,7 +4515,7 @@ def _crm_claim_token() -> str:
 async def cmd_guide(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Отправляет HTML-инструкцию менеджеру."""
     chat_id = update.effective_chat.id
-    guide_path = ROOT_DIR / "docs" / "manager_guide.html"
+    guide_path = ROOT_DIR / "docs" / "Инструкция по работе с ботом.html"
     if not guide_path.exists():
         await context.bot.send_message(chat_id=chat_id, text="❌ Файл инструкции не найден.")
         return
@@ -4524,7 +4524,7 @@ async def cmd_guide(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_document(
                 chat_id=chat_id,
                 document=f,
-                filename="manager_guide.html",
+                filename="Инструкция по работе с ботом.html",
                 caption="📖 Инструкция по работе с ботом Минбаракат",
             )
     except Exception as e:
@@ -5373,7 +5373,7 @@ async def post_init(app: Application):
 
     if MANAGERS_MAP:
         for manager, chat_id in MANAGERS_MAP.items():
-            if manager == "Минай" or chat_id == ADMIN_CHAT_ID:
+            if manager in _SYSTEM_ACCOUNTS or chat_id == ADMIN_CHAT_ID:
                 continue
             try:
                 await app.bot.send_message(
