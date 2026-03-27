@@ -308,39 +308,8 @@ async def _parse_contact_with_ai(text: str, current: Dict[str, Any]) -> Dict[str
 
 
 async def _parse_rejection_reason(text: str) -> str:
-    """Очищает/суммаризирует причину отказа через AI. Fallback — оригинал."""
-    if not DEEPSEEK_API_KEY:
-        return text.strip()
-
-    url = "https://api.deepseek.com/v1/chat/completions"
-    payload = {
-        "model": DEEPSEEK_MODEL,
-        "messages": [
-            {
-                "role": "system",
-                "content": (
-                    "Ты помощник. Сформулируй причину отказа менеджера кратко "
-                    "(1-2 предложения). Отвечай только текстом, без лишних слов."
-                ),
-            },
-            {"role": "user", "content": text},
-        ],
-        "max_tokens": 150,
-        "temperature": 0.3,
-    }
-    headers = {
-        "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
-        "Content-Type": "application/json",
-    }
-    try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(url, json=payload, headers=headers)
-        if resp.status_code != 200:
-            return text.strip()
-        return resp.json()["choices"][0]["message"]["content"].strip()
-    except (httpx.RequestError, httpx.TimeoutException, json.JSONDecodeError,
-            KeyError, IndexError):
-        return text.strip()
+    """Возвращает причину отказа дословно, без AI-обработки."""
+    return text.strip()
 
 
 # ─── Internal helpers ─────────────────────────────────────────────────────────
