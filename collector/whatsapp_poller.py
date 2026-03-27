@@ -136,7 +136,7 @@ async def poll_once() -> None:
 
     receipt_id: Optional[int] = None
     try:
-        async with httpx.AsyncClient(timeout=8) as client:
+        async with httpx.AsyncClient(timeout=25) as client:
             resp = await client.get(receive_url)
 
         if resp.status_code != 200:
