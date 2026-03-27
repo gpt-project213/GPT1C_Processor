@@ -6,9 +6,9 @@ Green API polling — получает входящие сообщения Whats
 
 Версия: 1.0.1 (2026-03-23)
 
-Endpoints:
-  GET  https://api.green-api.com/waInstance{ID}/receiveNotification/{TOKEN}
-  DELETE https://api.green-api.com/waInstance{ID}/deleteNotification/{TOKEN}/{receiptId}
+Endpoints (используется instance-specific URL, напр. https://7107.api.greenapi.com):
+  GET  https://{ID[:4]}.api.greenapi.com/waInstance{ID}/receiveNotification/{TOKEN}
+  DELETE https://{ID[:4]}.api.greenapi.com/waInstance{ID}/deleteNotification/{TOKEN}/{receiptId}
 """
 
 import logging
@@ -35,7 +35,12 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 TEST_MODE      = os.getenv("TEST_MODE", "0") == "1"
 TEST_WA_PHONE  = os.getenv("TEST_WA_PHONE", "")
 
-_GREENAPI_BASE = "https://api.green-api.com"
+# Каждый инстанс имеет свой поддомен: первые 4 цифры ID → 7107.api.greenapi.com
+# Может быть переопределён через GREENAPI_URL в .env
+_GREENAPI_BASE = os.getenv(
+    "GREENAPI_URL",
+    f"https://{GREENAPI_ID[:4]}.api.greenapi.com" if GREENAPI_ID else "https://api.green-api.com"
+)
 
 logger = logging.getLogger(__name__)
 
