@@ -1100,24 +1100,31 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
             except Exception as _e:
                 logger.warning("crm_daily_task: уведомление %s: %s", manager, _e)
 
-        # 3. Точечный запрос — один клиент на менеджера, три шага (имя → телефон → адрес)
-        for manager, chat_id in MANAGERS_MAP.items():
-            if manager == "Минай" or chat_id == ADMIN_CHAT_ID:
+        # 3. Точечный запрос — первый клиент из очереди, остальные 9 идут цепочкой
+        #    после каждого сохранения (один заполнил → сразу следующий).
+        #    Включает admin (Вадим) — у него тоже могут быть свои клиенты.
+        for manager, chat_id in _all_crm_participants().items():
+            if manager == "Минай":
                 continue
             no_phone = _crm_no_phone(manager, limit=1)
             if not no_phone:
                 continue
             client_key = no_phone[0]
-            # Запускаем FSM: clarify_name
+            total_no_phone = len(_crm_no_phone(manager, limit=500))
             _CRM_PHONE_PENDING[chat_id] = {
                 "state": "clarify_name",
                 "client_key": client_key,
+                "done_today": 0,
+                "daily_limit": CRM_DAILY_LIMIT,
+                "manager": manager,
+                "total_no_phone": total_no_phone,
             }
             try:
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text=(
-                        f"📋 <b>{client_key}</b>\n\n"
+                        f"📋 Нужно внести контакты клиентов — <b>1 из {min(CRM_DAILY_LIMIT, total_no_phone)}</b>\n\n"
+                        f"<b>{client_key}</b>\n\n"
                         f"Как к нему обращаться?\n"
                         f"(введите имя или имя и отчество)"
                     ),
@@ -1126,6 +1133,44 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
             except Exception as _e:
                 _CRM_PHONE_PENDING.pop(chat_id, None)
                 logger.warning("crm_daily_task: запрос данных %s: %s", manager, _e)
+
+        # 4. Бесхозные клиенты — рассылаем всем участникам CRM: "чей клиент?"
+        #    До 3 штук в день чтобы не перегружать.
+        from bot.crm_clients import load_clients as _crm_load
+        _crm_data = _crm_load()
+        _unowned = [
+            k for k, v in _crm_data.get("clients", {}).items()
+            if not v.get("manager") or v.get("manager") in ("", "Не определён", "?")
+            and k != "Без клиента"
+        ][:3]
+        _participants = _all_crm_participants()
+        for _client_key in _unowned:
+            _token = _crm_claim_token()
+            _notified = []
+            _kb = InlineKeyboardMarkup([[
+                InlineKeyboardButton("✋ Мой клиент", callback_data=f"crm_claim|{_token}")
+            ]])
+            for _mgr_name, _mgr_chat in _participants.items():
+                try:
+                    await context.bot.send_message(
+                        chat_id=_mgr_chat,
+                        text=(
+                            f"❓ <b>Чей клиент?</b>\n\n"
+                            f"<b>{_client_key}</b>\n\n"
+                            f"Если ваш — нажмите кнопку."
+                        ),
+                        parse_mode="HTML",
+                        reply_markup=_kb,
+                    )
+                    _notified.append(_mgr_chat)
+                except Exception as _ce:
+                    logger.warning("crm_claim broadcast %s → %s: %s", _client_key, _mgr_name, _ce)
+            _CRM_CLAIM_PENDING[_token] = {
+                "client_key": _client_key,
+                "notified": _notified,
+                "claimed": False,
+            }
+            logger.info("CRM claim: разослано по %d участникам для «%s»", len(_notified), _client_key)
 
         log_event("crm_daily_done",
                   new_total=sum(len(v) for v in new_by_manager.values()))
@@ -3469,6 +3514,19 @@ async def pipeline_task(context: ContextTypes.DEFAULT_TYPE):
                 log_event("archive_cleanup", removed_dir=old_dir.name)
     except Exception as e:
         log_event("archive_error", error=str(e), level="ERROR")
+    # CRM: обновляем базу клиентов после каждого цикла в котором были новые файлы.
+    # Новые клиенты из debt/sales JSON сразу попадают в clients.json —
+    # не ждём 18:00, добавляем по мере появления.
+    if processed_files > 0:
+        try:
+            from bot.crm_clients import update_from_reports as _crm_pipeline_update
+            _new = _crm_pipeline_update()
+            _new_total = sum(len(v) for v in _new.values())
+            if _new_total:
+                logger.info("CRM: добавлено %d новых клиентов после пайплайна", _new_total)
+        except Exception as _crm_e:
+            logger.warning("CRM pipeline update error: %s", _crm_e)
+
     log_event("pipeline_cycle_finish")
 
 async def _suggest_weekly_clients(context, chat_id: int, categorized: dict, weekly_clients: list) -> None:
@@ -4430,6 +4488,28 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Хранит временные данные выбора клиента: {chat_id: {"phone": str, "alias": str, "candidates": [str]}}
 _CRM_PHONE_PENDING: Dict[int, Dict[str, Any]] = {}
+CRM_DAILY_LIMIT = 10  # максимум клиентов за один сеанс в 18:00
+
+# Рассылка "чей клиент": token → {client_key, notified_chat_ids, claimed}
+_CRM_CLAIM_PENDING: Dict[str, Dict[str, Any]] = {}
+_CRM_CLAIM_COUNTER = 0  # монотонный счётчик токенов
+
+# Имя администратора — участвует в CRM наравне с менеджерами
+ADMIN_NAME = "Вадим"
+
+
+def _all_crm_participants() -> Dict[str, int]:
+    """Все участники CRM: менеджеры + admin (Вадим)."""
+    result = dict(MANAGERS_MAP or {})
+    if ADMIN_CHAT_ID and ADMIN_NAME not in result:
+        result[ADMIN_NAME] = ADMIN_CHAT_ID
+    return result
+
+
+def _crm_claim_token() -> str:
+    global _CRM_CLAIM_COUNTER
+    _CRM_CLAIM_COUNTER += 1
+    return f"claim_{_CRM_CLAIM_COUNTER}"
 
 
 async def cmd_guide(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -5133,6 +5213,97 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             pass
         return
+    # ── CRM: "Мой клиент" — менеджер/admin забирает бесхозного клиента ──────
+    if data.startswith("crm_claim|"):
+        token = data.split("|", 1)[1]
+        claim = _CRM_CLAIM_PENDING.get(token)
+        if not claim:
+            await q.answer("Запрос устарел или уже обработан.")
+            return
+        if claim.get("claimed"):
+            await q.answer("Этот клиент уже взят другим менеджером.")
+            try:
+                await q.message.edit_reply_markup(reply_markup=None)
+            except Exception:
+                pass
+            return
+
+        # Определяем имя менеджера/admin по chat_id
+        claimer_chat_id = q.message.chat.id
+        claimer_name = None
+        for mgr, mid in _all_crm_participants().items():
+            if mid == claimer_chat_id:
+                claimer_name = mgr
+                break
+        if not claimer_name:
+            await q.answer("Не удалось определить менеджера.")
+            return
+
+        client_key = claim["client_key"]
+        claim["claimed"] = True
+
+        # Назначаем менеджера в clients.json
+        try:
+            from bot.crm_clients import load_clients as _cc_load, save_clients as _cc_save
+            _cc_data = _cc_load()
+            _cc_clients = _cc_data.get("clients", {})
+            if client_key in _cc_clients:
+                _cc_clients[client_key]["manager"] = claimer_name
+                _cc_data["clients"] = _cc_clients
+                _cc_save(_cc_data)
+                logger.info("CRM claim: %s → менеджер %s", client_key, claimer_name)
+        except Exception as _e:
+            logger.error("crm_claim save error: %s", _e)
+
+        await q.answer(f"✅ Назначено!")
+        try:
+            await q.message.edit_text(
+                f"✅ <b>{client_key}</b>\nВзял: <b>{claimer_name}</b>",
+                parse_mode="HTML",
+                reply_markup=None,
+            )
+        except Exception:
+            pass
+
+        # Остальным участникам — убираем кнопку
+        for other_chat_id in claim.get("notified", []):
+            if other_chat_id == claimer_chat_id:
+                continue
+            try:
+                await context.bot.send_message(
+                    chat_id=other_chat_id,
+                    text=f"ℹ️ <b>{client_key}</b> — взял {claimer_name}.",
+                    parse_mode="HTML",
+                )
+            except Exception:
+                pass
+
+        # Сразу запускаем цепочку внесения телефона для того кто взял
+        try:
+            from bot.crm_clients import get_clients_without_phones as _crm_next2
+            remaining = len(_crm_next2(claimer_name, limit=500))
+            _CRM_PHONE_PENDING[claimer_chat_id] = {
+                "state": "clarify_name",
+                "client_key": client_key,
+                "done_today": 0,
+                "daily_limit": 1,  # один клиент — тот что только что взял
+                "manager": claimer_name,
+                "total_no_phone": remaining,
+            }
+            await context.bot.send_message(
+                chat_id=claimer_chat_id,
+                text=(
+                    f"📋 Отлично! Теперь внесите контакт:\n\n"
+                    f"<b>{client_key}</b>\n\n"
+                    f"Как к нему обращаться?\n"
+                    f"(введите имя или имя и отчество)"
+                ),
+                parse_mode="HTML",
+            )
+        except Exception as _e:
+            logger.warning("crm_claim → phone chain error: %s", _e)
+        return
+
     # ─────────────────────────────────────────────────────────────────────────
 
     await q.answer("Неизвестная команда")
@@ -5915,19 +6086,63 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
                 phone = pending.get("phone", "")
                 ok = _set_details(client_key, display_name=display_name,
                                   phone=phone, address=address)
+                log_event("crm_details_set", client=client_key,
+                          display_name=display_name, phone=phone, address=address)
+
+                done_today   = pending.get("done_today", 0) + 1
+                daily_limit  = pending.get("daily_limit", CRM_DAILY_LIMIT)
+                manager_name = pending.get("manager", "")
                 _CRM_PHONE_PENDING.pop(chat_id, None)
+
                 if ok:
                     await update.message.reply_text(
-                        f"✅ Данные сохранены:\n"
-                        f"👤 <b>{display_name}</b>\n"
-                        f"📞 {phone}\n"
-                        f"📍 {address}",
+                        f"✅ Сохранено: <b>{display_name}</b> · {phone}",
                         parse_mode="HTML",
                     )
-                    log_event("crm_details_set", client=client_key,
-                              display_name=display_name, phone=phone, address=address)
                 else:
                     await update.message.reply_text("⚠️ Не удалось сохранить. Клиент не найден.")
+
+                # Следующий клиент в цепочке или итог дня
+                if done_today < daily_limit:
+                    from bot.crm_clients import get_clients_without_phones as _crm_next
+                    next_list = _crm_next(manager_name, limit=1)
+                    remaining = len(_crm_next(manager_name, limit=500))
+                    if next_list:
+                        next_key = next_list[0]
+                        _CRM_PHONE_PENDING[chat_id] = {
+                            "state": "clarify_name",
+                            "client_key": next_key,
+                            "done_today": done_today,
+                            "daily_limit": daily_limit,
+                            "manager": manager_name,
+                            "total_no_phone": remaining,
+                        }
+                        await update.message.reply_text(
+                            f"📋 <b>{done_today + 1} из {min(daily_limit, done_today + remaining)}</b>\n\n"
+                            f"<b>{next_key}</b>\n\n"
+                            f"Как к нему обращаться?\n"
+                            f"(введите имя или имя и отчество)",
+                            parse_mode="HTML",
+                        )
+                    else:
+                        await update.message.reply_text(
+                            f"🎉 Все клиенты внесены! База полностью заполнена.",
+                            parse_mode="HTML",
+                        )
+                else:
+                    from bot.crm_clients import get_clients_without_phones as _crm_remain
+                    remaining = len(_crm_remain(manager_name, limit=500))
+                    if remaining:
+                        await update.message.reply_text(
+                            f"✅ На сегодня готово — внесено {done_today} клиентов.\n\n"
+                            f"📋 Осталось без телефона: <b>{remaining}</b>\n"
+                            f"Завтра в 18:00 бот пришлёт ещё {min(daily_limit, remaining)}.",
+                            parse_mode="HTML",
+                        )
+                    else:
+                        await update.message.reply_text(
+                            f"🎉 Все клиенты внесены! База полностью заполнена."
+                        )
                 return
 
         except Exception as e:

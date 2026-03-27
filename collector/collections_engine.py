@@ -4,7 +4,7 @@
 collections/collections_engine.py
 Главный оркестратор AI-Коллектора долгов.
 
-Версия: 1.0.2 (2026-03-25)
+Версия: 1.0.4 (2026-03-27)
 
 CLI:
   python -m collector.collections_engine --dry-run
@@ -132,6 +132,115 @@ def _get_manager_chat_id(manager_name: str) -> Optional[int]:
     return None
 
 
+def _get_client_manager_from_crm(client_name: str) -> str:
+    """Ищет менеджера клиента в clients.json когда контакт не найден в contacts."""
+    try:
+        from bot.crm_clients import load_clients
+        data = load_clients()
+        clients_db = data.get("clients", {})
+        if client_name in clients_db:
+            return clients_db[client_name].get("manager", "")
+        c_lower = client_name.lower().strip()
+        for key, info in clients_db.items():
+            if key.lower().strip() == c_lower:
+                return info.get("manager", "")
+    except Exception as e:
+        logger.warning("_get_client_manager_from_crm error: %s", e)
+    return ""
+
+
+_NO_PHONE_WARN_PREFIX = "__no_phone_warn__"
+
+
+async def _warn_manager_no_phone(
+    client_name: str,
+    level: int,
+    amount: float,
+    days: int,
+    manager_name: str,
+    manager_chat_id: Optional[int],
+    dry_run: bool,
+) -> None:
+    """
+    Предупреждает менеджера: у проблемного клиента нет телефона → добавь номер.
+    При повторном предупреждении (warn_count >= 2) — эскалация руководителю.
+    """
+    from collector.collections_db import load_state, save_state
+
+    state = load_state()
+    key = f"{_NO_PHONE_WARN_PREFIX}{client_name}"
+    today = _today_str()
+
+    warn_info = state.get(key, {})
+    last_warned = warn_info.get("last_warned", "")
+    warn_count = warn_info.get("warn_count", 0)
+    first_warned = warn_info.get("first_warned", today)
+
+    # Уже предупреждали сегодня — не дублировать
+    if last_warned == today:
+        logger.info("[%s] менеджер уже предупреждён сегодня — пропуск", client_name)
+        return
+
+    warn_count += 1
+    state[key] = {
+        "first_warned": first_warned,
+        "last_warned": today,
+        "warn_count": warn_count,
+        "manager": manager_name,
+    }
+
+    amount_str = f"{int(amount):,}".replace(",", " ")
+
+    warn_text = (
+        f"📵 <b>Проблемный клиент без контакта</b>\n\n"
+        f"👤 <b>{client_name}</b>\n"
+        f"💰 Долг: {amount_str} тг  |  Молчит: {days} дн.\n"
+        f"🔴 Уровень риска: {level}/5\n\n"
+        f"Телефон клиента <b>отсутствует в базе</b> — "
+        f"сообщение не может быть отправлено.\n\n"
+        f"Внесите номер командой:\n"
+        f"<code>/phone {client_name} 87XXXXXXXXX</code>\n\n"
+        f"⚠️ Если номер не будет внесён, руководитель получит "
+        f"уведомление об этом клиенте."
+    )
+
+    if dry_run:
+        logger.info(
+            "[%s] DRY-RUN: предупреждение менеджеру %s (warn #%d)",
+            client_name, manager_name or "?", warn_count,
+        )
+    elif manager_chat_id:
+        await notify_manager(manager_chat_id, warn_text)
+        logger.info(
+            "[%s] предупреждение отправлено менеджеру %s (warn #%d)",
+            client_name, manager_name, warn_count,
+        )
+    else:
+        logger.warning(
+            "[%s] нет chat_id для менеджера %s — предупреждение не отправлено",
+            client_name, manager_name or "?",
+        )
+
+    # 2+ предупреждения → телефон до сих пор не внесён → эскалация
+    if warn_count >= 2 and not dry_run:
+        admin_text = (
+            f"📵 <b>Нет телефона: менеджер {manager_name or '?'} игнорирует</b>\n\n"
+            f"👤 {client_name}\n"
+            f"💰 Долг: {amount_str} тг  |  Молчит: {days} дн.\n"
+            f"Предупреждений отправлено: {warn_count} "
+            f"(первое: {first_warned})\n\n"
+            f"Телефон клиента до сих пор не добавлен в базу."
+        )
+        await notify_admin(admin_text)
+        logger.warning(
+            "[%s] эскалация руководителю — телефон не внесён (warn_count=%d)",
+            client_name, warn_count,
+        )
+
+    if not dry_run:
+        save_state(state)
+
+
 def daily_summary(processed: List[Dict], dry_run: bool = False) -> str:
     """Формирует ежедневную сводку работы коллектора."""
     total = len(processed)
@@ -157,7 +266,7 @@ def daily_summary(processed: List[Dict], dry_run: bool = False) -> str:
         for r in broken[:5]:
             lines.append(f"  • {r['name']}")
     if no_contact:
-        lines.append(f"Нет контактов в справочнике: {len(no_contact)}")
+        lines.append(f"📵 Нет телефона — предупреждены менеджеры: {len(no_contact)}")
     if escalated:
         lines.append(f"Эскалировано директору: {len(escalated)}")
     return "\n".join(lines)
@@ -418,6 +527,19 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
         if level == 0:
             continue
 
+        # Фильтр: только "стоп-клиенты" — не покупают и не платят вообще ничего.
+        # debit > 0  → клиент активно покупает (не трогаем, менеджер работает с ним)
+        # credit > 0 → клиент хоть что-то платит (не трогаем, динамика есть)
+        # Коллектор бьёт только тех, кто полностью молчит: debit==0 AND credit==0
+        debit  = client.get("debit", 0.0) or 0.0
+        credit = client.get("credit", 0.0) or 0.0
+        if debit > 0 or credit > 0:
+            logger.info(
+                "[%s] пропуск — клиент активен (debit=%.0f, credit=%.0f)",
+                name, debit, credit,
+            )
+            continue
+
         # Уже контактировали сегодня — пропускаем
         if not dry_run and already_contacted_today(name):
             logger.info("[%s] уже обработан сегодня — пропуск", name)
@@ -425,9 +547,30 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
 
         # Ищем контакты (из CRM — clients.json + debtors_contacts.json)
         contact = match_client(name, contacts)
+
+        # Случай 1: клиент вообще не найден в базе контактов
         if not contact:
-            # Телефон менеджер вносит через CRM-поток в 18:00, не из коллектора
-            logger.info("[%s] нет телефона в базе — пропуск (CRM запросит в 18:00)", name)
+            manager_name = _get_client_manager_from_crm(name)
+            manager_chat_id = _get_manager_chat_id(manager_name) if manager_name else None
+            await _warn_manager_no_phone(
+                name, level, client["amount"], client["days"],
+                manager_name, manager_chat_id, dry_run,
+            )
+            processed.append({"name": name, "level": level, "no_contacts": True,
+                               "sent": False, "promise_received": False,
+                               "promise_broken": False, "escalated": False})
+            continue
+
+        # Случай 2: контакт найден, но нет ни WhatsApp, ни Telegram
+        _phone = (contact.get("whatsapp") or contact.get("phone", "")).strip()
+        _tg_id = str(contact.get("telegram_id") or "").strip()
+        if not _phone and not _tg_id:
+            manager_name = contact.get("manager", "") or _get_client_manager_from_crm(name)
+            manager_chat_id = _get_manager_chat_id(manager_name) if manager_name else None
+            await _warn_manager_no_phone(
+                name, level, client["amount"], client["days"],
+                manager_name, manager_chat_id, dry_run,
+            )
             processed.append({"name": name, "level": level, "no_contacts": True,
                                "sent": False, "promise_received": False,
                                "promise_broken": False, "escalated": False})

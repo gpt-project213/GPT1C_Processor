@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Инструкция: Бот аналитики Минбаракат</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+         background: #f0f2f5; color: #1a1a2e; font-size: 15px; }
+  .header { background: linear-gradient(135deg, #1a73e8, #0d47a1);
+            color: white; padding: 24px 20px; text-align: center; }
+  .header h1 { font-size: 22px; margin-bottom: 6px; }
+  .header p  { font-size: 13px; opacity: 0.85; }
+  .container { max-width: 640px; margin: 0 auto; padding: 16px; }
+  .card { background: white; border-radius: 12px; margin-bottom: 14px;
+          box-shadow: 0 1px 4px rgba(0,0,0,.1); overflow: hidden; }
+  .card-header { padding: 14px 16px; display: flex; align-items: center;
+                 gap: 10px; cursor: pointer; user-select: none; }
+  .card-header .icon { font-size: 22px; flex-shrink: 0; }
+  .card-header .title { font-weight: 600; font-size: 15px; flex: 1; }
+  .card-header .arrow { font-size: 12px; color: #888; transition: transform .2s; }
+  .card-header.open .arrow { transform: rotate(180deg); }
+  .card-body { display: none; padding: 0 16px 16px; border-top: 1px solid #f0f0f0; }
+  .card-body.open { display: block; }
+  .step { display: flex; gap: 12px; margin-top: 12px; }
+  .step-num { background: #1a73e8; color: white; border-radius: 50%;
+              width: 26px; height: 26px; flex-shrink: 0;
+              display: flex; align-items: center; justify-content: center;
+              font-size: 13px; font-weight: 700; margin-top: 1px; }
+  .step-text { flex: 1; line-height: 1.5; }
+  .msg-box { background: #e8f4fd; border-left: 3px solid #1a73e8;
+             border-radius: 0 8px 8px 0; padding: 10px 12px;
+             margin-top: 10px; font-size: 14px; line-height: 1.5; }
+  .msg-box.green { background: #e8f5e9; border-color: #2e7d32; }
+  .msg-box.orange { background: #fff3e0; border-color: #e65100; }
+  .msg-box.red { background: #fce4ec; border-color: #c62828; }
+  .btn-row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .btn { padding: 7px 14px; border-radius: 8px; font-size: 13px;
+         font-weight: 600; display: inline-flex; align-items: center; gap: 4px; }
+  .btn.blue   { background: #1a73e8; color: white; }
+  .btn.green  { background: #2e7d32; color: white; }
+  .btn.red    { background: #c62828; color: white; }
+  .btn.gray   { background: #e0e0e0; color: #333; }
+  .note { background: #fffde7; border-left: 3px solid #f9a825;
+          border-radius: 0 8px 8px 0; padding: 8px 12px;
+          margin-top: 10px; font-size: 13px; line-height: 1.5; }
+  .badge { display: inline-block; background: #e3f2fd; color: #1565c0;
+           border-radius: 6px; padding: 2px 8px; font-size: 12px;
+           font-weight: 600; margin-right: 4px; }
+  h3 { font-size: 14px; color: #555; margin-top: 14px; margin-bottom: 4px;
+       text-transform: uppercase; letter-spacing: .5px; }
+  ul { padding-left: 18px; margin-top: 6px; }
+  ul li { margin-top: 5px; line-height: 1.5; }
+  .tg-bubble { background: #effdde; border-radius: 12px 12px 0 12px;
+               padding: 10px 14px; font-size: 14px; line-height: 1.5;
+               display: inline-block; max-width: 90%; margin-top: 8px; }
+  .tg-label { font-size: 11px; color: #888; margin-top: 6px; }
+  .time-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  .time-table td { padding: 7px 10px; border-bottom: 1px solid #f0f0f0;
+                   font-size: 14px; vertical-align: top; }
+  .time-table td:first-child { font-weight: 700; color: #1a73e8;
+                               white-space: nowrap; width: 70px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📱 Бот аналитики — Минбаракат</h1>
+  <p>Инструкция для менеджеров</p>
+</div>
+
+<div class="container">
+
+  <!-- ГЛАВНОЕ МЕНЮ -->
+  <div class="card">
+    <div class="card-header" onclick="toggle(this)">
+      <span class="icon">🏠</span>
+      <span class="title">Главное меню — что и где</span>
+      <span class="arrow">▼</span>
+    </div>
+    <div class="card-body">
+      <p style="margin-top:12px;line-height:1.6">После команды <strong>/start</strong> вы видите главное меню с 5 кнопками:</p>
+      <h3>Кнопки меню</h3>
+      <ul>
+        <li><strong>📊 Дебиторка</strong> — задолженность ваших клиентов (простой или детальный отчёт)</li>
+        <li><strong>📦 Остатки</strong> — текущие остатки товара на складе</li>
+        <li><strong>🛒 Продажи</strong> — отчёт по вашим продажам (по клиентам или по товару)</li>
+        <li><strong>💰 Валовая</strong> — валовая прибыль по вашим клиентам</li>
+        <li><strong>🗄️ Архив</strong> — предыдущие отчёты за прошлые дни</li>
+      </ul>
+      <div class="note">💡 Нажмите любую кнопку — бот пришлёт актуальный файл Excel за сегодня.</div>
+    </div>
+  </div>
+
+  <!-- ДЕБИТОРКА -->
+  <div class="card">
+    <div class="card-header" onclick="toggle(this)">
+      <span class="icon">📊</span>
+      <span class="title">Дебиторка</span>
+      <span class="arrow">▼</span>
+    </div>
+    <div class="card-body">
+      <p style="margin-top:12px;line-height:1.6">Показывает долги ваших клиентов перед компанией.</p>
+      <h3>Два варианта</h3>
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-text"><strong>📊 Простой</strong> — список клиентов с суммой долга и днями просрочки</div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-text"><strong>📈 Детальный</strong> — разбивка по каждому документу (накладной)</div>
+      </div>
+      <div class="note">⚠️ Если клиент не платит 7+ дней — вы получите уведомление об этом автоматически в 14:00 и 21:00.</div>
+    </div>
+  </div>
+
+  <!-- ПРОДАЖИ -->
+  <div class="card">
+    <div class="card-header" onclick="toggle(this)">
+      <span class="icon">🛒</span>
+      <span class="title">Продажи</span>
+      <span class="arrow">▼</span>
+    </div>
+    <div class="card-body">
+      <p style="margin-top:12px;line-height:1.6">Ваши продажи за текущий день из 1С.</p>
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-text"><strong>🛒 По клиентам</strong> — сколько продано каждому клиенту</div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-text"><strong>🛒 По товару</strong> — сколько продано каждого товара</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI КОЛЛЕКТОР -->
+  <div class="card">
+    <div class="card-header" onclick="toggle(this)">
+      <span class="icon">🤖</span>
+      <span class="title">AI Коллектор — уведомления о долгах</span>
+      <span class="arrow">▼</span>
+    </div>
+    <div class="card-body">
+      <p style="margin-top:12px;line-height:1.6">Каждый день в <strong>18:05</strong> бот присылает вам сообщение по одному клиенту с просрочкой. Бот уже подготовил текст — вам нужно только решить: отправить или нет.</p>
+
+      <h3>Сообщение от бота в Telegram</h3>
+      <div style="background:#f1f3f4; border-radius:12px 12px 12px 0; padding:12px 14px;
+                  font-size:14px; line-height:1.6; margin-top:8px; max-width:90%;">
+        📬 <b>Готово к отправке</b><br><br>
+        👤 Клиент: ТОО Ромашка<br>
+        💰 Долг: 450 000 тг | Просрочка: 8 дн.<br>
+        📱 WhatsApp: +7 701 123 45 67<br><br>
+        <div style="border-left:3px solid #bbb; padding:6px 10px; margin-top:4px;
+                    background:#e8e8e8; border-radius:0 6px 6px 0; color:#333;">
+          <span style="font-size:11px;color:#888;display:block;margin-bottom:3px;">✉️ Текст сообщения клиенту:</span>
+          <i>Здравствуйте! Я — ИИ-помощник вашего менеджера Алена из компании Минбаракат. По нашим данным, за вами числится задолженность в размере 450 000 тенге (просрочка 8 дней). Просим уточнить планируемую дату оплаты. Если возникли вопросы — менеджер Алена готова помочь.</i>
+        </div>
+      </div>
+      <div class="tg-label">Вы видите это в Telegram от бота</div>
+
+      <h3>Кнопки действий</h3>
+      <div class="btn-row">
+        <span class="btn green">✅ Отправить</span>
+        <span class="btn gray">✏️ Изменить</span>
+        <span class="btn red">❌ Отказать</span>
+      </div>
+      <div class="step" style="margin-top:12px">
+        <div class="step-num" style="background:#2e7d32">1</div>
+        <div class="step-text">✅ <strong>Отправить</strong> — сообщение уйдёт клиенту в WhatsApp от вашего имени</div>
+      </div>
+      <div class="step">
+        <div class="step-num" style="background:#757575">2</div>
+        <div class="step-text">✏️ <strong>Изменить</strong> — напишите свой текст, бот отправит его вместо готового</div>
+      </div>
+      <div class="step">
+        <div class="step-num" style="background:#c62828">3</div>
+        <div class="step-text">❌ <strong>Отказать</strong> — напишите причину (например: <em>«оплата своевременно»</em>, <em>«договорились лично»</em>). Причина уходит руководителю.</div>
+      </div>
+      <div class="note">📝 Причину отказа пишите своими словами — бот сохранит её дословно и передаст руководителю.</div>
+    </div>
+  </div>
+
+  <!-- CRM — пополнение базы -->
+  <div class="card">
+    <div class="card-header" onclick="toggle(this)">
+      <span class="icon">📋</span>
+      <span class="title">Пополнение базы клиентов (18:00)</span>
+      <span class="arrow">▼</span>
+    </div>
+    <div class="card-body">
+      <p style="margin-top:12px;line-height:1.6">Каждый день в <strong>18:00</strong> бот спрашивает про одного клиента, у которого ещё нет контактов в базе. Это занимает 30 секунд.</p>
+
+      <h3>Три вопроса по шагам</h3>
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-text">
+          Бот называет клиента из 1С и спрашивает: <strong>Как к нему обращаться?</strong><br>
+          <div class="msg-box">📋 <b>ТОО ГудФуд № 1 ул Досмухамедулы 48</b><br><br>Как к нему обращаться?<br>(введите имя или имя и отчество)</div>
+          Напишите просто: <em>Аида</em> или <em>Аида Петровна</em>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-text">
+          Бот спросит телефон:<br>
+          <div class="msg-box">📱 Телефон Аида в WhatsApp?<br>(формат: 87xxxxxxxxx)</div>
+          Напишите: <em>87012345678</em>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-text">
+          Бот спросит адрес торговой точки:<br>
+          <div class="msg-box">🏪 Адрес торговой точки Аида?</div>
+          Напишите: <em>ул. Достык 12, магазин Аида</em>
+        </div>
+      </div>
+      <div class="msg-box green">✅ Готово! Данные Аида сохранены.</div>
+      <div class="note">💡 Данные сохраняются в вашей личной базе клиентов. Другие менеджеры их не видят — конфиденциальность гарантирована. Пополнение базы — обязанность каждого менеджера. Данные должны быть актуальными: руководитель видит состояние базы и контролирует заполнение.</div>
+    </div>
+  </div>
+
+  <!-- АРХИВ -->
+  <div class="card">
+    <div class="card-header" onclick="toggle(this)">
+      <span class="icon">🗄️</span>
+      <span class="title">Архив отчётов</span>
+      <span class="arrow">▼</span>
+    </div>
+    <div class="card-body">
+      <p style="margin-top:12px;line-height:1.6">Кнопка <strong>🗄️ Архив</strong> — отчёты за прошлые дни. Выберите нужную дату и тип отчёта.</p>
+      <div class="note">📅 Хранятся последние 30 дней.</div>
+    </div>
+  </div>
+
+  <!-- РАСПИСАНИЕ -->
+  <div class="card">
+    <div class="card-header" onclick="toggle(this)">
+      <span class="icon">⏰</span>
+      <span class="title">Когда приходят уведомления</span>
+      <span class="arrow">▼</span>
+    </div>
+    <div class="card-body">
+      <table class="time-table">
+        <tr><td>09:00</td><td>📦 Краткая сводка остатков (только руководителю)</td></tr>
+        <tr><td>14:00</td><td>🔔 Уведомление о молчащих клиентах (долг 7+ дней)</td></tr>
+        <tr><td>18:00</td><td>📋 Запрос данных нового клиента (CRM)</td></tr>
+        <tr><td>18:05</td><td>🤖 AI Коллектор — сообщение для утверждения</td></tr>
+        <tr><td>20:00</td><td>💰 Краткая сводка валовой (руководителю)</td></tr>
+        <tr><td>21:00</td><td>🔔 Повтор уведомления о молчащих + сводка продаж</td></tr>
+      </table>
+      <div class="note">🌴 В воскресенье и праздники уведомления не отправляются.</div>
+    </div>
+  </div>
+
+  <!-- ЧАСТЫЕ ВОПРОСЫ -->
+  <div class="card">
+    <div class="card-header" onclick="toggle(this)">
+      <span class="icon">❓</span>
+      <span class="title">Частые вопросы</span>
+      <span class="arrow">▼</span>
+    </div>
+    <div class="card-body">
+      <h3>Нет отчёта за сегодня?</h3>
+      <p style="margin-top:6px;line-height:1.5">Отчёты появляются после того как 1С выгрузит данные (обычно до 10:00). Нажмите кнопку ещё раз позже.</p>
+
+      <h3 style="margin-top:14px">Неправильно введён телефон?</h3>
+      <p style="margin-top:6px;line-height:1.5">Напишите руководителю или введите команду <code>/phone Имя клиента 87xxxxxxxxx</code></p>
+
+      <h3 style="margin-top:14px">Что значит "имитация оплаты"?</h3>
+      <p style="margin-top:6px;line-height:1.5">Клиент платит маленькими суммами (менее 10% долга) чтобы сбросить счётчик дней. Бот помечает таких клиентов ⚠️</p>
+
+      <h3 style="margin-top:14px">Бот не отвечает?</h3>
+      <p style="margin-top:6px;line-height:1.5">Напишите <strong>/start</strong> — это сбросит состояние и восстановит меню.</p>
+    </div>
+  </div>
+
+  <p style="text-align:center;color:#aaa;font-size:12px;margin:20px 0">
+    Минбаракат · Бот аналитики · v9.4.39
+  </p>
+
+</div>
+
+<script>
+function toggle(header) {
+  header.classList.toggle('open');
+  const body = header.nextElementSibling;
+  body.classList.toggle('open');
+}
+// Открыть первый раздел по умолчанию
+document.querySelector('.card-header').click();
+</script>
+</body>
+</html>

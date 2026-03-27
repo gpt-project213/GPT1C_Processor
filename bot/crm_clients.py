@@ -4,7 +4,7 @@
 bot/crm_clients.py
 Универсальная база клиентов Минбаракат (CRM).
 
-Версия: 1.0.0 (2026-03-25)
+Версия: 1.0.1 (2026-03-27)
 
 Источники данных:
   - reports/json/debt_ext_*.json   → должники по менеджерам
@@ -230,8 +230,10 @@ def update_from_reports() -> Dict[str, List[str]]:
             existing["last_seen"] = today
             if source not in existing.get("sources", []):
                 existing.setdefault("sources", []).append(source)
-            # Обновляем менеджера если был пустым
-            if not existing.get("manager") and manager:
+            # Обновляем менеджера если был не определён или пуст
+            # Реальные имена ("Вадим", "Алена" и т.д.) не перезаписываем
+            _UNOWNED = ("", "Не определён", "?", "-", "—")
+            if existing.get("manager", "") in _UNOWNED and manager and manager not in _UNOWNED:
                 existing["manager"] = manager
             return False
 

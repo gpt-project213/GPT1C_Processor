@@ -4,7 +4,7 @@
 collections/debt_monitor.py
 Анализ дебиторки, классификация должников по уровням давления.
 
-Версия: 1.0.1 (2026-03-23)
+Версия: 1.0.2 (2026-03-27)
 
 Уровни:
   0–9 дней   → level 0 (пропустить)
@@ -245,12 +245,21 @@ def classify_debtors(debt_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         if violation_shipment and level == 0:
             level = 1
 
+        # Извлекаем credit (платежи) для фильтра on_stop
+        credit = 0.0
+        try:
+            credit = float(str(client.get("credit") or 0).replace(" ", "").replace(",", "."))
+        except (ValueError, TypeError):
+            pass
+
         results.append({
             "name": name,
             "amount": amount,
             "days": days,
             "level": level,
             "violation_shipment": violation_shipment,
+            "debit": debit,    # текущие отгрузки (>0 = клиент активно покупает)
+            "credit": credit,  # платежи за период (>0 = клиент что-то платит)
             "manager": client.get("_manager", ""),
             "raw": client,
         })
