@@ -78,7 +78,7 @@ TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 logger = logging.getLogger("imap_fetcher")
 logger.setLevel(logging.INFO)
 
-_ts = datetime.now(TZ).strftime("%Y%m%d_%H%M%S")
+_ts = datetime.now(TZ).strftime("%Y%m%d")   # суточный лог вместо поминутного
 _file_handler = logging.FileHandler(LOGS / f"email_{_ts}.log", encoding="utf-8")
 _stream_handler = logging.StreamHandler(sys.stdout)
 

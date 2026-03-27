@@ -961,8 +961,6 @@ async def start_dialog(
     if msg_id:
         update_dialog(manager_chat_id, message_id=msg_id)
 
-    logger.info("[%s] диалог запущен с менеджером %s", client["name"], manager_name)
-
 
 async def handle_callback(data: str, chat_id: int, message_id: int) -> bool:
     """Обрабатывает inline callback от Telegram. Возвращает True если обработан."""
@@ -1252,6 +1250,9 @@ async def send_reminders() -> None:
         STATE_DEADLINE_SET,
     )
 
+    from collector.dialog_store import STATE_DONE
+    DIALOG_EXPIRE_HOURS = float(os.getenv("DIALOG_EXPIRE_HOURS", "48"))
+
     pending = get_all_pending()
     now = datetime.now(TZ)
 
@@ -1260,6 +1261,27 @@ async def send_reminders() -> None:
         state = dialog.get("state")
         if not mid:
             continue
+
+        # Авто-сброс застрявшего диалога через DIALOG_EXPIRE_HOURS (по умолчанию 48 ч)
+        created_str = dialog.get("created") or dialog.get("last_reminded")
+        if created_str:
+            try:
+                created_dt = datetime.fromisoformat(created_str)
+                age_hours = (now - created_dt).total_seconds() / 3600
+                if age_hours > DIALOG_EXPIRE_HOURS:
+                    logger.warning(
+                        "[%s] диалог старше %.0f ч — авто-сброс (state=%s)",
+                        dialog.get("client_name"), age_hours, state,
+                    )
+                    update_dialog(mid, state=STATE_DONE)
+                    await _send_msg(
+                        mid,
+                        f"⏱️ Диалог по клиенту <b>{dialog.get('client_name')}</b> "
+                        f"закрыт автоматически (нет ответа {int(age_hours)} ч).",
+                    )
+                    continue
+            except (ValueError, TypeError):
+                pass
 
         # Проверяем время последнего напоминания
         last_str = dialog.get("last_reminded")
