@@ -1125,7 +1125,9 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
                 "daily_limit": CRM_DAILY_LIMIT,
                 "manager": manager,
                 "total_no_phone": total_no_phone,
+                "last_sent": datetime.now(TZ).isoformat(),
             }
+            _crm_save_pending()
             try:
                 await context.bot.send_message(
                     chat_id=chat_id,
@@ -1139,6 +1141,7 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
                 )
             except Exception as _e:
                 _CRM_PHONE_PENDING.pop(chat_id, None)
+                _crm_save_pending()
                 logger.warning("crm_daily_task: запрос данных %s: %s", manager, _e)
 
         # 4. Бесхозные клиенты — рассылаем всем участникам CRM: "чей клиент?"
@@ -4495,7 +4498,34 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Хранит временные данные выбора клиента: {chat_id: {"phone": str, "alias": str, "candidates": [str]}}
 _CRM_PHONE_PENDING: Dict[int, Dict[str, Any]] = {}
-CRM_DAILY_LIMIT = 10  # максимум клиентов за один сеанс в 18:00
+CRM_DAILY_LIMIT = 15  # максимум клиентов за один сеанс в 18:00
+CRM_PENDING_PATH = LOGS_DIR / "crm_pending_state.json"
+
+
+def _crm_save_pending() -> None:
+    """Сохраняет _CRM_PHONE_PENDING на диск — переживает перезапуск бота."""
+    try:
+        tmp = CRM_PENDING_PATH.with_suffix(".tmp")
+        with open(tmp, "w", encoding="utf-8") as _f:
+            json.dump({str(k): v for k, v in _CRM_PHONE_PENDING.items()},
+                      _f, ensure_ascii=False, indent=2)
+        tmp.replace(CRM_PENDING_PATH)
+        logger.debug("CRM pending saved: %d", len(_CRM_PHONE_PENDING))
+    except Exception as _e:
+        logger.warning("_crm_save_pending error: %s", _e)
+
+
+def _crm_load_pending() -> None:
+    """Восстанавливает _CRM_PHONE_PENDING из файла при старте."""
+    if not CRM_PENDING_PATH.exists():
+        return
+    try:
+        with open(CRM_PENDING_PATH, encoding="utf-8") as _f:
+            data = json.load(_f)
+        _CRM_PHONE_PENDING.update({int(k): v for k, v in data.items()})
+        logger.info("CRM pending restored: %d managers", len(_CRM_PHONE_PENDING))
+    except Exception as _e:
+        logger.warning("_crm_load_pending error: %s", _e)
 
 # Рассылка "чей клиент": token → {client_key, notified_chat_ids, claimed}
 _CRM_CLAIM_PENDING: Dict[str, Dict[str, Any]] = {}
@@ -5296,7 +5326,9 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "daily_limit": 1,  # один клиент — тот что только что взял
                 "manager": claimer_name,
                 "total_no_phone": remaining,
+                "last_sent": datetime.now(TZ).isoformat(),
             }
+            _crm_save_pending()
             await context.bot.send_message(
                 chat_id=claimer_chat_id,
                 text=(
@@ -5327,6 +5359,9 @@ async def post_init(app: Application):
     pending_count = len(queue_data.get("jobs", []))
     if pending_count > 0:
         logger.info(f"🧹 Восстановлено {pending_count} задач на удаление из очереди")
+
+    # Восстанавливаем CRM-очередь сбора телефонов
+    _crm_load_pending()
 
     # v9.4.27: Уведомление о запуске — admin (техническое) + команда (мотивирующее)
     start_kb = InlineKeyboardMarkup([
@@ -6008,6 +6043,46 @@ async def handle_analytics(update: Update, context: ContextTypes.DEFAULT_TYPE, d
 # ═══════════════════════════════════════════════════════════════
 
 
+async def crm_phone_reminder_task(context: ContextTypes.DEFAULT_TYPE):
+    """
+    Каждый час: напоминает менеджерам у кого висит незаполненный клиент в CRM-очереди.
+    Работает только в рабочие часы 09–19. Повторяет до получения ответа.
+    """
+    if not _CRM_PHONE_PENDING:
+        return
+    now = datetime.now(TZ)
+    if not (9 <= now.hour < 19):
+        return
+    for chat_id, pending in list(_CRM_PHONE_PENDING.items()):
+        client_key  = pending.get("client_key", "?")
+        state       = pending.get("state", "clarify_name")
+        done_today  = pending.get("done_today", 0)
+        total       = pending.get("total_no_phone", 0)
+        daily_limit = pending.get("daily_limit", CRM_DAILY_LIMIT)
+
+        if state == "clarify_name":
+            prompt = "Как к нему обращаться? (введите имя или имя и отчество)"
+        elif state == "clarify_phone":
+            prompt = "Введите телефон WhatsApp: <code>+77001234567</code>"
+        else:
+            prompt = "Введите адрес торговой точки"
+
+        try:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=(
+                    f"⏰ <b>Напоминание CRM</b> — ждём ответа:\n\n"
+                    f"<b>{client_key}</b>\n\n"
+                    f"{prompt}\n\n"
+                    f"Выполнено сегодня: {done_today} из {min(daily_limit, done_today + total)}"
+                ),
+                parse_mode="HTML",
+            )
+            logger.info("CRM hourly reminder → chat_id=%s client=%s", chat_id, client_key)
+        except Exception as e:
+            logger.warning("crm_phone_reminder_task chat_id=%s: %s", chat_id, e)
+
+
 async def collector_reminder_task(context: ContextTypes.DEFAULT_TYPE):
     """Hourly: send reminders to managers with pending collector dialogs."""
     try:
@@ -6100,6 +6175,7 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
                 daily_limit  = pending.get("daily_limit", CRM_DAILY_LIMIT)
                 manager_name = pending.get("manager", "")
                 _CRM_PHONE_PENDING.pop(chat_id, None)
+                _crm_save_pending()
 
                 if ok:
                     await update.message.reply_text(
@@ -6123,7 +6199,9 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
                             "daily_limit": daily_limit,
                             "manager": manager_name,
                             "total_no_phone": remaining,
+                            "last_sent": datetime.now(TZ).isoformat(),
                         }
+                        _crm_save_pending()
                         await update.message.reply_text(
                             f"📋 <b>{done_today + 1} из {min(daily_limit, done_today + remaining)}</b>\n\n"
                             f"<b>{next_key}</b>\n\n"
@@ -6431,6 +6509,14 @@ def main():
             name="debt_collector_promises",
         )
         logger.info("💰 Настроена проверка обещаний: ежедневно 10:00")
+
+        job_queue.run_repeating(
+            crm_phone_reminder_task,
+            interval=3600,
+            first=600,
+            name="crm_phone_reminders",
+        )
+        logger.info("📋 Настроены CRM-напоминания о телефонах: каждый час (09–19)")
 
         job_queue.run_repeating(
             collector_reminder_task,
