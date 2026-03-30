@@ -91,7 +91,7 @@ def send_whatsapp(phone: str, text: str) -> bool:
         logger.warning("Green API ошибка %d: %s", resp.status_code, resp.text[:200])
         return False
     except (httpx.RequestError, httpx.TimeoutException) as e:
-        logger.error("Green API сетевая ошибка: %s", e)
+        logger.error("Green API сетевая ошибка: %s: %s", type(e).__name__, e or repr(e))
         return False
 
 
@@ -118,7 +118,7 @@ async def send_telegram(telegram_id: int, text: str) -> bool:
         logger.warning("Telegram ошибка %d: %s", resp.status_code, resp.text[:200])
         return False
     except (httpx.RequestError, httpx.TimeoutException) as e:
-        logger.error("Telegram сетевая ошибка: %s", e)
+        logger.error("Telegram сетевая ошибка: %s: %s", type(e).__name__, e or repr(e))
         return False
 
 
@@ -164,7 +164,7 @@ async def send_telegram_with_markup(
         logger.warning("Telegram+markup ошибка %d: %s", resp.status_code, resp.text[:200])
         return False
     except (httpx.RequestError, httpx.TimeoutException) as e:
-        logger.error("Telegram+markup сетевая ошибка: %s", e)
+        logger.error("Telegram+markup сетевая ошибка: %s: %s", type(e).__name__, e or repr(e))
         return False
 
 

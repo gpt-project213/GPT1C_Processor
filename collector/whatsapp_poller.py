@@ -105,7 +105,7 @@ async def transcribe_audio(audio_url: str) -> str:
                 )
                 return ""
             except (httpx.RequestError, httpx.TimeoutException) as e:
-                logger.error("Whisper сетевая ошибка: %s", e)
+                logger.error("Whisper сетевая ошибка: %s: %s", type(e).__name__, e or repr(e))
                 return ""
 
     except (httpx.RequestError, httpx.TimeoutException) as e:
@@ -207,7 +207,7 @@ async def poll_once() -> None:
             logger.debug("Игнорируем webhook type=%s", webhook_type)
 
     except (httpx.RequestError, httpx.TimeoutException) as e:
-        logger.debug("Green API сетевая ошибка: %s", e)
+        logger.debug("Green API сетевая ошибка: %s: %s", type(e).__name__, e or repr(e))
     except (KeyError, ValueError, TypeError) as e:
         logger.error("Ошибка разбора уведомления Green API: %s", e)
     finally:
@@ -234,4 +234,4 @@ async def _delete_notification(receipt_id: int) -> None:
                 receipt_id, resp.status_code,
             )
     except (httpx.RequestError, httpx.TimeoutException) as e:
-        logger.error("Ошибка удаления уведомления %s: %s", receipt_id, e)
+        logger.error("Ошибка удаления уведомления %s: %s: %s", receipt_id, type(e).__name__, e or repr(e))

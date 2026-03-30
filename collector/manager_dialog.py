@@ -58,7 +58,7 @@ async def _tg_post(method: str, payload: Dict[str, Any]) -> Optional[Dict[str, A
         logger.warning("Telegram %s ошибка %d: %s", method, resp.status_code, resp.text[:200])
         return None
     except (httpx.RequestError, httpx.TimeoutException) as e:
-        logger.error("Telegram %s сетевая ошибка: %s", method, e)
+        logger.error("Telegram %s сетевая ошибка: %s: %s", method, type(e).__name__, e or repr(e))
         return None
 
 
@@ -300,7 +300,7 @@ async def _parse_contact_with_ai(text: str, current: Dict[str, Any]) -> Dict[str
             content = "\n".join(lines).strip()
         return json.loads(content)
     except (httpx.RequestError, httpx.TimeoutException) as e:
-        logger.error("DeepSeek сетевая ошибка: %s", e)
+        logger.error("DeepSeek сетевая ошибка: %s: %s", type(e).__name__, e or repr(e))
         return {}
     except (json.JSONDecodeError, KeyError, IndexError) as e:
         logger.error("DeepSeek неверный ответ: %s", e)
@@ -1177,7 +1177,7 @@ async def handle_voice_message(chat_id: int, file_id: str) -> bool:
             return False
         file_path = resp.json()["result"]["file_path"]
     except (httpx.RequestError, httpx.TimeoutException, KeyError) as e:
-        logger.error("getFile сетевая ошибка: %s", e)
+        logger.error("getFile сетевая ошибка: %s: %s", type(e).__name__, e or repr(e))
         return False
 
     # Скачиваем файл
@@ -1217,11 +1217,11 @@ async def handle_voice_message(chat_id: int, file_id: str) -> bool:
                     return False
                 transcribed = whisper_resp.json().get("text", "").strip()
             except (httpx.RequestError, httpx.TimeoutException, KeyError) as e:
-                logger.error("Whisper сетевая ошибка: %s", e)
+                logger.error("Whisper сетевая ошибка: %s: %s", type(e).__name__, e or repr(e))
                 return False
 
     except (httpx.RequestError, httpx.TimeoutException) as e:
-        logger.error("Скачивание голоса сетевая ошибка: %s", e)
+        logger.error("Скачивание голоса сетевая ошибка: %s: %s", type(e).__name__, e or repr(e))
         return False
     finally:
         if tmp_path:
