@@ -24,6 +24,7 @@ Fix P-004: удалён unreachable code после return None в load_latest_s
 """
 from __future__ import annotations
 
+import difflib
 import json
 import math
 import os
@@ -104,6 +105,52 @@ def normalize_product_name(name: str) -> str:
     s = re.sub(r"\s+", " ", s)
     
     return s.strip()
+
+_FUZZY_MATCH_THRESHOLD = 0.85
+
+# Единицы измерения для удаления при fuzzy-нормализации
+_UNIT_RE = re.compile(
+    r"\b(кг|шт|уп|упак|л|мл|г|гр|пач|пачка|пачек)\b",
+    re.IGNORECASE | re.UNICODE,
+)
+# Числовые суффиксы: даты партий (6 цифр: ДДММГГ), цены (3-6 цифр в конце)
+_NUMERIC_SUFFIX_RE = re.compile(r"\b\d{3,6}\b")
+
+
+def normalize_product_name_fuzzy(name: str) -> str:
+    """
+    Агрессивная нормализация для fuzzy-матча.
+
+    Дополнительно к normalize_product_name:
+    - Убирает единицы измерения (кг, шт, уп, л и т.д.)
+    - Убирает числовые суффиксы (даты партий ДДММГГ, цены)
+
+    Пример:
+    "УКПФ Филе на подложке (140126) 1730" → "укпф филе на подложке"
+    "Куриное филе/12 кг (201225) 1350"    → "куриное филе"
+    """
+    s = normalize_product_name(name)
+    s = _UNIT_RE.sub(" ", s)
+    s = _NUMERIC_SUFFIX_RE.sub(" ", s)
+    s = re.sub(r"\s+", " ", s)
+    return s.strip()
+
+
+def _fuzzy_match(key_fuzzy: str, margin_dict_fuzzy: Dict[str, str],
+                 threshold: float = _FUZZY_MATCH_THRESHOLD) -> Optional[str]:
+    """
+    Ищет наилучшее совпадение для key_fuzzy среди margin_dict_fuzzy.
+    margin_dict_fuzzy: {fuzzy_key → original_margin_dict_key}
+    Возвращает original_margin_dict_key или None.
+    """
+    if not key_fuzzy or not margin_dict_fuzzy:
+        return None
+    candidates = list(margin_dict_fuzzy.keys())
+    matches = difflib.get_close_matches(key_fuzzy, candidates, n=1, cutoff=threshold)
+    if matches:
+        return margin_dict_fuzzy[matches[0]]
+    return None
+
 
 def fmt_money(x: float) -> str:
     return f"{float(x):,.0f}".replace(",", NBSP) + " ₸"
@@ -193,44 +240,79 @@ def build_margin_dict(gross_data: Dict[str, Any]) -> Dict[str, Dict[str, float]]
             "profit": product.get("profit", 0),
             "original_name": name
         }
-    
+
     LOG.info("Построен справочник маржи: %d товаров", len(margin_dict))
     return margin_dict
+
+
+def build_margin_dict_fuzzy(margin_dict: Dict[str, Any]) -> Dict[str, str]:
+    """
+    Создать вспомогательный словарь для fuzzy-матча.
+    Возвращает: {fuzzy_normalized_key → exact_key_in_margin_dict}
+    """
+    fuzzy_index: Dict[str, str] = {}
+    for exact_key in margin_dict:
+        fuzzy_key = normalize_product_name_fuzzy(exact_key)
+        if fuzzy_key and fuzzy_key not in fuzzy_index:
+            fuzzy_index[fuzzy_key] = exact_key
+    return fuzzy_index
 
 # ──────────────────────────────────────────────────────────────────
 # Анализ продаж с рентабельностью
 def analyze_sales_with_profitability(sales_data: Dict[str, Any],
                                      margin_dict: Dict[str, Dict[str, float]]) -> Dict[str, Any]:
     """
-    Добавить маржу к каждому товару в продажах
+    Добавить маржу к каждому товару в продажах.
+    Двухэтапный матч: сначала точный (normalize_product_name),
+    затем fuzzy (normalize_product_name_fuzzy + difflib, порог 0.85).
     """
     clients_enriched = []
-    
+
     total_matched = 0
+    total_fuzzy_matched = 0
     total_unmatched = 0
     low_margin_items = []  # Список товаров с низкой маржой
-    
+
+    # Строим fuzzy-индекс один раз для всего вызова
+    margin_dict_fuzzy = build_margin_dict_fuzzy(margin_dict)
+
     for client_data in sales_data.get("clients", []):
         client_name = client_data.get("client", "")
         client_total = client_data.get("total", 0)
-        
+
         products_with_margin = []
         client_revenue_with_margin = 0.0
         client_profit = 0.0
-        
+
         for product in client_data.get("products", []):
             prod_name = product.get("product", "")
             prod_sum = product.get("sum", 0)
             prod_qty = product.get("qty", 0)
             prod_price = product.get("price", 0)
-            
-            # JOIN по нормализованному названию
+
+            # Этап 1: точный JOIN по нормализованному названию
             key = normalize_product_name(prod_name)
             margin_info = margin_dict.get(key)
+            match_type = "exact"
+
+            # Этап 2: fuzzy-матч если точный не нашёл
+            if margin_info is None:
+                key_fuzzy = normalize_product_name_fuzzy(prod_name)
+                exact_key = _fuzzy_match(key_fuzzy, margin_dict_fuzzy)
+                if exact_key is not None:
+                    margin_info = margin_dict.get(exact_key)
+                    match_type = "fuzzy"
+                    LOG.debug(
+                        "fuzzy-матч: '%s' → '%s' (score>=%.2f)",
+                        prod_name, exact_key, _FUZZY_MATCH_THRESHOLD,
+                    )
             
             if margin_info:
                 margin_pct = margin_info["margin_pct"]
-                total_matched += 1
+                if match_type == "fuzzy":
+                    total_fuzzy_matched += 1
+                else:
+                    total_matched += 1
                 
                 # Вычислить прибыль для этой продажи
                 item_profit = prod_sum * (margin_pct / 100)
@@ -276,6 +358,8 @@ def analyze_sales_with_profitability(sales_data: Dict[str, Any],
                     })
             else:
                 total_unmatched += 1
+                LOG.debug("нет матча: '%s' (fuzzy_key='%s')",
+                          prod_name, normalize_product_name_fuzzy(prod_name))
                 products_with_margin.append({
                     "product": prod_name,
                     "qty": prod_qty,
@@ -303,14 +387,16 @@ def analyze_sales_with_profitability(sales_data: Dict[str, Any],
     
     LOG.info("Анализ завершён:")
     LOG.info("  - Клиентов: %d", len(clients_enriched))
-    LOG.info("  - Товаров matched: %d", total_matched)
-    LOG.info("  - Товаров unmatched: %d", total_unmatched)
+    LOG.info("  - Товаров точный матч: %d", total_matched)
+    LOG.info("  - Товаров fuzzy-матч (порог %.2f): %d", _FUZZY_MATCH_THRESHOLD, total_fuzzy_matched)
+    LOG.info("  - Товаров без матча: %d", total_unmatched)
     LOG.info("  - Товаров с низкой маржой: %d", len(low_margin_items))
-    
+
     return {
         "clients": clients_enriched,
         "low_margin_items": low_margin_items,
         "total_matched": total_matched,
+        "total_fuzzy_matched": total_fuzzy_matched,
         "total_unmatched": total_unmatched
     }
 
@@ -336,6 +422,7 @@ def generate_json_report(result: Dict[str, Any],
         },
         "match_rate": {
             "matched": result["total_matched"],
+            "fuzzy_matched": result["total_fuzzy_matched"],
             "unmatched": result["total_unmatched"]
         },
         "clients": result["clients"],
