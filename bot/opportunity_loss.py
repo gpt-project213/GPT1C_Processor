@@ -174,7 +174,7 @@ def calculate_opportunity_loss(
     margin_pct, margin_source = _get_manager_margin(html_dir, manager_name)
 
     # 5. Фильтруем и группируем по зонам
-    zones: Dict[str, List[Dict]] = {"red": [], "yellow": []}
+    zones: Dict[str, List[Dict]] = {"dead": [], "red": [], "yellow": []}
 
     for client in clients_data:
         days  = client.get("silence_days", 0)
@@ -212,15 +212,17 @@ def calculate_opportunity_loss(
         zones[key].sort(key=lambda x: x["debt"], reverse=True)
 
     # 6. Итоги
+    dead_loss   = sum(e["loss"] for e in zones["dead"])
     red_loss    = sum(e["loss"] for e in zones["red"])
     yellow_loss = sum(e["loss"] for e in zones["yellow"])
-    total_loss  = red_loss + yellow_loss
+    total_loss  = dead_loss + red_loss + yellow_loss
 
+    dead_real   = sum(e["real_loss"] for e in zones["dead"])
     red_real    = sum(e["real_loss"] for e in zones["red"])
     yellow_real = sum(e["real_loss"] for e in zones["yellow"])
-    total_real  = red_real + yellow_real
+    total_real  = dead_real + red_real + yellow_real
 
-    total_clients = len(zones["red"]) + len(zones["yellow"])
+    total_clients = len(zones["dead"]) + len(zones["red"]) + len(zones["yellow"])
 
     if total_clients == 0:
         logger.info(f"opportunity_loss: у {manager_name} нет клиентов с просрочкой >= {ZONE_YELLOW_MIN} дней")
@@ -233,9 +235,11 @@ def calculate_opportunity_loss(
         "report_date":   report_date,
         "zones":         zones,
         "total_loss":    total_loss,
+        "dead_loss":     dead_loss,
         "red_loss":      red_loss,
         "yellow_loss":   yellow_loss,
         "total_real":    total_real,
+        "dead_real":     dead_real,
         "red_real":      red_real,
         "yellow_real":   yellow_real,
         "total_clients": total_clients,
