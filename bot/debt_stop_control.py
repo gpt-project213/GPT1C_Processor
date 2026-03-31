@@ -58,11 +58,15 @@ TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 JSON_DIR   = ROOT / "reports" / "json"
 CONFIG_DIR = ROOT / "config"
 
-STATE_FILE    = ROOT / "reports" / "debt_stop_state.json"
-REGISTRY_FILE = ROOT / "reports" / "debt_stop_registry.json"
+STATE_FILE     = ROOT / "reports" / "debt_stop_state.json"
+REGISTRY_FILE  = ROOT / "reports" / "debt_stop_registry.json"
+DELETION_QUEUE = ROOT / "logs" / "deletion_queue.json"
 
 # Саида — бухгалтер-оператор
 SAIDA_CHAT_ID = int(os.getenv("SAIDA_CHAT_ID", "920236287"))
+
+# Автоудаление сообщений через 24 часа (как у всего бота)
+DELETE_AFTER_HOURS = 24
 
 # Пороги (дней молчания)
 OVERDUE_MIN   = 7    # 7–9 дней: запрос менеджеру
@@ -91,6 +95,37 @@ def _load_json(path: Path, default: Any = None) -> Any:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         return default if default is not None else {}
+
+
+def _schedule_delete(chat_id: int, message_id: int, msg_ts: float,
+                     hours: int = DELETE_AFTER_HOURS) -> None:
+    """
+    Планирует удаление сообщения через `hours` часов.
+    Пишет в тот же deletion_queue.json что и основной бот (janitor подберёт).
+    Telegram API позволяет удалять сообщения не старше 48 часов.
+    """
+    import time as _time
+    try:
+        due_ts = msg_ts + hours * 3600
+        queue  = _load_json(DELETION_QUEUE, {"jobs": []})
+        jobs   = queue.get("jobs", [])
+        # дедупликация
+        for j in jobs:
+            if j.get("chat_id") == chat_id and j.get("message_id") == message_id:
+                j["due_ts"] = due_ts
+                break
+        else:
+            jobs.append({
+                "chat_id":      chat_id,
+                "message_id":   message_id,
+                "due_ts":       due_ts,
+                "msg_ts":       msg_ts,
+                "scheduled_at": _time.time(),
+            })
+        queue["jobs"] = jobs[-5000:]
+        _save_json(DELETION_QUEUE, queue)
+    except Exception as e:
+        LOG.warning("Ошибка планирования удаления msg=%s: %s", message_id, e)
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -439,6 +474,7 @@ async def send_manager_requests(bot) -> None:
                 msg = await bot.send_message(chat_id=chat_id, text=text,
                                              parse_mode="HTML", reply_markup=kb)
                 state["candidates"][cid]["manager_msg_id"] = msg.message_id
+                _schedule_delete(chat_id, msg.message_id, msg.date.timestamp())
             except Exception as e:
                 LOG.warning("Ошибка отправки клиента %s менеджеру %s: %s",
                             c["client"], manager_name, e)
@@ -515,6 +551,7 @@ async def escalate_unanswered(bot) -> None:
                                          parse_mode="HTML", reply_markup=kb)
             state["candidates"][cid]["escalated"]    = True
             state["candidates"][cid]["admin_msg_id"] = msg.message_id
+            _schedule_delete(admin_id, msg.message_id, msg.date.timestamp())
         except Exception as e:
             LOG.warning("Ошибка эскалации %s: %s", c["client"], e)
 
@@ -552,11 +589,12 @@ async def send_saida_final(bot) -> None:
 
     if total == 0:
         try:
-            await bot.send_message(
+            msg = await bot.send_message(
                 chat_id=SAIDA_CHAT_ID,
                 text=f"✅ <b>Стоп-лист на {today_str} пуст</b>\nВсе клиенты в порядке.",
                 parse_mode="HTML"
             )
+            _schedule_delete(SAIDA_CHAT_ID, msg.message_id, msg.date.timestamp())
         except Exception as e:
             LOG.warning("Ошибка отправки Саиде (пусто): %s", e)
         state["saida_sent"] = True
@@ -586,11 +624,12 @@ async def send_saida_final(bot) -> None:
     lines.append(f"\n<i>Отгрузка возобновляется только после полной оплаты и решения руководителя.</i>")
 
     try:
-        await bot.send_message(
+        msg = await bot.send_message(
             chat_id=SAIDA_CHAT_ID,
             text="\n".join(lines),
             parse_mode="HTML"
         )
+        _schedule_delete(SAIDA_CHAT_ID, msg.message_id, msg.date.timestamp())
         state["saida_sent"] = True
         save_state(state)
         LOG.info("Саиде отправлен стоп-лист: %d позиций", total)
