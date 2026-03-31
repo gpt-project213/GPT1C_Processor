@@ -58,9 +58,10 @@ TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 JSON_DIR   = ROOT / "reports" / "json"
 CONFIG_DIR = ROOT / "config"
 
-STATE_FILE     = ROOT / "reports" / "debt_stop_state.json"
-REGISTRY_FILE  = ROOT / "reports" / "debt_stop_registry.json"
-DELETION_QUEUE = ROOT / "logs" / "deletion_queue.json"
+STATE_FILE      = ROOT / "reports" / "debt_stop_state.json"
+REGISTRY_FILE   = ROOT / "reports" / "debt_stop_registry.json"
+DELETION_QUEUE  = ROOT / "logs" / "deletion_queue.json"
+SAIDA_INTRO_FILE = ROOT / "reports" / "debt_stop_saida_intro_sent.json"
 
 # Саида — бухгалтер-оператор
 SAIDA_CHAT_ID = int(os.getenv("SAIDA_CHAT_ID", "920236287"))
@@ -563,11 +564,62 @@ async def escalate_unanswered(bot) -> None:
 # 22:00 — финальный список Саиде
 # ══════════════════════════════════════════════════════════════════════
 
+async def _send_saida_intro(bot) -> None:
+    """
+    Отправляет Саиде инструкцию один раз — перед первым стоп-листом.
+    Повторно не отправляется (флаг в SAIDA_INTRO_FILE).
+    """
+    intro_data = _load_json(SAIDA_INTRO_FILE, {})
+    if intro_data.get("sent"):
+        return
+
+    instruction = (
+        "👋 <b>Саида, добрый вечер!</b>\n\n"
+        "Я буду присылать тебе каждый вечер список клиентов, которых <b>нельзя отгружать</b> завтра.\n\n"
+
+        "📋 <b>Как это работает:</b>\n"
+        "1. Каждый вечер в 22:00 ты получаешь список.\n"
+        "2. Утром перед оформлением отгрузки — проверь его.\n"
+        "3. Если клиент в списке — <b>не отгружай</b>, пока нет разрешения.\n\n"
+
+        "⚡ <b>Что означают значки:</b>\n"
+        "🚫 — клиент давно не платит и нарушил договорённость. Стоп до полной оплаты.\n"
+        "🔴 — молчит 10 и более дней. Руководитель утвердил стоп.\n"
+        "⚡ — молчит 7–9 дней. Руководитель утвердил стоп.\n\n"
+
+        "💡 <b>Если знаешь, что оплата уже пришла, но ещё не проведена в 1С:</b>\n"
+        "Нажми кнопку <b>«Оплата получена»</b> под именем клиента в списке.\n"
+        "Руководитель сразу получит уведомление и подтвердит отгрузку.\n\n"
+
+        "❗ <b>Важно:</b>\n"
+        "Список обновляется каждый день автоматически.\n"
+        "Клиент исчезает из списка сам, как только оплата разносится в 1С.\n\n"
+
+        "Если что-то непонятно — напиши руководителю. 🙂"
+    )
+
+    try:
+        msg = await bot.send_message(
+            chat_id=SAIDA_CHAT_ID,
+            text=instruction,
+            parse_mode="HTML"
+        )
+        _schedule_delete(SAIDA_CHAT_ID, msg.message_id, msg.date.timestamp(),
+                         hours=72)  # инструкцию храним 3 дня
+        _save_json(SAIDA_INTRO_FILE, {"sent": True, "sent_at": datetime.now(TZ).isoformat()})
+        LOG.info("Инструкция Саиде отправлена")
+    except Exception as e:
+        LOG.warning("Ошибка отправки инструкции Саиде: %s", e)
+
+
 async def send_saida_final(bot) -> None:
     """22:00 — отправить Саиде утверждённый стоп-лист."""
     state = load_state()
     if state.get("saida_sent"):
         return
+
+    # Первый запуск — отправить инструкцию перед списком
+    await _send_saida_intro(bot)
 
     candidates = state.get("candidates", {})
     registry   = load_registry()
@@ -601,40 +653,66 @@ async def send_saida_final(bot) -> None:
         save_state(state)
         return
 
-    lines = [f"🚫 <b>Не отгружать — {today_str}</b>  ({total} позиций)\n"]
-
-    # Авто-стопы (нарушители) — в первую очередь
-    if auto_stopped:
-        lines.append("🚫 <b>Авто-стоп (нарушение фин. дисциплины):</b>")
-        for name, rec in sorted(auto_stopped, key=lambda x: x[1].get("days_at_stop", 0), reverse=True):
-            days  = rec.get("days_at_stop", "?")
-            lines.append(f"   • <b>{name}</b>  —  {days}\u202fдн. молчания  [{rec.get('manager','')}]")
-        lines.append("")
-
-    # Утверждённые руководителем сегодня
-    if approved_daily:
-        lines.append("🔴 <b>Утверждено руководителем:</b>")
-        for cid, c in sorted(approved_daily, key=lambda x: -x[1]["days_silence"]):
-            icon = "🔴" if c["level"] == "10+" else "⚡"
-            lines.append(
-                f"   {icon} <b>{c['client']}</b>  —  "
-                f"{c['days_silence']}\u202fдн.  ·  {_fmt(c['debt'])}  [{c['manager']}]"
-            )
-
-    lines.append(f"\n<i>Отгрузка возобновляется только после полной оплаты и решения руководителя.</i>")
-
+    header = f"🚫 <b>Не отгружать — {today_str}</b>  ({total} позиций)\n"
     try:
-        msg = await bot.send_message(
-            chat_id=SAIDA_CHAT_ID,
-            text="\n".join(lines),
-            parse_mode="HTML"
+        hdr_msg = await bot.send_message(
+            chat_id=SAIDA_CHAT_ID, text=header, parse_mode="HTML"
         )
-        _schedule_delete(SAIDA_CHAT_ID, msg.message_id, msg.date.timestamp())
-        state["saida_sent"] = True
-        save_state(state)
-        LOG.info("Саиде отправлен стоп-лист: %d позиций", total)
+        _schedule_delete(SAIDA_CHAT_ID, hdr_msg.message_id, hdr_msg.date.timestamp())
     except Exception as e:
-        LOG.error("Ошибка отправки Саиде: %s", e)
+        LOG.warning("Ошибка отправки заголовка Саиде: %s", e)
+
+    # Каждый клиент — отдельное сообщение с кнопкой «Оплата получена»
+    all_items: List[Tuple[str, int, str, str]] = []  # (name, days, debt_fmt, manager)
+    for name, rec in sorted(auto_stopped, key=lambda x: x[1].get("days_at_stop", 0), reverse=True):
+        all_items.append((name, rec.get("days_at_stop", 0), "?", rec.get("manager", ""), "auto"))
+    for cid, c in sorted(approved_daily, key=lambda x: -x[1]["days_silence"]):
+        all_items.append((c["client"], c["days_silence"], _fmt(c["debt"]), c["manager"], c["level"]))
+
+    for item in all_items:
+        name, days, debt_str, manager, level = item
+        if level == "auto":
+            icon = "🚫"
+            note = "нарушение фин. дисциплины"
+        elif level == "10+":
+            icon = "🔴"
+            note = f"долг: {debt_str}"
+        else:
+            icon = "⚡"
+            note = f"долг: {debt_str}"
+
+        text = (
+            f"{icon} <b>{name}</b>\n"
+            f"Молчит {days}\u202fдн.  ·  {note}  [{manager}]\n"
+            f"<i>Не отгружать до разрешения руководителя</i>"
+        )
+        kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton(
+                "💰 Оплата получена",
+                callback_data=f"dstop_paid|{name[:40]}"
+            )
+        ]])
+        try:
+            item_msg = await bot.send_message(
+                chat_id=SAIDA_CHAT_ID, text=text,
+                parse_mode="HTML", reply_markup=kb
+            )
+            _schedule_delete(SAIDA_CHAT_ID, item_msg.message_id, item_msg.date.timestamp())
+        except Exception as e:
+            LOG.warning("Ошибка отправки позиции '%s' Саиде: %s", name, e)
+
+    footer = "<i>Список обновляется каждый день. Клиент исчезнет сам после оплаты.</i>"
+    try:
+        ftr_msg = await bot.send_message(
+            chat_id=SAIDA_CHAT_ID, text=footer, parse_mode="HTML"
+        )
+        _schedule_delete(SAIDA_CHAT_ID, ftr_msg.message_id, ftr_msg.date.timestamp())
+    except Exception as e:
+        LOG.warning("Ошибка отправки футера Саиде: %s", e)
+
+    state["saida_sent"] = True
+    save_state(state)
+    LOG.info("Саиде отправлен стоп-лист: %d позиций", total)
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -663,6 +741,10 @@ async def handle_dstop_callback(data: str, chat_id: int, bot) -> Optional[str]:
         client_key  = parts[1]
         action      = "clear" if data.startswith("dstop_clear|") else "keep"
         return await _handle_clearance(client_key, action, chat_id, bot)
+
+    if data.startswith("dstop_paid|"):
+        client_key = data.split("|", 1)[1]
+        return await _handle_saida_payment(client_key, chat_id, bot)
 
     return None
 
@@ -718,6 +800,36 @@ async def _handle_admin_response(cid: str, action: str, chat_id: int, bot) -> st
         return f"✅ Стоп утверждён — <b>{c['client']}</b>"
     else:
         return f"❌ Убран из стоп-листа — <b>{c['client']}</b>"
+
+
+async def _handle_saida_payment(client_key: str, chat_id: int, bot) -> str:
+    """
+    Саида нажала «Оплата получена» — оплата есть, но ещё не разнесена в 1С.
+    Уведомляем руководителя, Саиде подтверждаем что сообщение принято.
+    """
+    admin_id = _get_admin_chat_id()
+    now_str  = datetime.now(TZ).strftime("%H:%M")
+
+    admin_msg = (
+        f"💰 <b>Саида: оплата получена (не разнесена в 1С)</b>\n\n"
+        f"Клиент: <b>{client_key}</b>\n"
+        f"Время: {now_str}\n\n"
+        f"Саида планирует отгрузить этого клиента.\n"
+        f"Оплата поступила, но ещё не проведена в системе.\n\n"
+        f"Если всё верно — ничего делать не нужно.\n"
+        f"Если нет — свяжитесь с Саидой."
+    )
+    if admin_id:
+        try:
+            adm_msg = await bot.send_message(
+                chat_id=admin_id, text=admin_msg, parse_mode="HTML"
+            )
+            _schedule_delete(admin_id, adm_msg.message_id, adm_msg.date.timestamp())
+        except Exception as e:
+            LOG.warning("Ошибка уведомления руководителя об оплате %s: %s", client_key, e)
+
+    LOG.info("Саида: оплата получена (не разнесена) — клиент '%s'", client_key)
+    return f"✅ Принято. Руководитель уведомлён.\nМожешь отгружать <b>{client_key}</b>."
 
 
 async def _handle_clearance(client_key: str, action: str, chat_id: int, bot) -> str:
