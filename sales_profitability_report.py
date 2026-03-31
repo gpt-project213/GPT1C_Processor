@@ -212,16 +212,39 @@ def load_latest_sales() -> Optional[Dict[str, Any]]:
     return None
 
 def load_latest_gross() -> Optional[Dict[str, Any]]:
-    """Загрузить последний gross JSON"""
-    files = sorted(JSON_DIR.glob("gross_*.json"), key=_mtime, reverse=True)
+    """Загрузить gross JSON с максимальным числом товаров.
+
+    Бухгалтер присылает два вида gross:
+    - накопленный за месяц (01.03–27.03) — 88–91 товаров, нужен нам
+    - за один день (30 марта)            — 18–31 товаров, неполный
+
+    Берём файл с наибольшим product-count, а не последний по mtime.
+    """
+    files = list(JSON_DIR.glob("gross_*.json"))
     if not files:
         LOG.error("Не найдены файлы gross_*.json")
         return None
-    
-    path = files[0]
-    LOG.info("Загружаю gross: %s", path.name)
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+
+    best_path = None
+    best_count = -1
+    for path in files:
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            count = len(data.get("products", []))
+            if count > best_count:
+                best_count = count
+                best_path = path
+                best_data = data
+        except Exception as e:
+            LOG.warning("Ошибка чтения %s: %s", path.name, e)
+
+    if best_path is None:
+        LOG.error("Нет читаемых gross JSON")
+        return None
+
+    LOG.info("Загружаю gross: %s (%d товаров)", best_path.name, best_count)
+    return best_data
 
 # ──────────────────────────────────────────────────────────────────
 # Построение справочника маржи
