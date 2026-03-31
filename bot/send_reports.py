@@ -221,6 +221,21 @@ except ImportError as e:
     SalesSummary = None
     GrossSummary = None
 
+# debt_stop_control: контроль стоп-листа отгрузки (Саида, бухгалтер)
+try:
+    from debt_stop_control import (
+        monitor_exceptions        as _dstop_monitor,
+        send_manager_requests     as _dstop_managers,
+        escalate_unanswered       as _dstop_escalate,
+        send_saida_final          as _dstop_saida,
+        handle_dstop_callback     as _dstop_callback,
+    )
+    _DEBT_STOP_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ [STARTUP] debt_stop_control не найден: {e}")
+    _DEBT_STOP_AVAILABLE = False
+    _dstop_monitor = _dstop_managers = _dstop_escalate = _dstop_saida = _dstop_callback = None
+
 # v9.4.26: Модуль упущенной прибыли
 try:
     from opportunity_loss import (
@@ -4787,6 +4802,19 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             log_event("workday_set_workday", date=today)
         return
 
+    # Стоп-лист отгрузки (debt_stop_control)
+    if data.startswith("dstop_") and _DEBT_STOP_AVAILABLE:
+        try:
+            result_text = await _dstop_callback(data, chat_id, context.bot)
+            if result_text:
+                try:
+                    await q.edit_message_text(result_text, parse_mode="HTML")
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.error("dstop callback error: %s", e)
+        return
+
     # Collector dialog callbacks
     if data.startswith("col_"):
         try:
@@ -6533,6 +6561,60 @@ def main():
             name="whatsapp_poller",
         )
         logger.info("📱 Настроен Green API поллер: каждые 30 сек")
+
+        # ── Стоп-лист отгрузки (Саида) ─────────────────────────────
+        if _DEBT_STOP_AVAILABLE:
+            async def _job_dstop_monitor(ctx):
+                try:
+                    await _dstop_monitor(ctx.bot)
+                except Exception as e:
+                    logger.error("debt_stop monitor error: %s", e)
+
+            async def _job_dstop_managers(ctx):
+                try:
+                    await _dstop_managers(ctx.bot)
+                except Exception as e:
+                    logger.error("debt_stop managers error: %s", e)
+
+            async def _job_dstop_escalate(ctx):
+                try:
+                    await _dstop_escalate(ctx.bot)
+                except Exception as e:
+                    logger.error("debt_stop escalate error: %s", e)
+
+            async def _job_dstop_saida(ctx):
+                try:
+                    await _dstop_saida(ctx.bot)
+                except Exception as e:
+                    logger.error("debt_stop saida error: %s", e)
+
+            job_queue.run_daily(
+                _job_dstop_monitor,
+                time=dt_time(14, 0, tzinfo=TZ),
+                name="debt_stop_monitor",
+            )
+            logger.info("🚫 Настроен мониторинг авто-стопа: ежедневно 14:00")
+
+            job_queue.run_daily(
+                _job_dstop_managers,
+                time=dt_time(17, 0, tzinfo=TZ),
+                name="debt_stop_managers",
+            )
+            logger.info("🚫 Настроен запрос менеджерам по стоп-листу: ежедневно 17:00")
+
+            job_queue.run_daily(
+                _job_dstop_escalate,
+                time=dt_time(19, 0, tzinfo=TZ),
+                name="debt_stop_escalate",
+            )
+            logger.info("🚫 Настроена эскалация к руководителю: ежедневно 19:00")
+
+            job_queue.run_daily(
+                _job_dstop_saida,
+                time=dt_time(22, 0, tzinfo=TZ),
+                name="debt_stop_saida",
+            )
+            logger.info("🚫 Настроено уведомление Саиды: ежедневно 22:00")
 
         logger.info(f"🗑️ Автоудаление сообщений через {AUTO_DELETE_HOURS} часов")
     
