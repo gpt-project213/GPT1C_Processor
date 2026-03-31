@@ -99,7 +99,7 @@ def setup_logging(module_name: str, level: int = logging.INFO) -> Logger:
     ts = datetime.now(TZ).strftime("%Y%m%d_%H%M%S")
     log_path = LOGS_DIR / f"{module_name}_{ts}.log"
 
-    fh = logging.FileHandler(log_path, encoding="utf-8")
+    fh = logging.FileHandler(log_path, encoding="utf-8", delay=True)
     sh = logging.StreamHandler()
 
     fmt = _TzFormatter(_LOG_FORMAT, _LOG_DATEFMT, TZ)

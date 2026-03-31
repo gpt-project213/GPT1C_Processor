@@ -565,10 +565,25 @@ tr:hover td {{ background:#f5f8fc }}
 </div>
 """
 
-    # Клиенты с товарами
-    html += "<h2>Клиенты и товары</h2>\n"
-    
+    # Клиенты с убыточными и критическими товарами
+    # Показываем только тех клиентов, у которых есть хотя бы один убыточный
+    # или критически низкомаржинальный товар. По каждому клиенту — только эти товары.
+    clients_with_problems = []
     for client in clients:
+        problem_products = [
+            p for p in client["products"]
+            if p["status"] in ("LOSS", "CRITICAL")
+        ]
+        if problem_products:
+            clients_with_problems.append({**client, "products": problem_products})
+
+    if clients_with_problems:
+        html += f"<h2>Клиенты с убыточными и критическими товарами ({len(clients_with_problems)} из {len(clients)})</h2>\n"
+    else:
+        html += "<h2>Клиенты с убыточными и критическими товарами</h2>\n"
+        html += "<p style='color:var(--good);font-weight:600'>✅ Убыточных и критических позиций не обнаружено.</p>\n"
+
+    for client in clients_with_problems:
         html += f"""
 <div class="client-card">
   <div class="client-header">
@@ -596,20 +611,19 @@ tr:hover td {{ background:#f5f8fc }}
         for prod in client["products"]:
             margin_text = fmt_pct(prod["margin_pct"]) if prod["margin_pct"] is not None else "—"
             profit_text = fmt_money(prod["profit"]) if prod["profit"] is not None else "—"
-            
-            margin_class = ""
+
             if prod["margin_pct"] is not None:
                 if prod["margin_pct"] < MARGIN_LOSS:
                     margin_class = "margin-loss"
                 elif prod["margin_pct"] < MARGIN_CRITICAL:
                     margin_class = "margin-critical"
-                elif prod["margin_pct"] < MARGIN_LOW:
-                    margin_class = "margin-low"
                 else:
-                    margin_class = "margin-ok"
-            
-            status_class = f"status-{prod['status'].lower()}" if prod["status"] != "UNKNOWN" else ""
-            
+                    margin_class = "margin-low"
+            else:
+                margin_class = ""
+
+            status_class = f"status-{prod['status'].lower()}"
+
             html += f"""
       <tr>
         <td>{prod["product"]}</td>
@@ -621,7 +635,7 @@ tr:hover td {{ background:#f5f8fc }}
         <td><span class="{status_class}">{prod["status_label"]}</span></td>
       </tr>
 """
-        
+
         html += """
     </tbody>
   </table></div>
