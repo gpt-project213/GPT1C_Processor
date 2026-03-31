@@ -176,6 +176,7 @@ class ClientBlock:
     closing: Optional[float] = None
     movements: List[Movement] = field(default_factory=list)
     last_date: Optional[pd.Timestamp] = None
+    last_credit_date: Optional[pd.Timestamp] = None  # дата последней оплаты (кредит)
 
     @property
     def sum_debit(self) -> float:
@@ -250,6 +251,8 @@ def parse_extended_excel(path: Path, managers_list: List[str] | None = None
             if not pd.isna(dts) and (db != 0.0 or cr != 0.0):
                 cur_client.movements.append(Movement(date=dts, debit=db, credit=cr))
                 cur_client.last_date = dts
+                if cr != 0.0:
+                    cur_client.last_credit_date = dts
 
     agg = aggregate_blocks(blocks)
     dates = [m.date for b in blocks for m in b.movements if not pd.isna(m.date)]
@@ -536,8 +539,10 @@ def process_extended_report(clean_xlsx: Path, src_name: str) -> Dict[str, Any]:
                    for b in blocks_sorted[:15] if (b.closing or 0.0) > 0]
 
     # Все клиенты (+ days_silence)
-    def _calc_silence(b_last_date, p_min, p_max):
-        ref = b_last_date if (b_last_date is not None and not pd.isna(b_last_date)) else p_min
+    def _calc_silence(b_last_credit_date, p_min, p_max):
+        # Считаем от последней ОПЛАТЫ (кредит), а не от любого движения.
+        # Если оплат в периоде не было — берём начало периода (должник не платил вообще).
+        ref = b_last_credit_date if (b_last_credit_date is not None and not pd.isna(b_last_credit_date)) else p_min
         if p_max is None or ref is None or pd.isna(ref) or pd.isna(p_max):
             return None
         try:
@@ -549,7 +554,7 @@ def process_extended_report(clean_xlsx: Path, src_name: str) -> Dict[str, Any]:
         "client": b.client, "client_slug": slugify(b.client),
         "debt": b.closing or 0.0, "opening": b.opening or 0.0,
         "debit": b.sum_debit, "credit": b.sum_credit, "movements": len(b.movements),
-        "days_silence": _calc_silence(b.last_date, period_min, period_max),
+        "days_silence": _calc_silence(b.last_credit_date, period_min, period_max),
     } for b in blocks_sorted]
 
     # Движения: отсортировать клиентов в каждой подгруппе по убыванию closing
