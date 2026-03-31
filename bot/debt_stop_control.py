@@ -297,8 +297,8 @@ async def monitor_exceptions(bot) -> None:
                             LOG.warning("Ошибка уведомления авто-стоп %s (chat=%s): %s",
                                         client_name, chat_id, e)
 
-        # ── Проверка полной оплаты авто-стопа ───────────────────────
-        elif status == "auto_stopped":
+        # ── Проверка полной оплаты (авто-стоп или утверждённый стоп) ──
+        elif status in ("auto_stopped", "stopped"):
             current = _get_client_current_state(client_name)
             if not current:
                 continue
@@ -317,9 +317,13 @@ async def monitor_exceptions(bot) -> None:
                         callback_data=f"dstop_keep|{client_name[:40]}"
                     ),
                 ]])
+                if status == "auto_stopped":
+                    note = f"⚠️ Ранее нарушил финансовую дисциплину ({rec.get('days_at_stop', '?')} дн. молчания).\n"
+                else:
+                    note = f"Был на стопе {rec.get('days_at_stop', '?')} дн.\n"
                 msg = (
                     f"💰 <b>{client_name}</b> — полностью рассчитался.\n"
-                    f"⚠️ Ранее нарушил финансовую дисциплину ({rec.get('days_at_stop', '?')} дн. молчания).\n"
+                    f"{note}"
                     f"Снять со стопа?"
                 )
                 if admin_id:
@@ -510,7 +514,6 @@ async def escalate_unanswered(bot) -> None:
             c.get("manager_response") in (None, "no")
             or c.get("skip_manager")
         )
-        and c.get("manager_response") != "yes"
     ]
 
     if not pending:
@@ -534,6 +537,8 @@ async def escalate_unanswered(bot) -> None:
             note = "⚠️ Нарушитель фин. дисциплины — без согласования менеджера"
         elif c.get("manager_response") == "no":
             note = f"Менеджер {c['manager']}: нет договорённости"
+        elif c.get("manager_response") == "yes":
+            note = f"Менеджер {c['manager']}: договорились ✅"
         else:
             note = f"Менеджер {c['manager']} не ответил"
 
@@ -631,10 +636,10 @@ async def send_saida_final(bot) -> None:
         if c.get("admin_approved") is True
     ]
 
-    # Из реестра: авто-стопы (включая сегодняшние)
+    # Из реестра: авто-стопы и утверждённые стопы (включая сегодняшние)
     auto_stopped = [
         (name, rec) for name, rec in registry.items()
-        if rec.get("status") == "auto_stopped"
+        if rec.get("status") in ("auto_stopped", "stopped")
     ]
 
     total = len(approved_daily) + len(auto_stopped)
@@ -746,6 +751,22 @@ async def handle_dstop_callback(data: str, chat_id: int, bot) -> Optional[str]:
         client_key = data.split("|", 1)[1]
         return await _handle_saida_payment(client_key, chat_id, bot)
 
+    if data.startswith("dstop_mgr_paid|"):
+        cid = data.split("|", 1)[1]
+        return await _handle_mgr_paid_claim(cid, chat_id, bot)
+
+    if data.startswith("dstop_saida_full|"):
+        cid = data.split("|", 1)[1]
+        return await _handle_saida_confirm_full(cid, chat_id, bot)
+
+    if data.startswith("dstop_saida_partial|"):
+        cid = data.split("|", 1)[1]
+        return await _handle_saida_confirm_partial(cid, chat_id, bot)
+
+    if data.startswith("dstop_admin_allow|"):
+        cid = data.split("|", 1)[1]
+        return await _handle_admin_allow_after_saida(cid, chat_id, bot)
+
     return None
 
 
@@ -761,23 +782,29 @@ async def _handle_manager_response(cid: str, response: str, chat_id: int, bot) -
     c["response_at"] = datetime.now(TZ).strftime("%H:%M")
 
     if response == "yes":
-        # Добавляем в реестр как одобренное исключение
-        registry = load_registry()
-        today = datetime.now(TZ).strftime("%Y-%m-%d")
-        registry[c["client"]] = {
-            "manager":           c["manager"],
-            "manager_chat_id":   c["manager_chat_id"],
-            "approved_at":       today,
-            "days_at_approval":  c["days_silence"],
-            "debt_at_approval":  c["debt"],
-            "status":            "exception",
-            "auto_stopped_at":   None,
-            "days_at_stop":      None,
-            "discipline_violation": False,
-            "cleared_at":        None,
-        }
-        save_registry(registry)
-        result = f"✅ Договорились — <b>{c['client']}</b> исключён из стоп-листа сегодня."
+        # Эскалируем к руководителю — его решение финальное
+        admin_id = _get_admin_chat_id()
+        icon = "🔴" if c["level"] == "10+" else "⚡"
+        text = (
+            f"{icon} <b>{c['client']}</b>  [{c['manager']}]\n"
+            f"Молчит: <b>{c['days_silence']}\u202fдн.</b>  |  "
+            f"Долг: <b>{_fmt(c['debt'])}</b>\n"
+            f"<i>Менеджер {c['manager']}: договорились ✅</i>"
+        )
+        kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton("✅ Разрешить отгрузку", callback_data=f"dstop_admin_remove|{cid}"),
+            InlineKeyboardButton("🚫 Утвердить стоп",    callback_data=f"dstop_admin_ok|{cid}"),
+        ]])
+        if admin_id:
+            try:
+                msg = await bot.send_message(chat_id=admin_id, text=text,
+                                             parse_mode="HTML", reply_markup=kb)
+                c["escalated"]    = True
+                c["admin_msg_id"] = msg.message_id
+                _schedule_delete(admin_id, msg.message_id, msg.date.timestamp())
+            except Exception as e:
+                LOG.warning("Ошибка эскалации yes-ответа %s: %s", c["client"], e)
+        result = f"✅ Передано руководителю на утверждение — <b>{c['client']}</b>"
     else:
         result = f"🚫 Зафиксировано — <b>{c['client']}</b> передан руководителю."
 
@@ -796,10 +823,71 @@ async def _handle_admin_response(cid: str, action: str, chat_id: int, bot) -> st
     c["admin_approved"] = (action == "ok")
     save_state(state)
 
+    mgr_chat_id = c.get("manager_chat_id")
+    today = datetime.now(TZ).strftime("%Y-%m-%d")
+
     if action == "ok":
+        # Стоп — записываем в реестр для отслеживания оплаты
+        registry = load_registry()
+        registry[c["client"]] = {
+            "manager":              c["manager"],
+            "manager_chat_id":      mgr_chat_id,
+            "approved_at":          today,
+            "days_at_approval":     c["days_silence"],
+            "debt_at_approval":     c["debt"],
+            "status":               "stopped",
+            "auto_stopped_at":      None,
+            "days_at_stop":         c["days_silence"],
+            "discipline_violation": False,
+            "cleared_at":           None,
+        }
+        save_registry(registry)
+        # Уведомить менеджера с кнопкой «Клиент оплатил»
+        if mgr_chat_id:
+            try:
+                kb_mgr = InlineKeyboardMarkup([[
+                    InlineKeyboardButton(
+                        "💳 Клиент оплатил, ждём разноски",
+                        callback_data=f"dstop_mgr_paid|{cid}"
+                    )
+                ]])
+                await bot.send_message(
+                    chat_id=mgr_chat_id,
+                    text=f"🚫 <b>Руководитель утвердил стоп</b>\n{c['client']}\nОтгрузка запрещена.",
+                    parse_mode="HTML",
+                    reply_markup=kb_mgr
+                )
+            except Exception as e:
+                LOG.warning("Ошибка уведомления менеджера о стопе %s: %s", c["client"], e)
         return f"✅ Стоп утверждён — <b>{c['client']}</b>"
     else:
-        return f"❌ Убран из стоп-листа — <b>{c['client']}</b>"
+        # Разрешил — если менеджер говорил "yes", записываем как exception
+        if c.get("manager_response") == "yes":
+            registry = load_registry()
+            registry[c["client"]] = {
+                "manager":              c["manager"],
+                "manager_chat_id":      mgr_chat_id,
+                "approved_at":          today,
+                "days_at_approval":     c["days_silence"],
+                "debt_at_approval":     c["debt"],
+                "status":               "exception",
+                "auto_stopped_at":      None,
+                "days_at_stop":         None,
+                "discipline_violation": False,
+                "cleared_at":           None,
+            }
+            save_registry(registry)
+        # Уведомить менеджера
+        if mgr_chat_id:
+            try:
+                await bot.send_message(
+                    chat_id=mgr_chat_id,
+                    text=f"✅ <b>Руководитель разрешил отгрузку</b>\n{c['client']}",
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                LOG.warning("Ошибка уведомления менеджера о разрешении %s: %s", c["client"], e)
+        return f"✅ Разрешено — <b>{c['client']}</b>"
 
 
 async def _handle_saida_payment(client_key: str, chat_id: int, bot) -> str:
@@ -877,3 +965,191 @@ async def _handle_clearance(client_key: str, action: str, chat_id: int, bot) -> 
         rec["status"] = "auto_stopped"  # возвращаем в авто-стоп
         save_registry(registry)
         return f"🚫 {matched_key} — оставлен на стопе."
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Цепочка: менеджер сообщает об оплате → Саида проверяет → admin решает
+# ══════════════════════════════════════════════════════════════════════
+
+async def _handle_mgr_paid_claim(cid: str, chat_id: int, bot) -> str:
+    """Менеджер нажал «Клиент оплатил, ждём разноски»."""
+    state = load_state()
+    c = state["candidates"].get(cid)
+    if not c:
+        return "❓ Клиент не найден в сегодняшнем списке."
+    if c.get("mgr_paid_claimed"):
+        return "ℹ️ Вы уже сообщили об оплате этого клиента."
+
+    c["mgr_paid_claimed"] = True
+    c["mgr_paid_at"] = datetime.now(TZ).strftime("%H:%M")
+    save_state(state)
+
+    admin_id = _get_admin_chat_id()
+    now_str = datetime.now(TZ).strftime("%H:%M")
+
+    # Саиде — запрос с двумя кнопками
+    kb_saida = InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Полная оплата",    callback_data=f"dstop_saida_full|{cid}"),
+        InlineKeyboardButton("⚠️ Частичная оплата", callback_data=f"dstop_saida_partial|{cid}"),
+    ]])
+    try:
+        await bot.send_message(
+            chat_id=SAIDA_CHAT_ID,
+            text=(
+                f"💳 <b>Менеджер {c['manager']} сообщает об оплате</b>\n\n"
+                f"Клиент: <b>{c['client']}</b>\n"
+                f"Время: {now_str}\n\n"
+                f"Проверь разноску и подтверди:"
+            ),
+            parse_mode="HTML",
+            reply_markup=kb_saida
+        )
+    except Exception as e:
+        LOG.warning("Ошибка уведомления Саиды об оплате %s: %s", c["client"], e)
+
+    # Руководителю — информационно
+    if admin_id:
+        try:
+            await bot.send_message(
+                chat_id=admin_id,
+                text=(
+                    f"📋 <b>Менеджер {c['manager']}</b> сообщил об оплате:\n"
+                    f"<b>{c['client']}</b> ({now_str})\n"
+                    f"Саида уведомлена — ожидаем подтверждение разноски."
+                ),
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            LOG.warning("Ошибка уведомления руководителя о заявке менеджера %s: %s", c["client"], e)
+
+    return f"✅ Саида уведомлена. Ожидайте подтверждения разноски."
+
+
+async def _handle_saida_confirm_full(cid: str, chat_id: int, bot) -> str:
+    """Саида подтвердила полную оплату — руководителю запрос на разрешение."""
+    state = load_state()
+    c = state["candidates"].get(cid)
+    if not c:
+        return "❓ Клиент не найден."
+    if c.get("saida_payment_confirmed") is not None:
+        return "ℹ️ Статус оплаты уже зафиксирован."
+
+    c["saida_payment_confirmed"] = "full"
+    save_state(state)
+
+    admin_id = _get_admin_chat_id()
+    now_str = datetime.now(TZ).strftime("%H:%M")
+
+    # Руководителю — запрос на разрешение отгрузки
+    if admin_id:
+        kb_admin = InlineKeyboardMarkup([[
+            InlineKeyboardButton("✅ Разрешить отгрузку", callback_data=f"dstop_admin_allow|{cid}"),
+            InlineKeyboardButton("🚫 Отказать",           callback_data=f"dstop_admin_ok|{cid}"),
+        ]])
+        try:
+            await bot.send_message(
+                chat_id=admin_id,
+                text=(
+                    f"💰 <b>Саида подтвердила полную оплату</b>\n\n"
+                    f"Клиент: <b>{c['client']}</b>  [{c['manager']}]\n"
+                    f"Время: {now_str}\n\n"
+                    f"Разрешить отгрузку?"
+                ),
+                parse_mode="HTML",
+                reply_markup=kb_admin
+            )
+        except Exception as e:
+            LOG.warning("Ошибка уведомления руководителя о полной оплате %s: %s", c["client"], e)
+
+    return f"✅ Руководитель уведомлён. Ожидайте решения."
+
+
+async def _handle_saida_confirm_partial(cid: str, chat_id: int, bot) -> str:
+    """Саида сообщила о частичной оплате — конфликт с заявлением менеджера."""
+    state = load_state()
+    c = state["candidates"].get(cid)
+    if not c:
+        return "❓ Клиент не найден."
+    if c.get("saida_payment_confirmed") is not None:
+        return "ℹ️ Статус оплаты уже зафиксирован."
+
+    c["saida_payment_confirmed"] = "partial"
+    save_state(state)
+
+    admin_id = _get_admin_chat_id()
+    mgr_chat_id = c.get("manager_chat_id")
+    now_str = datetime.now(TZ).strftime("%H:%M")
+
+    # Руководителю — предупреждение о конфликте
+    if admin_id:
+        try:
+            await bot.send_message(
+                chat_id=admin_id,
+                text=(
+                    f"⚠️ <b>Конфликт по оплате!</b>\n\n"
+                    f"Менеджер <b>{c['manager']}</b> заявил полную оплату,\n"
+                    f"но Саида говорит — <b>частичная</b>.\n\n"
+                    f"Клиент: <b>{c['client']}</b>\n"
+                    f"Время: {now_str}\n\n"
+                    f"Клиент остаётся на стопе."
+                ),
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            LOG.warning("Ошибка уведомления руководителя о частичной оплате %s: %s", c["client"], e)
+
+    # Менеджеру — оплата не подтверждена
+    if mgr_chat_id:
+        try:
+            await bot.send_message(
+                chat_id=mgr_chat_id,
+                text=(
+                    f"⚠️ <b>Саида: оплата частичная</b>\n"
+                    f"{c['client']}\n"
+                    f"Разноска не подтверждена. Клиент остаётся на стопе."
+                ),
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            LOG.warning("Ошибка уведомления менеджера о частичной оплате %s: %s", c["client"], e)
+
+    return f"⚠️ Руководитель уведомлён о конфликте. Клиент остаётся на стопе."
+
+
+async def _handle_admin_allow_after_saida(cid: str, chat_id: int, bot) -> str:
+    """Руководитель разрешил отгрузку после подтверждения Саиды."""
+    state = load_state()
+    c = state["candidates"].get(cid)
+    if not c:
+        return "❓ Клиент не найден."
+    if c.get("admin_approved") is not None:
+        return "ℹ️ Решение уже принято."
+
+    c["admin_approved"] = False  # убираем из стоп-листа
+    save_state(state)
+
+    mgr_chat_id = c.get("manager_chat_id")
+    now_str = datetime.now(TZ).strftime("%H:%M")
+
+    # Менеджеру — разрешение
+    if mgr_chat_id:
+        try:
+            await bot.send_message(
+                chat_id=mgr_chat_id,
+                text=f"✅ <b>Руководитель разрешил отгрузку</b>\n{c['client']}",
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            LOG.warning("Ошибка уведомления менеджера о разрешении %s: %s", c["client"], e)
+
+    # Саиде — разрешение
+    try:
+        await bot.send_message(
+            chat_id=SAIDA_CHAT_ID,
+            text=f"✅ <b>Руководитель разрешил отгрузку</b>\n{c['client']} ({now_str})",
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        LOG.warning("Ошибка уведомления Саиды о разрешении %s: %s", c["client"], e)
+
+    return f"✅ Разрешено — <b>{c['client']}</b>. Менеджер и Саида уведомлены."

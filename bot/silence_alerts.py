@@ -377,13 +377,16 @@ class SilenceAlert:
         def _imitation_suffix(c: Dict) -> str:
             return " ⚠️ имитация" if c.get('is_imitation') else ""
 
+        def _violation_suffix(c: Dict) -> str:
+            return " 🚨 нарушение отгрузки" if c.get('shipment_violation') else ""
+
         def _append_block(label: str, clients: List[Dict], limit: int = 10) -> float:
             if not clients:
                 return 0.0
             msg_lines.append(label)
             total = 0.0
             for c in clients[:limit]:
-                suffix = _imitation_suffix(c)
+                suffix = _imitation_suffix(c) + _violation_suffix(c)
                 msg_lines.append(
                     f"  • {c['client']} — {c['debt_str']} ({c['silence_days']} дн){suffix}"
                 )

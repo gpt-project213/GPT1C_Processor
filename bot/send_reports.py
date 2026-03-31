@@ -3612,6 +3612,19 @@ async def check_and_send_silence_alerts(context=None):
             if not clients_data:
                 logger.warning(f"⚠️ Не удалось распарсить данные для {manager}")
                 continue
+            # shipment_violation из debt_ext JSON
+            _json_path = JSON_DIR / (latest_report.stem + ".json")
+            if _json_path.exists():
+                try:
+                    import json as _json_mod
+                    _ext = _json_mod.loads(_json_path.read_text(encoding='utf-8'))
+                    _vmap = {r['client']: r.get('shipment_violation', False)
+                             for r in _ext.get('clients', []) if isinstance(r, dict) and 'client' in r}
+                    for _c in clients_data:
+                        if _vmap.get(_c['client']):
+                            _c['shipment_violation'] = True
+                except Exception as _e:
+                    logger.warning("Не удалось загрузить %s: %s", _json_path.name, _e)
             # v1.4: исторические дни молчания из предыдущего файла
             prev_report = alert.get_prev_debt_report(reports_dir, manager)
             hist_map = alert.build_historical_silence_map(prev_report) if prev_report else {}
@@ -4783,7 +4796,6 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not is_admin(chat_id):
             return
         from bot.workday_checker import set_holiday, clear_holiday
-        from datetime import datetime
         today = datetime.now(TZ).strftime("%Y-%m-%d")
         choice = data.split("|", 1)[1]
         if choice == "holiday":
