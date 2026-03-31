@@ -176,7 +176,11 @@ class ClientBlock:
     closing: Optional[float] = None
     movements: List[Movement] = field(default_factory=list)
     last_date: Optional[pd.Timestamp] = None
-    last_credit_date: Optional[pd.Timestamp] = None  # дата последней оплаты (кредит)
+    last_debit_date: Optional[pd.Timestamp] = None        # дата последней отгрузки
+    balance_before_last_debit: Optional[float] = None     # баланс ДО последней отгрузки
+    last_credit_before_debit: Optional[pd.Timestamp] = None  # последняя оплата ДО последней отгрузки включительно
+    last_credit_date: Optional[pd.Timestamp] = None       # последняя оплата в периоде (любая)
+    shipment_violation: bool = False                       # отгрузка при долге > 5000 ₸
 
     @property
     def sum_debit(self) -> float:
@@ -253,6 +257,17 @@ def parse_extended_excel(path: Path, managers_list: List[str] | None = None
                 cur_client.last_date = dts
                 if cr != 0.0:
                     cur_client.last_credit_date = dts
+                if db != 0.0:
+                    # Баланс ДО этой отгрузки = closing текущее минус всё что накопилось
+                    # Считаем нарастающим итогом через movements (все до текущего включительно)
+                    bal_before = (cur_client.opening or 0.0) + sum(
+                        m.debit - m.credit for m in cur_client.movements[:-1]
+                    )
+                    cur_client.balance_before_last_debit = bal_before
+                    cur_client.last_debit_date = dts
+                    cur_client.last_credit_before_debit = cur_client.last_credit_date
+                    if bal_before > 5000.0:
+                        cur_client.shipment_violation = True
 
     agg = aggregate_blocks(blocks)
     dates = [m.date for b in blocks for m in b.movements if not pd.isna(m.date)]
@@ -539,22 +554,61 @@ def process_extended_report(clean_xlsx: Path, src_name: str) -> Dict[str, Any]:
                    for b in blocks_sorted[:15] if (b.closing or 0.0) > 0]
 
     # Все клиенты (+ days_silence)
-    def _calc_silence(b_last_credit_date, p_min, p_max):
-        # Считаем от последней ОПЛАТЫ (кредит), а не от любого движения.
-        # Если оплат в периоде не было — берём начало периода (должник не платил вообще).
-        ref = b_last_credit_date if (b_last_credit_date is not None and not pd.isna(b_last_credit_date)) else p_min
-        if p_max is None or ref is None or pd.isna(ref) or pd.isna(p_max):
+    def _calc_silence(b, p_min, p_max):
+        """
+        Логика расчёта дней молчания:
+
+        Случай 1: нет движений вообще → отсчёт с p_min
+        Случай 2: только оплаты, отгрузок нет → отсчёт с даты последней оплаты
+        Случай 3А: долга до последней отгрузки не было (баланс ≤ 5000) → отсчёт с даты отгрузки
+        Случай 3Б: долг висел (баланс > 5000):
+            - есть оплата после отгрузки → отсчёт с даты отгрузки
+            - нет оплаты после отгрузки → отсчёт с даты последней оплаты ДО отгрузки включительно
+        """
+        if p_max is None:
             return None
-        try:
-            return max(0, (p_max - ref).days)
-        except (TypeError, AttributeError):
-            return None
+
+        def _days(ref):
+            if ref is None or (hasattr(ref, '__class__') and pd.isna(ref)):
+                return None
+            try:
+                return max(0, (p_max - ref).days)
+            except (TypeError, AttributeError):
+                return None
+
+        # Случай 1: нет движений
+        if not b.movements:
+            return _days(p_min)
+
+        # Случай 2: только оплаты, отгрузок нет
+        if b.last_debit_date is None:
+            return _days(b.last_credit_date or p_min)
+
+        # Случай 3: есть отгрузки
+        bal = b.balance_before_last_debit or 0.0
+        has_credit_after = (
+            b.last_credit_date is not None and
+            b.last_credit_date > b.last_debit_date
+        )
+
+        if bal <= 5000.0:
+            # 3А: долга не было → всегда с даты отгрузки
+            return _days(b.last_debit_date)
+        else:
+            # 3Б: долг висел
+            if has_credit_after:
+                # есть оплата после отгрузки → с даты отгрузки
+                return _days(b.last_debit_date)
+            else:
+                # нет оплаты после отгрузки → с последней оплаты ДО отгрузки
+                return _days(b.last_credit_before_debit or p_min)
 
     all_rows = [{
         "client": b.client, "client_slug": slugify(b.client),
         "debt": b.closing or 0.0, "opening": b.opening or 0.0,
         "debit": b.sum_debit, "credit": b.sum_credit, "movements": len(b.movements),
-        "days_silence": _calc_silence(b.last_credit_date, period_min, period_max),
+        "days_silence": _calc_silence(b, period_min, period_max),
+        "shipment_violation": b.shipment_violation,
     } for b in blocks_sorted]
 
     # Движения: отсортировать клиентов в каждой подгруппе по убыванию closing
@@ -618,6 +672,7 @@ def _save_extended_json(ctx: dict, stem: str) -> Path:
             "subgroup": b.subgroup, "client": b.client,
             "opening": b.opening or 0.0, "closing": b.closing or 0.0,
             "last_date": b.last_date.strftime("%Y-%m-%d") if (b.last_date is not None and not pd.isna(b.last_date)) else None,
+            "shipment_violation": b.shipment_violation,
             "movements": [_mov(m) for m in b.movements],
         })
 
