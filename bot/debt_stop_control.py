@@ -310,11 +310,11 @@ async def monitor_exceptions(bot) -> None:
                 kb = InlineKeyboardMarkup([[
                     InlineKeyboardButton(
                         "✅ Снять со стопа",
-                        callback_data=f"dstop_clear|{client_name[:40]}"
+                        callback_data=f"dstop_clear|{client_name[:26]}"
                     ),
                     InlineKeyboardButton(
                         "🚫 Оставить на стопе",
-                        callback_data=f"dstop_keep|{client_name[:40]}"
+                        callback_data=f"dstop_keep|{client_name[:26]}"
                     ),
                 ]])
                 if status == "auto_stopped":
@@ -694,7 +694,7 @@ async def send_saida_final(bot) -> None:
         kb = InlineKeyboardMarkup([[
             InlineKeyboardButton(
                 "💰 Оплата получена",
-                callback_data=f"dstop_paid|{name[:40]}"
+                callback_data=f"dstop_paid|{name[:26]}"
             )
         ]])
         try:
@@ -927,7 +927,7 @@ async def _handle_clearance(client_key: str, action: str, chat_id: int, bot) -> 
     # Ищем по полному имени (ключ мог быть обрезан до 40 символов в callback)
     matched_key = None
     for name in registry:
-        if name.startswith(client_key) or name[:40] == client_key[:40]:
+        if name.startswith(client_key) or name[:26] == client_key[:26]:
             matched_key = name
             break
 

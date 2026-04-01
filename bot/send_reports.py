@@ -4786,7 +4786,6 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         # httpx.ConnectTimeout может пробивать telegram.error wrapper
         logger.warning("cb_data q.answer() error: %s: %s", type(e).__name__, e)
-        return
     data = q.data or ""
     chat_id = q.message.chat.id
 
@@ -5154,11 +5153,13 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if report_type == "EXPENSES":
             await _safe_edit_text(q.message, f"🤖 ИИ анализ затрат запущен...", reply_markup=None)
             await handle_ai_only("Общий", chat_id, context, user_role, scopes, report_type)
+            await send_main_menu(context, chat_id, user_role)
             return
         if user_role == "manager":
             manager_name = get_my_manager_name(chat_id) or "Unknown"
             await _safe_edit_text(q.message, f"🤖 ИИ анализ запущен...", reply_markup=None)
             await handle_ai_only(manager_name, chat_id, context, user_role, scopes, report_type)
+            await send_main_menu(context, chat_id, user_role)
         else:
             type_names = {"DEBT": "Дебиторка", "SALES": "Продажи", "GROSS": "Валовая",
                           "INVENTORY": "Остатки", "EXPENSES": "Затраты"}
@@ -5182,25 +5183,26 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         await _safe_edit_text(q.message, f"🤖 ИИ анализ запущен...", reply_markup=None)
         await handle_ai_only(manager_name, chat_id, context, user_role, scopes, report_type)
+        await send_main_menu(context, chat_id, user_role)
         return
     # ─────────────────────────────────────────────────────────────────
 
     if data.startswith("ai_only|"):
         manager = data.split("|")[1]
-        
         if manager not in scopes:
             await q.answer("Нет доступа к этому менеджеру")
             return
         await handle_ai_only(manager, chat_id, context, user_role, scopes)
+        await send_main_menu(context, chat_id, user_role)
         return
 
     if data.startswith("extended_ai|"):
         manager = data.split("|")[1]
-        
         if manager not in scopes:
             await q.answer("Нет доступа к этому менеджеру")
             return
         await handle_extended_with_ai(manager, chat_id, context, user_role, scopes)
+        await send_main_menu(context, chat_id, user_role)
         return
 
     if data == "back_submenu":
