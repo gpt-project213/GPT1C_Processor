@@ -274,7 +274,7 @@ async def monitor_exceptions(bot) -> None:
             debt = current["debt"]
 
             if days >= AUTO_STOP_MIN:
-                if debt < 1_000:
+                if debt < 2_000:
                     LOG.info("Пропуск авто-стопа %s — долг копеечный (%.2f ₸)", client_name, debt)
                     continue
                 rec["status"] = "auto_stopped"
