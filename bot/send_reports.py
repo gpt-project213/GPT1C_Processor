@@ -349,6 +349,9 @@ except (ValueError, AttributeError):
     ADMIN_SUMMARY_TIME = dt_time(23, 0, tzinfo=TZ)
 
 
+# BUG FIX: дедупликация лога ai_daily_skipped (1 раз в день на менеджера)
+_AI_DAILY_SKIPPED_LOGGED: set = set()
+
 # v9.4.5: Константы для автоудаления
 AUTO_DELETE_HOURS = 24  # Автоудаление через 24 часа
 DELETION_QUEUE_PATH = LOGS_DIR / "deletion_queue.json"
@@ -3378,12 +3381,16 @@ async def pipeline_task(context: ContextTypes.DEFAULT_TYPE):
                 # v9.4.8: AI генерация отключена (теперь еженедельная)
                 if script_executed and script_rc == 0:
                     pass  # schedule_ai_generation отключена
-                    # Логируем что пропустили
+                    # BUG FIX: логируем только 1 раз в день на менеджера (не при каждом файле)
                     try:
                         fname = file_path.name.lower()
+                        today_key = datetime.now(TZ).strftime("%Y-%m-%d")
                         for manager in get_managers_list():
                             if manager.lower() in fname:
-                                log_event("ai_daily_skipped", manager=manager, reason="Weekly AI mode")
+                                skip_key = f"{today_key}:{manager}"
+                                if skip_key not in _AI_DAILY_SKIPPED_LOGGED:
+                                    _AI_DAILY_SKIPPED_LOGGED.add(skip_key)
+                                    log_event("ai_daily_skipped", manager=manager, reason="Weekly AI mode")
                                 break
                     except Exception:
                         pass
@@ -6136,10 +6143,14 @@ async def collector_reminder_task(context: ContextTypes.DEFAULT_TYPE):
 
 
 async def whatsapp_poller_task(context: ContextTypes.DEFAULT_TYPE):
-    """Poll Green API for incoming WhatsApp messages every 10 seconds."""
+    """Poll Green API for incoming WhatsApp messages every 30 seconds."""
     try:
         from collector.whatsapp_poller import poll_once
-        await poll_once()
+        # BUG FIX: poll_once может зависнуть (аудио Whisper до 90 сек).
+        # Жёсткий таймаут 25 сек — не даём задержать следующие джобы.
+        await asyncio.wait_for(poll_once(), timeout=25)
+    except asyncio.TimeoutError:
+        logger.warning("whatsapp_poller_task: poll_once timeout (>25s) — пропуск итерации")
     except Exception as e:
         logger.error("whatsapp_poller_task error: %s", e)
 
@@ -6395,7 +6406,16 @@ def main():
     
     # v9.4.6.1: ПАТЧ - Правильная регистрация post_init через builder
     application = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
-    
+
+    # BUG FIX: глушим "No error handlers are registered" для сетевых ошибок Telegram
+    async def _tg_error_handler(update: object, context) -> None:
+        err = context.error
+        if isinstance(err, NetworkError):
+            logger.warning("Telegram NetworkError (transient): %s", err)
+        else:
+            logger.error("Telegram error: %s", err, exc_info=err)
+    application.add_error_handler(_tg_error_handler)
+
     application.add_handler(CommandHandler("start", cmd_start))
     # v9.4.12: Обработчик текстовых команд от persistent menu
     from telegram.ext import MessageHandler, filters
