@@ -281,6 +281,7 @@ async def monitor_exceptions(bot) -> None:
                 rec["auto_stopped_at"] = today
                 rec["days_at_stop"] = days
                 rec["discipline_violation"] = True
+                rec["added_by"] = "auto"
                 auto_stopped_today.append(client_name)
                 LOG.warning("Авто-стоп: %s (%d дн.)", client_name, days)
 
@@ -292,13 +293,33 @@ async def monitor_exceptions(bot) -> None:
                     f"Клиент заблокирован для отгрузки до полной оплаты.\n"
                     f"Разблокировка — только через руководителя."
                 )
-                for chat_id in {mgr_id, admin_id}:
+                for chat_id in {mgr_id, admin_id, SAIDA_CHAT_ID}:
                     if chat_id:
                         try:
                             await bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
                         except Exception as e:
                             LOG.warning("Ошибка уведомления авто-стоп %s (chat=%s): %s",
                                         client_name, chat_id, e)
+
+        # ── Условная отгрузка: долг оплачен → авто-снятие ────────────
+        elif status == "conditional":
+            current = _get_client_current_state(client_name)
+            if current and current["debt"] <= 0:
+                rec["status"] = "cleared"
+                rec["cleared_at"] = today
+                LOG.info("Условная отгрузка выполнена (оплата разнесена): %s", client_name)
+                mgr_id = rec.get("manager_chat_id", 0)
+                note = (
+                    f"✅ <b>{client_name}</b> — условная отгрузка выполнена.\n"
+                    f"Оплата разнесена в 1С. Клиент снят с контроля."
+                )
+                for cid_tg in {admin_id, mgr_id, SAIDA_CHAT_ID}:
+                    if cid_tg:
+                        try:
+                            await bot.send_message(chat_id=cid_tg, text=note, parse_mode="HTML")
+                        except Exception as e:
+                            LOG.warning("Ошибка уведомления conditional-cleared %s: %s",
+                                        client_name, e)
 
         # ── Проверка полной оплаты (авто-стоп или утверждённый стоп) ──
         elif status in ("auto_stopped", "stopped"):
@@ -310,16 +331,24 @@ async def monitor_exceptions(bot) -> None:
                 paid_in_full_today.append(client_name)
                 LOG.info("Полная оплата: %s", client_name)
 
-                kb = InlineKeyboardMarkup([[
-                    InlineKeyboardButton(
-                        "✅ Снять со стопа",
-                        callback_data=f"dstop_clear|{client_name[:26]}"
-                    ),
-                    InlineKeyboardButton(
-                        "🚫 Оставить на стопе",
-                        callback_data=f"dstop_keep|{client_name[:26]}"
-                    ),
-                ]])
+                kb = InlineKeyboardMarkup([
+                    [
+                        InlineKeyboardButton(
+                            "✅ Снять со стопа",
+                            callback_data=f"dstop_clear|{client_name[:26]}"
+                        ),
+                        InlineKeyboardButton(
+                            "🚫 Оставить на стопе",
+                            callback_data=f"dstop_keep|{client_name[:26]}"
+                        ),
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "⚠️ Условная отгрузка",
+                            callback_data=f"dstop_conditional|{client_name[:26]}"
+                        ),
+                    ],
+                ])
                 if status == "auto_stopped":
                     note = f"⚠️ Ранее нарушил финансовую дисциплину ({rec.get('days_at_stop', '?')} дн. молчания).\n"
                 else:
@@ -366,7 +395,8 @@ def _build_candidates() -> Dict[str, Any]:
     # Клиенты уже под контролем реестра — не дублировать
     already_controlled = {
         name for name, rec in registry.items()
-        if rec.get("status") in ("exception", "auto_stopped", "pending_clearance")
+        if rec.get("status") in ("exception", "auto_stopped", "pending_clearance",
+                                  "stopped", "conditional")
     }
 
     # Нарушители дисциплины (были авто-остановлены ранее, но уже cleared)
@@ -750,6 +780,10 @@ async def handle_dstop_callback(data: str, chat_id: int, bot) -> Optional[str]:
         action      = "clear" if data.startswith("dstop_clear|") else "keep"
         return await _handle_clearance(client_key, action, chat_id, bot)
 
+    if data.startswith("dstop_conditional|"):
+        client_key = data.split("|", 1)[1]
+        return await _handle_conditional_clearance(client_key, chat_id, bot)
+
     if data.startswith("dstop_paid|"):
         client_key = data.split("|", 1)[1]
         return await _handle_saida_payment(client_key, chat_id, bot)
@@ -839,12 +873,27 @@ async def _handle_admin_response(cid: str, action: str, chat_id: int, bot) -> st
             "days_at_approval":     c["days_silence"],
             "debt_at_approval":     c["debt"],
             "status":               "stopped",
+            "added_by":             "admin_manual",
             "auto_stopped_at":      None,
             "days_at_stop":         c["days_silence"],
             "discipline_violation": False,
             "cleared_at":           None,
         }
         save_registry(registry)
+        # Уведомить Саиду в реальном времени
+        try:
+            await bot.send_message(
+                chat_id=SAIDA_CHAT_ID,
+                text=(
+                    f"🚫 <b>Стоп-лист обновлён</b>\n"
+                    f"<b>{c['client']}</b> — добавлен.\n"
+                    f"Молчит {c['days_silence']}\u202fдн., долг: {_fmt(c['debt'])}\n"
+                    f"<i>Не отгружать до разрешения руководителя.</i>"
+                ),
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            LOG.warning("Ошибка уведомления Саиды о стопе %s: %s", c["client"], e)
         # Уведомить менеджера с кнопкой «Клиент оплатил»
         if mgr_chat_id:
             try:
@@ -874,6 +923,7 @@ async def _handle_admin_response(cid: str, action: str, chat_id: int, bot) -> st
                 "days_at_approval":     c["days_silence"],
                 "debt_at_approval":     c["debt"],
                 "status":               "exception",
+                "added_by":             "admin_manual",
                 "auto_stopped_at":      None,
                 "days_at_stop":         None,
                 "discipline_violation": False,
@@ -968,6 +1018,59 @@ async def _handle_clearance(client_key: str, action: str, chat_id: int, bot) -> 
         rec["status"] = "auto_stopped"  # возвращаем в авто-стоп
         save_registry(registry)
         return f"🚫 {matched_key} — оставлен на стопе."
+
+
+async def _handle_conditional_clearance(client_key: str, chat_id: int, bot) -> str:
+    """
+    Руководитель нажал «⚠️ Условная отгрузка».
+    Оплата ещё не разнесена в 1С, но руководитель разрешает отгрузить под условие.
+    Статус → 'conditional'. Саида и менеджер уведомляются немедленно.
+    """
+    registry = load_registry()
+
+    matched_key = None
+    for name in registry:
+        if name.startswith(client_key) or name[:26] == client_key[:26]:
+            matched_key = name
+            break
+
+    if not matched_key:
+        return "❓ Клиент не найден в реестре."
+
+    rec = registry[matched_key]
+    if rec.get("status") not in ("pending_clearance", "auto_stopped", "stopped"):
+        return "ℹ️ Условная отгрузка неприменима к текущему статусу клиента."
+
+    today = datetime.now(TZ).strftime("%Y-%m-%d")
+    rec["status"] = "conditional"
+    rec["conditional_at"] = today
+    # discipline_violation сохраняется — при следующем нарушении сразу к руководителю
+    save_registry(registry)
+
+    mgr_chat_id = rec.get("manager_chat_id") or _load_managers().get(rec.get("manager", ""), 0)
+
+    saida_msg = (
+        f"⚠️ <b>Условная отгрузка разрешена</b>\n"
+        f"<b>{matched_key}</b>\n"
+        f"Руководитель разрешил отгрузить под условие оплаты.\n"
+        f"Оплата ожидается — отгрузи, но контролируй поступление."
+    )
+    mgr_msg = (
+        f"⚠️ <b>Условная отгрузка — {matched_key}</b>\n"
+        f"Руководитель разрешил отгрузить клиента под условие оплаты.\n"
+        f"Проконтролируй поступление платежа."
+    )
+
+    for target, text in [(SAIDA_CHAT_ID, saida_msg), (mgr_chat_id, mgr_msg)]:
+        if target:
+            try:
+                await bot.send_message(chat_id=target, text=text, parse_mode="HTML")
+            except Exception as e:
+                LOG.warning("Ошибка уведомления условной отгрузки %s (chat=%s): %s",
+                            matched_key, target, e)
+
+    LOG.info("Условная отгрузка: %s", matched_key)
+    return f"⚠️ Условная отгрузка — <b>{matched_key}</b>. Менеджер и Саида уведомлены."
 
 
 # ══════════════════════════════════════════════════════════════════════

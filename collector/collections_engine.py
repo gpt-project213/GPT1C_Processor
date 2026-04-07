@@ -529,6 +529,20 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
         if level == 0:
             continue
 
+        # Клиент на ручном/авто стопе — пропускаем, управляется debt_stop_control
+        try:
+            from bot.debt_stop_control import load_registry as _dsc_registry
+            _dsc_reg = _dsc_registry()
+            _dsc_rec = _dsc_reg.get(name)
+            if _dsc_rec and _dsc_rec.get("status") in (
+                "stopped", "auto_stopped", "pending_clearance", "conditional"
+            ):
+                logger.info("[%s] в стоп-листе (статус: %s) — пропуск коллектора",
+                            name, _dsc_rec["status"])
+                continue
+        except Exception as _e:
+            logger.debug("Ошибка проверки stop-registry: %s", _e)
+
         # Фильтр: только "стоп-клиенты" — не покупают и не платят вообще ничего.
         # debit > 0  → клиент активно покупает (не трогаем, менеджер работает с ним)
         # credit > 0 → клиент хоть что-то платит (не трогаем, динамика есть)
