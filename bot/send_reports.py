@@ -1913,16 +1913,19 @@ async def send_inventory_summary(context: ContextTypes.DEFAULT_TYPE):
         return
 
     log_event("inventory_summary_start")
-    
+
     try:
         summary = InventorySummary()
-        latest_html = summary.get_latest_inventory_report(HTML_DIR)
-        
-        if not latest_html:
-            log_event("inventory_summary_no_file")
-            return
-        
-        data = summary.parse_inventory_html(latest_html)
+        # v1.4: JSON-первый путь (HTML-fallback)
+        latest_json = summary.get_latest_inventory_json(JSON_DIR)
+        if latest_json:
+            data = summary.parse_inventory_json(latest_json)
+        else:
+            latest_html = summary.get_latest_inventory_report(HTML_DIR)
+            if not latest_html:
+                log_event("inventory_summary_no_file")
+                return
+            data = summary.parse_inventory_html(latest_html)
         message = summary.format_summary(data)
         
         # v9.4.10: Только админу (убрана рассылка менеджерам)
@@ -5439,7 +5442,7 @@ async def post_init(app: Application):
                 f"· 09:00 — остатки\n"
                 f"· 14:00 — молчание{_oploss_line}\n"
                 f"· 18:00 — база клиентов (CRM)\n"
-                f"· 18:05 — коллектор\n"
+                f"· 17:30 — коллектор\n"
                 f"· 20:00 — валовая\n"
                 f"· 21:00 — продажи + молчание\n"
                 f"· 22:00 — аналитика\n"
@@ -6133,7 +6136,17 @@ async def crm_phone_reminder_task(context: ContextTypes.DEFAULT_TYPE):
 
 
 async def collector_reminder_task(context: ContextTypes.DEFAULT_TYPE):
-    """Hourly: send reminders to managers with pending collector dialogs."""
+    """Hourly: send reminders to managers with pending collector dialogs.
+    Работает только в рабочие часы 09–18, пропускает выходные.
+    """
+    from bot.workday_checker import is_holiday_today
+    if is_holiday_today():
+        logger.info("collector_reminder_task: выходной — пропуск")
+        return
+    now = datetime.now(TZ)
+    if not (9 <= now.hour < 18):
+        logger.debug("collector_reminder_task: вне рабочих часов (%d:xx) — пропуск", now.hour)
+        return
     try:
         from collector.manager_dialog import send_reminders as _collector_reminders
         await _collector_reminders()
@@ -6544,10 +6557,10 @@ def main():
         # Проверка рабочего дня в 12:00 (если нет xlsx — спросить админа)
         job_queue.run_daily(
             check_workday_task,
-            time=dt_time(12, 0, tzinfo=TZ),
+            time=dt_time(7, 30, tzinfo=TZ),
             name="check_workday",
         )
-        logger.info("📅 Настроена проверка рабочего дня: ежедневно 12:00")
+        logger.info("📅 Настроена проверка рабочего дня: ежедневно 07:30 (до отчётов в 09:00)")
 
         # CRM: обновление базы клиентов + запрос телефонов в 18:00
         job_queue.run_daily(
@@ -6557,13 +6570,13 @@ def main():
         )
         logger.info("👥 Настроена CRM: обновление базы + запрос телефонов ежедневно 18:00")
 
-        # AI Debt Collector (18:05 — после CRM)
+        # AI Debt Collector (17:30 — после CRM)
         job_queue.run_daily(
             debt_collector_daily,
-            time=dt_time(18, 5, tzinfo=TZ),
+            time=dt_time(17, 30, tzinfo=TZ),
             name="debt_collector_daily",
         )
-        logger.info("💰 Настроен AI Debt Collector: ежедневно 18:05")
+        logger.info("💰 Настроен AI Debt Collector: ежедневно 17:30")
 
         job_queue.run_daily(
             debt_collector_promises,

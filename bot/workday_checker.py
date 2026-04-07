@@ -149,9 +149,9 @@ def is_holiday_today() -> bool:
         logger.debug("Флаг дня %s: %s", today, "выходной" if result else "рабочий")
         return result
 
-    # Воскресенье — выходной по умолчанию
-    if datetime.now(TZ).weekday() == 6:  # 6 = Sunday
-        logger.debug("Воскресенье %s — выходной по умолчанию", today)
+    # Суббота и воскресенье — выходные по умолчанию
+    if datetime.now(TZ).weekday() in (5, 6):  # 5 = Saturday, 6 = Sunday
+        logger.debug("Выходной день %s (weekday=%d) — пропуск", today, datetime.now(TZ).weekday())
         return True
 
     # Флага нет — смотрим xlsx

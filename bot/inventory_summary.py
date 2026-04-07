@@ -1,16 +1,18 @@
 """
 Модуль для генерации кратких сводок по остаткам
 
-Версия: 1.3
-Дата: 2026-03-16
+Версия: 1.4
+Дата: 2026-04-07
+Изменения v1.4:
+  - Fix #INV-2: parse_inventory_json() читает новый JSON-формат inventory.py
+    (total_qty / categories[].item_list[].qty вместо total_quantity / items[].quantity)
+  - get_latest_inventory_json() — поиск JSON по mtime
+  - Используется JSON-первый путь: JSON → HTML-fallback
 Изменения v1.2:
   - Fix #INV-1: исправлен glob-паттерн inventory_simple_*.html → inventory_*.html
-    (inventory.py генерирует файлы как inventory_{slug}.html без _simple_ в имени)
-Изменения v1.1:
-  - get_latest_inventory_report() сортирует по периоду данных из HTML (не по mtime)
-  - Добавлен _parse_period_date_from_html() — лёгкий парсер даты
 """
 
+import json
 import logging
 import re
 from pathlib import Path
@@ -186,17 +188,52 @@ class InventorySummary:
     def format_number(num: float) -> str:
         return f"{num:,.0f}".replace(',', ' ')
     
+    def get_latest_inventory_json(self, json_dir: Path) -> Optional[Path]:
+        """v1.4: Находит свежий JSON остатков по mtime."""
+        files = list(json_dir.glob("inventory_*.json"))
+        if not files:
+            return None
+        latest = max(files, key=lambda p: p.stat().st_mtime)
+        logger.info(f"📄 Найден JSON остатков: {latest.name}")
+        return latest
+
+    def parse_inventory_json(self, json_path: Path) -> Dict:
+        """v1.4: Читает новый JSON-формат inventory.py v1.1+."""
+        try:
+            data = json.loads(json_path.read_text(encoding="utf-8"))
+            total_qty = float(data.get("total_qty") or 0)
+            items: List[Dict] = []
+            for cat in data.get("categories", []):
+                cat_name = cat.get("category", "")
+                for item in cat.get("item_list", []):
+                    items.append({
+                        "category": cat_name,
+                        "product": item.get("product", ""),
+                        "quantity": float(item.get("qty") or 0),
+                    })
+            # Дата из имени файла (fallback — mtime)
+            try:
+                mtime = json_path.stat().st_mtime
+                date_str = datetime.fromtimestamp(mtime).strftime("%d.%m.%Y")
+            except Exception:
+                date_str = ""
+            logger.info(f"📊 JSON: {len(items)} товаров, итого {total_qty:.0f} ед")
+            return {"date": date_str, "total_quantity": total_qty, "items": items}
+        except Exception as e:
+            logger.error(f"Ошибка при разборе JSON {json_path}: {e}", exc_info=True)
+            return {"date": "", "total_quantity": 0.0, "items": []}
+
     def get_latest_inventory_report(self, reports_dir: Path) -> Optional[Path]:
         """
         v1.1: Находит отчёт остатков с НОВЕЙШИМ ПЕРИОДОМ ДАННЫХ (не mtime).
         """
         pattern = "inventory_*.html"
         matching_files = list(reports_dir.glob(pattern))
-        
+
         if not matching_files:
             logger.warning("Не найдены отчёты остатков")
             return None
-        
+
         # Сортируем по периоду данных из HTML (не по mtime файла)
         latest = max(matching_files, key=lambda p: self._parse_period_date_from_html(p))
         logger.info(f"📄 Найден отчёт остатков: {latest.name} "
