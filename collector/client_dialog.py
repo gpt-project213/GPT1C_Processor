@@ -4,7 +4,7 @@
 collector/client_dialog.py
 Управление диалогами с должниками через WhatsApp.
 
-Версия: 1.0.1 (2026-03-23)
+Версия: 1.0.2 (2026-04-08)
 
 Хранилище: logs/collector_client_dialogs.json
 Ключ: номер телефона (цифры, без +, без @c.us)
@@ -434,17 +434,13 @@ async def handle_incoming(phone: str, text: str) -> None:
             return
 
     if intent == "delay_request":
-        reply = (
-            "Пожалуйста, укажите конкретную дату, до которой вам нужна отсрочка. "
-            "Это поможет нам согласовать условия."
+        # Уточняем конкретную дату — диалог остаётся активным
+        reply = suggested_reply if suggested_reply else (
+            "Пожалуйста, укажите конкретную дату оплаты — например, 15.04.2026."
         )
         dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
         _set_client_dialog(phone_clean, dialog)
         await _reply_to_client(phone_clean, reply)
-        await escalate_to_manager(
-            dialog, "delay_request",
-            "Клиент просит отсрочку — уточните дату", phone_clean,
-        )
         return
 
     if intent == "question":

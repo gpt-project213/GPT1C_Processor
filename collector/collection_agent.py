@@ -4,7 +4,7 @@
 collections/collection_agent.py
 AI-диалоговый агент взыскания долгов через DeepSeek.
 
-Версия: 1.0.0 (2026-03-16)
+Версия: 1.0.1 (2026-04-08)
 
 Функции:
   generate_message()  — генерирует текст сообщения должнику
@@ -25,6 +25,7 @@ OpenClaw:
 import json
 import logging
 import os
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -204,17 +205,24 @@ def analyze_response(
     company_ctx = f"для компании {COMPANY_NAME}"
     mgr_ctx = f" (менеджер: {manager_name})" if manager_name else ""
 
+    today = datetime.now(TZ).strftime("%Y-%m-%d")
+    today_display = datetime.now(TZ).strftime("%d.%m.%Y")
     system_prompt = (
         f"Ты — аналитик сообщений должников {company_ctx}{mgr_ctx}. "
+        f"Сегодняшняя дата: {today} ({today_display}). "
         "Твоя задача: проанализировать ответ клиента и вернуть ТОЛЬКО JSON без пояснений. "
         "Формат ответа строго:\n"
         '{"intent":"...", "promise_date":"...", "promise_amount":..., '
         '"requires_human":..., "suggested_reply":"..."}\n'
         "intent: одно из [promise, refusal, delay_request, question, unclear]\n"
-        "promise_date: дата в формате YYYY-MM-DD или null\n"
+        "  - promise: клиент назвал КОНКРЕТНУЮ дату (число месяца) и подтвердил оплату\n"
+        "  - delay_request: клиент говорит расплывчато ('завтра', 'скоро', 'на неделе', "
+        "'послезавтра', 'в пятницу' и т.д.) — нужно уточнить точную дату\n"
+        "promise_date: конкретная дата YYYY-MM-DD если клиент назвал число, иначе null\n"
         "promise_amount: число или null\n"
         "requires_human: true если агрессия, юридические угрозы или неоднозначность\n"
-        "suggested_reply: короткий ответ агента на русском (1–2 предложения)\n"
+        "suggested_reply при delay_request: уточни дату — напиши примерно так: "
+        "'Хорошо, уточните пожалуйста точную дату — оплата будет ДД.ММ.ГГГГ?'\n"
         "Не обсуждай темы не связанные с задолженностью. "
         "Если клиент уходит от темы — это off_topic, set requires_human=true "
         "после второго off_topic."

@@ -4,7 +4,7 @@
 collector/whatsapp_poller.py
 Green API polling — получает входящие сообщения WhatsApp каждые 30 секунд.
 
-Версия: 1.0.1 (2026-03-23)
+Версия: 1.0.2 (2026-04-08)
 
 Endpoints (используется instance-specific URL, напр. https://7107.api.greenapi.com):
   GET  https://{ID[:4]}.api.greenapi.com/waInstance{ID}/receiveNotification/{TOKEN}
@@ -177,6 +177,10 @@ async def poll_once() -> None:
             if msg_type == "textMessage":
                 text = message_data.get("textMessageData", {}).get("textMessage", "")
                 logger.info("Входящий текст от %s: %s...", phone, text[:60])
+
+            elif msg_type == "extendedTextMessage":
+                text = message_data.get("extendedTextMessageData", {}).get("text", "")
+                logger.info("Входящий extendedText от %s: %s...", phone, text[:60])
 
             elif msg_type == "audioMessage":
                 download_url = (
