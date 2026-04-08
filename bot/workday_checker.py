@@ -36,6 +36,14 @@ load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env",
 TZ       = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 ROOT_DIR = Path(__file__).resolve().parent.parent
 EXCEL_DIR = ROOT_DIR / "excel"
+# Директории где могут лежать xlsx (queue — основной, excel/ — запасной)
+_XLSX_SEARCH_DIRS = [
+    ROOT_DIR / "reports" / "queue",
+    ROOT_DIR / "reports" / "excel",
+    ROOT_DIR / "reports" / "excel" / "clean",
+    EXCEL_DIR,
+    EXCEL_DIR / "processed",
+]
 FLAG_FILE = ROOT_DIR / "reports" / "holiday_flags.json"   # {date_str: true/false}
 
 logger = logging.getLogger(__name__)
@@ -102,7 +110,7 @@ def has_xlsx_today() -> bool:
     today = _today_str()
     from datetime import datetime
 
-    for search_dir in (EXCEL_DIR, EXCEL_DIR / "processed"):
+    for search_dir in _XLSX_SEARCH_DIRS:
         if not search_dir.exists():
             continue
         for p in search_dir.rglob("*.xlsx"):
@@ -141,7 +149,7 @@ def is_holiday_today() -> bool:
         logger.debug("Флаг дня %s: %s", today, "выходной" if result else "рабочий")
         return result
 
-    # Воскресенье — выходной по умолчанию
+    # Воскресенье — выходной по умолчанию (суббота — рабочий день)
     if datetime.now(TZ).weekday() == 6:  # 6 = Sunday
         logger.debug("Воскресенье %s — выходной по умолчанию", today)
         return True

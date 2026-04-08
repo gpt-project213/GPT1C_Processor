@@ -1,45 +1,42 @@
 @echo off
 :: ============================================================
-:: GPT1C OtchetBot — Watchdog STABLE
+:: GPT1C OtchetBot â€” Watchdog STABLE
+:: ÐŸÑƒÑ‚Ð¸ Ð¾Ñ‚Ð½Ð¾ÑÐ¸Ñ‚ÐµÐ»ÑŒÐ½Ñ‹Ðµ â€” Ñ€Ð°Ð±Ð¾Ñ‚Ð°ÐµÑ‚ Ð¸ Ð½Ð° E:\ Ð¸ Ð½Ð° C:\
 :: ============================================================
 
-cd /d E:\GPT1C_Processor_analitic
+cd /d "%~dp0"
 
-:: ïóòü ê python venv
-set PYTHON=E:\GPT1C_Processor_analitic\.venv\Scripts\python.exe
+:: ÐŸÑƒÑ‚ÑŒ Ðº python venv (Ð¾Ñ‚Ð½Ð¾ÑÐ¸Ñ‚ÐµÐ»ÑŒÐ½Ð¾ Ð¿Ð°Ð¿ÐºÐ¸ ÑÐºÑ€Ð¸Ð¿Ñ‚Ð°)
+set PYTHON=%~dp0.venv\Scripts\python.exe
 
-:: ÂÀÆÍÎ — ïóòü ê áîòó
+:: Ð¡ÐºÑ€Ð¸Ð¿Ñ‚ Ð¸ Ð»Ð¾Ð³
 set SCRIPT=bot\send_reports.py
-
 set LOG=logs\watchdog.log
 set RESTART_COUNT=0
 
-echo [Watchdog] Çàïóñê %DATE% %TIME% >> %LOG%
+echo [Watchdog] Ð¡Ñ‚Ð°Ñ€Ñ‚ %DATE% %TIME% >> %LOG%
 
 :LOOP
 set /A RESTART_COUNT+=1
 
 echo. >> %LOG%
 echo ============================================================ >> %LOG%
-echo [%DATE% %TIME%] Çàïóñê #%RESTART_COUNT% >> %LOG%
+echo [%DATE% %TIME%] Ð—Ð°Ð¿ÑƒÑÐº #%RESTART_COUNT% >> %LOG%
 echo ============================================================ >> %LOG%
 
-:: çàïóñê áîòà
-%PYTHON% %SCRIPT%
+:: Ð—Ð°Ð¿ÑƒÑÐº Ð±Ð¾Ñ‚Ð°
+"%PYTHON%" %SCRIPT%
 
 set EXIT_CODE=%ERRORLEVEL%
-echo [%DATE% %TIME%] Áîò çàâåðøèëñÿ ñ êîäîì %EXIT_CODE% >> %LOG%
+echo [%DATE% %TIME%] Ð‘Ð¾Ñ‚ Ð·Ð°Ð²ÐµÑ€ÑˆÐ¸Ð»ÑÑ Ñ ÐºÐ¾Ð´Ð¾Ð¼ %EXIT_CODE% >> %LOG%
 
-:: åñëè êîä 0 — øòàòíàÿ îñòàíîâêà
+:: ÐšÐ¾Ð´ 0 â€” ÑˆÑ‚Ð°Ñ‚Ð½Ð¾Ðµ Ð·Ð°Ð²ÐµÑ€ÑˆÐµÐ½Ð¸Ðµ, Ð¿ÐµÑ€ÐµÐ·Ð°Ð¿ÑƒÑÐºÐ°ÐµÐ¼ Ñ‡ÐµÑ€ÐµÐ· 5 ÑÐµÐº (Ð½Ðµ Ð±Ð»Ð¾ÐºÐ¸Ñ€ÑƒÐµÐ¼)
 if %EXIT_CODE% EQU 0 (
-    echo [%DATE% %TIME%] ×èñòûé âûõîä. Watchdog îñòàíîâëåí. >> %LOG%
-    echo Áîò îñòàíîâëåí øòàòíî.
-    pause
-    exit /b 0
+    echo [%DATE% %TIME%] Ð¨Ñ‚Ð°Ñ‚Ð½Ñ‹Ð¹ Ð²Ñ‹Ñ…Ð¾Ð´. ÐŸÐµÑ€ÐµÐ·Ð°Ð¿ÑƒÑÐº Ñ‡ÐµÑ€ÐµÐ· 5 ÑÐµÐº... >> %LOG%
+    timeout /t 5 /nobreak > nul
+    goto LOOP
 )
 
-echo [%DATE% %TIME%] Îøèáêà. Ïåðåçàïóñê ÷åðåç 30 ñåê... >> %LOG%
-echo Áîò óïàë. Ïåðåçàïóñê ÷åðåç 30 ñåê...
-
+echo [%DATE% %TIME%] ÐžÑˆÐ¸Ð±ÐºÐ°. ÐŸÐµÑ€ÐµÐ·Ð°Ð¿ÑƒÑÐº Ñ‡ÐµÑ€ÐµÐ· 30 ÑÐµÐº... >> %LOG%
 timeout /t 30 /nobreak > nul
 goto LOOP

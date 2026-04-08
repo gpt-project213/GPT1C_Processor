@@ -20,6 +20,7 @@ v1.2: Pipeline-сводки после обработки файла:
 v1.1: get_latest_sales_report сортирует по периоду данных, не по mtime
 """
 
+import calendar
 import json
 import logging
 import re
@@ -563,6 +564,21 @@ class SalesSummary:
                 try:
                     d = date_type(int(m3.group(3)), mon, int(m3.group(1)))
                     return d, d
+                except (ValueError, TypeError):
+                    pass
+        # Русский месяц без дня: "Март 2026 г." / "март 2026"
+        m4 = re.search(r'([а-яё]+)\s+(\d{4})', s.lower())
+        if m4:
+            _MONTHS_NOM = {
+                "январь":1,"февраль":2,"март":3,"апрель":4,"май":5,"июнь":6,
+                "июль":7,"август":8,"сентябрь":9,"октябрь":10,"ноябрь":11,"декабрь":12,
+            }
+            mon = _MONTHS_NOM.get(m4.group(1))
+            if mon:
+                try:
+                    year = int(m4.group(2))
+                    last_day = calendar.monthrange(year, mon)[1]
+                    return date_type(year, mon, 1), date_type(year, mon, last_day)
                 except (ValueError, TypeError):
                     pass
         return None, None

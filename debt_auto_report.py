@@ -33,7 +33,7 @@ from utils_excel import ensure_clean_xlsx
 from utils import money
 from analyze_debt_excel import parse_debt_report
 
-__VERSION__ = "debt_auto=v2.7.4"
+__VERSION__ = "debt_auto=v2.7.5"
 NBSP = "\u202f"
 
 log = getattr(config, "setup_logging", lambda name: logging.getLogger(name))("debt_auto_report")
@@ -601,7 +601,18 @@ def process_extended_report(clean_xlsx: Path, src_name: str) -> Dict[str, Any]:
                 return _days(b.last_debit_date)
             else:
                 # нет оплаты после отгрузки → с последней оплаты ДО отгрузки
-                return _days(b.last_credit_before_debit or p_min)
+                if b.last_credit_before_debit is not None:
+                    return _days(b.last_credit_before_debit)
+                # Оплат вообще не было: если долга на начало периода тоже не было —
+                # отсчёт с ПЕРВОЙ отгрузки (не с p_min, иначе новый клиент получает
+                # искусственно раздутое "молчание" длиной во весь период).
+                if (b.opening or 0.0) <= 5000.0:
+                    first_debit = min(
+                        (m.date for m in b.movements if m.debit > 0),
+                        default=None,
+                    )
+                    return _days(first_debit or p_min)
+                return _days(p_min)
 
     all_rows = [{
         "client": b.client, "client_slug": slugify(b.client),
