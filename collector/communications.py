@@ -4,7 +4,7 @@
 collections/communications.py
 Единый gateway для отправки сообщений должникам и уведомлений команде.
 
-Версия: 1.0.0 (2026-03-16)
+Версия: 1.0.1 (2026-04-08)
 
 Каналы:
   WhatsApp — Green API (GREENAPI_ID, GREENAPI_TOKEN из .env)
@@ -95,14 +95,15 @@ def send_whatsapp(phone: str, text: str) -> bool:
         return False
 
 
-async def send_telegram(telegram_id: int, text: str) -> bool:
+async def send_telegram(telegram_id: int, text: str) -> Optional[int]:
     """Отправляет сообщение через Telegram Bot API.
 
     Использует существующий BOT_TOKEN из .env.
+    Возвращает message_id при успехе, None при ошибке.
     """
     if not BOT_TOKEN:
         logger.warning("BOT_TOKEN не задан — Telegram недоступен")
-        return False
+        return None
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": telegram_id,
@@ -113,13 +114,14 @@ async def send_telegram(telegram_id: int, text: str) -> bool:
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.post(url, json=payload)
         if resp.status_code == 200:
-            logger.info("Telegram отправлен: chat_id=%s", telegram_id)
-            return True
+            message_id = resp.json().get("result", {}).get("message_id")
+            logger.info("Telegram отправлен: chat_id=%s message_id=%s", telegram_id, message_id)
+            return message_id
         logger.warning("Telegram ошибка %d: %s", resp.status_code, resp.text[:200])
-        return False
+        return None
     except (httpx.RequestError, httpx.TimeoutException) as e:
         logger.error("Telegram сетевая ошибка: %s: %s", type(e).__name__, e or repr(e))
-        return False
+        return None
 
 
 async def notify_admin(message: str) -> bool:

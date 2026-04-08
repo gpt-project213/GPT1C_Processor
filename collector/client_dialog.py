@@ -4,7 +4,7 @@
 collector/client_dialog.py
 Управление диалогами с должниками через WhatsApp.
 
-Версия: 1.0.2 (2026-04-08)
+Версия: 1.0.3 (2026-04-08)
 
 Хранилище: logs/collector_client_dialogs.json
 Ключ: номер телефона (цифры, без +, без @c.us)
@@ -19,6 +19,7 @@ import json
 import logging
 import os
 import tempfile
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -37,8 +38,35 @@ COMPANY_NAME = os.getenv("COMPANY_NAME", "Минбаракат")
 
 _ROOT = Path(__file__).resolve().parent.parent
 _DIALOGS_PATH = _ROOT / "logs" / "collector_client_dialogs.json"
+_DELETION_QUEUE_PATH = _ROOT / "logs" / "deletion_queue.json"
 
 logger = logging.getLogger(__name__)
+
+
+def _schedule_tg_deletion(chat_id: int, message_id: int, delay_hours: int = 24) -> None:
+    """Добавляет Telegram-сообщение в очередь авто-удаления (deletion_queue.json)."""
+    try:
+        now = time.time()
+        try:
+            with open(_DELETION_QUEUE_PATH, encoding="utf-8") as f:
+                queue = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            queue = {"jobs": []}
+        jobs = queue.get("jobs", [])
+        jobs.append({
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "due_ts": now + delay_hours * 3600,
+            "msg_ts": now,
+            "scheduled_at": now,
+        })
+        queue["jobs"] = jobs[-5000:]
+        tmp_fd, tmp_path = tempfile.mkstemp(dir=str(_DELETION_QUEUE_PATH.parent), suffix=".tmp")
+        with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+            json.dump(queue, f, ensure_ascii=False)
+        os.replace(tmp_path, str(_DELETION_QUEUE_PATH))
+    except Exception as e:
+        logger.warning("_schedule_tg_deletion error: %s", e)
 
 
 # ─── Хранилище ───────────────────────────────────────────────────────────────
@@ -108,10 +136,12 @@ def detect_language(text: str) -> str:
 # ─── Telegram уведомление менеджера ──────────────────────────────────────────
 
 async def _send_tg(chat_id: int, text: str) -> None:
-    """Отправляет Telegram-сообщение менеджеру."""
+    """Отправляет Telegram-сообщение менеджеру и планирует авто-удаление через 24ч."""
     try:
         from collector.communications import send_telegram
-        await send_telegram(chat_id, text)
+        message_id = await send_telegram(chat_id, text)
+        if message_id:
+            _schedule_tg_deletion(chat_id, message_id, delay_hours=24)
     except Exception as e:
         logger.error("Ошибка отправки Telegram chat_id=%d: %s", chat_id, e)
 
