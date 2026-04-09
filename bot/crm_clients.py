@@ -384,7 +384,9 @@ def set_client_phone(client_name: str, phone: str, manager: str = "",
 
 
 def set_client_details(client_name: str, display_name: str = "",
-                        phone: str = "", address: str = "") -> bool:
+                        phone: str = "", address: str = "",
+                        original_name: str = "", name_mode: str = "",
+                        name_review_needed: Optional[bool] = None) -> bool:
     """
     Сохраняет display_name, телефон и/или адрес торговой точки для клиента.
     Обновляет только переданные (непустые) поля.
@@ -395,16 +397,23 @@ def set_client_details(client_name: str, display_name: str = "",
     if entry is None:
         logger.warning("set_client_details: клиент не найден: %s", client_name)
         return False
-    if display_name and display_name.strip().lower() != client_name.lower():
+    if original_name:
+        entry["original_name"] = original_name.strip()
+    if display_name:
         entry["display_name"] = display_name.strip()
     if phone:
         entry["whatsapp"] = phone.strip()
     if address:
         entry["address"] = address.strip()
+    if name_mode:
+        entry["name_mode"] = name_mode
+    if name_review_needed is not None:
+        entry["name_review_needed"] = bool(name_review_needed)
     data["clients"] = clients_db
     save_clients(data)
-    logger.info("Данные обновлены: %s (name=%r phone=%r address=%r)",
-                client_name, display_name or "-", phone or "-", address or "-")
+    logger.info("Данные обновлены: %s (name=%r phone=%r address=%r original=%r mode=%r review=%r)",
+                client_name, display_name or "-", phone or "-", address or "-",
+                original_name or "-", name_mode or "-", name_review_needed)
     return True
 
 

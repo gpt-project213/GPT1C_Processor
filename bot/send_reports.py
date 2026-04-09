@@ -181,7 +181,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 __VERSION__ = "v9.4.40/08.04.2026"
 
-from datetime import datetime, time as dt_time
+from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
 from typing import Dict, List, Optional, Any, Tuple
 from dotenv import load_dotenv
@@ -1139,6 +1139,7 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
             _CRM_PHONE_PENDING[chat_id] = {
                 "state": "clarify_name",
                 "client_key": client_key,
+                "original_name": client_key,
                 "done_today": 0,
                 "daily_limit": CRM_DAILY_LIMIT,
                 "manager": manager,
@@ -1149,13 +1150,14 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
             try:
                 await context.bot.send_message(
                     chat_id=chat_id,
-                    text=(
-                        f"📋 Нужно внести контакты клиентов — <b>1 из {min(CRM_DAILY_LIMIT, total_no_phone)}</b>\n\n"
-                        f"<b>{client_key}</b>\n\n"
-                        f"Как к нему обращаться?\n"
-                        f"(введите имя или имя и отчество)"
+                    text=_crm_name_prompt_text(
+                        client_key=client_key,
+                        done_today=0,
+                        total=total_no_phone,
+                        daily_limit=CRM_DAILY_LIMIT,
                     ),
                     parse_mode="HTML",
+                    reply_markup=_crm_name_choice_kb(),
                 )
             except Exception as _e:
                 _CRM_PHONE_PENDING.pop(chat_id, None)
@@ -4540,11 +4542,100 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 _CRM_PHONE_PENDING: Dict[int, Dict[str, Any]] = {}
 CRM_DAILY_LIMIT = 15  # максимум клиентов за один сеанс в 18:00
 CRM_PENDING_PATH = LOGS_DIR / "crm_pending_state.json"
+CRM_PENDING_TTL_HOURS = float(os.getenv("CRM_PENDING_TTL_HOURS", "48"))
+COLLECTOR_PENDING_TTL_DAYS = int(os.getenv("COLLECTOR_PENDING_TTL_DAYS", "2"))
+
+
+def _crm_name_choice_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✏️ Ввести имя", callback_data="crm_name|edit")],
+        [InlineKeyboardButton("✅ Оставить как в системе", callback_data="crm_name|keep")],
+        [InlineKeyboardButton("⏳ Позже", callback_data="crm_name|later")],
+    ])
+
+
+def _crm_name_prompt_text(client_key: str, done_today: int, total: int, daily_limit: int, reminder: bool = False) -> str:
+    header = "⏰ <b>Напоминание CRM</b> — ждём ответа:\n\n" if reminder else ""
+    prefix = "📋 Нужно внести контакты клиентов" if done_today == 0 else "📋 Продолжаем CRM-очередь"
+    return (
+        f"{header}"
+        f"{prefix} — <b>{done_today + 1} из {min(daily_limit, done_today + total)}</b>\n\n"
+        f"<b>{client_key}</b>\n\n"
+        f"Как к нему обращаться?\n"
+        f"Можно ввести удобное имя, оставить как в системе или вернуться к имени позже."
+    )
+
+
+def _crm_cleanup_pending() -> None:
+    """Убирает просроченные CRM pending-кейсы с явной записью в лог."""
+    now = datetime.now(TZ)
+    stale_chat_ids: List[int] = []
+    for chat_id, pending in list(_CRM_PHONE_PENDING.items()):
+        ts_raw = pending.get("last_sent") or pending.get("created_at")
+        if not ts_raw:
+            continue
+        try:
+            ts = datetime.fromisoformat(ts_raw)
+        except (TypeError, ValueError):
+            logger.warning("CRM pending invalid timestamp: chat_id=%s raw=%r", chat_id, ts_raw)
+            stale_chat_ids.append(chat_id)
+            continue
+        age_hours = (now - ts).total_seconds() / 3600
+        if age_hours <= CRM_PENDING_TTL_HOURS:
+            continue
+        logger.warning(
+            "CRM pending expired: chat_id=%s client=%s state=%s age_hours=%.1f",
+            chat_id,
+            pending.get("client_key"),
+            pending.get("state"),
+            age_hours,
+        )
+        stale_chat_ids.append(chat_id)
+    for chat_id in stale_chat_ids:
+        _CRM_PHONE_PENDING.pop(chat_id, None)
+
+
+def _cleanup_legacy_collector_pending_state() -> None:
+    """Чистит просроченные __phone_pending__/__name_pending__ записи из collector_state.json."""
+    try:
+        from collector.collections_db import load_state, save_state
+    except Exception as _e:
+        logger.warning("legacy collector pending cleanup import error: %s", _e)
+        return
+
+    state = load_state()
+    today = datetime.now(TZ).date()
+    changed = False
+    for key, value in list(state.items()):
+        if not (key.startswith("__phone_pending__") or key.startswith("__name_pending__")):
+            continue
+        if not isinstance(value, dict):
+            logger.warning("legacy pending malformed: %s=%r", key, value)
+            del state[key]
+            changed = True
+            continue
+        raw_date = value.get("date")
+        try:
+            record_date = datetime.fromisoformat(raw_date).date()
+        except (TypeError, ValueError):
+            logger.warning("legacy pending invalid date: %s=%r", key, raw_date)
+            del state[key]
+            changed = True
+            continue
+        age_days = (today - record_date).days
+        if age_days < COLLECTOR_PENDING_TTL_DAYS:
+            continue
+        logger.warning("legacy pending expired: %s client=%s age_days=%d", key, value.get("client"), age_days)
+        del state[key]
+        changed = True
+    if changed:
+        save_state(state)
 
 
 def _crm_save_pending() -> None:
     """Сохраняет _CRM_PHONE_PENDING на диск — переживает перезапуск бота."""
     try:
+        _crm_cleanup_pending()
         tmp = CRM_PENDING_PATH.with_suffix(".tmp")
         with open(tmp, "w", encoding="utf-8") as _f:
             json.dump({str(k): v for k, v in _CRM_PHONE_PENDING.items()},
@@ -4558,14 +4649,17 @@ def _crm_save_pending() -> None:
 def _crm_load_pending() -> None:
     """Восстанавливает _CRM_PHONE_PENDING из файла при старте."""
     if not CRM_PENDING_PATH.exists():
+        _cleanup_legacy_collector_pending_state()
         return
     try:
         with open(CRM_PENDING_PATH, encoding="utf-8") as _f:
             data = json.load(_f)
         _CRM_PHONE_PENDING.update({int(k): v for k, v in data.items()})
+        _crm_cleanup_pending()
         logger.info("CRM pending restored: %d managers", len(_CRM_PHONE_PENDING))
     except Exception as _e:
         logger.warning("_crm_load_pending error: %s", _e)
+    _cleanup_legacy_collector_pending_state()
 
 # Рассылка "чей клиент": token → {client_key, notified_chat_ids, claimed}
 _CRM_CLAIM_PENDING: Dict[str, Dict[str, Any]] = {}
@@ -4942,6 +5036,63 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 🆕 v9.4.9: Аналитика
     if data.startswith("analytics|"):
         await handle_analytics(update, context, data)
+        return
+
+    if data.startswith("crm_name|"):
+        pending = _CRM_PHONE_PENDING.get(chat_id)
+        if not pending or pending.get("state") != "clarify_name":
+            await q.answer("CRM-запрос устарел.")
+            return
+        action = data.split("|", 1)[1]
+        client_key = pending.get("client_key", "?")
+        pending.setdefault("original_name", client_key)
+        pending["last_sent"] = datetime.now(TZ).isoformat()
+        pending.pop("awaiting_name_text", None)
+        try:
+            await q.message.edit_reply_markup(reply_markup=None)
+        except Exception:
+            pass
+        if action == "edit":
+            pending["awaiting_name_text"] = True
+            _crm_save_pending()
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=(
+                    f"✏️ Введите удобное имя для клиента:\n\n"
+                    f"<b>{client_key}</b>\n\n"
+                    f"Это имя будет использоваться в CRM и сообщениях."
+                ),
+                parse_mode="HTML",
+            )
+            return
+        if action == "keep":
+            pending["display_name"] = client_key
+            pending["name_mode"] = "system"
+            pending["name_review_needed"] = False
+            pending["state"] = "clarify_phone"
+            _crm_save_pending()
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text="Введите телефон WhatsApp:\n<code>+77001234567</code>",
+                parse_mode="HTML",
+            )
+            return
+        if action == "later":
+            pending["name_mode"] = "later"
+            pending["name_review_needed"] = True
+            pending["state"] = "clarify_phone"
+            pending["paused_until"] = (datetime.now(TZ) + timedelta(hours=24)).isoformat()
+            _crm_save_pending()
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=(
+                    "Имя можно заполнить позже.\n\n"
+                    "Введите телефон WhatsApp:\n<code>+77001234567</code>"
+                ),
+                parse_mode="HTML",
+            )
+            return
+        await q.answer("Неизвестное действие CRM")
         return
 
     # v9.4.27: Принудительная отправка отчёта
@@ -5376,6 +5527,7 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             _CRM_PHONE_PENDING[claimer_chat_id] = {
                 "state": "clarify_name",
                 "client_key": client_key,
+                "original_name": client_key,
                 "done_today": 0,
                 "daily_limit": 1,  # один клиент — тот что только что взял
                 "manager": claimer_name,
@@ -5385,13 +5537,14 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             _crm_save_pending()
             await context.bot.send_message(
                 chat_id=claimer_chat_id,
-                text=(
-                    f"📋 Отлично! Теперь внесите контакт:\n\n"
-                    f"<b>{client_key}</b>\n\n"
-                    f"Как к нему обращаться?\n"
-                    f"(введите имя или имя и отчество)"
+                text=_crm_name_prompt_text(
+                    client_key=client_key,
+                    done_today=0,
+                    total=remaining,
+                    daily_limit=1,
                 ),
                 parse_mode="HTML",
+                reply_markup=_crm_name_choice_kb(),
             )
         except Exception as _e:
             logger.warning("crm_claim → phone chain error: %s", _e)
@@ -6102,6 +6255,7 @@ async def crm_phone_reminder_task(context: ContextTypes.DEFAULT_TYPE):
     Каждый час: напоминает менеджерам у кого висит незаполненный клиент в CRM-очереди.
     Работает только в рабочие часы 09–19. Повторяет до получения ответа.
     """
+    _crm_cleanup_pending()
     if not _CRM_PHONE_PENDING:
         return
     now = datetime.now(TZ)
@@ -6113,25 +6267,49 @@ async def crm_phone_reminder_task(context: ContextTypes.DEFAULT_TYPE):
         done_today  = pending.get("done_today", 0)
         total       = pending.get("total_no_phone", 0)
         daily_limit = pending.get("daily_limit", CRM_DAILY_LIMIT)
+        paused_until_raw = pending.get("paused_until")
+        if paused_until_raw:
+            try:
+                paused_until = datetime.fromisoformat(paused_until_raw)
+                if paused_until.tzinfo is None:
+                    paused_until = paused_until.replace(tzinfo=TZ)
+                if now < paused_until:
+                    continue
+            except (TypeError, ValueError):
+                pass
 
         if state == "clarify_name":
-            prompt = "Как к нему обращаться? (введите имя или имя и отчество)"
+            prompt = None
         elif state == "clarify_phone":
             prompt = "Введите телефон WhatsApp: <code>+77001234567</code>"
         else:
             prompt = "Введите адрес торговой точки"
 
         try:
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=(
-                    f"⏰ <b>Напоминание CRM</b> — ждём ответа:\n\n"
-                    f"<b>{client_key}</b>\n\n"
-                    f"{prompt}\n\n"
-                    f"Выполнено сегодня: {done_today} из {min(daily_limit, done_today + total)}"
-                ),
-                parse_mode="HTML",
-            )
+            if state == "clarify_name":
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=_crm_name_prompt_text(
+                        client_key=client_key,
+                        done_today=done_today,
+                        total=total,
+                        daily_limit=daily_limit,
+                        reminder=True,
+                    ),
+                    parse_mode="HTML",
+                    reply_markup=_crm_name_choice_kb(),
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=(
+                        f"⏰ <b>Напоминание CRM</b> — ждём ответа:\n\n"
+                        f"<b>{client_key}</b>\n\n"
+                        f"{prompt}\n\n"
+                        f"Выполнено сегодня: {done_today} из {min(daily_limit, done_today + total)}"
+                    ),
+                    parse_mode="HTML",
+                )
             logger.info("CRM hourly reminder → chat_id=%s client=%s", chat_id, client_key)
         except Exception as e:
             logger.warning("crm_phone_reminder_task chat_id=%s: %s", chat_id, e)
@@ -6189,6 +6367,7 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
     chat_id = update.effective_chat.id
 
     # CRM: уточняющий диалог по шагам (clarify_name → clarify_phone → clarify_address)
+    _crm_cleanup_pending()
     pending = _CRM_PHONE_PENDING.get(chat_id)
     if pending and pending.get("state", "").startswith("clarify_"):
         state = pending["state"]
@@ -6204,8 +6383,14 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
                         "❌ Слишком коротко. Введите имя или имя и отчество:"
                     )
                     return
+                pending.setdefault("original_name", client_key)
                 pending["display_name"] = display_name
+                pending["name_mode"] = "manual"
+                pending["name_review_needed"] = False
+                pending.pop("awaiting_name_text", None)
                 pending["state"] = "clarify_phone"
+                pending["last_sent"] = datetime.now(TZ).isoformat()
+                _crm_save_pending()
                 await update.message.reply_text(
                     f"Телефон WhatsApp?\n"
                     f"(формат: <code>+77001234567</code>)",
@@ -6225,8 +6410,93 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
                     )
                     return
                 pending["phone"] = "+" + phone_digits
-                pending["state"] = "clarify_address"
-                await update.message.reply_text("Адрес торговой точки?")
+                display_name = pending.get("display_name", "")
+                phone = pending.get("phone", "")
+                original_name = pending.get("original_name", client_key)
+                name_mode = pending.get("name_mode") or ("manual" if display_name else "later")
+                name_review_needed = pending.get("name_review_needed")
+                if name_review_needed is None:
+                    name_review_needed = not bool(display_name)
+                ok = _set_details(
+                    client_key,
+                    display_name=display_name,
+                    phone=phone,
+                    original_name=original_name,
+                    name_mode=name_mode,
+                    name_review_needed=name_review_needed,
+                )
+                log_event(
+                    "crm_details_set",
+                    client=client_key,
+                    display_name=display_name,
+                    phone=phone,
+                    original_name=original_name,
+                    name_mode=name_mode,
+                    address="-",
+                )
+
+                done_today = pending.get("done_today", 0) + 1
+                daily_limit = pending.get("daily_limit", CRM_DAILY_LIMIT)
+                manager_name = pending.get("manager", "")
+                _CRM_PHONE_PENDING.pop(chat_id, None)
+                _crm_save_pending()
+
+                label = display_name or original_name
+                if ok:
+                    await update.message.reply_text(
+                        f"✅ Сохранено: <b>{label}</b> · {phone}\n"
+                        f"Адрес можно заполнить позже.",
+                        parse_mode="HTML",
+                    )
+                else:
+                    await update.message.reply_text("⚠️ Не удалось сохранить. Клиент не найден.")
+
+                if done_today < daily_limit:
+                    from bot.crm_clients import get_clients_without_phones as _crm_next
+                    next_list = _crm_next(manager_name, limit=1)
+                    remaining = len(_crm_next(manager_name, limit=500))
+                    if next_list:
+                        next_key = next_list[0]
+                        _CRM_PHONE_PENDING[chat_id] = {
+                            "state": "clarify_name",
+                            "client_key": next_key,
+                            "original_name": next_key,
+                            "done_today": done_today,
+                            "daily_limit": daily_limit,
+                            "manager": manager_name,
+                            "total_no_phone": remaining,
+                            "last_sent": datetime.now(TZ).isoformat(),
+                        }
+                        _crm_save_pending()
+                        await update.message.reply_text(
+                            _crm_name_prompt_text(
+                                client_key=next_key,
+                                done_today=done_today,
+                                total=remaining,
+                                daily_limit=daily_limit,
+                            ),
+                            parse_mode="HTML",
+                            reply_markup=_crm_name_choice_kb(),
+                        )
+                    else:
+                        await update.message.reply_text(
+                            "🎉 Все клиенты внесены! База полностью заполнена.",
+                            parse_mode="HTML",
+                        )
+                else:
+                    from bot.crm_clients import get_clients_without_phones as _crm_remain
+                    remaining = len(_crm_remain(manager_name, limit=500))
+                    if remaining:
+                        await update.message.reply_text(
+                            f"✅ На сегодня готово — внесено {done_today} клиентов.\n\n"
+                            f"📋 Осталось без телефона: <b>{remaining}</b>\n"
+                            f"Завтра в 18:00 бот пришлёт ещё {min(daily_limit, remaining)}.",
+                            parse_mode="HTML",
+                        )
+                    else:
+                        await update.message.reply_text(
+                            "🎉 Все клиенты внесены! База полностью заполнена."
+                        )
                 return
 
             if state == "clarify_address":
@@ -6234,8 +6504,15 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
                 pending["address"] = address
                 display_name = pending.get("display_name", "")
                 phone = pending.get("phone", "")
-                ok = _set_details(client_key, display_name=display_name,
-                                  phone=phone, address=address)
+                ok = _set_details(
+                    client_key,
+                    display_name=display_name,
+                    phone=phone,
+                    address=address,
+                    original_name=pending.get("original_name", client_key),
+                    name_mode=pending.get("name_mode", "manual" if display_name else "later"),
+                    name_review_needed=pending.get("name_review_needed", not bool(display_name)),
+                )
                 log_event("crm_details_set", client=client_key,
                           display_name=display_name, phone=phone, address=address)
 
@@ -6263,6 +6540,7 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
                         _CRM_PHONE_PENDING[chat_id] = {
                             "state": "clarify_name",
                             "client_key": next_key,
+                            "original_name": next_key,
                             "done_today": done_today,
                             "daily_limit": daily_limit,
                             "manager": manager_name,
@@ -6271,11 +6549,14 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
                         }
                         _crm_save_pending()
                         await update.message.reply_text(
-                            f"📋 <b>{done_today + 1} из {min(daily_limit, done_today + remaining)}</b>\n\n"
-                            f"<b>{next_key}</b>\n\n"
-                            f"Как к нему обращаться?\n"
-                            f"(введите имя или имя и отчество)",
+                            _crm_name_prompt_text(
+                                client_key=next_key,
+                                done_today=done_today,
+                                total=remaining,
+                                daily_limit=daily_limit,
+                            ),
                             parse_mode="HTML",
+                            reply_markup=_crm_name_choice_kb(),
                         )
                     else:
                         await update.message.reply_text(

@@ -1,5 +1,14 @@
 # SESSION_CONTEXT.md
-> Автоматически обновляется Claude Code. Последнее обновление: 2026-04-08
+> Автоматически обновляется Claude Code. Последнее обновление: 2026-04-09
+
+## Сессия 2026-04-09
+
+### CRM-flow
+- Добавлены 3 кнопки на шаге `clarify_name`: ввести имя / оставить как в системе / позже
+- Сохранение телефона больше не блокируется корректировкой имени
+- В `config/clients.json` сохраняются `original_name`, `display_name`, `name_mode`, `name_review_needed`
+- Для `crm_name|later` добавлена пауза `paused_until` на 24 часа
+- `crm_phone_reminder_task` не шлёт reminder до истечения `paused_until`
 
 ## Последние коммиты
 
