@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-debt_stop_control.py · v1.0.0 (2026-03-31)
+debt_stop_control.py · v1.0.1 (2026-04-09)
 
 Контроль стоп-листа отгрузки — уведомление Саиды-бухгалтера.
 
@@ -819,34 +819,89 @@ async def _handle_manager_response(cid: str, response: str, chat_id: int, bot) -
     c["response_at"] = datetime.now(TZ).strftime("%H:%M")
 
     if response == "yes":
-        # Эскалируем к руководителю — его решение финальное
-        admin_id = _get_admin_chat_id()
-        icon = "🔴" if c["level"] == "10+" else "⚡"
-        text = (
-            f"{icon} <b>{c['client']}</b>  [{c['manager']}]\n"
-            f"Молчит: <b>{c['days_silence']}\u202fдн.</b>  |  "
-            f"Долг: <b>{_fmt(c['debt'])}</b>\n"
-            f"<i>Менеджер {c['manager']}: договорились ✅</i>"
+        # Запрашиваем детали договорённости — эскалация к руководителю после ответа
+        c["awaiting_detail"] = True
+        save_state(state)
+        return (
+            f"✅ <b>{c['client']}</b> — принято!\n\n"
+            f"Уточни детали договорённости одним сообщением:\n"
+            f"<i>(дата оплаты, сумма, условия — например: «оплата 15.04, 500к сейчас + 300к через неделю»)</i>"
         )
-        kb = InlineKeyboardMarkup([[
-            InlineKeyboardButton("✅ Разрешить отгрузку", callback_data=f"dstop_admin_remove|{cid}"),
-            InlineKeyboardButton("🚫 Утвердить стоп",    callback_data=f"dstop_admin_ok|{cid}"),
-        ]])
-        if admin_id:
-            try:
-                msg = await bot.send_message(chat_id=admin_id, text=text,
-                                             parse_mode="HTML", reply_markup=kb)
-                c["escalated"]    = True
-                c["admin_msg_id"] = msg.message_id
-                _schedule_delete(admin_id, msg.message_id, msg.date.timestamp())
-            except Exception as e:
-                LOG.warning("Ошибка эскалации yes-ответа %s: %s", c["client"], e)
-        result = f"✅ Передано руководителю на утверждение — <b>{c['client']}</b>"
     else:
         result = f"🚫 Зафиксировано — <b>{c['client']}</b> передан руководителю."
 
     save_state(state)
     return result
+
+
+async def _escalate_yes_to_admin(cid: str, c: dict, bot) -> None:
+    """Эскалирует к руководителю после получения деталей от менеджера."""
+    admin_id = _get_admin_chat_id()
+    icon = "🔴" if c["level"] == "10+" else "⚡"
+    note = c.get("manager_note", "").strip()
+    detail_line = f"\n💬 <b>Детали:</b> {note}" if note else ""
+    text = (
+        f"{icon} <b>{c['client']}</b>  [{c['manager']}]\n"
+        f"Молчит: <b>{c['days_silence']}\u202fдн.</b>  |  "
+        f"Долг: <b>{_fmt(c['debt'])}</b>\n"
+        f"<i>Менеджер {c['manager']}: договорились ✅</i>"
+        f"{detail_line}"
+    )
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Разрешить отгрузку", callback_data=f"dstop_admin_remove|{cid}"),
+        InlineKeyboardButton("🚫 Утвердить стоп",    callback_data=f"dstop_admin_ok|{cid}"),
+    ]])
+    if admin_id:
+        try:
+            msg = await bot.send_message(chat_id=admin_id, text=text,
+                                         parse_mode="HTML", reply_markup=kb)
+            c["escalated"]    = True
+            c["admin_msg_id"] = msg.message_id
+            _schedule_delete(admin_id, msg.message_id, msg.date.timestamp())
+        except Exception as e:
+            LOG.warning("Ошибка эскалации yes-ответа %s: %s", c["client"], e)
+
+
+async def handle_dstop_detail_message(chat_id: int, text: str, bot) -> bool:
+    """Обрабатывает текстовый ответ менеджера с деталями договорённости.
+
+    Вызывается из обработчика текстовых сообщений send_reports.py.
+    Возвращает True если сообщение обработано (ждали детали).
+    """
+    state = load_state()
+    candidates = state.get("candidates", {})
+
+    # Ищем кандидата с pending-деталью для этого менеджера
+    found_cid = None
+    for cid, c in candidates.items():
+        if c.get("awaiting_detail") and c.get("manager_chat_id") == chat_id:
+            found_cid = cid
+            break
+
+    if found_cid is None:
+        return False
+
+    c = candidates[found_cid]
+    c["manager_note"]   = text.strip()
+    c["awaiting_detail"] = False
+    save_state(state)
+
+    LOG.info("Детали договорённости от менеджера %s: %s", c["manager"], text[:80])
+
+    # Эскалируем к руководителю с деталями
+    await _escalate_yes_to_admin(found_cid, c, bot)
+
+    # Подтверждаем менеджеру
+    try:
+        await bot.send_message(
+            chat_id=chat_id,
+            text=f"✅ Передано руководителю — <b>{c['client']}</b>\nДетали зафиксированы.",
+            parse_mode="HTML",
+        )
+    except Exception as e:
+        LOG.warning("Ошибка подтверждения менеджеру %s: %s", c["manager"], e)
+
+    return True
 
 
 async def _handle_admin_response(cid: str, action: str, chat_id: int, bot) -> str:

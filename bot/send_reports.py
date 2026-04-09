@@ -6351,6 +6351,14 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
     # except Exception as e:
     #     logger.error("phone input handler error: %s", e)
 
+    # Проверяем ожидание деталей "договорились" (debt_stop_control)
+    try:
+        from bot.debt_stop_control import handle_dstop_detail_message as _dstop_detail
+        if await _dstop_detail(chat_id, text, context.bot):
+            return
+    except Exception as e:
+        logger.error("dstop detail handler error: %s", e)
+
     # Check active collector dialog first
     try:
         from collector.manager_dialog import handle_text_message as _col_text
