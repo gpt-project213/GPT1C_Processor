@@ -1,0 +1,130 @@
+[
+  {
+    "id": "F-001",
+    "title": "Отсутствуют ключевые runtime-конфиги в snapshot",
+    "status": "Требует дополнительного подтверждения",
+    "severity": "high",
+    "area": "config",
+    "evidence": [
+      "Код ожидает managers.json/roles.json/imap.json/.env",
+      "В config/ доступны только pattern_config.yaml и weekly_clients.json"
+    ],
+    "impact": "Нельзя доказать корректность ролей, chat_id, whitelist и части runtime-веток",
+    "notes": "Требуется аудит с доступом к production config"
+  },
+  {
+    "id": "F-002",
+    "title": "IMAP фильтрация может silently отбрасывать вложения",
+    "status": "Работает, но с риском",
+    "severity": "high",
+    "area": "imap",
+    "evidence": [
+      "imap_fetcher.py: filter require_manager_in_name",
+      "logs_public/send_reports_20260305.log: SKIP no-manager-in-name"
+    ],
+    "impact": "Потеря части входящих файлов без явной ошибки на пользовательском уровне",
+    "notes": "Часть логов в DEBUG"
+  },
+  {
+    "id": "F-003",
+    "title": "Ложная видимость успеха pipeline",
+    "status": "Работает, но с риском",
+    "severity": "high",
+    "area": "pipeline",
+    "evidence": [
+      "run_pipeline_all_mp.py: outs==[] допустимо для non-DEBT",
+      "send_reports logs: массовые run_script_finish rc=0"
+    ],
+    "impact": "Система активна, но полезный бизнес-результат не гарантирован",
+    "notes": "Нужны KPI-проверки на фактические выходы/доставку"
+  },
+  {
+    "id": "F-004",
+    "title": "Частичная деградация Telegram доставки",
+    "status": "Работает частично",
+    "severity": "high",
+    "area": "telegram_delivery",
+    "evidence": [
+      "logs_public/send_reports_20260305.log: repeated Chat not found"
+    ],
+    "impact": "Часть менеджеров не получает отчёты/уведомления",
+    "notes": "Требуется сверка chat_id и onboarding пользователей"
+  },
+  {
+    "id": "F-005",
+    "title": "Неполная тестовая проходимость проекта",
+    "status": "Работает частично",
+    "severity": "medium",
+    "area": "tests",
+    "evidence": [
+      "tests/test_project.py падает: ModuleNotFoundError requests",
+      "warning: managers.json not found"
+    ],
+    "impact": "Нет полного confidence по non-collector контуру",
+    "notes": "Collector tests проходят"
+  },
+  {
+    "id": "F-006",
+    "title": "Collector работает, но state-driven и чувствителен к stale flags",
+    "status": "Работает, но с риском",
+    "severity": "medium",
+    "area": "collector",
+    "evidence": [
+      "tests/test_collector.py: 104/104 passed",
+      "collections_db.py: already_contacted_today/promise/escalation flags",
+      "dialog_store.py: pending FSM states"
+    ],
+    "impact": "Возможны блокировки повторов и зависшие ветки",
+    "notes": "Нужен регулярный контроль state"
+  },
+  {
+    "id": "F-007",
+    "title": "Debt Stop runtime не доказан на snapshot",
+    "status": "Не доказано",
+    "severity": "medium",
+    "area": "debt_stop",
+    "evidence": [
+      "debt_stop_control.py реализует контур и state-файлы",
+      "Оригинальные runtime state-файлы не предоставлены"
+    ],
+    "impact": "Нельзя подтвердить прохождение эскалаций и финальных списков",
+    "notes": "Нужны production state/log artifacts"
+  },
+  {
+    "id": "F-008",
+    "title": "Snapshot state-файлы logs_public непарсибельны",
+    "status": "Требует дополнительного подтверждения",
+    "severity": "medium",
+    "area": "state_integrity",
+    "evidence": [
+      "notify_state.json/deletion_queue.json в snapshot не проходят json.load"
+    ],
+    "impact": "Нельзя достоверно восстановить state transitions",
+    "notes": "Возможна преднамеренная редактировка для публикации"
+  },
+  {
+    "id": "F-009",
+    "title": "PDF контур не найден в рабочем pipeline",
+    "status": "Не работает",
+    "severity": "low",
+    "area": "report_outputs",
+    "evidence": [
+      "Поиск по коду не выявил активной генерации/отправки PDF"
+    ],
+    "impact": "Если PDF обязателен — текущая реализация его не закрывает",
+    "notes": "Основной поток HTML/JSON"
+  },
+  {
+    "id": "F-010",
+    "title": "Параллельные оркестраторы pipeline повышают риск рассинхронизации",
+    "status": "Работает, но с риском",
+    "severity": "medium",
+    "area": "runtime_architecture",
+    "evidence": [
+      "run_pipeline_all_mp.py как отдельный оркестратор",
+      "bot/send_reports.py содержит собственный pipeline_task"
+    ],
+    "impact": "Возможны дубли и неоднозначность источника истины по обработке",
+    "notes": "Нужен операционный регламент запуска"
+  }
+]
