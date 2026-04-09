@@ -179,7 +179,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.39/25.03.2026"
+__VERSION__ = "v9.4.40/08.04.2026"
 
 from datetime import datetime, time as dt_time
 from zoneinfo import ZoneInfo
@@ -1213,10 +1213,10 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
 
 async def check_workday_task(context: ContextTypes.DEFAULT_TYPE):
     """
-    В 12:00: если xlsx от whitelist сегодня не пришли и флаг не установлен —
+    В 09:30: если xlsx от whitelist сегодня не пришли и флаг не установлен —
     спрашивает администратора: выходной или ждать?
     """
-    from bot.workday_checker import needs_admin_confirmation
+    from bot.workday_checker import needs_admin_confirmation, mark_asked_today
     if not needs_admin_confirmation():
         return
     if not ADMIN_CHAT_ID:
@@ -1230,11 +1230,12 @@ async def check_workday_task(context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(
             chat_id=ADMIN_CHAT_ID,
             text=(
-                "📭 До 12:00 не поступило ни одного отчёта.\n\n"
+                "📭 До 10:00 не поступило ни одного отчёта из 1С.\n\n"
                 "Сегодня выходной?"
             ),
             reply_markup=kb,
         )
+        mark_asked_today()
         log_event("workday_check_sent")
     except Exception as e:
         logger.warning("check_workday_task error: %s", e)
@@ -6563,13 +6564,13 @@ def main():
         )
         logger.info("🧹 Настроена автоочистка файлов: логи 2д, AI 7д, HTML 30д, JSON 7д, Excel 14д | Запуск в 03:00")
 
-        # Проверка рабочего дня в 12:00 (если нет xlsx — спросить админа)
+        # Проверка рабочего дня в 10:00 (если нет xlsx — спросить админа)
         job_queue.run_daily(
             check_workday_task,
-            time=dt_time(7, 30, tzinfo=TZ),
+            time=dt_time(10, 0, tzinfo=TZ),
             name="check_workday",
         )
-        logger.info("📅 Настроена проверка рабочего дня: ежедневно 07:30 (до отчётов в 09:00)")
+        logger.info("📅 Настроена проверка рабочего дня: ежедневно 10:00 (отчёты приходят 09:07–09:38)")
 
         # CRM: обновление базы клиентов + запрос телефонов в 18:00
         job_queue.run_daily(
@@ -6667,10 +6668,10 @@ def main():
 
             job_queue.run_daily(
                 _job_dstop_saida,
-                time=dt_time(22, 0, tzinfo=TZ),
+                time=dt_time(22, 15, tzinfo=TZ),
                 name="debt_stop_saida",
             )
-            logger.info("🚫 Настроено уведомление Саиды: ежедневно 22:00")
+            logger.info("🚫 Настроено уведомление Саиды: ежедневно 22:15")
 
         logger.info(f"🗑️ Автоудаление сообщений через {AUTO_DELETE_HOURS} часов")
     

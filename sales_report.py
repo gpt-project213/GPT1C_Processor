@@ -267,6 +267,8 @@ def extract_meta(df: pd.DataFrame, data_start: int) -> Tuple[str,str]:
 
 def read_excel_raw(path: Path) -> pd.DataFrame:
     clean_path = ensure_clean_xlsx(path, force_fix=True)
+    if clean_path is None:
+        raise ValueError(f"ensure_clean_xlsx вернул None для {path}")
     return pd.read_excel(clean_path, header=None, dtype=str)
 
 def find_data_end(raw: pd.DataFrame, data_start: int, colmap: Dict[str,int]) -> int:
