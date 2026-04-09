@@ -271,7 +271,7 @@ def already_notified_manager_today(client_name: str) -> bool:
     """True если менеджер уже получал запрос на регистрацию этого клиента сегодня."""
     state = load_state()
     key = _MGR_NOTIFY_PREFIX + client_name
-    return state.get(key, {}).get("date") == _today()
+    return (state.get(key) or {}).get("date") == _today()
 
 
 def mark_manager_notified(client_name: str) -> None:

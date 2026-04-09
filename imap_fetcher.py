@@ -84,7 +84,7 @@ _stream_handler = logging.StreamHandler(sys.stdout)
 
 class AlmatyFormatter(logging.Formatter):
     def formatTime(self, record, datefmt=None):
-        dt = datetime.fromtimestamp(record.created, ZoneInfo("Asia/Almaty"))
+        dt = datetime.fromtimestamp(record.created, ZoneInfo(os.getenv("TZ", "Asia/Almaty")))
         return dt.strftime(datefmt or "%Y-%m-%d %H:%M:%S")
 
 # было:

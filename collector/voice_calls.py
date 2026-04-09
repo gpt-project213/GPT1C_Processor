@@ -37,9 +37,13 @@ RETELL_ENABLED  = os.getenv("RETELL_ENABLED", "false").lower() == "true"
 RETELL_API_KEY  = os.getenv("RETELL_API_KEY", "")
 RETELL_AGENT_ID = os.getenv("RETELL_AGENT_ID", "")
 COMPANY_PHONE   = os.getenv("COMPANY_PHONE", "")
-CALL_LEVEL_MIN  = int(os.getenv("COLLECTOR_CALL_LEVEL", "4"))
-CALL_HOUR_START = int(os.getenv("COLLECTOR_HOUR_START", "9"))
-CALL_HOUR_END   = int(os.getenv("COLLECTOR_CALL_HOUR_END", "17"))  # настраивается через .env
+try:
+    CALL_LEVEL_MIN  = int(os.getenv("COLLECTOR_CALL_LEVEL", "4"))
+    CALL_HOUR_START = int(os.getenv("COLLECTOR_HOUR_START", "9"))
+    CALL_HOUR_END   = int(os.getenv("COLLECTOR_CALL_HOUR_END", "17"))
+except (ValueError, TypeError):
+    CALL_LEVEL_MIN, CALL_HOUR_START, CALL_HOUR_END = 4, 9, 17
+    logger.warning("Некорректные COLLECTOR_CALL_LEVEL/HOUR_START/HOUR_END — используются defaults")
 
 RETELL_BASE_URL = "https://api.retellai.com"
 

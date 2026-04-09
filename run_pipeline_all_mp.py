@@ -50,7 +50,7 @@ for d in (REPORTS, QUEUE_DIR, HTML_DIR, AI_DIR, JSON_DIR, EXCEL_DIR, ACTIVE_DIR,
 # ─────────────────────────────────────────────────────────────────────
 # Логирование
 def _now() -> str:
-    return datetime.now(ZoneInfo("Asia/Almaty")).strftime("%Y-%m-%d %H:%M:%S")
+    return datetime.now(ZoneInfo(os.getenv("TZ", "Asia/Almaty"))).strftime("%Y-%m-%d %H:%M:%S")
 
 def _log(msg: str, *, err: bool = False, extra: Dict[str, Any] | None = None) -> None:
     line = f"{_now()} {'ERROR' if err else 'INFO'} {msg}"
