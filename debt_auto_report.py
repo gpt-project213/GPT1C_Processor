@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 r"""
-debt_auto_report.py · v2.7.4 · 2026-03-16
+debt_auto_report.py · v2.7.5 · 2026-03-16 | v2.7.6 · 2026-04-09: TZ → os.getenv
 Правки: simple → убраны «Отгрузка/Оплата» во «Все клиенты»; extended → агрегаты в шапку,
 Δ (увеличение/уменьшение), сортировка «Движения» по убыванию closing, техданные без «Клиентов».
 
@@ -15,7 +15,7 @@ v2.7.2: Удалён "Арман" из INTERNAL_UNITS_MAP (уволен)
 
 from __future__ import annotations
 
-import sys, re, json, logging, argparse
+import sys, os, re, json, logging, argparse
 from pathlib import Path
 from datetime import datetime
 from typing import List, Tuple, Dict, Any, Optional
@@ -33,7 +33,7 @@ from utils_excel import ensure_clean_xlsx
 from utils import money
 from analyze_debt_excel import parse_debt_report
 
-__VERSION__ = "debt_auto=v2.7.5"
+__VERSION__ = "debt_auto=v2.7.6"
 NBSP = "\u202f"
 
 log = getattr(config, "setup_logging", lambda name: logging.getLogger(name))("debt_auto_report")
@@ -665,7 +665,7 @@ def render_html(ctx: dict) -> str:
 def _generated_footer() -> str:
     if hasattr(config, "generated_at_tz"):
         return f"{config.generated_at_tz()} | Версия: {__VERSION__}"
-    return f"Сформировано: {datetime.now(ZoneInfo('Asia/Almaty')):%d.%m.%Y %H:%M} (Asia/Almaty) | Версия: {__VERSION__}"
+    return f"Сформировано: {datetime.now(ZoneInfo(os.getenv('TZ', 'Asia/Almaty'))):%d.%m.%Y %H:%M} ({os.getenv('TZ', 'Asia/Almaty')}) | Версия: {__VERSION__}"
 
 def _save_extended_json(ctx: dict, stem: str) -> Path:
     out_json_dir = getattr(config, "JSON_DIR", Path(__file__).parent / "reports" / "json")

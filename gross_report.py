@@ -10,6 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Tuple, Optional
+import os
 import html as _html
 import logging, re
 from zoneinfo import ZoneInfo
@@ -448,7 +449,7 @@ def build_gross_report(xlsx: str | Path) -> Optional[Path]:
         f"строк без процента={nan_margin}; строк с отрицательной валовой прибылью={neg_gp_cnt}; "
         f"dedup_removed={removed_dups}; dedup={dedup_decision}"
     )
-    generated_local = datetime.now(ZoneInfo("Asia/Almaty")).strftime("%d.%m.%Y %H:%M")
+    generated_local = datetime.now(ZoneInfo(os.getenv("TZ", "Asia/Almaty"))).strftime("%d.%m.%Y %H:%M")
     tech_lines.append(f"Источник файла: {xlsx.name}")
     tech_lines.append(f"Сформировано: {generated_local} (Asia/Almaty)")
     tech_html = "<br>".join(tech_lines)

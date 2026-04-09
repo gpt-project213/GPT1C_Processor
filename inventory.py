@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-inventory.py v1.1.4 (2026-03-10) — Остатки товаров на складах (с группировкой по категориям)
+inventory.py v1.1.5 (2026-04-09) — Остатки товаров на складах (с группировкой по категориям)
 Генерирует HTML и JSON отчёты.
 Сортировка: категории по убыванию общего количества, товары по убыванию количества.
 Fix v1.1.4: TZ timezone(timedelta(hours=5)) → ZoneInfo("Asia/Almaty") (Bug TZ)
@@ -9,6 +9,7 @@ Fix v1.1.4: TZ timezone(timedelta(hours=5)) → ZoneInfo("Asia/Almaty") (Bug TZ)
 
 from __future__ import annotations
 import math
+import os
 import re
 import json
 import logging
@@ -18,6 +19,10 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from typing import Dict, List, Any, Optional
 
+from dotenv import load_dotenv
+load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env",
+            encoding="utf-8-sig", override=False)
+
 import pandas as pd
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
@@ -26,7 +31,7 @@ try:
 except ImportError:
     ensure_clean_xlsx = None
 
-TZ = ZoneInfo("Asia/Almaty")
+TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 ROOT = Path(__file__).resolve().parent
 TEMPLATES = ROOT / "templates"
 OUT_HTML = ROOT / "reports" / "html"

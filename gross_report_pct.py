@@ -8,6 +8,7 @@ gross_report_pct.py · v1.5.7 · 2025-09-27 (Asia/Almaty)
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Tuple, Optional
@@ -230,7 +231,7 @@ def build_gross_report_percent(xlsx: str | Path) -> Optional[Path]:
 
     ctx = {
         "title": "Рентабельность (проценты)",
-        "generated": datetime.now(ZoneInfo('Asia/Almaty')).strftime("%d.%m.%Y %H:%M"),
+        "generated": datetime.now(ZoneInfo(os.getenv("TZ", "Asia/Almaty"))).strftime("%d.%m.%Y %H:%M"),
         "period": period,
         "manager": manager_label,
         "overall_margin": overall_margin,

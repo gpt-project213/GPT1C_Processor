@@ -14,7 +14,6 @@ Includes an **AI Debt Collector** module that contacts debtors via WhatsApp/Tele
 - Timezone: Asia/Almaty (all timestamps must use this TZ)
 - Virtual environment: `.venv/`
 - Company: Минбаракат, wholesale food distribution, Almaty, Kazakhstan
-- Turnover: 50–80 млн ₸/month
 
 ---
 

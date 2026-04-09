@@ -256,7 +256,7 @@ a:hover{text-decoration:underline}
             <tbody>
             {% for movement in client.movements|sort(attribute='date') %}
               <tr>
-                <td>{{ movement.date.strftime('%d.%m.%Y') }}</td>
+                <td>{{ movement.date.strftime('%d.%m.%Y') if movement.date else '—' }}</td>
                 <td class="num {% if movement.debit > 0 %}negative{% endif %}">{% if movement.debit > 0 %}{{ movement.debit|money }}{% endif %}</td>
                 <td class="num {% if movement.credit > 0 %}positive{% endif %}">{% if movement.credit > 0 %}{{ movement.credit|money }}{% endif %}</td>
               </tr>

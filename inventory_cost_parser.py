@@ -18,14 +18,20 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from typing import Dict, List, Any, Optional
 
+import os
 import pandas as pd
+
+from dotenv import load_dotenv
+from pathlib import Path as _Path
+load_dotenv(dotenv_path=_Path(__file__).resolve().parent / ".env",
+            encoding="utf-8-sig", override=False)
 
 try:
     from utils_excel import ensure_clean_xlsx
 except ImportError:
     ensure_clean_xlsx = None
 
-TZ = ZoneInfo("Asia/Almaty")
+TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 ROOT = Path(__file__).resolve().parent
 JSON_OUT = ROOT / "reports" / "json"
 HTML_OUT = ROOT / "reports" / "html"
@@ -41,7 +47,7 @@ logging.basicConfig(
 )
 LOG = logging.getLogger("inventory_cost_parser")
 
-__VERSION__ = "1.6.6"
+__VERSION__ = "1.6.7"
 NBSP = "\u202f"
 
 # Регулярные выражения

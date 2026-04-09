@@ -74,7 +74,7 @@ logging.basicConfig(
 )
 LOG = logging.getLogger("gross_parser")
 
-__VERSION__ = "1.0.3"
+__VERSION__ = "1.0.4"
 
 NBSP = "\u202f"
 
@@ -345,7 +345,7 @@ def build_gross_json(xlsx: Path) -> Path:
         "metadata": {
             "version": __VERSION__,
             "parsed_at": datetime.now(TZ).strftime("%Y-%m-%d %H:%M:%S"),
-            "timezone": "Asia/Almaty"
+            "timezone": os.getenv("TZ", "Asia/Almaty")
         }
     }
     
