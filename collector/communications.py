@@ -4,7 +4,7 @@
 collections/communications.py
 Единый gateway для отправки сообщений должникам и уведомлений команде.
 
-Версия: 1.0.1 (2026-04-08)
+Версия: 1.0.2 (2026-04-09)
 
 Каналы:
   WhatsApp — Green API (GREENAPI_ID, GREENAPI_TOKEN из .env)
@@ -184,15 +184,24 @@ def get_observer_ids(manager_name: str) -> list:
     # The manager themselves
     mgr_id = roles.get("managers", {}).get(manager_name)
     if mgr_id:
-        ids.add(int(mgr_id))
+        try:
+            ids.add(int(mgr_id))
+        except (ValueError, TypeError):
+            logger.warning("get_observer_ids: некорректный mgr_id=%s для %s", mgr_id, manager_name)
 
     # Subadmins who supervise this manager
     for sub_id_str, scopes in roles.get("subadmin_scopes", {}).items():
         if manager_name in scopes:
-            ids.add(int(sub_id_str))
+            try:
+                ids.add(int(sub_id_str))
+            except (ValueError, TypeError):
+                logger.warning("get_observer_ids: некорректный sub_id=%s", sub_id_str)
 
     # All admins
     for admin_id in roles.get("admins", []):
-        ids.add(int(admin_id))
+        try:
+            ids.add(int(admin_id))
+        except (ValueError, TypeError):
+            logger.warning("get_observer_ids: некорректный admin_id=%s", admin_id)
 
     return sorted(ids)

@@ -4,7 +4,7 @@
 collections/collection_agent.py
 AI-диалоговый агент взыскания долгов через DeepSeek.
 
-Версия: 1.0.1 (2026-04-08)
+Версия: 1.0.2 (2026-04-09)
 
 Функции:
   generate_message()  — генерирует текст сообщения должнику
@@ -91,6 +91,9 @@ def _call_deepseek(system_prompt: str, user_prompt: str, max_tokens: int = 500) 
         )
         resp.raise_for_status()
         data = resp.json()
+        if not data.get("choices"):
+            logger.warning("DeepSeek вернул пустой choices: %s", str(data)[:200])
+            return ""
         return data["choices"][0]["message"]["content"].strip()
     except (httpx.HTTPError, KeyError, json.JSONDecodeError) as e:
         logger.error("DeepSeek API ошибка: %s", e)

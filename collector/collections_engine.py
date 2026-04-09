@@ -4,7 +4,7 @@
 collections/collections_engine.py
 Главный оркестратор AI-Коллектора долгов.
 
-Версия: 1.0.4 (2026-03-27)
+Версия: 1.0.5 (2026-04-09)
 
 CLI:
   python -m collector.collections_engine --dry-run
@@ -243,7 +243,7 @@ async def _warn_manager_no_phone(
         save_state(state)
 
 
-def daily_summary(processed: List[Dict], dry_run: bool = False) -> str:
+def daily_summary(processed: List[Dict], total_classified: int = 0, dry_run: bool = False) -> str:
     """Формирует ежедневную сводку работы коллектора."""
     total = len(processed)
     sent = sum(1 for r in processed if r.get("sent"))
@@ -251,13 +251,16 @@ def daily_summary(processed: List[Dict], dry_run: bool = False) -> str:
     broken = [r for r in processed if r.get("promise_broken")]
     no_contact = [r for r in processed if r.get("no_contacts")]
     escalated = [r for r in processed if r.get("escalated")]
+    skipped = total_classified - total if total_classified > total else 0
 
     mode_label = "🔇 DRY-RUN (сообщения НЕ отправлялись)" if dry_run else "✅ LIVE"
     lines = [
         f"📊 <b>AI Коллектор — ежедневная сводка</b> {mode_label}",
         f"",
-        f"Всего должников уровней 1–5: {total}",
-        f"Обработано сегодня: {sent}",
+        f"Классифицировано должников 1–5: {total_classified}",
+        f"Обработано коллектором: {total}",
+        f"Пропущено (стоп-лист): {skipped}",
+        f"Отправлено сообщений: {sent}",
     ]
     if promised:
         lines.append(f"Обещали оплату: {len(promised)}")
@@ -268,7 +271,7 @@ def daily_summary(processed: List[Dict], dry_run: bool = False) -> str:
         for r in broken[:5]:
             lines.append(f"  • {r['name']}")
     if no_contact:
-        lines.append(f"📵 Нет телефона — предупреждены менеджеры: {len(no_contact)}")
+        lines.append(f"📵 Нет контактов (телефона/TG) — предупреждены менеджеры: {len(no_contact)}")
     if escalated:
         lines.append(f"Эскалировано директору: {len(escalated)}")
     return "\n".join(lines)
@@ -354,7 +357,11 @@ async def _process_single(
             wa_ok = send_whatsapp(phone, text)
         tg_ok = False
         if tg_id:
-            tg_ok = await send_telegram(int(tg_id), text)
+            try:
+                tg_ok = await send_telegram(int(tg_id), text)
+            except (ValueError, TypeError):
+                logger.error("[%s] некорректный tg_id=%s", name, tg_id)
+                tg_ok = False
         sent = wa_ok or tg_ok
         if sent:
             update_after_contact(name, "whatsapp" if wa_ok else "telegram", level, text)
@@ -486,8 +493,9 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
             for _vc in _all_violations:
                 _vstate[f"__violation_notified__{_vc['name']}"] = {"date": _today_str()}
                 logger.warning(
-                    "Нарушение — отгрузка при долге: менеджер=%s",
-                    _vc.get("manager", ""),
+                    "Нарушение — %s (менеджер=%s, сумма=%.0f тг, дней=%d)",
+                    _vc["name"], _vc.get("manager", ""),
+                    _vc.get("amount", 0), _vc.get("days", 0),
                 )
             save_state(_vstate)  # ОДИН save после всего цикла
 
@@ -543,17 +551,12 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
         except Exception as _e:
             logger.debug("Ошибка проверки stop-registry: %s", _e)
 
-        # Фильтр: только "стоп-клиенты" — не покупают и не платят вообще ничего.
-        # debit > 0  → клиент активно покупает (не трогаем, менеджер работает с ним)
-        # credit > 0 → клиент хоть что-то платит (не трогаем, динамика есть)
-        # Коллектор бьёт только тех, кто полностью молчит: debit==0 AND credit==0
-        debit  = client.get("debit", 0.0) or 0.0
-        credit = client.get("credit", 0.0) or 0.0
-        if debit > 0 or credit > 0:
-            logger.info(
-                "[%s] пропуск — клиент активен (debit=%.0f, credit=%.0f)",
-                name, debit, credit,
-            )
+        # Фильтр: пропускаем только клиентов с нулевым или отрицательным долгом.
+        # Управление исключениями — через стоп-лист (debt_stop_control).
+        # Покупка (debit > 0) не означает что долг погашен — контакт нужен.
+        if client.get("amount", 0) <= 0:
+            logger.info("[%s] пропуск — долг погашен или отрицательный (amount=%.0f)",
+                        name, client.get("amount", 0))
             continue
 
         # Уже контактировали сегодня — пропускаем
@@ -596,7 +599,7 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
         processed.append(result)
 
     # Итоговая сводка → администратору
-    summary = daily_summary(processed, dry_run=dry_run)
+    summary = daily_summary(processed, total_classified=len(debtors), dry_run=dry_run)
     logger.info("Сводка:\n%s", summary)
     if not dry_run:
         await notify_admin(summary)

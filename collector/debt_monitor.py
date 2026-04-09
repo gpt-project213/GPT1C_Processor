@@ -4,7 +4,7 @@
 collections/debt_monitor.py
 Анализ дебиторки, классификация должников по уровням давления.
 
-Версия: 1.0.2 (2026-03-27)
+Версия: 1.0.3 (2026-04-09)
 
 Уровни:
   0–9 дней   → level 0 (пропустить)
@@ -37,6 +37,23 @@ CONTACTS_PATH = ROOT_DIR / "config" / "debtors_contacts.json"
 LOGS_DIR = ROOT_DIR / "logs"
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_float(val: Any) -> float:
+    """Парсит число из строки 1C безопасно: '1 234 567,89' → 1234567.89.
+    Убирает пробелы/nbsp, заменяет ТОЛЬКО ПЕРВУЮ запятую на точку."""
+    if val is None:
+        return 0.0
+    s = str(val).replace(" ", "").replace("\xa0", "").replace("\u202f", "")
+    # Если запятая — десятичный разделитель (европейский формат):
+    # "1234567,89" → "1234567.89"
+    # "1,234,567" → "1.234.567" ОШИБКА — поэтому берём только первую запятую
+    s = s.replace(",", ".", 1)
+    try:
+        return float(s)
+    except (ValueError, TypeError):
+        return 0.0
+
 
 # Порог уровней (минимальное кол-во дней просрочки)
 _LEVEL_THRESHOLDS = [
@@ -217,24 +234,18 @@ def classify_debtors(debt_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         for field in ("amount", "closing", "debt", "balance", "сумма", "остаток"):
             val = client.get(field)
             if val is not None:
-                try:
-                    amount = float(str(val).replace(" ", "").replace(",", "."))
+                v = _safe_float(val)
+                if v != 0.0 or str(val).strip() not in ("", "0", "0.0"):
+                    amount = v
                     break
-                except (ValueError, TypeError):
-                    continue
 
         # Клиент с нулевым/отрицательным или ниже минимального порога долгом — пропуск
         if amount < 5000:
             continue
 
         # Нарушение: была отгрузка при наличии предыдущего долга
-        opening = 0.0
-        debit = 0.0
-        try:
-            opening = float(str(client.get("opening") or 0).replace(" ", "").replace(",", "."))
-            debit = float(str(client.get("debit") or 0).replace(" ", "").replace(",", "."))
-        except (ValueError, TypeError):
-            pass
+        opening = _safe_float(client.get("opening") or 0)
+        debit   = _safe_float(client.get("debit") or 0)
         # BUG-C1 fix: violation только при просрочке >= 7 дней (OVERDUE_DAYS).
         # Без порога дней условие срабатывало для ВСЕХ активных торговых клиентов
         # (opening>=100 просто означает «была задолженность на начало периода»).
@@ -245,12 +256,8 @@ def classify_debtors(debt_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         if violation_shipment and level == 0:
             level = 1
 
-        # Извлекаем credit (платежи) для фильтра on_stop
-        credit = 0.0
-        try:
-            credit = float(str(client.get("credit") or 0).replace(" ", "").replace(",", "."))
-        except (ValueError, TypeError):
-            pass
+        # Извлекаем credit (платежи) для статистики
+        credit = _safe_float(client.get("credit") or 0)
 
         results.append({
             "name": name,
