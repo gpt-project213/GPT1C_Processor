@@ -193,7 +193,55 @@
 
 ---
 
+## 14) Ответы на 10 вопросов
+
+**1. CRM сейчас корректно наполняется или state/legacy уже искажена?**  
+✅ Корректно. `update_from_reports()` (`crm_clients.py:200`) читает debt_ext_*.json и sales_*.json, обновляет clients.json атомарно. last_seen=2026-04-10 подтверждает свежесть. Legacy debtors_contacts.json используется только как fallback через `load_contacts_compat()`.
+
+**2. Клиенты попадают правильным менеджерам?**  
+✅ Да. Manager извлекается из debt_ext_*.json (поле manager) и sales_*.json (имя файла). При обновлении пустой manager заменяется на найденный, непустой не перезаписывается (`crm_clients.py:234-237`).
+
+**3. Может ли один менеджер видеть чужих клиентов?**  
+✅ Нет, защищено. CRM-задачи выдаются по `_all_crm_participants()` — каждый получает только своих. Claim-кнопка рассылается всем, но записывается только кликнувший. Отчёты фильтруются через scopes в roles.json.
+
+**4. Может ли CRM спамить менеджеру?**  
+⚠️ Да. `crm_phone_reminder_task` (`send_reports.py:6264`, interval=3600) работает 09:00–18:59 → до 10 напоминаний в день. Нет счётчика числа напоминаний, нет exponential backoff. Единственная защита — `paused_until` если менеджер явно нажал «позже».
+
+**5. Работает ли pause/later?**  
+✅ Да. `paused_until` выставляется в `_CRM_PHONE_PENDING[chat_id]` при нажатии «позже», reminder-задача проверяет его (`send_reports.py:6281-6290`).
+
+**6. Работает ли not-my-client?**  
+❌ Не реализовано. Нет кнопки "это не мой клиент" / переназначения / "убрать из очереди". Единственный выход — claim кнопка для бесхозных клиентов.
+
+**7. Есть ли дублирующие stores/contacts/state?**  
+✅ Есть, но управляемо. clients.json (CRM) + debtors_contacts.json (legacy). Merge в `load_contacts_compat()` — CRM перекрывает legacy. Старые `__phone_pending__`/`__name_pending__` в collector_state.json чистятся при старте (`send_reports.py:4598`).
+
+**8. Какие взаимосвязи CRM ↔ debt ↔ sales ↔ collector самые опасные?**  
+🔴 Три опасных:
+- `load_contacts_compat()` использует старые debtors_contacts.json данные для коллектора если CRM неполная → неверный phone/manager для WA
+- Broadcast бесхозных клиентов (race) — первый нажавший получает клиента, остальные видят шум
+- `crm_phone_reminder_task` работает в выходные (нет `is_holiday_today()` guard, в отличие от `crm_daily_task`)
+
+**9. Какие сообщения CRM безопасны, а какие опасны?**  
+✅ Безопасны: новый клиент менеджеру (только ему), phone/name prompts (только pending), подтверждения.  
+⚠️ Опасны: broadcast "Чей клиент?" (всем участникам), hourly reminders без ограничения.
+
+**10. Можно ли сейчас безопасно включать CRM reminders?**  
+⚠️ Условно. Включать можно, но нужно понимать: менеджеры будут получать напоминание каждый час пока не ответят, включая выходные. Если это приемлемо — включать. Для полной безопасности сначала исправить `crm_phone_reminder_task`: добавить `is_holiday_today()` guard и счётчик (max 3 в день).
+
+---
+
 ## Итоговый verdict
-- **Controlled live CRM task creation**: допустимо.
-- **CRM reminders production-safe**: ещё нет.
-- **WhatsApp live**: в рамках этого аудита не трогалось и не включалось.
+- **Controlled live CRM task creation**: допустимо, стабильно.
+- **CRM reminders production-safe**: ⚠️ условно — работает, но без holiday guard и без лимита напоминаний.
+- **WhatsApp live**: в рамках этого аудита не трогалось и не включалось (управляется approval_flow).
+
+## Критический баг для исправления перед prod
+
+**BUG-CRM-1** (LOW): `crm_phone_reminder_task` (`send_reports.py:6264`) не проверяет `is_holiday_today()`.  
+Исправление: добавить 3 строки в начало функции:
+```python
+from bot.workday_checker import is_holiday_today
+if is_holiday_today():
+    return
+```
