@@ -4,7 +4,7 @@
 collections/collections_engine.py
 Главный оркестратор AI-Коллектора долгов.
 
-Версия: 1.0.8 (2026-04-11)
+Версия: 1.0.9 (2026-04-11)
 
 CLI:
   python -m collector.collections_engine --dry-run
@@ -383,6 +383,15 @@ async def _process_single(
     if dry_run:
         result["sent"] = True
         result["message_text"] = text
+        return result
+
+    # OP-4 guard: прямая отправка разрешена только если менеджер известен.
+    # Без manager_name невозможно отследить, кому принадлежит клиент.
+    if not manager_name:
+        logger.warning(
+            "[%s] direct send запрещён: manager_name пустой — клиент пропущен (OP-4)",
+            name,
+        )
         return result
 
     # Если нет chat_id менеджера — прямая отправка (старый путь)

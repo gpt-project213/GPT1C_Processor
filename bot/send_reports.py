@@ -179,7 +179,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.40/08.04.2026"
+__VERSION__ = "v9.4.41/11.04.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
@@ -6264,8 +6264,12 @@ async def handle_analytics(update: Update, context: ContextTypes.DEFAULT_TYPE, d
 async def crm_phone_reminder_task(context: ContextTypes.DEFAULT_TYPE):
     """
     Каждый час: напоминает менеджерам у кого висит незаполненный клиент в CRM-очереди.
-    Работает только в рабочие часы 09–19. Повторяет до получения ответа.
+    Работает только в рабочие часы 09–19 в рабочие дни. Повторяет до получения ответа.
     """
+    from bot.workday_checker import is_holiday_today
+    if is_holiday_today():
+        logger.info("crm_phone_reminder_task: выходной день — пропуск")
+        return
     _crm_cleanup_pending()
     if not _CRM_PHONE_PENDING:
         return
