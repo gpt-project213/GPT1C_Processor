@@ -603,6 +603,240 @@ check(
 )
 
 # ═══════════════════════════════════════════════════════════════
+# 16. APPROVAL FLOW — UX согласования рассылки (2026-04-11)
+# ═══════════════════════════════════════════════════════════════
+section("16. APPROVAL FLOW — UX согласования")
+
+try:
+    from collector.approval_flow import (
+        create_batch,
+        save_batch,
+        load_batch,
+        load_latest_batch,
+        is_ready_for_send,
+        get_approved_clients,
+        get_pending_managers,
+        _all_managers_responded,
+        _build_decisions,
+        _get_manager_by_idx,
+        expire_old_batches,
+    )
+    check("APPROVAL: импорт approval_flow.py успешен", True)
+except Exception as e:
+    check("APPROVAL: импорт approval_flow.py", False, str(e))
+    # Если импорт упал — дальнейшие тесты пропускаем
+    section("ИТОГ")
+    total  = len(results)
+    passed = sum(1 for _, ok in results if ok)
+    failed = total - passed
+    print(f"\n  Прошло: {passed}/{total}")
+    sys.exit(1 if failed else 0)
+
+# ── Тест 1: create_batch — один менеджер, 3 клиента ─────────────────────────
+_batch1_clients = [
+    {"name": "ТОО Альфа",    "amount": 500_000, "days": 15, "level": 2, "phone": "+77011111111"},
+    {"name": "ИП Бета",      "amount": 200_000, "days": 12, "level": 1, "phone": "+77012222222"},
+    {"name": "ТОО Гамма",    "amount": 900_000, "days": 25, "level": 3, "phone": "+77013333333"},
+]
+_batch1 = create_batch({"Алена": _batch1_clients})
+check(
+    "APPROVAL T1: create_batch — 1 менеджер 3 клиента",
+    (
+        _batch1.get("status") == "pending_managers"
+        and "Алена" in _batch1.get("managers", {})
+        and len(_batch1["managers"]["Алена"]["clients"]) == 3
+        and _batch1["managers"]["Алена"]["status"] == "pending"
+    ),
+)
+
+# ── Тест 2: create_batch — пустой manager_name игнорируется ─────────────────
+_batch_noname = create_batch({
+    "":          [{"name": "Клиент без менеджера", "amount": 1, "days": 10, "level": 1}],
+    "Оксана":    [{"name": "ТОО Дельта", "amount": 300_000, "days": 11, "level": 1}],
+})
+check(
+    "APPROVAL T2: клиент без manager_name НЕ попадает в батч",
+    "" not in _batch_noname.get("managers", {}),
+)
+check(
+    "APPROVAL T2b: клиент с manager_name попадает в батч",
+    "Оксана" in _batch_noname.get("managers", {}),
+)
+
+# ── Тест 3: save / load ──────────────────────────────────────────────────────
+import tempfile as _tempfile
+_tmp_dir = _tempfile.mkdtemp()
+_tmp_batches = Path(_tmp_dir) / "wa_approval_batches.json"
+
+import collector.approval_flow as _af_mod
+_orig_path = _af_mod._BATCHES_PATH
+_af_mod._BATCHES_PATH = _tmp_batches  # type: ignore[assignment]
+
+try:
+    save_batch(_batch1)
+    _loaded = load_batch(_batch1["batch_id"])
+    check(
+        "APPROVAL T3: save_batch / load_batch round-trip",
+        _loaded is not None and _loaded["batch_id"] == _batch1["batch_id"],
+    )
+    check(
+        "APPROVAL T3b: load_latest_batch возвращает pending батч",
+        load_latest_batch() is not None,
+    )
+finally:
+    _af_mod._BATCHES_PATH = _orig_path
+    import shutil as _shutil_t3
+    _shutil_t3.rmtree(_tmp_dir, ignore_errors=True)
+
+# ── Тест 4: менеджер одобрил всех ──────────────────────────────────────────
+_batch4 = create_batch({"Алена": _batch1_clients})
+_mgr4 = _batch4["managers"]["Алена"]
+_mgr4["status"]        = "approved_all"
+_mgr4["approved_names"] = [c["name"] for c in _batch1_clients]
+check(
+    "APPROVAL T4: менеджер одобрил всех — all_responded=True",
+    _all_managers_responded(_batch4),
+)
+check(
+    "APPROVAL T4b: approved_names содержит 3 клиентов",
+    len(_mgr4["approved_names"]) == 3,
+)
+
+# ── Тест 5: менеджер отклонил всех ──────────────────────────────────────────
+_batch5 = create_batch({"Алена": _batch1_clients})
+_mgr5 = _batch5["managers"]["Алена"]
+_mgr5["status"]        = "rejected_all"
+_mgr5["rejected_names"] = [c["name"] for c in _batch1_clients]
+_mgr5["approved_names"] = []
+check(
+    "APPROVAL T5: менеджер отклонил всех — approved_names пустой",
+    len(_mgr5["approved_names"]) == 0,
+)
+check(
+    "APPROVAL T5b: rejected_names содержит 3 клиентов",
+    len(_mgr5["rejected_names"]) == 3,
+)
+
+# ── Тест 6: менеджер выбрал вручную ─────────────────────────────────────────
+_batch6 = create_batch({"Алена": _batch1_clients})
+_mgr6 = _batch6["managers"]["Алена"]
+_mgr6["status"]          = "manual"
+_mgr6["approved_names"]  = ["ТОО Альфа"]
+_mgr6["rejected_names"]  = ["ИП Бета"]
+_mgr6["postponed_names"] = ["ТОО Гамма"]
+_dec6 = _build_decisions(_mgr6)
+check(
+    "APPROVAL T6: _build_decisions ручной выбор",
+    _dec6 == {"ТОО Альфа": "keep", "ИП Бета": "skip", "ТОО Гамма": "later"},
+)
+
+# ── Тест 7: два менеджера, разные списки ─────────────────────────────────────
+_batch7_data = {
+    "Алена":  [{"name": "ТОО Альфа", "amount": 500_000, "days": 15, "level": 2}],
+    "Оксана": [{"name": "ТОО Дельта", "amount": 300_000, "days": 11, "level": 1}],
+}
+_batch7 = create_batch(_batch7_data)
+check(
+    "APPROVAL T7: два менеджера — оба в батче",
+    set(_batch7["managers"].keys()) == {"Алена", "Оксана"},
+)
+check(
+    "APPROVAL T7b: Алена видит только своего клиента",
+    [c["name"] for c in _batch7["managers"]["Алена"]["clients"]] == ["ТОО Альфа"],
+)
+check(
+    "APPROVAL T7c: Оксана видит только своего клиента",
+    [c["name"] for c in _batch7["managers"]["Оксана"]["clients"]] == ["ТОО Дельта"],
+)
+
+# ── Тест 8: без admin approve send невозможен ─────────────────────────────────
+_batch8 = create_batch({"Алена": _batch1_clients})
+_batch8["managers"]["Алена"]["status"] = "approved_all"
+_batch8["managers"]["Алена"]["approved_names"] = [c["name"] for c in _batch1_clients]
+_batch8["status"] = "pending_admin"
+# НЕ выставляем admin_approved — is_ready_for_send должен вернуть False
+
+_tmp_dir8 = _tempfile.mkdtemp()
+_tmp_batches8 = Path(_tmp_dir8) / "wa_approval_batches.json"
+_af_mod._BATCHES_PATH = _tmp_batches8
+try:
+    save_batch(_batch8)
+    check(
+        "APPROVAL T8: pending_admin → is_ready_for_send=False",
+        is_ready_for_send(_batch8["batch_id"]) is False,
+    )
+    # Симулируем admin approve
+    _batch8["status"]       = "admin_approved"
+    _batch8["admin_status"] = "approved"
+    _batch8["approved_clients"] = [
+        {**c, "manager": "Алена"}
+        for c in _batch1_clients
+        if c["name"] in _batch8["managers"]["Алена"]["approved_names"]
+    ]
+    save_batch(_batch8)
+    check(
+        "APPROVAL T8b: admin_approved → is_ready_for_send=True",
+        is_ready_for_send(_batch8["batch_id"]) is True,
+    )
+    _approved8 = get_approved_clients(_batch8["batch_id"])
+    check(
+        "APPROVAL T8c: get_approved_clients возвращает 3 клиентов",
+        len(_approved8) == 3,
+    )
+finally:
+    _af_mod._BATCHES_PATH = _orig_path
+    _shutil_t3.rmtree(_tmp_dir8, ignore_errors=True)
+
+# ── Тест 9: active dialogs не влияют на batching ─────────────────────────────
+# Approval flow использует только debtors_by_manager dict — изолирован от dialogs
+_batch9 = create_batch({"Алена": _batch1_clients})
+check(
+    "APPROVAL T9: батч не содержит dialog_state полей (изолирован от collector_dialogs)",
+    "dialog_state" not in str(_batch9) and "collector_dialogs" not in str(_batch9),
+)
+
+# ── Тест 10: get_pending_managers ─────────────────────────────────────────────
+_batch10 = create_batch({"Алена": _batch1_clients, "Оксана": _batch7_data["Оксана"]})
+_tmp_dir10 = _tempfile.mkdtemp()
+_af_mod._BATCHES_PATH = Path(_tmp_dir10) / "wa_approval_batches.json"
+try:
+    save_batch(_batch10)
+    _pending10 = get_pending_managers(_batch10["batch_id"])
+    check(
+        "APPROVAL T10: get_pending_managers — оба ожидают",
+        set(_pending10) == {"Алена", "Оксана"},
+    )
+    # Алена ответила
+    _batch10["managers"]["Алена"]["status"] = "approved_all"
+    save_batch(_batch10)
+    _pending10b = get_pending_managers(_batch10["batch_id"])
+    check(
+        "APPROVAL T10b: после ответа Алены — ожидает только Оксана",
+        _pending10b == ["Оксана"],
+    )
+finally:
+    _af_mod._BATCHES_PATH = _orig_path
+    _shutil_t3.rmtree(_tmp_dir10, ignore_errors=True)
+
+# ── Тест 11: run_approval_preview в коде ─────────────────────────────────────
+_engine_src_v2 = (Path(__file__).parent.parent / "collector" / "collections_engine.py").read_text(encoding="utf-8")
+check(
+    "APPROVAL T11: run_approval_preview присутствует в collections_engine.py",
+    "run_approval_preview" in _engine_src_v2,
+)
+check(
+    "APPROVAL T11b: --preview флаг добавлен в CLI",
+    '"--preview"' in _engine_src_v2 or "'--preview'" in _engine_src_v2,
+)
+
+# ── Тест 12: wa_appr_ callback зарегистрирован в send_reports.py ─────────────
+_reports_src = (Path(__file__).parent.parent / "bot" / "send_reports.py").read_text(encoding="utf-8")
+check(
+    "APPROVAL T12: wa_appr_ callback роутер добавлен в send_reports.py",
+    "wa_appr_" in _reports_src and "approval_flow" in _reports_src,
+)
+
+# ═══════════════════════════════════════════════════════════════
 # 14. ИТОГ
 # ═══════════════════════════════════════════════════════════════
 section("ИТОГ")

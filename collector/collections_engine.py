@@ -4,7 +4,7 @@
 collections/collections_engine.py
 Главный оркестратор AI-Коллектора долгов.
 
-Версия: 1.0.7 (2026-04-11)
+Версия: 1.0.8 (2026-04-11)
 
 CLI:
   python -m collector.collections_engine --dry-run
@@ -710,6 +710,126 @@ async def check_promises() -> None:
                 )
 
 
+async def run_approval_preview(single_client: Optional[str] = None) -> Optional[str]:
+    """Формирует список кандидатов и отправляет менеджерам на согласование.
+
+    Это первый шаг перед реальной отправкой:
+    1. Запускает dry-run → получает список кандидатов
+    2. Группирует по менеджерам
+    3. Создаёт батч согласования (approval_flow)
+    4. Отправляет каждому менеджеру его список через Telegram
+    5. После ответа всех менеджеров — отправляет сводку администратору
+
+    Returns:
+        batch_id если батч создан, None если кандидатов нет.
+
+    ВАЖНО: WhatsApp не отправляется. Это только UX согласования.
+    Реальная отправка — отдельный шаг после admin approve + WHATSAPP_ENABLED=1.
+    """
+    from collector.approval_flow import create_batch, save_batch, send_manager_previews
+
+    debt_data = load_latest_debt_json()
+    if not debt_data:
+        logger.warning("run_approval_preview: нет данных дебиторки")
+        return None
+
+    debtors = classify_debtors(debt_data)
+    try:
+        from bot.crm_clients import load_contacts_compat as _crm_contacts
+        contacts = _crm_contacts()
+    except Exception:
+        contacts = load_contacts()
+
+    # Группируем кандидатов по менеджерам (применяем те же фильтры что в run())
+    debtors_by_manager: Dict[str, List[Dict]] = {}
+    state = load_state()
+
+    for client in debtors:
+        name = client["name"]
+
+        real_days = get_debt_days_since_first_seen(name)
+        _days_1c  = client["days"]
+        real_days = min(real_days, _days_1c + 7)
+        from collector.debt_monitor import _level_for_days
+        level = max(client["level"], _level_for_days(real_days))
+        client = dict(client, level=level, days=max(_days_1c, real_days))
+
+        if single_client and single_client.lower() not in name.lower():
+            continue
+        if level == 0:
+            continue
+
+        # Стоп-лист
+        try:
+            from bot.debt_stop_control import load_registry as _dsc_registry
+            _dsc_reg = _dsc_registry()
+            _dsc_rec = _dsc_reg.get(name)
+            if _dsc_rec and _dsc_rec.get("status") in (
+                "stopped", "auto_stopped", "pending_clearance", "conditional"
+            ):
+                continue
+        except Exception:
+            pass
+
+        # FIX-1: активные клиенты пропускаем
+        _debit_val  = client.get("debit", 0.0) or 0.0
+        _credit_val = client.get("credit", 0.0) or 0.0
+        if _debit_val > 0 or _credit_val > 0:
+            continue
+        if client.get("amount", 0) <= 0:
+            continue
+
+        # Уже контактировали сегодня
+        if already_contacted_today(name):
+            continue
+
+        # Ищем контакты
+        contact = match_client(name, contacts)
+        if not contact:
+            continue
+
+        _phone = (contact.get("whatsapp") or contact.get("phone", "")).strip()
+        _tg_id = str(contact.get("telegram_id") or "").strip()
+        if not _phone and not _tg_id:
+            continue
+
+        manager_name = contact.get("manager", "").strip()
+        if not manager_name:
+            manager_name = _get_client_manager_from_crm(name)
+        if not manager_name:
+            logger.info(
+                "run_approval_preview: [%s] нет manager_name — пропуск (требует admin approval)",
+                name,
+            )
+            continue
+
+        debtors_by_manager.setdefault(manager_name, []).append({
+            "name":     name,
+            "amount":   client.get("amount", 0),
+            "days":     client.get("days", 0),
+            "level":    level,
+            "phone":    _phone,
+            "language": contact.get("language", "ru"),
+        })
+
+    if not debtors_by_manager:
+        logger.info("run_approval_preview: кандидатов нет — батч не создан")
+        return None
+
+    total = sum(len(v) for v in debtors_by_manager.values())
+    logger.info(
+        "run_approval_preview: создаём батч — %d менеджеров, %d клиентов",
+        len(debtors_by_manager), total,
+    )
+
+    batch = create_batch(debtors_by_manager)
+    save_batch(batch)
+    await send_manager_previews(batch)
+
+    logger.info("run_approval_preview: батч %s создан и отправлен менеджерам", batch["batch_id"])
+    return batch["batch_id"]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="AI Debt Collector — Минбаракат",
@@ -717,6 +837,7 @@ def main() -> int:
         epilog=(
             "Примеры:\n"
             "  python -m collector.collections_engine --dry-run\n"
+            "  python -m collector.collections_engine --preview\n"
             "  python -m collector.collections_engine --send\n"
             "  python -m collector.collections_engine --send --client 'ТОО Альфа'\n"
             "  python -m collector.collections_engine --check-promises"
@@ -724,6 +845,8 @@ def main() -> int:
     )
     parser.add_argument("--dry-run", action="store_true",
                         help="Показать что будет отправлено, НЕ отправлять")
+    parser.add_argument("--preview", action="store_true",
+                        help="Сформировать список и отправить менеджерам на согласование (без WhatsApp)")
     parser.add_argument("--send", action="store_true",
                         help="Выполнить реальную отправку сообщений")
     parser.add_argument("--client", type=str, default=None,
@@ -732,8 +855,16 @@ def main() -> int:
                         help="Проверить просроченные обещания оплаты")
     args = parser.parse_args()
 
-    if not args.dry_run and not args.send and not args.check_promises:
+    if not args.dry_run and not args.send and not args.check_promises and not args.preview:
         parser.print_help()
+        return 0
+
+    if args.preview:
+        batch_id = asyncio.run(run_approval_preview(single_client=args.client))
+        if batch_id:
+            logger.info("Батч согласования создан: %s", batch_id)
+        else:
+            logger.info("Нет кандидатов для согласования")
         return 0
 
     if args.check_promises:

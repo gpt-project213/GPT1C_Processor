@@ -4943,6 +4943,17 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error("collector callback error: %s", e)
         return
 
+    # WhatsApp approval flow callbacks (wa_appr_mgr_* / wa_appr_cli_* / wa_appr_adm_*)
+    if data.startswith("wa_appr_"):
+        try:
+            from collector.approval_flow import handle_callback as _wa_appr_cb
+            handled = await _wa_appr_cb(data, chat_id, q.message.message_id)
+            if handled:
+                return
+        except Exception as e:
+            logger.error("wa_appr callback error: %s", e)
+        return
+
     # [DISABLED v9.4.39] Старый flow: коллектор → reg_lang/reg_name/reg_phone.
     # Заменён на CRM 18:00 + /phone команда (crm_psel|).
     # Оставлен закомментированным на случай отката.
