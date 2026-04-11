@@ -4,7 +4,7 @@
 collections/collections_engine.py
 Главный оркестратор AI-Коллектора долгов.
 
-Версия: 1.0.5 (2026-04-09)
+Версия: 1.0.6 (2026-04-11)
 
 CLI:
   python -m collector.collections_engine --dry-run
@@ -66,6 +66,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
+
+DUPLICATE_DIALOG_HOURS = float(os.getenv("COLLECTOR_DUPLICATE_DIALOG_HOURS", "24"))
 
 from collector.debt_monitor import (
     classify_debtors,
@@ -307,6 +309,38 @@ async def _process_single(
         "no_contacts": False,
     }
 
+    from collector.dialog_store import load_dialogs as _load_dialogs_state
+
+    for _dialog in _load_dialogs_state().values():
+        if not isinstance(_dialog, dict):
+            continue
+        if _dialog.get("client_name") != name:
+            continue
+        _state = _dialog.get("state", "")
+        if _state not in ("CONFIRMED", "DONE"):
+            logger.info("[%s] уже есть активный диалог по клиенту (state=%s) — дубль пропущен", name, _state)
+            return result
+        _ts_raw = _dialog.get("last_reminded") or _dialog.get("created")
+        if not _ts_raw:
+            logger.info("[%s] уже есть завершённый диалог по клиенту (state=%s) — дубль пропущен", name, _state)
+            result["sent"] = True
+            result["via_dialog"] = True
+            return result
+        try:
+            _ts = datetime.fromisoformat(_ts_raw)
+            if _ts.tzinfo is None:
+                _ts = _ts.replace(tzinfo=TZ)
+        except (TypeError, ValueError):
+            logger.info("[%s] уже есть завершённый диалог по клиенту (state=%s) — дубль пропущен", name, _state)
+            result["sent"] = True
+            result["via_dialog"] = True
+            return result
+        if (datetime.now(TZ) - _ts).total_seconds() < DUPLICATE_DIALOG_HOURS * 3600:
+            logger.info("[%s] клиент уже обработан %.1f ч назад (state=%s) — дубль пропущен", name, (datetime.now(TZ) - _ts).total_seconds() / 3600, _state)
+            result["sent"] = True
+            result["via_dialog"] = True
+            return result
+
     # Проверяем занятость менеджера ДО дорогого API-вызова (BUG-B2 fix)
     if manager_chat_id:
         from collector.dialog_store import get_dialog as _get_dialog_state
@@ -327,9 +361,10 @@ async def _process_single(
                 return result
 
         elif _dialog_pre and _dialog_pre.get("state") not in ("CONFIRMED", "DONE", None):
-            # Менеджер занят диалогом по другому клиенту — пропуск без API-вызова
+            # FIX-2: менеджер занят другим диалогом — пропускаем клиента до следующего цикла.
+            # Direct send убран: он обходил manager approval для всех остальных клиентов менеджера.
             logger.info(
-                "[%s] менеджер %s занят диалогом по %s — пропуск",
+                "[%s] менеджер %s занят диалогом по %s — пропуск до следующего запуска",
                 name, manager_name, _dialog_pre.get("client_name"),
             )
             return result
@@ -524,10 +559,14 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
         # и сбрасывается только при полном погашении (debt=0).
         # BUG-C5 fix: dry-run не должен регистрировать first_seen в state.
         real_days = 0 if dry_run else get_debt_days_since_first_seen(name)
-        # Уровень — максимум из 1С-дней и наших дней (берём наибольший)
+        # FIX-3: ограничиваем real_days — не надуваем уровень более чем на 7 дней
+        # от фактических данных 1С. Старый first_seen (напр. 22 дня назад) не должен
+        # превращать клиента с days_1c=3 (уровень 0) в level 3.
+        _days_1c = client["days"]
+        real_days = min(real_days, _days_1c + 7)
         from collector.debt_monitor import _level_for_days
         level = max(client["level"], _level_for_days(real_days))
-        client = dict(client, level=level, days=max(client["days"], real_days))
+        client = dict(client, level=level, days=max(_days_1c, real_days))
 
         # Фильтр по одному клиенту если задан
         if single_client and single_client.lower() not in name.lower():
@@ -551,9 +590,14 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
         except Exception as _e:
             logger.debug("Ошибка проверки stop-registry: %s", _e)
 
-        # Фильтр: пропускаем только клиентов с нулевым или отрицательным долгом.
-        # Управление исключениями — через стоп-лист (debt_stop_control).
-        # Покупка (debit > 0) не означает что долг погашен — контакт нужен.
+        # FIX-1: активные клиенты (покупают ИЛИ платят) — коллектор не трогает.
+        # Контакт нужен только тем, кто полностью заморожен: ни отгрузки, ни оплаты.
+        _debit_val  = client.get("debit", 0.0) or 0.0
+        _credit_val = client.get("credit", 0.0) or 0.0
+        if _debit_val > 0 or _credit_val > 0:
+            logger.info("[%s] пропуск — клиент активен (debit=%.0f, credit=%.0f)",
+                        name, _debit_val, _credit_val)
+            continue
         if client.get("amount", 0) <= 0:
             logger.info("[%s] пропуск — долг погашен или отрицательный (amount=%.0f)",
                         name, client.get("amount", 0))

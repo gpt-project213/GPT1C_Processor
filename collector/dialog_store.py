@@ -9,6 +9,7 @@ JSON-хранилище активных диалогов менеджеров �
 """
 
 import json
+import logging
 import os
 import tempfile
 from datetime import datetime
@@ -22,9 +23,11 @@ load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env",
             encoding="utf-8-sig", override=False)
 
 TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
+logger = logging.getLogger(__name__)
 
 _ROOT = Path(__file__).resolve().parent.parent
 DIALOGS_PATH = _ROOT / "logs" / "collector_dialogs.json"
+DIALOG_TTL_HOURS = float(os.getenv("DIALOG_EXPIRE_HOURS", "48"))
 
 # Состояния диалога
 STATE_AWAITING_CONFIRM              = "AWAITING_CONFIRM"
@@ -59,6 +62,40 @@ def _now_iso() -> str:
     return datetime.now(TZ).isoformat()
 
 
+def _cleanup_stale_dialogs(dialogs: Dict[str, Any]) -> bool:
+    """Переводит просроченные pending-диалоги в DONE с явной записью в лог."""
+    now = datetime.now(TZ)
+    changed = False
+    for key, dialog in dialogs.items():
+        if not isinstance(dialog, dict):
+            continue
+        state = dialog.get("state")
+        if state not in PENDING_STATES:
+            continue
+        ts_raw = dialog.get("control_deadline") or dialog.get("last_reminded") or dialog.get("created")
+        if not ts_raw:
+            continue
+        try:
+            ts = datetime.fromisoformat(ts_raw)
+        except (TypeError, ValueError):
+            continue
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=TZ)
+        age_hours = (now - ts).total_seconds() / 3600
+        if age_hours <= DIALOG_TTL_HOURS:
+            continue
+        logger.warning(
+            "[%s] stale dialog marked for control after %.1f h (state=%s, manager_chat_id=%s)",
+            dialog.get("client_name"),
+            age_hours,
+            state,
+            key,
+        )
+        dialogs[key]["control_deadline"] = now.isoformat()
+        changed = True
+    return changed
+
+
 def load_dialogs() -> Dict[str, Any]:
     """Загружает все диалоги из JSON-файла."""
     if not DIALOGS_PATH.exists():
@@ -67,6 +104,8 @@ def load_dialogs() -> Dict[str, Any]:
         with open(DIALOGS_PATH, encoding="utf-8") as f:
             data = json.load(f)
         if isinstance(data, dict):
+            if _cleanup_stale_dialogs(data):
+                save_dialogs(data)
             return data
         return {}
     except (OSError, json.JSONDecodeError):

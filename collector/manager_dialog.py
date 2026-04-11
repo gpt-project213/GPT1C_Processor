@@ -31,6 +31,7 @@ DEEPSEEK_API_KEY       = os.getenv("DEEPSEEK_API_KEY", "")
 DEEPSEEK_MODEL         = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 COLLECTOR_REMINDER_HOURS = float(os.getenv("COLLECTOR_REMINDER_HOURS", "1"))
 COLLECTOR_DEADLINE_DAYS  = int(os.getenv("COLLECTOR_DEADLINE_DAYS", "5"))
+COLLECTOR_MANAGER_SILENCE_HOURS = float(os.getenv("COLLECTOR_MANAGER_SILENCE_HOURS", "4"))
 COMPANY_NAME             = os.getenv("COMPANY_NAME", "Минбаракат")
 TEST_MODE                = os.getenv("TEST_MODE", "0") == "1"
 TEST_TG_CHAT_IDS: List[int] = [
@@ -328,19 +329,34 @@ def _get_admin_ids() -> List[int]:
 
 def _save_contact(client_name: str, contact: Dict[str, Any]) -> None:
     """Сохраняет обновлённый контакт в debtors_contacts.json."""
-    contacts_path = _ROOT / "collector" / "debtors_contacts.json"
+    contacts_path = _ROOT / "config" / "debtors_contacts.json"
+    legacy_contacts_path = _ROOT / "collector" / "debtors_contacts.json"
+    normalized = dict(contact)
+    primary_phone = (normalized.get("whatsapp") or normalized.get("phone") or "").strip()
+    if primary_phone:
+        normalized["whatsapp"] = primary_phone
+        normalized.setdefault("phone", primary_phone)
+        normalized["_needs_phone"] = False
+    data: Dict[str, Any] = {}
+    comment = None
     try:
-        if contacts_path.exists():
-            with open(contacts_path, encoding="utf-8") as f:
-                data: Dict[str, Any] = json.load(f)
-        else:
-            data = {}
+        for source_path in (legacy_contacts_path, contacts_path):
+            if not source_path.exists():
+                continue
+            with open(source_path, encoding="utf-8") as f:
+                source_data = json.load(f)
+            if not isinstance(source_data, dict):
+                continue
+            if comment is None and "_comment" in source_data:
+                comment = source_data.get("_comment")
+            for key, value in source_data.items():
+                if key == "_comment":
+                    continue
+                data[key] = value
     except (OSError, json.JSONDecodeError):
         data = {}
 
-    # Сохраняем _comment если есть
-    comment = data.get("_comment")
-    data[client_name] = contact
+    data[client_name] = normalized
     if comment is not None:
         data["_comment"] = comment
 
@@ -365,7 +381,7 @@ def _save_contact(client_name: str, contact: Dict[str, Any]) -> None:
 
 # ─── WhatsApp + Notification ──────────────────────────────────────────────────
 
-async def _send_whatsapp_and_notify(dialog: Dict[str, Any]) -> None:
+async def _send_whatsapp_and_notify(dialog: Dict[str, Any]) -> bool:
     """Отправляет WhatsApp-сообщение и уведомляет всех наблюдателей.
 
     Повторяет попытку до 3 раз с интервалом 5 минут при неудаче.
@@ -375,6 +391,7 @@ async def _send_whatsapp_and_notify(dialog: Dict[str, Any]) -> None:
     from collector.collection_agent import generate_message
     from collector.communications import send_whatsapp, get_observer_ids
     from collector.collections_db import update_after_contact
+    from collector.dialog_store import update_dialog, STATE_CONFIRMED
 
     client_name  = dialog["client_name"]
     manager_name = dialog["manager_name"]
@@ -444,6 +461,9 @@ async def _send_whatsapp_and_notify(dialog: Dict[str, Any]) -> None:
             update_after_contact(client_name, "whatsapp", level, message_text)
         except Exception as e:
             logger.error("[%s] update_after_contact ошибка: %s", client_name, e)
+        if manager_chat_id:
+            update_dialog(int(manager_chat_id), state=STATE_CONFIRMED)
+            dialog["state"] = STATE_CONFIRMED
 
         # Регистрируем клиентский диалог
         if phone and manager_chat_id:
@@ -484,6 +504,7 @@ async def _send_whatsapp_and_notify(dialog: Dict[str, Any]) -> None:
 
     for obs_id in observer_ids:
         await _send_msg(obs_id, notify_text)
+    return wa_ok
 
 
 async def _escalate_to_admin(dialog: Dict[str, Any]) -> None:
@@ -550,10 +571,12 @@ async def _send_deadline_exceeded(dialog: Dict[str, Any]) -> None:
 
 async def _on_confirm(dialog: Dict[str, Any], mid: int) -> None:
     """Менеджер подтвердил актуальность данных — отправить WhatsApp."""
-    from collector.dialog_store import update_dialog, STATE_CONFIRMED
-    update_dialog(mid, state=STATE_CONFIRMED)
-    dialog["state"] = STATE_CONFIRMED
-    await _send_whatsapp_and_notify(dialog)
+    sent = await _send_whatsapp_and_notify(dialog)
+    if not sent:
+        await _send_msg(
+            mid,
+            "⚠️ Отправка не подтверждена. Кейс оставлен активным и не переведён в CONFIRMED.",
+        )
 
 
 async def _on_update(dialog: Dict[str, Any], mid: int) -> None:
@@ -644,18 +667,28 @@ async def _on_data_received(
 
 async def _on_data_confirmed(dialog: Dict[str, Any], mid: int) -> None:
     """Менеджер подтвердил AI-распознанные данные — применить и отправить."""
-    from collector.dialog_store import update_dialog, STATE_CONFIRMED
+    from collector.dialog_store import update_dialog, STATE_AWAITING_CONFIRM
     current  = dialog.get("current_contact") or {}
     proposed = dialog.get("proposed_contact") or {}
     merged   = {**current, **proposed}
 
     _save_contact(dialog["client_name"], merged)
-    update_dialog(mid, state=STATE_CONFIRMED, current_contact=merged)
-    dialog["state"]           = STATE_CONFIRMED
+    update_dialog(
+        mid,
+        state=STATE_AWAITING_CONFIRM,
+        current_contact=merged,
+        proposed_contact=None,
+    )
+    dialog["state"]           = STATE_AWAITING_CONFIRM
     dialog["current_contact"] = merged
 
     await _send_msg(mid, "✅ Данные обновлены.")
-    await _send_whatsapp_and_notify(dialog)
+    sent = await _send_whatsapp_and_notify(dialog)
+    if not sent:
+        await _send_msg(
+            mid,
+            "⚠️ WhatsApp не отправлен. Диалог возвращён в ожидание подтверждения без CONFIRMED.",
+        )
 
 
 async def _on_data_edit(dialog: Dict[str, Any], mid: int) -> None:
@@ -765,10 +798,14 @@ async def _send_control_reminder(dialog: Dict[str, Any]) -> None:
 
 async def _on_admin_send(dialog: Dict[str, Any], mid: int) -> None:
     """Администратор решил отправить уведомление клиенту сейчас."""
-    from collector.dialog_store import update_dialog, STATE_CONFIRMED
-    update_dialog(mid, state=STATE_CONFIRMED)
-    dialog["state"] = STATE_CONFIRMED
-    await _send_whatsapp_and_notify(dialog)
+    sent = await _send_whatsapp_and_notify(dialog)
+    if not sent:
+        for admin_id in _get_admin_ids():
+            await _send_msg(
+                admin_id,
+                f"⚠️ Отправка клиенту {dialog['client_name']} не подтверждена. "
+                f"Кейс оставлен активным без CONFIRMED.",
+            )
 
 
 async def _on_admin_extend(dialog: Dict[str, Any], mid: int) -> None:
@@ -821,6 +858,26 @@ async def _on_admin_call_manager(dialog: Dict[str, Any], mid: int) -> None:
         f"❓ Вадим требует объяснений.\n"
         f"Напишите ответ ответным сообщением:",
     )
+
+
+async def _send_admin_timeout_escalation(dialog: Dict[str, Any], age_hours: float) -> None:
+    """Передаёт кейс администратору, если менеджер молчит слишком долго."""
+    mid = dialog["manager_chat_id"]
+    text = (
+        f"⏱️ <b>Эскалация из-за молчания менеджера</b>\n\n"
+        f"Менеджер: {dialog['manager_name']}\n"
+        f"Клиент: {dialog['client_name']}\n"
+        f"Просрочка: {dialog['days']} дн. | {_fmt_amount(dialog['amount'])} тг\n\n"
+        f"Нет ответа менеджера уже {int(age_hours)} ч.\n"
+        f"Кейс передан на решение руководителю."
+    )
+    markup = _inline([
+        [("📤 Уведомить клиента сейчас", f"col_adm_send_{mid}")],
+        [("💬 Вызвать менеджера на отчёт", f"col_adm_call_{mid}")],
+        [("⏳ Продлить контроль +1 день", f"col_adm_extend_{mid}")],
+    ])
+    for admin_id in _get_admin_ids():
+        await _send_msg(admin_id, text, markup)
 
 
 async def _on_manager_explanation(dialog: Dict[str, Any], mid: int, text: str) -> None:
@@ -887,6 +944,11 @@ async def _on_phone_ok(dialog: Dict[str, Any], mid: int) -> None:
     from collector.dialog_store import update_dialog
     contact = dict(dialog.get("current_contact") or {})
     contact["phone_confirmations"] = contact.get("phone_confirmations", 0) + 1
+    primary_phone = (contact.get("whatsapp") or contact.get("phone") or "").strip()
+    if primary_phone:
+        contact["whatsapp"] = primary_phone
+        contact["phone"] = primary_phone
+        contact["_needs_phone"] = False
     _save_contact(dialog["client_name"], contact)
     update_dialog(mid, phone_confirmed=True, current_contact=contact)
     dialog["phone_confirmed"] = True
@@ -901,6 +963,7 @@ async def _on_phone_edit(dialog: Dict[str, Any], mid: int) -> None:
     update_dialog(mid, awaiting_phone_text=True, state=STATE_AWAITING_PHONE_TEXT)
     contact = dict(dialog.get("current_contact") or {})
     contact["phone_confirmations"] = 0
+    contact["_needs_phone"] = True
     _save_contact(dialog["client_name"], contact)
     update_dialog(mid, current_contact=contact)
     await _send_msg(
@@ -1104,7 +1167,9 @@ async def handle_text_message(chat_id: int, text: str) -> bool:
         phone_clean = "".join(c for c in text if c.isdigit() or c == "+")
         contact = dict(dialog.get("current_contact") or {})
         contact["phone"] = phone_clean
+        contact["whatsapp"] = phone_clean
         contact["phone_confirmations"] = 1
+        contact["_needs_phone"] = False
         _save_contact(dialog["client_name"], contact)
         update_dialog(
             chat_id,
@@ -1250,9 +1315,6 @@ async def send_reminders() -> None:
         STATE_DEADLINE_SET,
     )
 
-    from collector.dialog_store import STATE_DONE
-    DIALOG_EXPIRE_HOURS = float(os.getenv("DIALOG_EXPIRE_HOURS", "48"))
-
     pending = get_all_pending()
     now = datetime.now(TZ)
 
@@ -1262,26 +1324,37 @@ async def send_reminders() -> None:
         if not mid:
             continue
 
-        # Авто-сброс застрявшего диалога через DIALOG_EXPIRE_HOURS (по умолчанию 48 ч)
+        # Эскалируем админу молчаливые кейсы, чтобы менеджер не был единственной точкой отказа.
         created_str = dialog.get("created") or dialog.get("last_reminded")
         if created_str:
             try:
                 created_dt = datetime.fromisoformat(created_str)
+                if created_dt.tzinfo is None:
+                    created_dt = created_dt.replace(tzinfo=TZ)
                 age_hours = (now - created_dt).total_seconds() / 3600
-                if age_hours > DIALOG_EXPIRE_HOURS:
+                if age_hours > COLLECTOR_MANAGER_SILENCE_HOURS and not dialog.get("escalated_at"):
                     logger.warning(
-                        "[%s] диалог старше %.0f ч — авто-сброс (state=%s)",
+                        "[%s] менеджер молчит %.1f ч — эскалация админу (state=%s)",
                         dialog.get("client_name"), age_hours, state,
                     )
-                    update_dialog(mid, state=STATE_DONE)
+                    update_dialog(
+                        mid,
+                        control_deadline=now.isoformat(),
+                        escalated_at=now.isoformat(),
+                    )
+                    dialog["control_deadline"] = now.isoformat()
+                    dialog["escalated_at"] = now.isoformat()
                     await _send_msg(
                         mid,
                         f"⏱️ Диалог по клиенту <b>{dialog.get('client_name')}</b> "
-                        f"закрыт автоматически (нет ответа {int(age_hours)} ч).",
+                        f"передан руководителю (нет ответа {int(age_hours)} ч).",
                     )
+                    await _send_admin_timeout_escalation(dialog, age_hours)
                     continue
             except (ValueError, TypeError):
                 pass
+        if dialog.get("escalated_at"):
+            continue
 
         # Проверяем время последнего напоминания
         last_str = dialog.get("last_reminded")

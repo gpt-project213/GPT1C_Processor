@@ -4,7 +4,7 @@
 collections/communications.py
 Единый gateway для отправки сообщений должникам и уведомлений команде.
 
-Версия: 1.0.2 (2026-04-09)
+Версия: 1.0.3 (2026-04-11)
 
 Каналы:
   WhatsApp — Green API (GREENAPI_ID, GREENAPI_TOKEN из .env)
@@ -68,7 +68,11 @@ def send_whatsapp(phone: str, text: str) -> bool:
     if TEST_MODE and TEST_WA_PHONE:
         logger.info("TEST_MODE: redirecting WhatsApp to %s (original: %s)", TEST_WA_PHONE, phone)
         phone = TEST_WA_PHONE
-    if not WHATSAPP_ENABLED:
+    # FIX-4: hardguard — перечитываем env при каждом вызове, не полагаемся на
+    # модульную константу WHATSAPP_ENABLED (могла быть установлена при старте,
+    # а .env изменился позже или константа устарела после рестарта).
+    _wa_enabled_now = os.getenv("WHATSAPP_ENABLED", "0").lower() in ("1", "true", "yes")
+    if not _wa_enabled_now:
         logger.info("WhatsApp отключён (WHATSAPP_ENABLED=0) — пропуск отправки: %s", phone)
         return False
     if not GREENAPI_ID or not GREENAPI_TOKEN:
