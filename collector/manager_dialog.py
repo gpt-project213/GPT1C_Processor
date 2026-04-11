@@ -387,6 +387,13 @@ async def _send_whatsapp_and_notify(dialog: Dict[str, Any]) -> bool:
     Повторяет попытку до 3 раз с интервалом 5 минут при неудаче.
     После успешной отправки регистрирует клиентский диалог.
     """
+    client_name = str(dialog.get("client_name") or "unknown")
+    logger.error(
+        "[%s] legacy manager_dialog live send blocked; use collector.collections_engine --send-approved --batch-id",
+        client_name,
+    )
+    return False
+
     import asyncio as _asyncio
     from collector.collection_agent import generate_message
     from collector.communications import send_whatsapp, get_observer_ids
