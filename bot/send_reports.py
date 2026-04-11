@@ -1258,7 +1258,7 @@ async def debt_collector_daily(context: ContextTypes.DEFAULT_TYPE):
     try:
         rc, stdout, stderr = await run_script_async(
             "collector/collections_engine.py",
-            "--send" if not dry_run else "--dry-run",
+            "--dry-run",
             timeout=900,
         )
         if rc != 0:

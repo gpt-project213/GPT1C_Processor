@@ -1171,16 +1171,13 @@ def main() -> int:
         asyncio.run(send_approved_batch(args.batch_id, single_client=args.client))
         return 0
 
-    # CLI GUARD: блокируем --send если WHATSAPP_ENABLED=0
+    # Phase 2: legacy live send is disabled; controlled live uses --send-approved.
     if args.send:
-        _wa_cli = os.getenv("WHATSAPP_ENABLED", "0").lower() in ("1", "true", "yes")
-        if not _wa_cli:
-            logger.error(
-                "--send заблокирован: WHATSAPP_ENABLED=0 в .env. "
-                "Для реальной отправки нужны WHATSAPP_ENABLED=1 + LIVE_SEND_ALLOWED=1. "
-                "Сначала запустите --dry-run и проверьте список кандидатов."
-            )
-            return 1
+        logger.error(
+            "--send disabled for Phase 2 controlled live. "
+            "Use --send-approved --batch-id <id> after admin approval."
+        )
+        return 1
 
     dry_run = args.dry_run or not args.send
     if dry_run and not args.dry_run:
