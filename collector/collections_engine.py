@@ -8,8 +8,9 @@ collections/collections_engine.py
 
 CLI:
   python -m collector.collections_engine --dry-run
-  python -m collector.collections_engine --send
-  python -m collector.collections_engine --send --client "ТОО Альфа"
+  python -m collector.collections_engine --preview
+  python -m collector.collections_engine --send-approved --batch-id 20260412-120000-ab12
+  python -m collector.collections_engine --send-approved --batch-id 20260412-120000-ab12 --client "ТОО Альфа"
   python -m collector.collections_engine --check-promises
 
 Жёсткие ограничения (из ТЗ):
@@ -110,6 +111,21 @@ _MANAGERS_CACHE: Optional[Dict[str, Any]] = None
 def _today_str() -> str:
     from datetime import date
     return date.today().isoformat()
+
+
+def _live_send_allowed(reason_prefix: str = "LIVE SEND BLOCKED") -> bool:
+    if not is_allowed_time():
+        logger.error("%s: outside allowed time window", reason_prefix)
+        return False
+    _wa_live = os.getenv("WHATSAPP_ENABLED", "0").lower() in ("1", "true", "yes")
+    _send_ok = os.getenv("LIVE_SEND_ALLOWED", "0").lower() in ("1", "true", "yes")
+    if not _wa_live:
+        logger.error("%s: WHATSAPP_ENABLED=0", reason_prefix)
+        return False
+    if not _send_ok:
+        logger.error("%s: LIVE_SEND_ALLOWED is not enabled", reason_prefix)
+        return False
+    return True
 
 
 def _load_managers() -> Dict[str, Any]:
@@ -851,6 +867,103 @@ async def check_promises() -> None:
                 )
 
 
+async def _send_approved_client(client: Dict[str, Any]) -> Dict[str, Any]:
+    name = str(client.get("name") or "").strip()
+    manager_name = str(client.get("manager") or "").strip()
+    phone = str(client.get("phone") or client.get("whatsapp") or "").strip()
+
+    result = {
+        "name": name,
+        "manager": manager_name,
+        "phone": phone,
+        "status": "skipped",
+        "reason": "",
+    }
+
+    if not name:
+        result["reason"] = "missing client name"
+        return result
+    if not phone:
+        result["reason"] = "missing WhatsApp phone in approved batch"
+        return result
+    if already_contacted_today(name):
+        result["reason"] = "already contacted today"
+        return result
+
+    amount = float(client.get("amount", 0) or 0)
+    days = int(client.get("days", 0) or 0)
+    level = int(client.get("level", 0) or 0)
+    language = str(client.get("language") or "ru")
+    msg_type = str(client.get("msg_type") or "")
+
+    text = generate_message(
+        client_name=name,
+        debt_amount=amount,
+        days_overdue=days,
+        level=level,
+        language=language,
+        manager_name=manager_name,
+        msg_type=msg_type,
+    )
+
+    if not send_whatsapp(phone, text):
+        result["status"] = "failed"
+        result["reason"] = "send_whatsapp returned false"
+        return result
+
+    update_after_contact(name, "whatsapp", level, text)
+    result["status"] = "sent"
+    result["reason"] = "sent from admin-approved batch"
+
+    try:
+        from collector.client_dialog import start_client_dialog
+        phone_clean = "".join(c for c in phone if c.isdigit())
+        await start_client_dialog(
+            phone=phone_clean,
+            client_name=name,
+            manager_name=manager_name,
+            manager_chat_id=_get_manager_chat_id(manager_name) or 0,
+            level=level,
+            days=days,
+            amount=amount,
+            message_text=text,
+        )
+    except Exception as e:
+        logger.error("[%s] start_client_dialog after approved send error: %s", name, e)
+
+    return result
+
+
+async def send_approved_batch(batch_id: str, single_client: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Sends WhatsApp only to clients stored in an admin-approved batch."""
+    from collector.approval_flow import get_approved_clients, is_ready_for_send, record_send_results
+
+    if not is_ready_for_send(batch_id):
+        logger.error("send-approved blocked: batch %s is not admin-approved", batch_id)
+        return []
+    if not _live_send_allowed("SEND-APPROVED BLOCKED"):
+        return []
+
+    clients = get_approved_clients(batch_id)
+    if single_client:
+        needle = single_client.lower()
+        clients = [c for c in clients if needle in str(c.get("name", "")).lower()]
+
+    logger.info(
+        "send-approved: batch=%s candidates=%d%s",
+        batch_id, len(clients),
+        f" client_filter={single_client!r}" if single_client else "",
+    )
+
+    results = []
+    for client in clients:
+        results.append(await _send_approved_client(client))
+
+    record_send_results(batch_id, results)
+    logger.info("send-approved: batch=%s results=%s", batch_id, results)
+    return results
+
+
 async def run_approval_preview(single_client: Optional[str] = None) -> Optional[str]:
     """Формирует список кандидатов и отправляет менеджерам на согласование.
 
@@ -995,8 +1108,8 @@ def main() -> int:
             "Примеры:\n"
             "  python -m collector.collections_engine --dry-run\n"
             "  python -m collector.collections_engine --preview\n"
-            "  python -m collector.collections_engine --send\n"
-            "  python -m collector.collections_engine --send --client 'ТОО Альфа'\n"
+            "  python -m collector.collections_engine --send-approved --batch-id 20260412-120000-ab12\n"
+            "  python -m collector.collections_engine --send-approved --batch-id 20260412-120000-ab12 --client 'ТОО Альфа'\n"
             "  python -m collector.collections_engine --check-promises"
         ),
     )
@@ -1006,6 +1119,10 @@ def main() -> int:
                         help="Сформировать список и отправить менеджерам на согласование (без WhatsApp)")
     parser.add_argument("--send", action="store_true",
                         help="Выполнить реальную отправку сообщений")
+    parser.add_argument("--send-approved", action="store_true",
+                        help="Отправить WhatsApp только клиентам из admin-approved batch")
+    parser.add_argument("--batch-id", type=str, default=None,
+                        help="ID approval batch для --send-approved")
     parser.add_argument("--client", type=str, default=None,
                         help="Обработать только одного клиента (подстрока имени)")
     parser.add_argument("--check-promises", action="store_true",
@@ -1014,7 +1131,10 @@ def main() -> int:
                         help="Одноразовый патч: пересчитать first_seen у клиентов с датой 2026-03-19")
     args = parser.parse_args()
 
-    if not args.dry_run and not args.send and not args.check_promises and not args.preview and not args.fix_first_seen:
+    if (
+        not args.dry_run and not args.send and not args.send_approved
+        and not args.check_promises and not args.preview and not args.fix_first_seen
+    ):
         parser.print_help()
         return 0
 
@@ -1037,6 +1157,13 @@ def main() -> int:
             "fix-first-seen: исправлено=%d, удалено=%d, сброшено=%d",
             result["fixed"], result["reset"], result["skipped"],
         )
+        return 0
+
+    if args.send_approved:
+        if not args.batch_id:
+            logger.error("--send-approved requires --batch-id")
+            return 1
+        asyncio.run(send_approved_batch(args.batch_id, single_client=args.client))
         return 0
 
     # CLI GUARD: блокируем --send если WHATSAPP_ENABLED=0
