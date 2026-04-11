@@ -25,6 +25,7 @@ Callback prefix: wa_appr_
 import json
 import logging
 import os
+import secrets
 import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -123,7 +124,7 @@ def create_batch(
         batch dict (ещё не сохранён — вызовите save_batch() отдельно).
     """
     now = datetime.now(tz=TZ)
-    batch_id = now.strftime("%Y%m%d-%H%M")
+    batch_id = f"{now.strftime('%Y%m%d-%H%M%S')}-{secrets.token_hex(2)}"
 
     managers_state: Dict[str, Any] = {}
     for manager_name, clients in debtors_by_manager.items():
