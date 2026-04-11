@@ -163,7 +163,7 @@ def create_batch(
 
         managers_state[manager_name] = {
             "clients":         normalized,
-            "status":          "pending",        # pending | approved_all | rejected_all | manual | timeout
+            "status":          "pending",        # pending | approved_all | rejected_all | manual_editing | manual_done | timeout
             "approved_names":  [],
             "rejected_names":  [],
             "postponed_names": [],
@@ -440,8 +440,12 @@ def _build_decisions(mgr_state: Dict[str, Any]) -> Dict[str, str]:
 
 def _all_managers_responded(batch: Dict[str, Any]) -> bool:
     for mgr_state in batch["managers"].values():
-        if mgr_state.get("status") == "pending":
-            return False
+        status = mgr_state.get("status")
+        if status in ("approved_all", "rejected_all", "manual_done", "timeout"):
+            continue
+        if status == "manual" and mgr_state.get("responded_at"):
+            continue
+        return False
     return True
 
 
@@ -526,7 +530,8 @@ async def handle_manager_callback(
     elif action == "wa_appr_mgr_manual":
         # Режим ручного выбора — показываем список
         decisions = _build_decisions(mgr_state)
-        mgr_state["status"] = "manual"
+        mgr_state["status"] = "manual_editing"
+        mgr_state["responded_at"] = None
         save_batch(batch)
         text = (
             f"✏️ <b>Выбор вручную</b>\n\n"
@@ -559,7 +564,7 @@ async def handle_manager_callback(
             await _tg_edit(chat_id, message_id, text, markup)
             return True
 
-        mgr_state["status"]          = "manual"
+        mgr_state["status"]          = "manual_done"
         mgr_state["approved_names"]  = approved
         mgr_state["rejected_names"]  = rejected
         mgr_state["postponed_names"] = postponed
@@ -669,7 +674,9 @@ def _format_admin_summary_text(batch: Dict[str, Any]) -> str:
             status_label = f"✅ разрешил всех ({len(approved)})"
         elif status == "rejected_all":
             status_label = f"⛔ отклонил всех ({len(rejected)})"
-        elif status == "manual":
+        elif status == "manual_editing":
+            status_label = f"✏️ выбирает вручную"
+        elif status in ("manual", "manual_done"):
             status_label = f"✏️ выбрал вручную"
         elif status == "timeout":
             status_label = "⏰ не ответил вовремя"
@@ -725,8 +732,8 @@ def _format_admin_detail_text(batch: Dict[str, Any]) -> str:
         clients = mgr_state.get("clients", [])
 
         mgr_icon = {
-            "approved_all": "✅", "manual": "✅",
-            "rejected_all": "⛔", "pending": "⏳", "timeout": "⏰",
+            "approved_all": "✅", "manual": "✅", "manual_done": "✅",
+            "rejected_all": "⛔", "pending": "⏳", "manual_editing": "⏳", "timeout": "⏰",
         }.get(mgr_status, "❓")
 
         lines.append(f"\n<b>{mgr_icon} {manager_name}</b>")
@@ -963,7 +970,7 @@ def get_pending_managers(batch_id: str) -> List[str]:
         return []
     return [
         name for name, state in batch["managers"].items()
-        if state.get("status") == "pending"
+        if state.get("status") in ("pending", "manual_editing")
     ]
 
 
