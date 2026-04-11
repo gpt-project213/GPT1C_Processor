@@ -179,7 +179,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.41/11.04.2026"
+__VERSION__ = "v9.4.42/11.04.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
@@ -1721,7 +1721,11 @@ async def weekly_ai_generation(context: ContextTypes.DEFAULT_TYPE):
     # Проверка: запускаем только в понедельник
     if datetime.now(TZ).weekday() != 0:  # 0 = понедельник
         return
-    
+    from bot.workday_checker import is_holiday_today
+    if is_holiday_today():
+        logger.info("weekly_ai_generation: выходной — пропуск")
+        return
+
     log_event("weekly_ai_start")
     
     results = []
@@ -2201,7 +2205,11 @@ async def send_daily_summary_to_admin(context: ContextTypes.DEFAULT_TYPE):
     """Отправляет ежедневную сводку админу в 23:00"""
     if not ADMIN_ACTIVITY_LOG or not ADMIN_CHAT_ID:
         return
-    
+    from bot.workday_checker import is_holiday_today
+    if is_holiday_today():
+        logger.info("send_daily_summary_to_admin: выходной — пропуск")
+        return
+
     try:
         activity = _load_daily_activity()
         today = activity.get("date", datetime.now(TZ).strftime("%Y-%m-%d"))
@@ -3184,8 +3192,9 @@ def _should_notify_manager_today(manager_name: str, period_str: str) -> bool:
 async def pipeline_task(context: ContextTypes.DEFAULT_TYPE):
     log_event("pipeline_cycle_start")
     _imap_rc, _imap_out, _imap_err = await run_script_async("imap_fetcher.py", "--once")
-    # v9.4.25: Уведомляем admin если почта не ответила
-    if _imap_rc != 0 and ADMIN_CHAT_ID:
+    # v9.4.25: Уведомляем admin если почта не ответила (пропуск в выходной)
+    from bot.workday_checker import is_holiday_today as _imap_is_holiday
+    if _imap_rc != 0 and ADMIN_CHAT_ID and not _imap_is_holiday():
         try:
             _err_preview = (_imap_err or _imap_out or "")[:200].strip()
             _msg = await context.bot.send_message(
@@ -3770,6 +3779,10 @@ async def send_opportunity_loss_report(context=None):
     if datetime.now(TZ).weekday() != 4:
         logger.info("💸 opportunity_loss: сегодня не пятница — пропуск автозапуска")
         return
+    from bot.workday_checker import is_holiday_today
+    if is_holiday_today():
+        logger.info("send_opportunity_loss_report: выходной — пропуск")
+        return
 
     logger.info("💸 Расчёт упущенной прибыли...")
 
@@ -4127,6 +4140,9 @@ def _touch_notify_state(file_path: str) -> None:
         log_event("save_state_error", error=str(e), level="ERROR")
 
 async def new_reports_notifier(context: ContextTypes.DEFAULT_TYPE):
+    from bot.workday_checker import is_holiday_today
+    if is_holiday_today():
+        return
     log_event("notifier_start")
     MAX_NOTIFICATIONS_PER_CYCLE = 50
     state = _load_json_safe(NOTIFY_STATE_PATH)
@@ -5867,6 +5883,10 @@ def _build_manager_ranking(json_dir: Path, analytics_dir: Path) -> Optional[str]
 
 async def weekly_analytics_job(context):
     """v9.4.26: Генерация аналитических отчётов + уведомление admin/subadmin + alert если нет expenses"""
+    from bot.workday_checker import is_holiday_today
+    if is_holiday_today():
+        logger.info("weekly_analytics_job: выходной — пропуск")
+        return
     log_event("weekly_analytics_start")
     scripts = [
         "sales_profitability_report.py",
@@ -6918,24 +6938,40 @@ def main():
         # ── Стоп-лист отгрузки (Саида) ─────────────────────────────
         if _DEBT_STOP_AVAILABLE:
             async def _job_dstop_monitor(ctx):
+                from bot.workday_checker import is_holiday_today
+                if is_holiday_today():
+                    logger.info("_job_dstop_monitor: выходной — пропуск")
+                    return
                 try:
                     await _dstop_monitor(ctx.bot)
                 except Exception as e:
                     logger.error("debt_stop monitor error: %s", e)
 
             async def _job_dstop_managers(ctx):
+                from bot.workday_checker import is_holiday_today
+                if is_holiday_today():
+                    logger.info("_job_dstop_managers: выходной — пропуск")
+                    return
                 try:
                     await _dstop_managers(ctx.bot)
                 except Exception as e:
                     logger.error("debt_stop managers error: %s", e)
 
             async def _job_dstop_escalate(ctx):
+                from bot.workday_checker import is_holiday_today
+                if is_holiday_today():
+                    logger.info("_job_dstop_escalate: выходной — пропуск")
+                    return
                 try:
                     await _dstop_escalate(ctx.bot)
                 except Exception as e:
                     logger.error("debt_stop escalate error: %s", e)
 
             async def _job_dstop_saida(ctx):
+                from bot.workday_checker import is_holiday_today
+                if is_holiday_today():
+                    logger.info("_job_dstop_saida: выходной — пропуск")
+                    return
                 try:
                     await _dstop_saida(ctx.bot)
                 except Exception as e:

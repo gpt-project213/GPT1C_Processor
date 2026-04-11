@@ -565,9 +565,9 @@ _engine_src = (_pathlib.Path(__file__).parent.parent
                / "collector" / "collections_engine.py").read_text(encoding="utf-8")
 _no_direct_send = (
     "direct send без manager lock" not in _engine_src
-    and "direct send запрещён" not in _engine_src
     and "manager_chat_id = None" not in _engine_src
 )
+# Примечание: "direct send запрещён" теперь есть в коде как guard-лог OP-4 — это корректно
 check(
     "FIX-2: ветка 'direct send без manager lock' удалена из кода",
     _no_direct_send,

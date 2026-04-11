@@ -4,7 +4,7 @@
 collector/approval_flow.py
 UX согласования рассылки WhatsApp — менеджер → администратор.
 
-Версия: 1.0.0 (2026-04-11)
+Версия: 1.0.1 (2026-04-11)
 
 Жизненный цикл:
   1. create_batch(debtors_by_manager)       → batch dict
@@ -625,12 +625,71 @@ def _format_admin_summary_text(batch: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _format_admin_detail_text(batch: Dict[str, Any]) -> str:
+    """Подробный список всех клиентов для финального решения директора.
+    На каждого клиента: имя, менеджер, долг, просрочка, телефон, статус согласования.
+    """
+    lines = [
+        "📋 <b>Итоговый список перед отправкой — подробно</b>\n",
+        f"Батч: <code>{batch['batch_id']}</code>\n",
+    ]
+
+    total_ready = 0
+    total_all   = 0
+
+    for manager_name, mgr_state in batch["managers"].items():
+        mgr_status  = mgr_state.get("status", "pending")
+        approved_set  = set(mgr_state.get("approved_names", []))
+        rejected_set  = set(mgr_state.get("rejected_names", []))
+        postponed_set = set(mgr_state.get("postponed_names", []))
+        clients = mgr_state.get("clients", [])
+
+        mgr_icon = {
+            "approved_all": "✅", "manual": "✅",
+            "rejected_all": "⛔", "pending": "⏳", "timeout": "⏰",
+        }.get(mgr_status, "❓")
+
+        lines.append(f"\n<b>{mgr_icon} {manager_name}</b>")
+
+        for c in clients:
+            name = c["name"]
+            amount_fmt = f"{c['amount']:,.0f}".replace(",", " ")
+            phone = c.get("phone", "") or "—"
+            days  = c.get("days", 0)
+            total_all += 1
+
+            if name in approved_set:
+                icon = "✅"
+                total_ready += 1
+            elif name in rejected_set:
+                icon = "❌"
+            elif name in postponed_set:
+                icon = "⏸"
+            else:
+                icon = "◯"
+
+            lines.append(
+                f"  {icon} <b>{name}</b>\n"
+                f"     Долг: {amount_fmt} тг · Просрочка: {days} дн.\n"
+                f"     Тел: <code>{phone}</code>"
+            )
+
+    lines += [
+        "",
+        f"<b>К отправке: {total_ready}</b> из {total_all}",
+        "",
+        "Нажмите <b>«✅ Разрешить тестовую отправку»</b> для финального утверждения.",
+        "<i>Сообщения уйдут только после вашего подтверждения.</i>",
+    ]
+    return "\n".join(lines)
+
+
 def _admin_keyboard(batch_id: str) -> Dict[str, Any]:
     return _inline_kb([
-        [("✅ Утвердить отправку",             f"wa_appr_adm_ok|{batch_id}")],
-        [("👀 Посмотреть по менеджерам",       f"wa_appr_adm_view|{batch_id}")],
-        [("❌ Отменить всё",                   f"wa_appr_adm_no|{batch_id}")],
-        [("⏸ Отложить на потом",              f"wa_appr_adm_later|{batch_id}")],
+        [("✅ Разрешить тестовую отправку",    f"wa_appr_adm_ok|{batch_id}")],
+        [("👀 Показать список подробнее",      f"wa_appr_adm_view|{batch_id}")],
+        [("❌ Отменить",                       f"wa_appr_adm_no|{batch_id}")],
+        [("⏸ Отложить",                       f"wa_appr_adm_later|{batch_id}")],
     ])
 
 
@@ -737,8 +796,8 @@ async def handle_admin_callback(
         logger.info("[%s] Администратор отложил решение", batch_id)
 
     elif action == "wa_appr_adm_view":
-        # Расширенный просмотр по менеджерам — просто обновляем сводку
-        text   = _format_admin_summary_text(batch)
+        # Подробный список всех клиентов: телефон + статус согласования менеджера
+        text   = _format_admin_detail_text(batch)
         markup = _admin_keyboard(batch_id)
         await _tg_edit(chat_id, message_id, text, markup)
 
