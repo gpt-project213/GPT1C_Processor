@@ -4,7 +4,7 @@
 collections/debt_monitor.py
 Анализ дебиторки, классификация должников по уровням давления.
 
-Версия: 1.0.3 (2026-04-09)
+Версия: 1.0.5 (2026-04-11)
 
 Уровни:
   0–9 дней   → level 0 (пропустить)
@@ -85,10 +85,11 @@ def load_latest_debt_json() -> Dict[str, Any]:
         logger.warning("Нет debt_ext_*.json в %s", JSON_DIR)
         return {}
 
-    # Группируем по базовому имени (убираем суффикс ' (NNN)')
+    # Группируем по базовому имени (убираем суффикс ' (NNN)' и timestamp-префикс YYYYMMDDHHMMSS_)
     groups: Dict[str, List[Path]] = {}
     for p in candidates:
         base = re.sub(r"\s*\(\d+\)$", "", p.stem)
+        base = re.sub(r"^(debt_ext_)\d{14}_", r"\1", base)
         groups.setdefault(base, []).append(p)
 
     merged_clients: Dict[str, Dict[str, Any]] = {}
@@ -246,15 +247,16 @@ def classify_debtors(debt_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         # Нарушение: была отгрузка при наличии предыдущего долга
         opening = _safe_float(client.get("opening") or 0)
         debit   = _safe_float(client.get("debit") or 0)
-        # BUG-C1 fix: violation только при просрочке >= 7 дней (OVERDUE_DAYS).
-        # Без порога дней условие срабатывало для ВСЕХ активных торговых клиентов
-        # (opening>=100 просто означает «была задолженность на начало периода»).
+        # Нарушение: отгрузка при наличии предыдущего долга И просрочка >= 7 дней.
+        # Флаг violation_shipment используется ТОЛЬКО для уведомления менеджера ("Внимание!").
+        # Повышение level производится только по стандартным порогам (_level_for_days).
         violation_shipment = opening >= 100 and debit > 0 and days >= 7
 
         level = _level_for_days(days)
-        # Нарушение → минимум уровень 1, даже если дней молчания < 10
-        if violation_shipment and level == 0:
-            level = 1
+        # Уровень определяется только по дням (стандартные пороги):
+        # 0–9 дней → level 0 (не трогаем), 10+ → level 1 и выше.
+        # violation_shipment НЕ повышает level — иначе 7–9-дневные клиенты
+        # попадали бы в коллектор как должники, хотя они ещё активны.
 
         # Извлекаем credit (платежи) для статистики
         credit = _safe_float(client.get("credit") or 0)
@@ -264,6 +266,7 @@ def classify_debtors(debt_data: Dict[str, Any]) -> List[Dict[str, Any]]:
             "amount": amount,
             "days": days,
             "level": level,
+            "opening": opening,
             "violation_shipment": violation_shipment,
             "debit": debit,    # текущие отгрузки (>0 = клиент активно покупает)
             "credit": credit,  # платежи за период (>0 = клиент что-то платит)

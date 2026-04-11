@@ -4,7 +4,7 @@
 collector/approval_flow.py
 UX согласования рассылки WhatsApp — менеджер → администратор.
 
-Версия: 1.0.1 (2026-04-11)
+Версия: 1.0.2 (2026-04-11)
 
 Жизненный цикл:
   1. create_batch(debtors_by_manager)       → batch dict
@@ -140,13 +140,25 @@ def create_batch(
         # Нормализуем клиентов (только нужные поля)
         normalized = []
         for c in clients:
+            msg_type = c.get("msg_type")
+            reason = c.get("reason")
+            if not msg_type or not reason:
+                msg_type, reason = _classify_msg_type_and_reason(c)
             normalized.append({
-                "name":     c.get("name", "—"),
-                "amount":   float(c.get("amount", 0)),
-                "days":     int(c.get("days", 0)),
-                "level":    int(c.get("level", 0)),
-                "phone":    c.get("phone") or c.get("whatsapp") or "",
-                "language": c.get("language", "ru"),
+                "name":              c.get("name", "—"),
+                "amount":            float(c.get("amount", 0)),
+                "days":              int(c.get("days", 0)),
+                "level":             int(c.get("level", 0)),
+                "opening":           float(c.get("opening", 0) or 0),
+                "debit":             float(c.get("debit", 0) or 0),
+                "credit":            float(c.get("credit", 0) or 0),
+                "violation_shipment": bool(c.get("violation_shipment", False)),
+                "msg_type":          msg_type,
+                "reason":            reason,
+                "stop_status":       c.get("stop_status", ""),
+                "review_action":     c.get("review_action", "client_approval"),
+                "phone":             c.get("phone") or c.get("whatsapp") or "",
+                "language":          c.get("language", "ru"),
             })
 
         managers_state[manager_name] = {
@@ -175,6 +187,67 @@ def create_batch(
         sum(len(v["clients"]) for v in managers_state.values()),
     )
     return batch
+
+
+# ─── Payment discipline classifier ───────────────────────────────────────────
+
+_MSG_TYPE_LABELS = {
+    "strict_reminder":      "Строгое напоминание",
+    "payment_plan_control": "Контроль графика",
+    "soft_reminder":        "Мягкое напоминание",
+    "stoplist_reminder":    "Стоп-лист",
+}
+
+
+def _classify_msg_type_and_reason(c: Dict[str, Any]) -> tuple:
+    """Определяет тип сообщения и причину попадания клиента в список.
+
+    Returns:
+        (msg_type, reason) — строки для отображения менеджеру/директору.
+    """
+    opening   = float(c.get("opening", 0) or 0)
+    debit     = float(c.get("debit", 0) or 0)
+    credit    = float(c.get("credit", 0) or 0)
+    amount    = float(c.get("amount", 0) or 0)
+    days      = int(c.get("days", 0) or 0)
+    violation = bool(c.get("violation_shipment", False))
+    stop_status = str(c.get("stop_status") or "")
+
+    def fmt(n: float) -> str:
+        return f"{n:,.0f}".replace(",", " ")
+
+    if stop_status in ("stopped", "auto_stopped"):
+        return "stoplist_reminder", f"статус {stop_status}, долг {fmt(amount)} тг не закрыт"
+    if stop_status in ("pending_clearance", "conditional"):
+        return "payment_plan_control", f"статус {stop_status}, требуется ручная проверка перед текстом"
+
+    # Заморожен — нет ни отгрузок, ни оплат
+    if debit == 0 and credit == 0:
+        return "strict_reminder", f"{days}д, нет отгрузок и оплат"
+
+    # Активные отгрузки при старом долге
+    if violation and debit > 0:
+        if credit > 0 and credit >= debit * 0.85:
+            # Платит почти всё что берёт, хвост небольшой
+            return "payment_plan_control", (
+                f"оборот {fmt(debit)} тг, оплаты {fmt(credit)} тг, хвост {fmt(amount)} тг"
+            )
+        return "strict_reminder", (
+            f"отгрузки {fmt(debit)} тг при начальном долге {fmt(opening)} тг, "
+            f"оплаты {fmt(credit)} тг"
+        )
+
+    # Есть оплаты, нет новых отгрузок
+    if credit > 0 and debit == 0:
+        base = opening if opening > 0 else amount
+        pct = (credit / base * 100) if base > 0 else 0
+        if pct < 15:
+            return "soft_reminder", (
+                f"оплата {fmt(credit)} тг ({pct:.0f}% от долга), остаток {fmt(amount)} тг"
+            )
+        return "soft_reminder", f"оплата {fmt(credit)} тг, остаток {fmt(amount)} тг"
+
+    return "strict_reminder", f"{days}д просрочки, долг {fmt(amount)} тг"
 
 
 # ─── Telegram helpers ─────────────────────────────────────────────────────────
@@ -243,15 +316,22 @@ def _format_manager_preview_text(
     batch_id: str,
 ) -> str:
     """Формирует текст превью для менеджера."""
+    def _fmt(n: float) -> str:
+        return f"{n:,.0f}".replace(",", " ")
+
     lines = [
         f"👋 <b>{manager_name}</b>, добрый день!\n",
-        f"Бот предлагает отправить уведомление об оплате <b>{len(clients)} клиент(ам)</b>:\n",
+        f"Бот предлагает отправить уведомление <b>{len(clients)} клиент(ам)</b>:\n",
     ]
     for i, c in enumerate(clients, 1):
-        amount_fmt = f"{c['amount']:,.0f}".replace(",", " ")
+        viol_tag = " ⚠️" if c.get("violation_shipment") else ""
+        type_label = _MSG_TYPE_LABELS.get(c.get("msg_type", ""), c.get("msg_type", ""))
         lines.append(
-            f"  {i}. <b>{c['name']}</b>\n"
-            f"     Долг: {amount_fmt} тг · Просрочка: {c['days']} дн."
+            f"  {i}. <b>{c['name']}</b>{viol_tag}\n"
+            f"     Долг: {_fmt(c['amount'])} тг · Просрочка: {c['days']} дн. · L{c['level']}\n"
+            f"     Отгрузки: {_fmt(c['debit'])} тг · Оплаты: {_fmt(c['credit'])} тг\n"
+            f"     Тип: {type_label}\n"
+            f"     Причина: {c.get('reason', '—')}"
         )
     lines += [
         "",
@@ -651,11 +731,15 @@ def _format_admin_detail_text(batch: Dict[str, Any]) -> str:
 
         lines.append(f"\n<b>{mgr_icon} {manager_name}</b>")
 
+        def _fmt(n: float) -> str:
+            return f"{n:,.0f}".replace(",", " ")
+
         for c in clients:
             name = c["name"]
-            amount_fmt = f"{c['amount']:,.0f}".replace(",", " ")
             phone = c.get("phone", "") or "—"
             days  = c.get("days", 0)
+            viol_tag = " ⚠️" if c.get("violation_shipment") else ""
+            type_label = _MSG_TYPE_LABELS.get(c.get("msg_type", ""), c.get("msg_type", ""))
             total_all += 1
 
             if name in approved_set:
@@ -669,8 +753,10 @@ def _format_admin_detail_text(batch: Dict[str, Any]) -> str:
                 icon = "◯"
 
             lines.append(
-                f"  {icon} <b>{name}</b>\n"
-                f"     Долг: {amount_fmt} тг · Просрочка: {days} дн.\n"
+                f"  {icon} <b>{name}</b>{viol_tag}\n"
+                f"     Долг: {_fmt(c['amount'])} тг · Просрочка: {days} дн. · L{c.get('level', '?')}\n"
+                f"     Отгрузки: {_fmt(c.get('debit', 0))} тг · Оплаты: {_fmt(c.get('credit', 0))} тг\n"
+                f"     Тип: {type_label} · {c.get('reason', '—')}\n"
                 f"     Тел: <code>{phone}</code>"
             )
 

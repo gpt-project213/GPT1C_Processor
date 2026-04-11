@@ -4,7 +4,7 @@
 collections/collections_engine.py
 Главный оркестратор AI-Коллектора долгов.
 
-Версия: 1.0.9 (2026-04-11)
+Версия: 1.1.0 (2026-04-12)
 
 CLI:
   python -m collector.collections_engine --dry-run
@@ -151,6 +151,138 @@ def _get_client_manager_from_crm(client_name: str) -> str:
     except Exception as e:
         logger.warning("_get_client_manager_from_crm error: %s", e)
     return ""
+
+
+def _load_stop_registry_safe() -> Dict[str, Any]:
+    try:
+        from bot.debt_stop_control import load_registry as _dsc_registry
+        reg = _dsc_registry()
+        return reg if isinstance(reg, dict) else {}
+    except Exception as e:
+        logger.debug("stop-registry load error: %s", e)
+        return {}
+
+
+def _get_stop_record(name: str, registry: Dict[str, Any]) -> Dict[str, Any]:
+    rec = registry.get(name)
+    if isinstance(rec, dict):
+        return rec
+    name_l = name.lower().strip()
+    for key, value in registry.items():
+        if key.lower().strip() == name_l and isinstance(value, dict):
+            return value
+    return {}
+
+
+def _flag_enabled(data: Optional[Dict[str, Any]], *keys: str) -> bool:
+    if not isinstance(data, dict):
+        return False
+    return any(bool(data.get(key)) for key in keys)
+
+
+def _fmt_amount(n: float) -> str:
+    return f"{n:,.0f}".replace(",", " ")
+
+
+def _collector_candidate_decision(
+    client: Dict[str, Any],
+    contact: Optional[Dict[str, Any]],
+    stop_rec: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Business decision for preview shortlist.
+
+    This is intentionally separate from debt_stop_control: stop-list still blocks
+    shipment, but it is not a collector skip reason when debt remains open.
+    """
+    amount = float(client.get("amount", 0) or 0)
+    days = int(client.get("days", 0) or 0)
+    opening = float(client.get("opening", 0) or 0)
+    debit = float(client.get("debit", 0) or 0)
+    credit = float(client.get("credit", 0) or 0)
+    stop_status = str((stop_rec or {}).get("status") or "")
+
+    if amount <= 0:
+        return {"action": "skip", "reason": "долг закрыт"}
+
+    if _flag_enabled(contact, "do_not_notify", "do_not_write", "do_not_contact", "collector_skip"):
+        return {"action": "skip", "reason": "ручной запрет уведомления в CRM"}
+    if _flag_enabled(stop_rec, "do_not_notify", "do_not_write", "do_not_contact", "collector_skip"):
+        return {"action": "skip", "reason": "ручной запрет уведомления в stop-registry"}
+
+    if stop_status in ("stopped", "auto_stopped"):
+        return {
+            "action": "client_approval",
+            "msg_type": "stoplist_reminder",
+            "reason": f"{stop_status}: долг {_fmt_amount(amount)} тг не закрыт",
+            "stop_status": stop_status,
+        }
+
+    if stop_status in ("pending_clearance", "conditional"):
+        return {
+            "action": "manager_review",
+            "msg_type": "payment_plan_control",
+            "reason": f"{stop_status}: нужен ручной контроль перед сообщением клиенту",
+            "stop_status": stop_status,
+        }
+
+    if credit > 0 and amount < 100_000 and amount <= credit * 0.10:
+        return {
+            "action": "skip",
+            "reason": (
+                f"малый остаток после крупной оплаты: "
+                f"оплата {_fmt_amount(credit)} тг, остаток {_fmt_amount(amount)} тг"
+            ),
+        }
+
+    # Healthy payer heuristic: paying at least as much as current shipments and
+    # keeping only a small tail should not receive a hard collector message.
+    base_debt = opening if opening > 0 else amount
+    small_tail = base_debt > 0 and amount <= base_debt * 0.25
+    if debit > 0 and credit >= debit and small_tail:
+        return {
+            "action": "skip",
+            "reason": (
+                f"платёжная дисциплина выглядит нормальной: "
+                f"отгрузки {_fmt_amount(debit)} тг, оплаты {_fmt_amount(credit)} тг, "
+                f"остаток {_fmt_amount(amount)} тг"
+            ),
+        }
+
+    if credit > 0 and debit == 0:
+        pct = (credit / base_debt * 100) if base_debt > 0 else 0
+        if pct < 20 or amount >= 100_000 or days >= 10:
+            return {
+                "action": "client_approval",
+                "msg_type": "payment_plan_control" if amount >= 500_000 else "soft_reminder",
+                "reason": (
+                    f"есть оплата {_fmt_amount(credit)} тг ({pct:.0f}% от долга), "
+                    f"но остаток {_fmt_amount(amount)} тг не закрыт"
+                ),
+            }
+        return {"action": "skip", "reason": "есть существенная оплата, мягкий контроль пока не нужен"}
+
+    if debit > 0:
+        if credit > 0:
+            return {
+                "action": "client_approval",
+                "msg_type": "payment_plan_control" if credit >= debit * 0.85 else "strict_reminder",
+                "reason": (
+                    f"клиент продолжает движение при долге: "
+                    f"отгрузки {_fmt_amount(debit)} тг, оплаты {_fmt_amount(credit)} тг, "
+                    f"остаток {_fmt_amount(amount)} тг"
+                ),
+            }
+        return {
+            "action": "manager_review",
+            "msg_type": "strict_reminder",
+            "reason": f"есть отгрузки {_fmt_amount(debit)} тг при незакрытом долге",
+        }
+
+    return {
+        "action": "client_approval",
+        "msg_type": "strict_reminder",
+        "reason": f"{days}д просрочки, оплат и отгрузок нет, долг {_fmt_amount(amount)} тг",
+    }
 
 
 _NO_PHONE_WARN_PREFIX = "__no_phone_warn__"
@@ -749,9 +881,10 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
     except Exception:
         contacts = load_contacts()
 
-    # Группируем кандидатов по менеджерам (применяем те же фильтры что в run())
+    # Preview shortlist: stop-list and debit/credit are not absolute skips here.
+    # They become explicit business reasons shown to manager/admin.
     debtors_by_manager: Dict[str, List[Dict]] = {}
-    state = load_state()
+    stop_registry = _load_stop_registry_safe()
 
     for client in debtors:
         name = client["name"]
@@ -768,23 +901,6 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
         if level == 0:
             continue
 
-        # Стоп-лист
-        try:
-            from bot.debt_stop_control import load_registry as _dsc_registry
-            _dsc_reg = _dsc_registry()
-            _dsc_rec = _dsc_reg.get(name)
-            if _dsc_rec and _dsc_rec.get("status") in (
-                "stopped", "auto_stopped", "pending_clearance", "conditional"
-            ):
-                continue
-        except Exception:
-            pass
-
-        # FIX-1: активные клиенты пропускаем
-        _debit_val  = client.get("debit", 0.0) or 0.0
-        _credit_val = client.get("credit", 0.0) or 0.0
-        if _debit_val > 0 or _credit_val > 0:
-            continue
         if client.get("amount", 0) <= 0:
             continue
 
@@ -794,15 +910,39 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
 
         # Ищем контакты
         contact = match_client(name, contacts)
-        if not contact:
+        stop_rec = _get_stop_record(name, stop_registry)
+        decision = _collector_candidate_decision(client, contact, stop_rec)
+        if decision.get("action") == "skip":
+            logger.info(
+                "run_approval_preview: [%s] skip — %s",
+                name, decision.get("reason", ""),
+            )
             continue
 
-        _phone = (contact.get("whatsapp") or contact.get("phone", "")).strip()
-        _tg_id = str(contact.get("telegram_id") or "").strip()
+        _phone = ((contact or {}).get("whatsapp") or (contact or {}).get("phone", "")).strip()
+        _tg_id = str((contact or {}).get("telegram_id") or "").strip()
         if not _phone and not _tg_id:
+            manager_name = ""
+            if contact:
+                manager_name = (contact.get("manager", "") or "").strip()
+            if not manager_name:
+                manager_name = str((stop_rec or {}).get("manager") or "").strip()
+            if not manager_name:
+                manager_name = _get_client_manager_from_crm(name)
+            manager_chat_id = _get_manager_chat_id(manager_name) if manager_name else None
+            await _warn_manager_no_phone(
+                name, level, client["amount"], client["days"],
+                manager_name, manager_chat_id, dry_run=False,
+            )
+            logger.info(
+                "run_approval_preview: [%s] no phone/telegram — manager warning requested",
+                name,
+            )
             continue
 
-        manager_name = contact.get("manager", "").strip()
+        manager_name = (contact or {}).get("manager", "").strip()
+        if not manager_name:
+            manager_name = str((stop_rec or {}).get("manager") or "").strip()
         if not manager_name:
             manager_name = _get_client_manager_from_crm(name)
         if not manager_name:
@@ -813,12 +953,20 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
             continue
 
         debtors_by_manager.setdefault(manager_name, []).append({
-            "name":     name,
-            "amount":   client.get("amount", 0),
-            "days":     client.get("days", 0),
-            "level":    level,
-            "phone":    _phone,
-            "language": contact.get("language", "ru"),
+            "name":               name,
+            "amount":             client.get("amount", 0),
+            "days":               client.get("days", 0),
+            "level":              level,
+            "opening":            client.get("opening", 0) or 0,
+            "debit":              client.get("debit", 0) or 0,
+            "credit":             client.get("credit", 0) or 0,
+            "violation_shipment": client.get("violation_shipment", False),
+            "phone":              _phone,
+            "language":           (contact or {}).get("language", "ru"),
+            "msg_type":           decision.get("msg_type"),
+            "reason":             decision.get("reason", ""),
+            "stop_status":        decision.get("stop_status", str((stop_rec or {}).get("status") or "")),
+            "review_action":      decision.get("action", "client_approval"),
         })
 
     if not debtors_by_manager:
@@ -862,9 +1010,11 @@ def main() -> int:
                         help="Обработать только одного клиента (подстрока имени)")
     parser.add_argument("--check-promises", action="store_true",
                         help="Проверить просроченные обещания оплаты")
+    parser.add_argument("--fix-first-seen", action="store_true",
+                        help="Одноразовый патч: пересчитать first_seen у клиентов с датой 2026-03-19")
     args = parser.parse_args()
 
-    if not args.dry_run and not args.send and not args.check_promises and not args.preview:
+    if not args.dry_run and not args.send and not args.check_promises and not args.preview and not args.fix_first_seen:
         parser.print_help()
         return 0
 
@@ -878,6 +1028,15 @@ def main() -> int:
 
     if args.check_promises:
         asyncio.run(check_promises())
+        return 0
+
+    if args.fix_first_seen:
+        from collector.collections_db import fix_first_seen_inflation
+        result = fix_first_seen_inflation()
+        logger.info(
+            "fix-first-seen: исправлено=%d, удалено=%d, сброшено=%d",
+            result["fixed"], result["reset"], result["skipped"],
+        )
         return 0
 
     # CLI GUARD: блокируем --send если WHATSAPP_ENABLED=0
