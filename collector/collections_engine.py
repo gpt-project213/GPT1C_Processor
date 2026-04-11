@@ -886,6 +886,11 @@ async def _send_approved_client(client: Dict[str, Any]) -> Dict[str, Any]:
     if not phone:
         result["reason"] = "missing WhatsApp phone in approved batch"
         return result
+    from collector.approval_flow import validate_production_phone
+    phone_valid, phone_issue = validate_production_phone(phone, name)
+    if not phone_valid:
+        result["reason"] = phone_issue
+        return result
     if already_contacted_today(name):
         result["reason"] = "already contacted today"
         return result

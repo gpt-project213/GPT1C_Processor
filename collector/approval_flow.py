@@ -25,6 +25,7 @@ Callback prefix: wa_appr_
 import json
 import logging
 import os
+import re
 import secrets
 import tempfile
 from datetime import datetime, timedelta
@@ -145,6 +146,8 @@ def create_batch(
             reason = c.get("reason")
             if not msg_type or not reason:
                 msg_type, reason = _classify_msg_type_and_reason(c)
+            phone = c.get("phone") or c.get("whatsapp") or ""
+            phone_valid, phone_issue = validate_production_phone(phone, c.get("name", ""))
             normalized.append({
                 "name":              c.get("name", "—"),
                 "amount":            float(c.get("amount", 0)),
@@ -158,7 +161,9 @@ def create_batch(
                 "reason":            reason,
                 "stop_status":       c.get("stop_status", ""),
                 "review_action":     c.get("review_action", "client_approval"),
-                "phone":             c.get("phone") or c.get("whatsapp") or "",
+                "phone":             phone,
+                "invalid_phone":     not phone_valid,
+                "phone_issue":       phone_issue,
                 "language":          c.get("language", "ru"),
             })
 
@@ -198,6 +203,46 @@ _MSG_TYPE_LABELS = {
     "soft_reminder":        "Мягкое напоминание",
     "stoplist_reminder":    "Стоп-лист",
 }
+
+_PLACEHOLDER_PHONE_KEYS = {
+    "77001234567",
+}
+
+
+def _normalize_phone_key(phone: str) -> str:
+    digits = "".join(c for c in str(phone or "") if c.isdigit())
+    if len(digits) == 10:
+        return "7" + digits
+    if len(digits) == 11 and digits.startswith("8"):
+        return "7" + digits[1:]
+    return digits
+
+
+def _phone_keys_in_name(client_name: str) -> List[str]:
+    keys: List[str] = []
+    for raw in re.findall(r"\d[\d\s().-]{8,}\d", str(client_name or "")):
+        key = _normalize_phone_key(raw)
+        if len(key) == 11 and key.startswith("7"):
+            keys.append(key)
+    return keys
+
+
+def validate_production_phone(phone: str, client_name: str = "") -> Tuple[bool, str]:
+    """Returns (valid, reason) for production WhatsApp send."""
+    key = _normalize_phone_key(phone)
+    if not key:
+        return False, "invalid_phone:missing"
+    if key in _PLACEHOLDER_PHONE_KEYS:
+        return False, "invalid_phone:placeholder"
+    if len(key) != 11 or not key.startswith("7"):
+        return False, "invalid_phone:bad_format"
+    if len(set(key[-10:])) <= 2:
+        return False, "invalid_phone:suspicious"
+
+    name_keys = _phone_keys_in_name(client_name)
+    if name_keys and key not in name_keys:
+        return False, "invalid_phone:name_mismatch"
+    return True, ""
 
 
 def _classify_msg_type_and_reason(c: Dict[str, Any]) -> tuple:
@@ -326,6 +371,11 @@ def _format_manager_preview_text(
     ]
     for i, c in enumerate(clients, 1):
         viol_tag = " ⚠️" if c.get("violation_shipment") else ""
+        phone_note = (
+            f"\n     Тел: <code>{c.get('phone', '—')}</code> ⚠️ {c.get('phone_issue')}"
+            if c.get("invalid_phone")
+            else ""
+        )
         type_label = _MSG_TYPE_LABELS.get(c.get("msg_type", ""), c.get("msg_type", ""))
         lines.append(
             f"  {i}. <b>{c['name']}</b>{viol_tag}\n"
@@ -333,6 +383,7 @@ def _format_manager_preview_text(
             f"     Отгрузки: {_fmt(c['debit'])} тг · Оплаты: {_fmt(c['credit'])} тг\n"
             f"     Тип: {type_label}\n"
             f"     Причина: {c.get('reason', '—')}"
+            f"{phone_note}"
         )
     lines += [
         "",
@@ -668,6 +719,7 @@ def _format_admin_summary_text(batch: Dict[str, Any]) -> str:
         rejected  = mgr_state.get("rejected_names", [])
         postponed = mgr_state.get("postponed_names", [])
         clients   = mgr_state.get("clients", [])
+        invalid_phone_clients = [c["name"] for c in clients if c.get("invalid_phone")]
 
         if status == "pending":
             status_label = "⏳ не ответил"
@@ -698,6 +750,10 @@ def _format_admin_summary_text(batch: Dict[str, Any]) -> str:
             lines.append(f"  Отложено ({len(postponed)}):")
             for n in postponed:
                 lines.append(f"    ⏸ {n}")
+        if invalid_phone_clients:
+            lines.append(f"  ⚠️ invalid_phone ({len(invalid_phone_clients)}):")
+            for n in invalid_phone_clients:
+                lines.append(f"    ⚠️ {n}")
 
         total_ok    += len(approved)
         total_no    += len(rejected)
@@ -745,6 +801,8 @@ def _format_admin_detail_text(batch: Dict[str, Any]) -> str:
         for c in clients:
             name = c["name"]
             phone = c.get("phone", "") or "—"
+            if c.get("invalid_phone"):
+                phone = f"{phone} ⚠️ {c.get('phone_issue')}"
             days  = c.get("days", 0)
             viol_tag = " ⚠️" if c.get("violation_shipment") else ""
             type_label = _MSG_TYPE_LABELS.get(c.get("msg_type", ""), c.get("msg_type", ""))
@@ -841,6 +899,12 @@ async def handle_admin_callback(
             approved_names = set(mgr_state.get("approved_names", []))
             for c in mgr_state["clients"]:
                 if c["name"] in approved_names:
+                    if c.get("invalid_phone"):
+                        logger.warning(
+                            "[%s] admin approve skipped invalid_phone client: %s (%s)",
+                            batch_id, c.get("name"), c.get("phone_issue"),
+                        )
+                        continue
                     approved_clients.append({**c, "manager": mgr_name})
 
         batch["status"]            = "admin_approved"
