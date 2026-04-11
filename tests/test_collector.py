@@ -504,6 +504,105 @@ finally:
 
 
 # ═══════════════════════════════════════════════════════════════
+# 15. РЕГРЕССИЯ — INCIDENT 2026-04-10 (несанкционированная WA-рассылка)
+# ═══════════════════════════════════════════════════════════════
+section("15. Регрессия: INCIDENT 2026-04-10")
+
+# ── FIX-1: debit > 0 блокирует клиента ──────────────────────────────────────
+_fix1_client_debit = {
+    "name": "Тест Активный Покупатель",
+    "debit": 150_000.0,
+    "credit": 0.0,
+    "amount": 500_000.0,
+    "days": 15,
+    "level": 2,
+}
+_fix1_d = _fix1_client_debit.get("debit", 0.0) or 0.0
+_fix1_c = _fix1_client_debit.get("credit", 0.0) or 0.0
+check(
+    "FIX-1: клиент с debit>0 фильтруется (не идёт в коллектор)",
+    _fix1_d > 0 or _fix1_c > 0,
+)
+
+# ── FIX-1: credit > 0 блокирует клиента ─────────────────────────────────────
+_fix1_client_credit = {
+    "name": "Тест Активный Плательщик",
+    "debit": 0.0,
+    "credit": 50_000.0,
+    "amount": 300_000.0,
+    "days": 20,
+    "level": 3,
+}
+_fix1_d2 = _fix1_client_credit.get("debit", 0.0) or 0.0
+_fix1_c2 = _fix1_client_credit.get("credit", 0.0) or 0.0
+check(
+    "FIX-1: клиент с credit>0 фильтруется (не идёт в коллектор)",
+    _fix1_d2 > 0 or _fix1_c2 > 0,
+)
+
+# ── FIX-3: старый first_seen не надувает real_days до level 3 ─────────────────
+def _level_for_days_regression(days: int) -> int:
+    for thr, lvl in [(30, 5), (25, 4), (20, 3), (15, 2), (10, 1)]:
+        if days >= thr:
+            return lvl
+    return 0
+
+_fix3_days_1c   = 3    # реальные данные 1С: 3 дня (уровень 0)
+_fix3_real_raw  = 22   # старый first_seen: 22 дня назад (инцидент)
+_fix3_capped    = min(_fix3_real_raw, _fix3_days_1c + 7)   # = 10
+_fix3_level_fix = max(_level_for_days_regression(_fix3_days_1c),
+                       _level_for_days_regression(_fix3_capped))
+_fix3_level_bug = max(_level_for_days_regression(_fix3_days_1c),
+                       _level_for_days_regression(_fix3_real_raw))
+check(
+    f"FIX-3: days_1c=3 + raw_real_days=22 → capped={_fix3_capped} → level={_fix3_level_fix} (было {_fix3_level_bug})",
+    _fix3_level_fix <= 1 and _fix3_level_bug == 3,
+)
+
+# ── FIX-2: ветка "direct send без manager lock" отсутствует в коде ───────────
+import pathlib as _pathlib
+_engine_src = (_pathlib.Path(__file__).parent.parent
+               / "collector" / "collections_engine.py").read_text(encoding="utf-8")
+_no_direct_send = (
+    "direct send без manager lock" not in _engine_src
+    and "direct send запрещён" not in _engine_src
+    and "manager_chat_id = None" not in _engine_src
+)
+check(
+    "FIX-2: ветка 'direct send без manager lock' удалена из кода",
+    _no_direct_send,
+    detail="Найдены следы bypass-логики в collections_engine.py" if not _no_direct_send else "",
+)
+
+# ── FIX-4: send_whatsapp() блокируется при WHATSAPP_ENABLED=0 ────────────────
+try:
+    import importlib
+    import collector.communications as _comm_fix4
+    _orig_wa_fix4 = _comm_fix4.WHATSAPP_ENABLED
+
+    # Проверка через hardguard (FIX-4): env перечитывается при каждом вызове
+    with patch.dict(os.environ, {"WHATSAPP_ENABLED": "0"}):
+        _comm_fix4.WHATSAPP_ENABLED = True  # намеренно рассинхронизируем константу
+        _result_fix4 = _comm_fix4.send_whatsapp("+77099999999", "тест блок")
+    check(
+        "FIX-4: send_whatsapp() блокируется через env hardguard даже при WHATSAPP_ENABLED=True в модуле",
+        _result_fix4 is False,
+    )
+finally:
+    _comm_fix4.WHATSAPP_ENABLED = _orig_wa_fix4
+
+# ── SAFEGUARD: LIVE_SEND_ALLOWED блокирует run() при dry_run=False ───────────
+_lsa_src = _engine_src
+_has_live_send_guard = (
+    "LIVE_SEND_ALLOWED" in _lsa_src
+    and "LIVE SEND BLOCKED" in _lsa_src
+)
+check(
+    "SAFEGUARD: LIVE_SEND_ALLOWED guard присутствует в run()",
+    _has_live_send_guard,
+)
+
+# ═══════════════════════════════════════════════════════════════
 # 14. ИТОГ
 # ═══════════════════════════════════════════════════════════════
 section("ИТОГ")

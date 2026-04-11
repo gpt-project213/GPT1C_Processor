@@ -4,7 +4,7 @@
 collections/collections_engine.py
 Главный оркестратор AI-Коллектора долгов.
 
-Версия: 1.0.6 (2026-04-11)
+Версия: 1.0.7 (2026-04-11)
 
 CLI:
   python -m collector.collections_engine --dry-run
@@ -457,6 +457,34 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
         logger.info("Вне рабочего времени (09:00–18:00, пн–пт) — пропуск")
         return
 
+    # ── SAFEGUARD: двойной замок перед любой live-отправкой ──────────────────
+    # Оба флага должны быть явно установлены в .env.
+    # WHATSAPP_ENABLED=1 — разрешает технически.
+    # LIVE_SEND_ALLOWED=1 — явное подтверждение руководителя «да, отправляй».
+    # Без обоих флагов ни один WhatsApp не уйдёт, даже если код дойдёт сюда.
+    if not dry_run:
+        _wa_live = os.getenv("WHATSAPP_ENABLED", "0").lower() in ("1", "true", "yes")
+        _send_ok = os.getenv("LIVE_SEND_ALLOWED", "0").lower() in ("1", "true", "yes")
+        if not _wa_live:
+            logger.error(
+                "LIVE SEND BLOCKED: WHATSAPP_ENABLED=0 в .env. "
+                "Для реальной отправки нужны оба флага: WHATSAPP_ENABLED=1 И LIVE_SEND_ALLOWED=1."
+            )
+            return
+        if not _send_ok:
+            logger.error(
+                "LIVE SEND BLOCKED: LIVE_SEND_ALLOWED не установлен (0 или отсутствует). "
+                "Это явная защита от случайной отправки. "
+                "Установите LIVE_SEND_ALLOWED=1 только после проверки dry-run и "
+                "личного решения руководителя."
+            )
+            return
+        logger.info(
+            "LIVE SEND ALLOWED: WHATSAPP_ENABLED=1 + LIVE_SEND_ALLOWED=1 — "
+            "отправка явно разрешена руководителем."
+        )
+    # ── /SAFEGUARD ────────────────────────────────────────────────────────────
+
     debt_data = load_latest_debt_json()
     if not debt_data:
         logger.warning("Нет данных дебиторки — завершаем")
@@ -711,6 +739,17 @@ def main() -> int:
     if args.check_promises:
         asyncio.run(check_promises())
         return 0
+
+    # CLI GUARD: блокируем --send если WHATSAPP_ENABLED=0
+    if args.send:
+        _wa_cli = os.getenv("WHATSAPP_ENABLED", "0").lower() in ("1", "true", "yes")
+        if not _wa_cli:
+            logger.error(
+                "--send заблокирован: WHATSAPP_ENABLED=0 в .env. "
+                "Для реальной отправки нужны WHATSAPP_ENABLED=1 + LIVE_SEND_ALLOWED=1. "
+                "Сначала запустите --dry-run и проверьте список кандидатов."
+            )
+            return 1
 
     dry_run = args.dry_run or not args.send
     if dry_run and not args.dry_run:
