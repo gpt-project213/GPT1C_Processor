@@ -1237,9 +1237,68 @@ except Exception as _e:
 
 
 # ═══════════════════════════════════════════════════════════════
-# 16. ИТОГ
+# 16. HIGH-4 PROOF — msg_type preserved through preview → send-approved
 # ═══════════════════════════════════════════════════════════════
-section("ИТОГ")  # секция 16
+section("HIGH-4 proof: msg_type preserved preview → batch → approved → send-approved")
+
+import asyncio
+from unittest.mock import patch, MagicMock
+from collector.approval_flow import create_batch
+
+# Step 1: create_batch preserves msg_type from debtors_by_manager
+_h4_debtors = {
+    "Ергали": [{
+        "name": "Тест Клиент",
+        "amount": 100000.0, "days": 25, "level": 3,
+        "opening": 0.0, "debit": 0.0, "credit": 0.0,
+        "violation_shipment": False,
+        "phone": "+77771234567",
+        "language": "ru",
+        "msg_type": "stoplist_reminder",
+        "reason": "auto_stopped: долг не закрыт",
+        "stop_status": "auto_stopped",
+        "review_action": "client_approval",
+    }]
+}
+_h4_batch = create_batch(_h4_debtors)
+_h4_client_in_batch = _h4_batch["managers"]["Ергали"]["clients"][0]
+check("H4 T1: create_batch сохраняет msg_type=stoplist_reminder",
+      _h4_client_in_batch.get("msg_type") == "stoplist_reminder",
+      str(_h4_client_in_batch.get("msg_type")))
+
+# Step 2: admin approve path copies client dict including msg_type
+_h4_approved_client = {**_h4_client_in_batch, "manager": "Ергали"}
+check("H4 T2: approved_clients сохраняет msg_type после {**c, 'manager': mgr_name}",
+      _h4_approved_client.get("msg_type") == "stoplist_reminder",
+      str(_h4_approved_client.get("msg_type")))
+
+# Step 3: _send_approved_client extracts msg_type and passes to generate_message
+# Мокаем send_whatsapp и generate_message, запускаем _send_approved_client
+from collector.collections_engine import _send_approved_client
+
+_captured_msg_type = []
+
+def _mock_generate_message(**kwargs):
+    _captured_msg_type.append(kwargs.get("msg_type", "__NOT_SET__"))
+    return "тестовое сообщение"
+
+with patch("collector.collections_engine.send_whatsapp", return_value=True), \
+     patch("collector.collections_engine.generate_message", side_effect=_mock_generate_message), \
+     patch("collector.collections_engine.already_contacted_today", return_value=False), \
+     patch("collector.collections_engine._get_manager_chat_id", return_value=99999999), \
+     patch("collector.collections_engine.update_after_contact"), \
+     patch("collector.client_dialog.start_client_dialog", return_value=None):
+    asyncio.run(_send_approved_client(_h4_approved_client))
+
+check("H4 T3: _send_approved_client передаёт msg_type=stoplist_reminder в generate_message",
+      _captured_msg_type == ["stoplist_reminder"],
+      f"captured: {_captured_msg_type}")
+
+
+# ═══════════════════════════════════════════════════════════════
+# 17. ИТОГ
+# ═══════════════════════════════════════════════════════════════
+section("ИТОГ")  # секция 17
 total  = len(results)
 passed = sum(1 for _, ok in results if ok)
 failed = total - passed
