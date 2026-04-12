@@ -365,7 +365,7 @@ def _debt_age_text(c: Dict[str, Any]) -> str:
     text = f"Возраст остатка: {days} дн."
     oldest = c.get("oldest_unpaid_date")
     if oldest:
-        text += f" · старейшая часть: {oldest}"
+        text += f" · Остаток с: {oldest}"
     if c.get("active_turnover"):
         text += " · активный оборот"
     return text
@@ -396,7 +396,7 @@ def _format_manager_preview_text(
         type_label = _MSG_TYPE_LABELS.get(c.get("msg_type", ""), c.get("msg_type", ""))
         lines.append(
             f"  {i}. <b>{c['name']}</b>{viol_tag}\n"
-            f"     Долг: {_fmt(c['amount'])} тг · {_debt_age_text(c)} · L{c['level']}\n"
+            f"     Долг: {_fmt(c['amount'])} тг · {_debt_age_text(c)}\n"
             f"     Отгрузки: {_fmt(c['debit'])} тг · Оплаты: {_fmt(c['credit'])} тг\n"
             f"     Тип: {type_label}\n"
             f"     Причина: {c.get('reason', '—')}"
@@ -836,7 +836,7 @@ def _format_admin_detail_text(batch: Dict[str, Any]) -> str:
 
             lines.append(
                 f"  {icon} <b>{name}</b>{viol_tag}\n"
-                f"     Долг: {_fmt(c['amount'])} тг · {_debt_age_text(c)} · L{c.get('level', '?')}\n"
+                f"     Долг: {_fmt(c['amount'])} тг · {_debt_age_text(c)}\n"
                 f"     Отгрузки: {_fmt(c.get('debit', 0))} тг · Оплаты: {_fmt(c.get('credit', 0))} тг\n"
                 f"     Тип: {type_label} · {c.get('reason', '—')}\n"
                 f"     Тел: <code>{phone}</code>"
