@@ -363,9 +363,6 @@ def _inline_kb(rows: List[List[Tuple[str, str]]]) -> Dict[str, Any]:
 def _debt_age_text(c: Dict[str, Any]) -> str:
     days = c.get("days", 0)
     text = f"Возраст остатка: {days} дн."
-    silence = c.get("payment_silence_days")
-    if silence is not None and str(silence) != "" and int(silence or 0) != int(days or 0):
-        text += f" · оплат нет: {int(silence or 0)} дн."
     oldest = c.get("oldest_unpaid_date")
     if oldest:
         text += f" · старейшая часть: {oldest}"

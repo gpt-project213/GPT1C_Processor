@@ -351,9 +351,9 @@ check("P5 T13: approval batch preserves residual debt metrics",
       _p5_batch_client["active_turnover"] is True,
       str(_p5_batch_client))
 _p5_debt_text = _p5_debt_age_text(_p5_batch_client)
-check("P5 T14: approval text shows residual age and payment silence",
+check("P5 T14: approval text shows residual age without payment-silence ambiguity",
       "Возраст остатка: 3 дн." in _p5_debt_text and
-      "оплат нет: 19 дн." in _p5_debt_text and
+      "оплат нет" not in _p5_debt_text and
       "старейшая часть: 2026-04-08" in _p5_debt_text and
       "активный оборот" in _p5_debt_text,
       _p5_debt_text)
