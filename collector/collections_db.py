@@ -4,7 +4,7 @@
 collections/collections_db.py
 Хранилище состояния коллектора — история контактов, обещания, статусы.
 
-Версия: 1.0.0 (2026-03-16)
+Версия: 1.0.1 (2026-04-12)
 
 Файл хранилища: logs/collector_state.json
 Запись атомарная через tempfile (защита от частичной записи).
@@ -13,7 +13,7 @@ collections/collections_db.py
 import json
 import logging
 import os
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any, Dict, List, Optional
@@ -318,3 +318,83 @@ def reset_debt_first_seen(client_name: str) -> None:
     if key in state:
         del state[key]
         save_state(state)
+
+
+def fix_first_seen_inflation(inflation_date: str = "2026-03-19") -> Dict[str, int]:
+    """Пересчитывает first_seen у клиентов, записанных в день первого запуска коллектора.
+
+    Проблема: при первом запуске 157 клиентам выставлен first_seen=2026-03-19,
+    хотя реальная просрочка у них другая. Это занижает уровень давления.
+
+    Алгоритм:
+      - Находит все __debt_since__* записи с first_seen == inflation_date
+      - Для каждого клиента берёт days_overdue из текущего debt JSON
+      - Устанавливает first_seen = today - days_overdue
+      - Если клиент не найден в debt JSON — сбрасывает first_seen=None
+        (при следующем запуске будет инициализирован заново как новый)
+
+    Args:
+        inflation_date: Дата первого запуска (YYYY-MM-DD), которую нужно исправить.
+
+    Returns:
+        {"fixed": N, "reset": N, "skipped": N}
+          fixed   — пересчитано по debt JSON
+          reset   — удалено (debt=0 или отсутствует)
+          skipped — не найдено в debt JSON, first_seen сброшен на None
+    """
+    from collector.debt_monitor import load_latest_debt_json, get_overdue_days
+
+    state = load_state()
+    today_date = datetime.now(tz=TZ).date()
+
+    # Собираем клиентов с раздутой датой
+    to_fix: Dict[str, str] = {}  # client_name → state_key
+    for key, val in state.items():
+        if key.startswith(_DEBT_DATE_PREFIX):
+            if isinstance(val, dict) and val.get("first_seen") == inflation_date:
+                client_name = key[len(_DEBT_DATE_PREFIX):]
+                to_fix[client_name] = key
+
+    if not to_fix:
+        logger.info("fix_first_seen_inflation: нет записей с датой %s", inflation_date)
+        return {"fixed": 0, "reset": 0, "skipped": 0}
+
+    # Строим dict name→data из списка клиентов debt JSON
+    raw = load_latest_debt_json()
+    debt_by_name: Dict[str, Any] = {
+        (c.get("name") or c.get("client") or "").strip(): c
+        for c in raw.get("clients", [])
+        if (c.get("name") or c.get("client") or "").strip()
+    }
+
+    fixed = 0
+    reset = 0
+    skipped = 0
+
+    for client_name, key in to_fix.items():
+        client_data = debt_by_name.get(client_name)
+        if client_data is not None:
+            days = get_overdue_days(client_data)
+            if days > 0:
+                actual_first_seen = (today_date - timedelta(days=days)).isoformat()
+                state[key] = {"first_seen": actual_first_seen}
+                fixed += 1
+                logger.info(
+                    "fix_first_seen: %s → %s (days=%d)", client_name, actual_first_seen, days,
+                )
+            else:
+                # days=0 — долг закрыт, удаляем запись
+                del state[key]
+                reset += 1
+        else:
+            # Клиент не найден в текущем debt JSON — сбрасываем
+            state[key] = {"first_seen": None}
+            skipped += 1
+            logger.info("fix_first_seen: %s не найден в debt JSON — сброшен", client_name)
+
+    save_state(state)
+    logger.info(
+        "fix_first_seen_inflation завершён: fixed=%d, reset=%d, skipped=%d",
+        fixed, reset, skipped,
+    )
+    return {"fixed": fixed, "reset": reset, "skipped": skipped}

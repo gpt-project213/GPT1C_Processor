@@ -4,7 +4,7 @@
 collector/client_dialog.py
 Управление диалогами с должниками через WhatsApp.
 
-Версия: 1.0.3 (2026-04-08)
+Версия: 1.0.5 (2026-04-12)
 
 Хранилище: logs/collector_client_dialogs.json
 Ключ: номер телефона (цифры, без +, без @c.us)
@@ -188,14 +188,16 @@ def _build_escalation_text(
 
     # Описание намерения
     intent_map = {
-        "promise":       "обещал оплатить",
-        "refusal":       "отказывается платить",
-        "delay_request": "просит отсрочку",
-        "question":      "задаёт вопрос о товарах/доставке",
-        "unclear":       "неясное намерение",
-        "off_topic":     "уходит от темы",
-        "requires_human": "требуется живой человек",
-        "limit_reached": "исчерпан лимит обменов",
+        "promise":              "обещал оплатить",
+        "promise_without_date": "готов платить, но не назвал дату",
+        "refusal":              "отказывается платить",
+        "delay_request":        "просит отсрочку",
+        "question":             "задаёт вопрос о товарах/доставке",
+        "identity_question":    "спрашивает кто пишет / откуда номер",
+        "unclear":              "неясное намерение",
+        "off_topic":            "уходит от темы",
+        "requires_human":       "требуется живой человек",
+        "limit_reached":        "исчерпан лимит обменов",
     }
     intent_desc = intent_map.get(reason, reason)
 
@@ -487,6 +489,30 @@ async def handle_incoming(phone: str, text: str) -> None:
         )
         return
 
+    if intent == "identity_question":
+        # Клиент спрашивает кто пишет — представляемся: компания, точка, менеджер.
+        # Дату оплаты НЕ требуем — сначала устанавливаем доверие.
+        reply = (
+            f"Здравствуйте! Пишет {COMPANY_NAME}, отдел по работе с клиентами.\n"
+            f"Обращаемся по задолженности {client_name}.\n"
+            f"Ваш менеджер — {manager_name}. Если есть вопросы — можете написать напрямую."
+        )
+        dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
+        _set_client_dialog(phone_clean, dialog)
+        await _reply_to_client(phone_clean, reply)
+        return
+
+    if intent == "promise_without_date":
+        # Клиент подтверждает готовность, но без даты — просим уточнить
+        reply = suggested_reply if suggested_reply else (
+            "Хорошо, понял вас! Уточните, пожалуйста, точную дату оплаты — "
+            "например, 20.04.2026."
+        )
+        dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
+        _set_client_dialog(phone_clean, dialog)
+        await _reply_to_client(phone_clean, reply)
+        return
+
     # intent == "unclear" — возможно off_topic
     off_topic_count = dialog.get("off_topic_count", 0)
     if off_topic_count == 0:
@@ -500,8 +526,7 @@ async def handle_incoming(phone: str, text: str) -> None:
         _set_client_dialog(phone_clean, dialog)
         await _reply_to_client(phone_clean, reply)
     else:
-        # Второй раз — эскалируем
-        dialog["exchanges"].append({"role": "bot", "text": "", "timestamp": now})
+        # Второй раз — эскалируем; пустой bot reply не сохраняем
         _set_client_dialog(phone_clean, dialog)
         await escalate_to_manager(
             dialog, "off_topic",

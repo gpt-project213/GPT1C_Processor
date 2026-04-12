@@ -241,6 +241,39 @@ try:
     rec3 = get_client_state("Должник А")
     check("mark_promise_broken sets flag", rec3.get("promise_kept") is False)
 
+    # fix_first_seen_inflation — пересчёт раздутых дат
+    cdb.STATE_PATH = Path(_tmpdir) / "state_fsi.json"
+    # Готовим стейт: два клиента с inflation_date, один без
+    from collector.collections_db import _DEBT_DATE_PREFIX, fix_first_seen_inflation
+    fsi_state = {
+        _DEBT_DATE_PREFIX + "ТОО Ромашка":   {"first_seen": "2026-03-19"},
+        _DEBT_DATE_PREFIX + "ИП Сидоров":    {"first_seen": "2026-03-19"},
+        _DEBT_DATE_PREFIX + "ТОО Норма":     {"first_seen": "2026-01-10"},  # не должен меняться
+    }
+    save_state(fsi_state)
+    # Мокаем load_latest_debt_json — ТОО Ромашка есть (20 дней), ИП Сидоров — нет
+    with patch("collector.debt_monitor.load_latest_debt_json") as mock_ldj:
+        mock_ldj.return_value = {"clients": [{"name": "ТОО Ромашка", "days": 20}]}
+        result = fix_first_seen_inflation("2026-03-19")
+    check("fix_first_seen_inflation: fixed=1", result["fixed"] == 1)
+    check("fix_first_seen_inflation: skipped=1", result["skipped"] == 1)
+    fsi_after = load_state()
+    romashka_key = _DEBT_DATE_PREFIX + "ТОО Ромашка"
+    sidorov_key  = _DEBT_DATE_PREFIX + "ИП Сидоров"
+    norma_key    = _DEBT_DATE_PREFIX + "ТОО Норма"
+    check("fix_first_seen_inflation: ТОО Ромашка first_seen пересчитан",
+          fsi_after.get(romashka_key, {}).get("first_seen") != "2026-03-19")
+    check("fix_first_seen_inflation: ИП Сидоров first_seen сброшен на None",
+          fsi_after.get(sidorov_key, {}).get("first_seen") is None)
+    check("fix_first_seen_inflation: ТОО Норма не изменился",
+          fsi_after.get(norma_key, {}).get("first_seen") == "2026-01-10")
+    # Повторный запуск — нет новых записей с inflation_date
+    with patch("collector.debt_monitor.load_latest_debt_json") as mock_ldj2:
+        mock_ldj2.return_value = {"clients": [{"name": "ТОО Ромашка", "days": 20}]}
+        result2 = fix_first_seen_inflation("2026-03-19")
+    check("fix_first_seen_inflation: идемпотентный (fixed=0 на второй запуск)",
+          result2 == {"fixed": 0, "reset": 0, "skipped": 0})
+
 finally:
     cdb.STATE_PATH = _orig_path
     shutil.rmtree(_tmpdir, ignore_errors=True)
@@ -409,6 +442,113 @@ try:
     # Неизвестный клиент — игнорируется без ошибки
     asyncio.run(cd_mod.handle_incoming("99999999999", "привет"))
     check("handle_incoming: неизвестный телефон — не падает", True)
+
+    # ─── identity_question: "Кто это?" ─────────────────────────────────────────
+    asyncio.run(cd_mod.start_client_dialog(
+        phone="77011234568",
+        client_name="ТОО Ромашка",
+        manager_name="Оксана",
+        manager_chat_id=654321,
+        level=1,
+        days=10,
+        amount=200000.0,
+        message_text="Добрый день, напоминаем о задолженности.",
+    ))
+    with patch("collector.collection_agent._call_deepseek") as mock_iq:
+        mock_iq.return_value = '{"intent":"identity_question","promise_date":null,"promise_amount":null,"requires_human":false,"suggested_reply":""}'
+        with patch("collector.client_dialog._reply_to_client") as mock_riq:
+            mock_riq.return_value = None
+            asyncio.run(cd_mod.handle_incoming("77011234568", "Кто это?"))
+    d_iq = cd_mod._get_client_dialog("77011234568")
+    check("identity_question: state=active", d_iq.get("state") == "active")
+    bot_replies_iq = [ex["text"] for ex in d_iq.get("exchanges", []) if ex["role"] == "bot"]
+    last_iq = bot_replies_iq[-1] if bot_replies_iq else ""
+    check("identity_question: ответ содержит название компании",
+          cd_mod.COMPANY_NAME in last_iq)
+    check("identity_question: ответ содержит имя клиента",
+          "ТОО Ромашка" in last_iq)
+    check("identity_question: ответ содержит имя менеджера",
+          "Оксана" in last_iq)
+    check("identity_question: ответ НЕ требует дату оплаты немедленно",
+          "когда" not in last_iq.lower() or "менеджер" in last_iq.lower())
+    check("identity_question: reply не пустой", bool(last_iq.strip()))
+
+    # ─── promise_without_date: "Я оплачу" ──────────────────────────────────────
+    asyncio.run(cd_mod.start_client_dialog(
+        phone="77011234569",
+        client_name="ИП Асанов",
+        manager_name="Ергали",
+        manager_chat_id=789012,
+        level=2,
+        days=18,
+        amount=350000.0,
+        message_text="Добрый день, напоминаем о задолженности.",
+    ))
+    with patch("collector.collection_agent._call_deepseek") as mock_pwd:
+        mock_pwd.return_value = '{"intent":"promise_without_date","promise_date":null,"promise_amount":null,"requires_human":false,"suggested_reply":"Хорошо! Уточните точную дату оплаты."}'
+        with patch("collector.client_dialog._reply_to_client") as mock_rpwd:
+            mock_rpwd.return_value = None
+            asyncio.run(cd_mod.handle_incoming("77011234569", "Я оплачу"))
+    d_pwd = cd_mod._get_client_dialog("77011234569")
+    check("promise_without_date 'Я оплачу': state=active", d_pwd.get("state") == "active")
+    bot_replies_pwd = [ex["text"] for ex in d_pwd.get("exchanges", []) if ex["role"] == "bot"]
+    check("promise_without_date 'Я оплачу': ответ не пустой",
+          bool(bot_replies_pwd[-1].strip() if bot_replies_pwd else ""))
+
+    # ─── promise_without_date: "Передам на оплату" ─────────────────────────────
+    asyncio.run(cd_mod.start_client_dialog(
+        phone="77011234570",
+        client_name="ИП Жаксыбеков",
+        manager_name="Магира",
+        manager_chat_id=111222,
+        level=1,
+        days=12,
+        amount=150000.0,
+        message_text="Добрый день, напоминаем о задолженности.",
+    ))
+    with patch("collector.collection_agent._call_deepseek") as mock_pwd2:
+        mock_pwd2.return_value = '{"intent":"promise_without_date","promise_date":null,"promise_amount":null,"requires_human":false,"suggested_reply":""}'
+        with patch("collector.client_dialog._reply_to_client") as mock_rpwd2:
+            mock_rpwd2.return_value = None
+            asyncio.run(cd_mod.handle_incoming("77011234570", "Передам на оплату"))
+    d_pwd2 = cd_mod._get_client_dialog("77011234570")
+    check("promise_without_date 'Передам на оплату': state=active", d_pwd2.get("state") == "active")
+    bot_replies_pwd2 = [ex["text"] for ex in d_pwd2.get("exchanges", []) if ex["role"] == "bot"]
+    # Должен использоваться дефолтный текст с датой
+    check("promise_without_date 'Передам на оплату': fallback содержит 'дату'",
+          any("дату" in t.lower() for t in bot_replies_pwd2))
+
+    # ─── off_topic эскалация: пустой bot reply НЕ сохраняется ──────────────────
+    asyncio.run(cd_mod.start_client_dialog(
+        phone="77011234571",
+        client_name="ТОО Заря",
+        manager_name="Ергали",
+        manager_chat_id=333444,
+        level=1,
+        days=11,
+        amount=80000.0,
+        message_text="Добрый день.",
+    ))
+    # Первый unclear — мягкое возвращение (off_topic_count=0 → 1)
+    with patch("collector.collection_agent._call_deepseek") as mock_ot1:
+        mock_ot1.return_value = '{"intent":"unclear","promise_date":null,"promise_amount":null,"requires_human":false,"suggested_reply":""}'
+        with patch("collector.client_dialog._reply_to_client") as mock_rot1:
+            mock_rot1.return_value = None
+            asyncio.run(cd_mod.handle_incoming("77011234571", "ладно ладно"))
+    # Второй unclear — эскалация (без пустого reply в exchanges)
+    with patch("collector.collection_agent._call_deepseek") as mock_ot2:
+        mock_ot2.return_value = '{"intent":"unclear","promise_date":null,"promise_amount":null,"requires_human":false,"suggested_reply":""}'
+        with patch("collector.client_dialog._reply_to_client") as mock_rot2:
+            mock_rot2.return_value = None
+            with patch("collector.client_dialog.escalate_to_manager"):
+                asyncio.run(cd_mod.handle_incoming("77011234571", "ну не знаю"))
+    d_ot = cd_mod._get_client_dialog("77011234571")
+    empty_bot_replies = [
+        ex for ex in d_ot.get("exchanges", [])
+        if ex["role"] == "bot" and not ex.get("text", "").strip()
+    ]
+    check("off_topic эскалация: пустые bot replies не сохраняются",
+          len(empty_bot_replies) == 0)
 
 finally:
     cd_mod._DIALOGS_PATH = _orig_dialogs_path
@@ -835,6 +975,139 @@ check(
     "APPROVAL T12: wa_appr_ callback роутер добавлен в send_reports.py",
     "wa_appr_" in _reports_src and "approval_flow" in _reports_src,
 )
+
+# ═══════════════════════════════════════════════════════════════
+# 17. PROMPTS — config/collector_prompts.json (2026-04-11)
+# ═══════════════════════════════════════════════════════════════
+section("17. Промпты — config/collector_prompts.json")
+
+import collector.collection_agent as _ca_mod
+
+_PROMPTS_JSON = ROOT / "config" / "collector_prompts.json"
+
+# ── T1: файл существует ──────────────────────────────────────────────────────
+check("PROMPTS T1: файл config/collector_prompts.json существует",
+      _PROMPTS_JSON.exists())
+
+# ── T2: load_prompts() возвращает непустой dict ──────────────────────────────
+_loaded_prompts = _ca_mod.load_prompts()
+check("PROMPTS T2: load_prompts() возвращает dict", isinstance(_loaded_prompts, dict))
+check("PROMPTS T2b: load_prompts() непустой", len(_loaded_prompts) > 0)
+
+# ── T3: обязательные ключи ───────────────────────────────────────────────────
+_required_keys = {"tones", "system_prompt", "user_prompt", "fallback_templates", "lang_instructions"}
+_missing = _required_keys - set(_loaded_prompts.keys())
+check("PROMPTS T3: обязательные ключи присутствуют",
+      len(_missing) == 0,
+      f"Отсутствуют: {_missing}")
+
+# ── T4: все уровни тонов 1–5 ─────────────────────────────────────────────────
+_tones = _loaded_prompts.get("tones", {})
+_tone_keys = {str(k) for k in _tones.keys()}
+check("PROMPTS T4: тон level 1 есть", "1" in _tone_keys)
+check("PROMPTS T4b: тон level 2 есть", "2" in _tone_keys)
+check("PROMPTS T4c: тон level 3 есть", "3" in _tone_keys)
+check("PROMPTS T4d: тон level 4 есть", "4" in _tone_keys)
+check("PROMPTS T4e: тон level 5 есть", "5" in _tone_keys)
+
+# ── T5: все типы fallback_templates ─────────────────────────────────────────
+_fb = _loaded_prompts.get("fallback_templates", {})
+_required_fb = {"soft_reminder", "payment_plan_control", "strict_reminder", "stoplist_reminder"}
+_missing_fb = _required_fb - set(_fb.keys())
+check("PROMPTS T5: все типы fallback_templates присутствуют",
+      len(_missing_fb) == 0,
+      f"Отсутствуют: {_missing_fb}")
+
+# ── T6: нет "торговой точке" в промптах (исправлена старая формулировка) ─────
+_prompts_text = json.dumps(_loaded_prompts, ensure_ascii=False)
+check("PROMPTS T6: 'торговой точке' отсутствует (заменено на 'задолженности')",
+      "торговой точке" not in _prompts_text)
+
+# ── T7: нет "ответьте «менеджер»" — заменено на "напишите 1" ────────────────
+check("PROMPTS T7: 'ответьте «менеджер»' отсутствует (заменено на напишите 1)",
+      "ответьте «менеджер»" not in _prompts_text)
+
+# ── T8: нет ИИ/бот слов в fallback_templates (как отдельные слова) ───────────
+import re as _re
+_fb_text = json.dumps(_fb, ensure_ascii=False)
+# "бот" проверяем как отдельное слово — не как подстроку "работа", "ботинки" и т.д.
+_forbidden_patterns = [
+    r'(?<![а-яёА-ЯЁa-zA-Z])ИИ(?![а-яёА-ЯЁa-zA-Z])',
+    r'(?<![а-яёА-ЯЁa-zA-Z])бот(?![а-яёА-ЯЁa-zA-Z])',
+    r'(?<![а-яёА-ЯЁa-zA-Z])робот(?![а-яёА-ЯЁa-zA-Z])',
+    r'автоматически',
+]
+_found_forbidden = [p for p in _forbidden_patterns
+                    if _re.search(p, _fb_text, _re.IGNORECASE)]
+check("PROMPTS T8: нет ИИ/бот/робот/автоматически в fallback_templates",
+      len(_found_forbidden) == 0,
+      f"Найдены паттерны: {_found_forbidden}")
+
+# ── T9: нет юридических УГРОЗ в тонах 4 и 5 ─────────────────────────────────
+# "Без угроз судом или юристами" — разрешено (явно запрещает угрозы).
+# Запрещены конкретные угрозы: "передадим юристам", "обратимся в суд" и т.д.
+_legal_threats = [
+    "передадим юристам", "передадим юристу", "обратимся в суд",
+    "подадим в суд", "судебное разбирательство", "арбитражный суд",
+    "юридический отдел",
+]
+_tone4 = _tones.get("4", "").lower()
+_tone5 = _tones.get("5", "").lower()
+_found_legal4 = [w for w in _legal_threats if w in _tone4]
+_found_legal5 = [w for w in _legal_threats if w in _tone5]
+check("PROMPTS T9: тон L4 без юридических угроз",
+      len(_found_legal4) == 0,
+      f"Найдены угрозы: {_found_legal4}")
+check("PROMPTS T9b: тон L5 без юридических угроз",
+      len(_found_legal5) == 0,
+      f"Найдены угрозы: {_found_legal5}")
+
+# ── T10: lang_instructions содержит ru и kz ──────────────────────────────────
+_lang = _loaded_prompts.get("lang_instructions", {})
+check("PROMPTS T10: lang_instructions.ru присутствует", "ru" in _lang)
+check("PROMPTS T10b: lang_instructions.kz присутствует", "kz" in _lang)
+
+# ── T11: load_prompts() не падает при отсутствии файла ───────────────────────
+with patch.object(_ca_mod, "_PROMPTS_PATH",
+                  ROOT / "config" / "collector_prompts_DOES_NOT_EXIST.json"):
+    _fallback_result = _ca_mod.load_prompts()
+check("PROMPTS T11: load_prompts() возвращает {} при отсутствии файла",
+      isinstance(_fallback_result, dict))
+
+# ── T12: _get_fallback_template подставляет переменные ───────────────────────
+_tpl = _ca_mod._get_fallback_template(
+    msg_type="soft_reminder",
+    client_name="ТОО Тест",
+    manager_name="Алена",
+    amount=100000,
+    days=15,
+    company="Минбаракат",
+)
+check("PROMPTS T12: fallback template подставляет client_name", "ТОО Тест" in _tpl)
+check("PROMPTS T12b: fallback template подставляет manager_name", "Алена" in _tpl)
+check("PROMPTS T12c: fallback template подставляет amount", "100 000" in _tpl or "100000" in _tpl)
+check("PROMPTS T12d: fallback template не содержит ИИ/бот как отдельное слово",
+      not any(_re.search(p, _tpl, _re.IGNORECASE) for p in [
+          r'(?<![а-яёА-ЯЁa-zA-Z])ИИ(?![а-яёА-ЯЁa-zA-Z])',
+          r'(?<![а-яёА-ЯЁa-zA-Z])бот(?![а-яёА-ЯЁa-zA-Z])',
+          r'(?<![а-яёА-ЯЁa-zA-Z])робот(?![а-яёА-ЯЁa-zA-Z])',
+      ]))
+check("PROMPTS T12e: fallback содержит 'напишите 1'", "напишите 1" in _tpl)
+
+# ── T13: _get_tone возвращает строку для каждого уровня ──────────────────────
+for lvl in range(1, 6):
+    _t = _ca_mod._get_tone(lvl)
+    check(f"PROMPTS T13: _get_tone({lvl}) непустая строка",
+          isinstance(_t, str) and len(_t) > 10,
+          f"Получено: {repr(_t)[:50]}")
+
+# ── T14: _get_lang_inst возвращает строку для ru и kz ────────────────────────
+check("PROMPTS T14: _get_lang_inst('ru') непустая",
+      isinstance(_ca_mod._get_lang_inst("ru"), str) and len(_ca_mod._get_lang_inst("ru")) > 3)
+check("PROMPTS T14b: _get_lang_inst('kz') непустая",
+      isinstance(_ca_mod._get_lang_inst("kz"), str) and len(_ca_mod._get_lang_inst("kz")) > 3)
+
+# ─────────────────────────────────────────────────────────────────────────────
 
 # ═══════════════════════════════════════════════════════════════
 # 14. ИТОГ

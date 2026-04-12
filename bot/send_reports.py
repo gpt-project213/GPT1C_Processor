@@ -1248,12 +1248,27 @@ async def check_workday_task(context: ContextTypes.DEFAULT_TYPE):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 async def debt_collector_daily(context: ContextTypes.DEFAULT_TYPE):
-    """Ежедневный запуск AI-коллектора в 18:00 Asia/Almaty."""
+    """Ежедневный запуск AI-коллектора в 17:30 Asia/Almaty."""
     from bot.workday_checker import is_holiday_today
     if is_holiday_today():
         logger.info("debt_collector_daily: выходной — пропуск")
         return
-    dry_run = os.getenv("COLLECTOR_DRY_RUN", "false").lower() == "true"
+
+    # Если WHATSAPP_ENABLED=0 — форсируем dry-run, не пытаемся --send (избегаем exit code 1)
+    wa_enabled = os.getenv("WHATSAPP_ENABLED", "0").lower() in ("1", "true", "yes")
+    dry_run = os.getenv("COLLECTOR_DRY_RUN", "false").lower() == "true" or not wa_enabled
+    if not wa_enabled:
+        logger.info("debt_collector_daily: WHATSAPP_ENABLED=0 — запуск в dry-run режиме")
+
+    # Чистим просроченные батчи согласования перед запуском
+    try:
+        from collector.approval_flow import expire_old_batches
+        expired = expire_old_batches()
+        if expired:
+            logger.info("debt_collector_daily: истёк %d батч(ей) согласования", expired)
+    except Exception as _e:
+        logger.debug("expire_old_batches error: %s", _e)
+
     log_event("collector_daily_start", dry_run=dry_run)
     try:
         rc, stdout, stderr = await run_script_async(
