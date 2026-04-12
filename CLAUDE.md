@@ -32,9 +32,13 @@ python run_pipeline_all_mp.py
 # Fetch new Excel files from IMAP email
 python imap_fetcher.py --once
 
-# Run collector manually (dry run first, then send)
-python -m collector.collections_engine --dry-run
-python -m collector.collections_engine --send
+# Run collector manually (Phase 3 controlled live — only approved-batch path)
+python -m collector.collections_engine --fix-first-seen   # correct first_seen inflation
+python -m collector.collections_engine --dry-run          # always first
+python -m collector.collections_engine --preview          # create approval batch
+# After manager + admin approval:
+python -m collector.collections_engine --send-approved --batch-id <id> --client "<name>"
+# Legacy --send is DISABLED. Do not use.
 
 # Run tests
 python -X utf8 tests/test_project.py
