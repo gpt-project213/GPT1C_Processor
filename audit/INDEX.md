@@ -15,7 +15,7 @@
 | WA Approval UX (менеджер → admin) | ✅ Реализован | `collector/approval_flow.py` v1.0.0 |
 | Telegram бот (отчёты, silence, CRM) | ✅ Работает | |
 | CRM task creation (18:00) | ✅ Условно безопасно | |
-| CRM reminders (каждый час) | ⚠️ Работает с оговоркой | BUG-CRM-1: нет holiday guard |
+| CRM reminders (каждый час) | ✅ С holiday guard | BUG-CRM-1: исправлен 2026-04-11 |
 | Voice calls (Retell AI) | ⛔ Не включён | `RETELL_ENABLED=0` |
 
 ---
@@ -30,6 +30,17 @@
 
 ---
 
+### Manager Lists
+
+| Файл | Дата | Содержание |
+|---|---|---|
+| [manager_lists/MANAGER_SHORTLIST_Алена_2026-04-11.md](manager_lists/MANAGER_SHORTLIST_Алена_2026-04-11.md) | 2026-04-11 | 5 клиентов: 3 stopped, 2 active |
+| [manager_lists/MANAGER_SHORTLIST_Ергали_2026-04-11.md](manager_lists/MANAGER_SHORTLIST_Ергали_2026-04-11.md) | 2026-04-11 | 9 клиентов: 5 stopped (2 потенциальных), 3 active, 1 no_phone |
+| [manager_lists/MANAGER_SHORTLIST_Магира_2026-04-11.md](manager_lists/MANAGER_SHORTLIST_Магира_2026-04-11.md) | 2026-04-11 | 7 клиентов: 1 stopped, 6 active (4 через violation_shipment) |
+| [manager_lists/MANAGER_SHORTLIST_Оксана_2026-04-11.md](manager_lists/MANAGER_SHORTLIST_Оксана_2026-04-11.md) | 2026-04-11 | 2 клиента: оба active |
+
+---
+
 ### Аудиты кода
 
 | Файл | Дата | Тема | Статус |
@@ -39,6 +50,8 @@
 | [AUDIT_VERDICT.md](AUDIT_VERDICT.md) | 2026-03-20 | Вердикт: 0 critical / 0 high / 2 arch | ✅ Актуально |
 | [AUDIT_FULL_PROJECT_2026-04-09.md](AUDIT_FULL_PROJECT_2026-04-09.md) | 2026-04-09 | Полный аудит проекта: расписание, роли, TZ | ✅ Актуально |
 | [CRM_FULL_AUDIT_2026-04-11.md](CRM_FULL_AUDIT_2026-04-11.md) | 2026-04-11 | Полный аудит CRM: 13 секций + ответы на 10 вопросов | ✅ Актуально |
+| [COLLECTOR_CLASSIFICATION_AUDIT_2026-04-11.md](COLLECTOR_CLASSIFICATION_AUDIT_2026-04-11.md) | 2026-04-11 | Разбор классификации 84/23 должников: реальный список, завышающие факторы, FIX-4..FIX-8 | ✅ Актуально |
+| [COLLECTOR_SHORTLIST_EXPLAINED_2026-04-11.md](COLLECTOR_SHORTLIST_EXPLAINED_2026-04-11.md) | 2026-04-11 | Shortlist для директора: 0 кандидатов, 2 потенциальных (ТОО ГудФуд, ИП Шахин), WA root cause | ✅ Актуально |
 
 ---
 
@@ -85,8 +98,8 @@
 
 | ID | Файл | Описание | Приоритет |
 |---|---|---|---|
-| BUG-CRM-1 | `bot/send_reports.py:6264` | `crm_phone_reminder_task` не проверяет `is_holiday_today()` — рассылает напоминания в выходные | LOW |
-| OP-4 | `collector/collections_engine.py` | Нет обязательной проверки `manager_name` перед прямой WA-отправкой в `_process_single()` | LOW |
+| ~~BUG-CRM-1~~ | ~~`bot/send_reports.py`~~ | ~~`crm_phone_reminder_task` не проверяет `is_holiday_today()`~~ | ✅ ИСПРАВЛЕН 2026-04-11 |
+| ~~OP-4~~ | ~~`collector/collections_engine.py`~~ | ~~Нет проверки `manager_name` перед WA-отправкой~~ | ✅ ИСПРАВЛЕН 2026-04-11 |
 | ARCH-1 | `tools/txt_to_html.py` + `bot/send_reports.py` | `txt_to_html` в двух местах с разными интерфейсами | ARCH |
 | ARCH-3 | `expenses_parser.py` | Inline HTML в парсере | ARCH |
 | BSR-01 | `bot/send_reports.py:388` | `logging.Formatter.formatTime` monkey-patch — глобальный | LOW |
