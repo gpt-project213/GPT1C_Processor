@@ -4,7 +4,7 @@
 collections/collections_engine.py
 Главный оркестратор AI-Коллектора долгов.
 
-Версия: 1.1.0 (2026-04-12)
+Версия: 1.2.0 (2026-04-12)
 
 CLI:
   python -m collector.collections_engine --dry-run
@@ -431,6 +431,7 @@ async def _process_single(
     client: Dict[str, Any],
     contact: Dict[str, Any],
     dry_run: bool,
+    msg_type: str = "",
 ) -> Dict[str, Any]:
     """Обрабатывает одного должника: генерация + диалог с менеджером + звонок."""
     name = client["name"]
@@ -525,6 +526,7 @@ async def _process_single(
         level=level,
         language=language,
         manager_name=manager_name,
+        msg_type=msg_type,
     )
     logger.info("[%s] level=%d days=%d | текст: %s...", name, level, days, text[:60])
 
@@ -761,17 +763,28 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
         if level == 0:
             continue
 
-        # Клиент на ручном/авто стопе — пропускаем, управляется debt_stop_control
+        # PHASE 4: stopped/auto_stopped блокирует отгрузки, НЕ уведомления коллектора.
+        # Явный collector-блок — только через do_not_notify / collector_skip в registry.
+        _dsc_rec = None
+        _msg_type = ""
         try:
             from bot.debt_stop_control import load_registry as _dsc_registry
-            _dsc_reg = _dsc_registry()
-            _dsc_rec = _dsc_reg.get(name)
-            if _dsc_rec and _dsc_rec.get("status") in (
-                "stopped", "auto_stopped", "pending_clearance", "conditional"
-            ):
-                logger.info("[%s] в стоп-листе (статус: %s) — пропуск коллектора",
-                            name, _dsc_rec["status"])
-                continue
+            _dsc_rec = _dsc_registry().get(name)
+            if _dsc_rec:
+                if _flag_enabled(_dsc_rec, "do_not_notify", "do_not_write",
+                                 "do_not_contact", "collector_skip"):
+                    logger.info("[%s] collector_skip в stop-registry — пропуск", name)
+                    continue
+                _shipment_status = _dsc_rec.get("status", "")
+                if _shipment_status in ("stopped", "auto_stopped"):
+                    _msg_type = "stoplist_reminder"
+                    logger.info(
+                        "[%s] shipment_status=%s — отгрузки заблокированы, "
+                        "уведомление разрешено (долг не закрыт)",
+                        name, _shipment_status,
+                    )
+                elif _shipment_status in ("pending_clearance", "conditional"):
+                    _msg_type = "payment_plan_control"
         except Exception as _e:
             logger.debug("Ошибка проверки stop-registry: %s", _e)
 
@@ -824,7 +837,7 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
                                "promise_broken": False, "escalated": False})
             continue
 
-        result = await _process_single(client, contact, dry_run)
+        result = await _process_single(client, contact, dry_run, msg_type=_msg_type)
         processed.append(result)
 
     # Итоговая сводка → администратору

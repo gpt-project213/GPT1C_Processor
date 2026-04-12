@@ -1110,9 +1110,71 @@ check("PROMPTS T14b: _get_lang_inst('kz') непустая",
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ═══════════════════════════════════════════════════════════════
-# 14. ИТОГ
+# 14. PHASE 4 — DECOUPLE SHIPMENT STOP FROM COLLECTION ELIGIBILITY
 # ═══════════════════════════════════════════════════════════════
-section("ИТОГ")
+section("PHASE 4: Collector eligibility decoupled from shipment stop")
+
+from collector.collections_engine import _collector_candidate_decision, _flag_enabled
+
+_p4_client = {
+    "name": "Test Client", "amount": 50000.0, "days": 20,
+    "opening": 0.0, "debit": 0.0, "credit": 0.0,
+}
+_p4_contact = {"whatsapp": "+77001112233", "telegram_id": "", "manager": "Тест"}
+
+# T1: auto_stopped + долг + валидный телефон → client_approval, stoplist_reminder
+_d1 = _collector_candidate_decision(_p4_client, _p4_contact, {"status": "auto_stopped"})
+check("P4 T1: auto_stopped + debt → action=client_approval",
+      _d1.get("action") == "client_approval", str(_d1))
+check("P4 T1b: auto_stopped → msg_type=stoplist_reminder",
+      _d1.get("msg_type") == "stoplist_reminder", str(_d1))
+
+# T2: stopped + долг + валидный телефон → client_approval, stoplist_reminder
+_d2 = _collector_candidate_decision(_p4_client, _p4_contact, {"status": "stopped"})
+check("P4 T2: stopped + debt → action=client_approval",
+      _d2.get("action") == "client_approval", str(_d2))
+check("P4 T2b: stopped → msg_type=stoplist_reminder",
+      _d2.get("msg_type") == "stoplist_reminder", str(_d2))
+
+# T3: auto_stopped + collector_skip → skip (явный collector-блок работает)
+_d3 = _collector_candidate_decision(
+    _p4_client, _p4_contact, {"status": "auto_stopped", "collector_skip": True}
+)
+check("P4 T3: auto_stopped + collector_skip → skip",
+      _d3.get("action") == "skip", str(_d3))
+
+# T4: do_not_contact в contact → skip (независимо от stop-статуса)
+_d4 = _collector_candidate_decision(
+    _p4_client, {**_p4_contact, "do_not_contact": True}, {"status": "auto_stopped"}
+)
+check("P4 T4: do_not_contact в contact → skip",
+      _d4.get("action") == "skip", str(_d4))
+
+# T5: auto_stopped + нет телефона → action=client_approval на уровне решения
+# (phone-блок срабатывает позже в run(), не в _collector_candidate_decision)
+_d5 = _collector_candidate_decision(
+    _p4_client, {"whatsapp": "", "telegram_id": ""}, {"status": "auto_stopped"}
+)
+check("P4 T5: auto_stopped + нет телефона → client_approval (phone-блок downstream)",
+      _d5.get("action") == "client_approval", str(_d5))
+
+# T6: _flag_enabled корректно определяет collector_skip / do_not_contact
+check("P4 T6: _flag_enabled находит collector_skip=True",
+      _flag_enabled({"collector_skip": True}, "collector_skip", "do_not_contact"))
+check("P4 T6b: _flag_enabled отрицательный (только status=auto_stopped)",
+      not _flag_enabled({"status": "auto_stopped"}, "collector_skip", "do_not_contact"))
+
+# T7: stop_rec.status не изменяется после вызова _collector_candidate_decision
+_stop_rec_check = {"status": "auto_stopped"}
+_collector_candidate_decision(_p4_client, _p4_contact, _stop_rec_check)
+check("P4 T7: stop_rec['status'] неизменён после decision (auto_stopped остаётся auto_stopped)",
+      _stop_rec_check.get("status") == "auto_stopped", str(_stop_rec_check))
+
+
+# ═══════════════════════════════════════════════════════════════
+# 15. ИТОГ
+# ═══════════════════════════════════════════════════════════════
+section("ИТОГ")  # секция 15
 total  = len(results)
 passed = sum(1 for _, ok in results if ok)
 failed = total - passed
