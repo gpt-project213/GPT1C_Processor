@@ -1170,6 +1170,19 @@ _collector_candidate_decision(_p4_client, _p4_contact, _stop_rec_check)
 check("P4 T7: stop_rec['status'] неизменён после decision (auto_stopped остаётся auto_stopped)",
       _stop_rec_check.get("status") == "auto_stopped", str(_stop_rec_check))
 
+# T8: regression — auto_stopped + ненулевые debit/credit → client_approval (active guard не блокирует)
+# Это проверяет инвариант dry-run == preview: _collector_candidate_decision() не применяет
+# active guard для stopped-клиентов, run() теперь тоже (_bypass_active_guard=True).
+_d8 = _collector_candidate_decision(
+    {**_p4_client, "debit": 100000.0, "credit": 80000.0},
+    _p4_contact,
+    {"status": "auto_stopped"},
+)
+check("P4 T8: auto_stopped + debit/credit > 0 → client_approval (active guard bypassed)",
+      _d8.get("action") == "client_approval", str(_d8))
+check("P4 T8b: msg_type=stoplist_reminder при наличии debit/credit",
+      _d8.get("msg_type") == "stoplist_reminder", str(_d8))
+
 
 # ═══════════════════════════════════════════════════════════════
 # 15. ИТОГ

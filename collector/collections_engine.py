@@ -409,7 +409,7 @@ def daily_summary(processed: List[Dict], total_classified: int = 0, dry_run: boo
         f"",
         f"Классифицировано должников 1–5: {total_classified}",
         f"Обработано коллектором: {total}",
-        f"Пропущено (стоп-лист): {skipped}",
+        f"Пропущено фильтрами: {skipped}",
         f"Отправлено сообщений: {sent}",
     ]
     if promised:
@@ -765,8 +765,11 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
 
         # PHASE 4: stopped/auto_stopped блокирует отгрузки, НЕ уведомления коллектора.
         # Явный collector-блок — только через do_not_notify / collector_skip в registry.
+        # _bypass_active_guard=True синхронизирует run() с _collector_candidate_decision(),
+        # которая для stopped/auto_stopped возвращает client_approval до проверки debit/credit.
         _dsc_rec = None
         _msg_type = ""
+        _bypass_active_guard = False
         try:
             from bot.debt_stop_control import load_registry as _dsc_registry
             _dsc_rec = _dsc_registry().get(name)
@@ -778,6 +781,7 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
                 _shipment_status = _dsc_rec.get("status", "")
                 if _shipment_status in ("stopped", "auto_stopped"):
                     _msg_type = "stoplist_reminder"
+                    _bypass_active_guard = True
                     logger.info(
                         "[%s] shipment_status=%s — отгрузки заблокированы, "
                         "уведомление разрешено (долг не закрыт)",
@@ -785,14 +789,16 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
                     )
                 elif _shipment_status in ("pending_clearance", "conditional"):
                     _msg_type = "payment_plan_control"
+                    _bypass_active_guard = True
         except Exception as _e:
             logger.debug("Ошибка проверки stop-registry: %s", _e)
 
         # FIX-1: активные клиенты (покупают ИЛИ платят) — коллектор не трогает.
-        # Контакт нужен только тем, кто полностью заморожен: ни отгрузки, ни оплаты.
+        # Исключение: клиенты на shipment-стопе — active guard не применяется,
+        # т.к. _collector_candidate_decision() (preview path) тоже его не применяет.
         _debit_val  = client.get("debit", 0.0) or 0.0
         _credit_val = client.get("credit", 0.0) or 0.0
-        if _debit_val > 0 or _credit_val > 0:
+        if not _bypass_active_guard and (_debit_val > 0 or _credit_val > 0):
             logger.info("[%s] пропуск — клиент активен (debit=%.0f, credit=%.0f)",
                         name, _debit_val, _credit_val)
             continue
