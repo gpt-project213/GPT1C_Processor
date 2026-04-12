@@ -47,6 +47,10 @@ CONTACTS_XLSX_BACKUP_DIR = ROOT_DIR / "backups" / "contacts_xlsx"
 
 logger = logging.getLogger(__name__)
 
+PHONE_IN_NAME_RE = re.compile(
+    r"(?<!\d)(?:\+?7|8)[\s\-\(\)]*\d{3}[\s\-\(\)]*\d{3}[\s\-]*\d{2}[\s\-]*\d{2}(?!\d)"
+)
+
 
 # ─────────────────────────────────────────────
 # Загрузка / сохранение
@@ -118,6 +122,26 @@ def refresh_contacts_xlsx_mirror(reason: str = "") -> bool:
             e,
         )
         return False
+
+
+def normalize_kz_phone(phone_raw: str) -> str:
+    """Returns +7XXXXXXXXXX for valid KZ phones, otherwise an empty string."""
+    digits = re.sub(r"\D", "", str(phone_raw or ""))
+    if re.fullmatch(r"8\d{10}", digits):
+        digits = "7" + digits[1:]
+    if re.fullmatch(r"7\d{10}", digits):
+        return "+" + digits
+    return ""
+
+
+def extract_phones_from_client_name(client_name: str) -> List[str]:
+    """Extracts possible KZ phone numbers embedded in a 1C client name."""
+    phones: List[str] = []
+    for match in PHONE_IN_NAME_RE.finditer(str(client_name or "")):
+        phone = normalize_kz_phone(match.group(0))
+        if phone and phone not in phones:
+            phones.append(phone)
+    return phones
 
 
 # ─────────────────────────────────────────────
@@ -394,7 +418,7 @@ def find_similar_clients(query: str, manager: str = "", limit: int = 5) -> List[
 
 
 def set_client_phone(client_name: str, phone: str, manager: str = "",
-                     alias: str = "") -> bool:
+                     alias: str = "", phone_source: str = "") -> bool:
     """
     Записывает телефон (WhatsApp) клиента в clients.json.
     client_name — точный ключ из 1С (после подтверждения менеджером).
@@ -410,6 +434,8 @@ def set_client_phone(client_name: str, phone: str, manager: str = "",
         return False
 
     entry["whatsapp"] = phone.strip()
+    if phone_source:
+        entry["phone_source"] = phone_source
     if manager and not entry.get("manager"):
         entry["manager"] = manager
     # Псевдоним: сохраняем если отличается от ключа 1С
@@ -426,7 +452,8 @@ def set_client_phone(client_name: str, phone: str, manager: str = "",
 def set_client_details(client_name: str, display_name: str = "",
                         phone: str = "", address: str = "",
                         original_name: str = "", name_mode: str = "",
-                        name_review_needed: Optional[bool] = None) -> bool:
+                        name_review_needed: Optional[bool] = None,
+                        phone_source: str = "") -> bool:
     """
     Сохраняет display_name, телефон и/или адрес торговой точки для клиента.
     Обновляет только переданные (непустые) поля.
@@ -443,6 +470,8 @@ def set_client_details(client_name: str, display_name: str = "",
         entry["display_name"] = display_name.strip()
     if phone:
         entry["whatsapp"] = phone.strip()
+        if phone_source:
+            entry["phone_source"] = phone_source
     if address:
         entry["address"] = address.strip()
     if name_mode:

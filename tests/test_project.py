@@ -424,7 +424,32 @@ for s, expected in cases_debt:
 section("12. CRM → contacts.xlsx mirror")
 
 import crm_clients as _crm
+import send_reports as _send_reports
 from openpyxl import load_workbook as _load_workbook
+
+check("CRM phone hint: 87019282878 извлекается из названия",
+      _crm.extract_phones_from_client_name("Е Руслан (сосед) тел 87019282878") == ["+77019282878"])
+check("CRM phone hint: +7 701 763 8514 нормализуется",
+      _crm.extract_phones_from_client_name("О Ч/Л тел +7 701 763 8514 Салтанат") == ["+77017638514"])
+check("CRM phone hint: несколько номеров сохраняют порядок",
+      _crm.extract_phones_from_client_name("М Сагыныш тел 87719058214-87053525045") == ["+77719058214", "+77053525045"])
+
+_phone_prompt = _send_reports._crm_phone_prompt_text(
+    "М Ресторан The Veil ул.Ак булак,3 (87776549363)",
+    suggestions=["+77776549363"],
+)
+check("CRM phone prompt: показывает найденный номер",
+      "+77776549363" in _phone_prompt and "Подтвердите WhatsApp" in _phone_prompt,
+      _phone_prompt)
+
+_phone_kb = _send_reports._crm_phone_choice_kb("М Ресторан The Veil ул.Ак булак,3 (87776549363)")
+_phone_buttons = [btn.text for row in _phone_kb.inline_keyboard for btn in row] if _phone_kb else []
+check("CRM phone buttons: только записать или указать другой",
+      "✅ Да, записать" in _phone_buttons and "✏️ Указать другой номер" in _phone_buttons,
+      str(_phone_buttons))
+check("CRM phone buttons: нет кнопки пропустить",
+      not any("пропустить" in b.lower() or "не знаю" in b.lower() for b in _phone_buttons),
+      str(_phone_buttons))
 
 _orig_config_dir = _crm.CONFIG_DIR
 _orig_clients_path = _crm.CLIENTS_PATH
@@ -446,6 +471,7 @@ with _tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
                 "ТОО Тест CRM": {
                     "manager": "Алена",
                     "whatsapp": "87010000000",
+                    "phone_source": "manager_manual",
                     "display_name": "Тест",
                     "language": "ru",
                     "sources": ["debt"],
@@ -459,10 +485,14 @@ with _tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
         wb = _load_workbook(_crm.CONTACTS_XLSX_PATH, read_only=True, data_only=True)
         ws = wb[wb.sheetnames[0]]
         values = [ws.cell(2, c).value for c in range(1, 5)]
+        headers = [ws.cell(1, c).value for c in range(1, ws.max_column + 1)]
         wb.close()
         check("CRM mirror: Excel содержит клиента из clients.json",
               values[0] == "ТОО Тест CRM" and values[1] == "Алена" and values[3] == "87010000000",
               str(values))
+        check("CRM mirror: Excel содержит колонки телефонной подсказки",
+              "Телефон из названия" in headers and "Источник телефона" in headers,
+              str(headers))
         backups = list(_crm.CONTACTS_XLSX_BACKUP_DIR.glob("contacts_*.xlsx"))
         check("CRM mirror: старый contacts.xlsx забэкаплен перед перезаписью",
               len(backups) == 1, str(backups))

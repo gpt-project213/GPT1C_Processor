@@ -20,6 +20,8 @@ tools/contacts_sync.py
   Адрес             — адрес торговой точки
   Язык              — ru / kz
   Не звонить        — Да / Нет
+  Телефон из названия — возможный телефон, найденный прямо в названии клиента
+  Источник телефона — откуда был подтверждён номер
   Источники         — debt/sales (только чтение)
   Первое появление  — дата (только чтение)
   Последнее видели  — дата (только чтение)
@@ -67,6 +69,8 @@ COLUMNS = [
     ("Адрес",             "address",        True),
     ("Язык",              "language",       True),
     ("Не звонить",        "do_not_call",    True),
+    ("Телефон из названия", "phone_suggestion", False),
+    ("Источник телефона", "phone_source",    False),
     ("Источники",         "sources",        False),
     ("Первое появление",  "first_seen",     False),
     ("Последнее видели",  "last_seen",      False),
@@ -140,6 +144,10 @@ def export_to_excel(xlsx_path: Path, clients_path: Path = CLIENTS_PATH) -> int:
     """Экспортирует clients.json в Excel. Возвращает количество строк."""
     data = _load_clients(clients_path)
     clients_db = data.get("clients", {})
+    try:
+        from bot.crm_clients import extract_phones_from_client_name
+    except Exception:
+        extract_phones_from_client_name = lambda _name: []  # type: ignore
 
     wb = openpyxl.Workbook()
 
@@ -177,6 +185,8 @@ def export_to_excel(xlsx_path: Path, clients_path: Path = CLIENTS_PATH) -> int:
             info.get("address", ""),
             info.get("language", "ru"),
             do_not_call,
+            ", ".join(extract_phones_from_client_name(client_key)),
+            info.get("phone_source", ""),
             sources,
             info.get("first_seen", ""),
             info.get("last_seen", ""),
@@ -193,7 +203,7 @@ def export_to_excel(xlsx_path: Path, clients_path: Path = CLIENTS_PATH) -> int:
                 cell.font = Font(color="888888")
 
     # Ширина колонок
-    col_widths = [40, 12, 20, 18, 30, 8, 12, 14, 16, 16]
+    col_widths = [40, 12, 20, 18, 30, 8, 12, 22, 20, 14, 16, 16]
     for col_idx, width in enumerate(col_widths, start=1):
         ws.column_dimensions[get_column_letter(col_idx)].width = width
 
@@ -211,6 +221,8 @@ def export_to_excel(xlsx_path: Path, clients_path: Path = CLIENTS_PATH) -> int:
         ("Адрес", "Адрес торговой точки", "ул. Достык 12, магазин Аида"),
         ("Язык", "Язык сообщений: ru или kz", "ru"),
         ("Не звонить", "Да — только WhatsApp/Telegram, звонки запрещены", "Нет"),
+        ("Телефон из названия", "Подсказка: возможный номер, найденный в названии клиента (НЕ редактировать)", "+77011234567"),
+        ("Источник телефона", "Как номер попал в CRM: вручную или подтверждён из названия (НЕ редактировать)", "client_name_confirmed"),
         ("Источники", "Откуда появился клиент: debt/sales (НЕ редактировать)", "debt, sales"),
         ("Первое появление", "Дата первого появления в системе (НЕ редактировать)", "2026-03-25"),
         ("Последнее видели", "Дата последнего обновления (НЕ редактировать)", "2026-03-27"),
