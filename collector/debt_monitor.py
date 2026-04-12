@@ -19,9 +19,9 @@ import json
 import logging
 import os
 import re
-from datetime import date
+from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from dotenv import load_dotenv
 from zoneinfo import ZoneInfo
@@ -112,6 +112,7 @@ def load_latest_debt_json() -> Dict[str, Any]:
         logger.info("Загружаем debt JSON: %s", latest.name)
 
         clients: List[Dict[str, Any]] = []
+        blocks_by_client: Dict[str, Dict[str, Any]] = {}
         if isinstance(data, dict):
             for key in ("clients", "rows", "data"):
                 if key in data and isinstance(data[key], list):
@@ -121,10 +122,20 @@ def load_latest_debt_json() -> Dict[str, Any]:
                 for name, val in data.items():
                     if isinstance(val, dict):
                         clients.append({"name": name, **val})
+            blocks = data.get("blocks")
+            if isinstance(blocks, list):
+                for block in blocks:
+                    if not isinstance(block, dict):
+                        continue
+                    block_name = (block.get("name") or block.get("client") or "").strip()
+                    if block_name:
+                        blocks_by_client[block_name] = block
         elif isinstance(data, list):
             clients = data
 
         file_manager = data.get("manager", "") if isinstance(data, dict) else ""
+        period_min = data.get("period_min", "") if isinstance(data, dict) else ""
+        period_max = data.get("period_max", "") if isinstance(data, dict) else ""
         for c in clients:
             if not isinstance(c, dict):
                 continue
@@ -133,6 +144,16 @@ def load_latest_debt_json() -> Dict[str, Any]:
                 continue
             # Сохраняем привязку к менеджеру из корня файла
             c_stamped = dict(c)
+            block = blocks_by_client.get(name)
+            if block:
+                movements = block.get("movements")
+                if isinstance(movements, list):
+                    c_stamped["_movements"] = movements
+                    c_stamped["_movement_block"] = block
+            if period_min and not c_stamped.get("_period_min"):
+                c_stamped["_period_min"] = period_min
+            if period_max and not c_stamped.get("_period_max"):
+                c_stamped["_period_max"] = period_max
             if file_manager and not c_stamped.get("_manager"):
                 c_stamped["_manager"] = file_manager
             existing = merged_clients.get(name)
@@ -191,6 +212,197 @@ def get_overdue_days(client_data: Dict[str, Any]) -> int:
     return 0
 
 
+def _parse_movement_date(value: Any) -> Optional[date]:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    raw = raw[:10]
+    for fmt in ("%Y-%m-%d", "%d.%m.%Y"):
+        try:
+            return datetime.strptime(raw, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _fmt_iso(d: Optional[date]) -> Optional[str]:
+    return d.isoformat() if d else None
+
+
+def _movement_entries(movement: Dict[str, Any]) -> List[Tuple[str, date, float]]:
+    d = _parse_movement_date(movement.get("date"))
+    if not d:
+        return []
+
+    entries: List[Tuple[str, date, float]] = []
+    kind = str(movement.get("type") or movement.get("kind") or "").lower()
+    amount = _safe_float(movement.get("amount") or movement.get("sum") or 0)
+    if kind:
+        if "оплат" in kind or "credit" in kind or kind == "payment":
+            if amount > 0:
+                entries.append(("payment", d, amount))
+        else:
+            if amount > 0:
+                entries.append(("shipment", d, amount))
+        return entries
+
+    debit = _safe_float(movement.get("debit") or 0)
+    credit = _safe_float(movement.get("credit") or 0)
+    if debit > 0:
+        entries.append(("shipment", d, debit))
+    if credit > 0:
+        entries.append(("payment", d, credit))
+    return entries
+
+
+def compute_residual_debt_profile(
+    client_data: Dict[str, Any],
+    as_of_date: Optional[date] = None,
+) -> Dict[str, Any]:
+    """Calculates current debt age by matching payments to oldest shipments.
+
+    Returns a profile, not just a number, so manager/admin previews can explain
+    why the collector level was chosen. If detailed movements are unavailable,
+    falls back to the legacy payment-silence metric.
+    """
+    as_of = (
+        as_of_date
+        or _parse_movement_date(client_data.get("_as_of_date"))
+        or _parse_movement_date(client_data.get("_period_max"))
+        or date.today()
+    )
+    payment_silence_days = get_overdue_days(client_data)
+    movements = client_data.get("_movements")
+    if not isinstance(movements, list) or not movements:
+        return {
+            "residual_debt_age_days": payment_silence_days,
+            "payment_silence_days": payment_silence_days,
+            "oldest_unpaid_date": None,
+            "unpaid_parts": [],
+            "basis": "fallback_days_silence",
+            "confidence": "low",
+            "active_turnover": False,
+            "explanation": "movements unavailable; using payment silence",
+        }
+
+    period_min = _parse_movement_date(client_data.get("_period_min")) or as_of
+    opening = _safe_float(client_data.get("opening") or 0)
+    queue: List[Tuple[date, float, str]] = []
+    unapplied_payment = 0.0
+
+    if opening > 0:
+        queue.append((period_min, opening, "opening"))
+    elif opening < 0:
+        unapplied_payment = abs(opening)
+
+    parsed_entries: List[Tuple[str, date, float]] = []
+    for movement in movements:
+        if isinstance(movement, dict):
+            parsed_entries.extend(_movement_entries(movement))
+    parsed_entries.sort(key=lambda item: (item[1], 0 if item[0] == "shipment" else 1))
+
+    recent_from = as_of - timedelta(days=14)
+    recent_shipment = False
+    recent_payment = False
+
+    for kind, movement_date, amount in parsed_entries:
+        if amount <= 0:
+            continue
+        if movement_date >= recent_from:
+            if kind == "shipment":
+                recent_shipment = True
+            elif kind == "payment":
+                recent_payment = True
+
+        if kind == "shipment":
+            if unapplied_payment > 0:
+                covered = min(unapplied_payment, amount)
+                amount -= covered
+                unapplied_payment -= covered
+            if amount > 0:
+                queue.append((movement_date, amount, "shipment"))
+            continue
+
+        remaining = amount
+        while queue and remaining > 0:
+            item_date, item_amount, source = queue[0]
+            if remaining + 0.005 >= item_amount:
+                remaining -= item_amount
+                queue.pop(0)
+            else:
+                queue[0] = (item_date, item_amount - remaining, source)
+                remaining = 0.0
+        if remaining > 0:
+            unapplied_payment += remaining
+
+    debt_amount = _safe_float(
+        client_data.get("amount")
+        or client_data.get("closing")
+        or client_data.get("debt")
+        or client_data.get("balance")
+        or 0
+    )
+    if debt_amount <= 0:
+        return {
+            "residual_debt_age_days": 0,
+            "payment_silence_days": payment_silence_days,
+            "oldest_unpaid_date": None,
+            "unpaid_parts": [],
+            "basis": "no_debt",
+            "confidence": "high",
+            "active_turnover": recent_shipment and recent_payment,
+            "explanation": "debt is closed",
+        }
+
+    queue_total = sum(amount for _, amount, _ in queue)
+    if queue_total > debt_amount + 1.0:
+        overage = queue_total - debt_amount
+        while queue and overage > 0:
+            item_date, item_amount, source = queue[-1]
+            if overage + 0.005 >= item_amount:
+                overage -= item_amount
+                queue.pop()
+            else:
+                queue[-1] = (item_date, item_amount - overage, source)
+                overage = 0.0
+
+    if not queue:
+        return {
+            "residual_debt_age_days": payment_silence_days,
+            "payment_silence_days": payment_silence_days,
+            "oldest_unpaid_date": None,
+            "unpaid_parts": [],
+            "basis": "fallback_days_silence",
+            "confidence": "low",
+            "active_turnover": recent_shipment and recent_payment,
+            "explanation": "positive debt but FIFO queue is empty; using payment silence",
+        }
+
+    oldest_date = queue[0][0]
+    age_days = max((as_of - oldest_date).days, 0)
+    basis = "opening_fallback" if queue[0][2] == "opening" else "movements_fifo"
+    confidence = "medium" if basis == "opening_fallback" else "high"
+    unpaid_parts = [
+        {"date": _fmt_iso(item_date), "amount": round(amount, 2), "source": source}
+        for item_date, amount, source in queue
+        if amount > 0.005
+    ]
+
+    return {
+        "residual_debt_age_days": age_days,
+        "payment_silence_days": payment_silence_days,
+        "oldest_unpaid_date": _fmt_iso(oldest_date),
+        "unpaid_parts": unpaid_parts,
+        "basis": basis,
+        "confidence": confidence,
+        "active_turnover": recent_shipment and recent_payment,
+        "explanation": (
+            "oldest unpaid part is from "
+            f"{_fmt_iso(oldest_date)}; payment silence is {payment_silence_days} days"
+        ),
+    }
+
+
 def classify_debtors(debt_data: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Классифицирует должников по уровням давления.
 
@@ -230,7 +442,9 @@ def classify_debtors(debt_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         if not name:
             continue
 
-        days = get_overdue_days(client)
+        debt_age_profile = compute_residual_debt_profile(client)
+        days = int(debt_age_profile.get("residual_debt_age_days", get_overdue_days(client)) or 0)
+        payment_silence_days = int(debt_age_profile.get("payment_silence_days", get_overdue_days(client)) or 0)
         amount = 0.0
         for field in ("amount", "closing", "debt", "balance", "сумма", "остаток"):
             val = client.get(field)
@@ -250,7 +464,7 @@ def classify_debtors(debt_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         # Нарушение: отгрузка при наличии предыдущего долга И просрочка >= 7 дней.
         # Флаг violation_shipment используется ТОЛЬКО для уведомления менеджера ("Внимание!").
         # Повышение level производится только по стандартным порогам (_level_for_days).
-        violation_shipment = opening >= 100 and debit > 0 and days >= 7
+        violation_shipment = opening >= 100 and debit > 0 and payment_silence_days >= 7
 
         level = _level_for_days(days)
         # Уровень определяется только по дням (стандартные пороги):
@@ -266,6 +480,14 @@ def classify_debtors(debt_data: Dict[str, Any]) -> List[Dict[str, Any]]:
             "amount": amount,
             "days": days,
             "level": level,
+            "residual_debt_age_days": days,
+            "payment_silence_days": payment_silence_days,
+            "oldest_unpaid_date": debt_age_profile.get("oldest_unpaid_date"),
+            "unpaid_parts": debt_age_profile.get("unpaid_parts", []),
+            "debt_age_basis": debt_age_profile.get("basis", ""),
+            "debt_age_confidence": debt_age_profile.get("confidence", ""),
+            "active_turnover": bool(debt_age_profile.get("active_turnover", False)),
+            "classification_explanation": debt_age_profile.get("explanation", ""),
             "opening": opening,
             "violation_shipment": violation_shipment,
             "debit": debit,    # текущие отгрузки (>0 = клиент активно покупает)

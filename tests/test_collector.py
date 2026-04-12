@@ -10,6 +10,7 @@ import os
 import json
 import tempfile
 import shutil
+from datetime import date
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
@@ -68,7 +69,7 @@ section("2. debt_monitor._level_for_days")
 
 from collector.debt_monitor import (
     _level_for_days, get_overdue_days, classify_debtors,
-    load_contacts, match_client, _strip_prefix,
+    load_contacts, match_client, _strip_prefix, compute_residual_debt_profile,
 )
 
 cases = [
@@ -146,10 +147,217 @@ data_kontragent = {"clients": [{"контрагент": "ТОО Дельта", "
 res4 = classify_debtors(data_kontragent)
 check("classify: контрагент field", len(res4) == 1 and res4[0]["name"] == "ТОО Дельта")
 
+# PHASE 5: уровень коллектора считается по возрасту текущего остатка.
+_p5_as_of = date(2026, 4, 11)
+_p5_shapagat = {
+    "name": "А ТД Шапагат 5 павильон Дюсембина",
+    "debt": 64415.36,
+    "opening": 170000.0,
+    "debit": 1219009.56,
+    "credit": 1324594.2,
+    "days_silence": 19,
+    "_period_min": "2026-03-11",
+    "_period_max": "2026-04-11",
+    "_movements": [
+        {"date": "2026-03-15", "debit": 0.0, "credit": 170000.0},
+        {"date": "2026-03-16", "debit": 450000.0, "credit": 0.0},
+        {"date": "2026-03-19", "debit": 639794.2, "credit": 0.0},
+        {"date": "2026-03-20", "debit": 64800.0, "credit": 0.2},
+        {"date": "2026-03-21", "debit": 0.0, "credit": 680000.0},
+        {"date": "2026-03-22", "debit": 0.0, "credit": 345000.0},
+        {"date": "2026-03-23", "debit": 0.0, "credit": 129594.0},
+        {"date": "2026-04-08", "debit": 28084.0, "credit": 0.0},
+        {"date": "2026-04-10", "debit": 36331.36, "credit": 0.0},
+    ],
+}
+_p5_profile = compute_residual_debt_profile(_p5_shapagat, as_of_date=_p5_as_of)
+check("P5 T1: Шапагат residual_debt_age_days=3",
+      _p5_profile["residual_debt_age_days"] == 3, str(_p5_profile))
+check("P5 T1b: Шапагат oldest_unpaid_date=2026-04-08",
+      _p5_profile["oldest_unpaid_date"] == "2026-04-08", str(_p5_profile))
+check("P5 T1c: Шапагат payment_silence_days сохранён как 19",
+      _p5_profile["payment_silence_days"] == 19, str(_p5_profile))
+_p5_classified = classify_debtors({"clients": [_p5_shapagat]})[0]
+check("P5 T1d: Шапагат классифицируется как L0, не L2",
+      _p5_classified["level"] == 0 and _p5_classified["days"] == 3, str(_p5_classified))
+
+_p5_old = {
+    "name": "Старый долг",
+    "debt": 100000.0,
+    "days_silence": 1,
+    "_period_min": "2026-03-01",
+    "_period_max": "2026-04-12",
+    "_movements": [{"date": "2026-03-20", "debit": 100000.0, "credit": 0.0}],
+}
+_p5_old_profile = compute_residual_debt_profile(_p5_old, as_of_date=date(2026, 4, 12))
+check("P5 T2: старая неоплаченная отгрузка 23 дня → L3",
+      _p5_old_profile["residual_debt_age_days"] == 23 and
+      _level_for_days(_p5_old_profile["residual_debt_age_days"]) == 3,
+      str(_p5_old_profile))
+
+_p5_partial_new = {
+    "name": "Оплата закрыла старую",
+    "debt": 50000.0,
+    "_period_min": "2026-04-01",
+    "_period_max": "2026-04-12",
+    "_movements": [
+        {"date": "2026-04-01", "debit": 100000.0, "credit": 0.0},
+        {"date": "2026-04-10", "debit": 50000.0, "credit": 0.0},
+        {"date": "2026-04-11", "debit": 0.0, "credit": 100000.0},
+    ],
+}
+_p5_partial_new_profile = compute_residual_debt_profile(_p5_partial_new, as_of_date=date(2026, 4, 12))
+check("P5 T3: оплата закрыла старую отгрузку, остаток от новой",
+      _p5_partial_new_profile["oldest_unpaid_date"] == "2026-04-10" and
+      _p5_partial_new_profile["residual_debt_age_days"] == 2,
+      str(_p5_partial_new_profile))
+
+_p5_partial_old = {
+    "name": "Старая часть осталась",
+    "debt": 50000.0,
+    "_period_min": "2026-04-01",
+    "_period_max": "2026-04-12",
+    "_movements": [
+        {"date": "2026-04-01", "debit": 150000.0, "credit": 0.0},
+        {"date": "2026-04-05", "debit": 0.0, "credit": 100000.0},
+    ],
+}
+_p5_partial_old_profile = compute_residual_debt_profile(_p5_partial_old, as_of_date=date(2026, 4, 12))
+check("P5 T4: частичная оплата оставила старую часть",
+      _p5_partial_old_profile["oldest_unpaid_date"] == "2026-04-01" and
+      _p5_partial_old_profile["residual_debt_age_days"] == 11,
+      str(_p5_partial_old_profile))
+
+_p5_opening_closed = {
+    "name": "Opening закрыт",
+    "debt": 50000.0,
+    "opening": 100000.0,
+    "_period_min": "2026-04-01",
+    "_period_max": "2026-04-12",
+    "_movements": [
+        {"date": "2026-04-02", "debit": 0.0, "credit": 100000.0},
+        {"date": "2026-04-10", "debit": 50000.0, "credit": 0.0},
+    ],
+}
+_p5_opening_closed_profile = compute_residual_debt_profile(_p5_opening_closed, as_of_date=date(2026, 4, 12))
+check("P5 T5: закрытый opening не влияет на возраст остатка",
+      _p5_opening_closed_profile["oldest_unpaid_date"] == "2026-04-10",
+      str(_p5_opening_closed_profile))
+
+_p5_opening_left = {
+    "name": "Opening остался",
+    "debt": 60000.0,
+    "opening": 100000.0,
+    "_period_min": "2026-04-01",
+    "_period_max": "2026-04-12",
+    "_movements": [{"date": "2026-04-02", "debit": 0.0, "credit": 40000.0}],
+}
+_p5_opening_left_profile = compute_residual_debt_profile(_p5_opening_left, as_of_date=date(2026, 4, 12))
+check("P5 T6: непогашенный opening считается с начала периода",
+      _p5_opening_left_profile["basis"] == "opening_fallback" and
+      _p5_opening_left_profile["oldest_unpaid_date"] == "2026-04-01",
+      str(_p5_opening_left_profile))
+
+_p5_overpaid = {
+    "name": "Переплата",
+    "debt": 0.0,
+    "_period_min": "2026-04-01",
+    "_period_max": "2026-04-12",
+    "_movements": [
+        {"date": "2026-04-01", "debit": 100000.0, "credit": 0.0},
+        {"date": "2026-04-02", "debit": 0.0, "credit": 150000.0},
+    ],
+}
+_p5_overpaid_profile = compute_residual_debt_profile(_p5_overpaid, as_of_date=date(2026, 4, 12))
+check("P5 T7: переплата/закрытый долг → residual age 0",
+      _p5_overpaid_profile["basis"] == "no_debt" and
+      _p5_overpaid_profile["residual_debt_age_days"] == 0,
+      str(_p5_overpaid_profile))
+
+_p5_no_movements = {"name": "Нет движений", "debt": 50000.0, "days_silence": 22}
+_p5_no_movements_profile = compute_residual_debt_profile(_p5_no_movements, as_of_date=date(2026, 4, 12))
+check("P5 T8: нет movements → fallback на days_silence",
+      _p5_no_movements_profile["basis"] == "fallback_days_silence" and
+      _p5_no_movements_profile["residual_debt_age_days"] == 22,
+      str(_p5_no_movements_profile))
+
+_p5_rounding = {
+    "name": "Округление",
+    "debt": 64.41,
+    "_period_min": "2026-04-01",
+    "_period_max": "2026-04-12",
+    "_movements": [
+        {"date": "2026-04-01", "debit": 100.0, "credit": 0.0},
+        {"date": "2026-04-02", "debit": 0.0, "credit": 35.59},
+    ],
+}
+_p5_rounding_profile = compute_residual_debt_profile(_p5_rounding, as_of_date=date(2026, 4, 12))
+check("P5 T9: округление не ломает FIFO-остаток",
+      abs(sum(p["amount"] for p in _p5_rounding_profile["unpaid_parts"]) - 64.41) < 0.02,
+      str(_p5_rounding_profile))
+
+check("P5 T10: классификатор сохраняет обе метрики",
+      _p5_classified["residual_debt_age_days"] == 3 and
+      _p5_classified["payment_silence_days"] == 19 and
+      _p5_classified["debt_age_basis"] == "movements_fifo",
+      str(_p5_classified))
+
 
 # ═══════════════════════════════════════════════════════════════
 # 5. debt_monitor — _strip_prefix / match_client
 # ═══════════════════════════════════════════════════════════════
+from collector.collections_engine import _apply_collector_day_policy
+from unittest.mock import patch as _p5_patch
+
+with _p5_patch("collector.collections_engine.get_debt_days_since_first_seen", return_value=19):
+    _p5_policy_movements = _apply_collector_day_policy(
+        {"name": "Shapagat", "days": 3, "level": 0, "debt_age_basis": "movements_fifo"},
+        "Shapagat",
+        use_first_seen=True,
+    )
+check("P5 T11: first_seen does not inflate movements_fifo residual age",
+      _p5_policy_movements["days"] == 3 and _p5_policy_movements["level"] == 0,
+      str(_p5_policy_movements))
+
+with _p5_patch("collector.collections_engine.get_debt_days_since_first_seen", return_value=19):
+    _p5_policy_fallback = _apply_collector_day_policy(
+        {"name": "Fallback", "days": 3, "level": 0, "debt_age_basis": "fallback_days_silence"},
+        "Fallback",
+        use_first_seen=True,
+    )
+check("P5 T12: first_seen fallback stays for data without movements",
+      _p5_policy_fallback["days"] == 10 and _p5_policy_fallback["level"] == 1,
+      str(_p5_policy_fallback))
+
+from collector.approval_flow import create_batch as _p5_create_batch, _debt_age_text as _p5_debt_age_text
+
+_p5_batch = _p5_create_batch({
+    "Aлена": [{
+        "name": "Shapagat",
+        "amount": 64415.36,
+        "days": 3,
+        "level": 0,
+        "phone": "+77770000000",
+        "payment_silence_days": 19,
+        "oldest_unpaid_date": "2026-04-08",
+        "debt_age_basis": "movements_fifo",
+        "active_turnover": True,
+    }]
+})
+_p5_batch_client = _p5_batch["managers"]["Aлена"]["clients"][0]
+check("P5 T13: approval batch preserves residual debt metrics",
+      _p5_batch_client["payment_silence_days"] == 19 and
+      _p5_batch_client["oldest_unpaid_date"] == "2026-04-08" and
+      _p5_batch_client["active_turnover"] is True,
+      str(_p5_batch_client))
+_p5_debt_text = _p5_debt_age_text(_p5_batch_client)
+check("P5 T14: approval text shows residual age and payment silence",
+      "Возраст остатка: 3 дн." in _p5_debt_text and
+      "оплат нет: 19 дн." in _p5_debt_text and
+      "старейшая часть: 2026-04-08" in _p5_debt_text and
+      "активный оборот" in _p5_debt_text,
+      _p5_debt_text)
+
 section("5. debt_monitor.match_client")
 
 check("_strip_prefix ТОО",   _strip_prefix("ТОО Альфа") == "Альфа")

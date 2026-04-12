@@ -156,6 +156,12 @@ def create_batch(
                 "opening":           float(c.get("opening", 0) or 0),
                 "debit":             float(c.get("debit", 0) or 0),
                 "credit":            float(c.get("credit", 0) or 0),
+                "payment_silence_days": c.get("payment_silence_days"),
+                "oldest_unpaid_date": c.get("oldest_unpaid_date"),
+                "unpaid_parts":      c.get("unpaid_parts", []),
+                "debt_age_basis":    c.get("debt_age_basis", ""),
+                "debt_age_confidence": c.get("debt_age_confidence", ""),
+                "active_turnover":   bool(c.get("active_turnover", False)),
                 "violation_shipment": bool(c.get("violation_shipment", False)),
                 "msg_type":          msg_type,
                 "reason":            reason,
@@ -354,6 +360,20 @@ def _inline_kb(rows: List[List[Tuple[str, str]]]) -> Dict[str, Any]:
     }
 
 
+def _debt_age_text(c: Dict[str, Any]) -> str:
+    days = c.get("days", 0)
+    text = f"Возраст остатка: {days} дн."
+    silence = c.get("payment_silence_days")
+    if silence is not None and str(silence) != "" and int(silence or 0) != int(days or 0):
+        text += f" · оплат нет: {int(silence or 0)} дн."
+    oldest = c.get("oldest_unpaid_date")
+    if oldest:
+        text += f" · старейшая часть: {oldest}"
+    if c.get("active_turnover"):
+        text += " · активный оборот"
+    return text
+
+
 # ─── Manager preview ──────────────────────────────────────────────────────────
 
 def _format_manager_preview_text(
@@ -379,7 +399,7 @@ def _format_manager_preview_text(
         type_label = _MSG_TYPE_LABELS.get(c.get("msg_type", ""), c.get("msg_type", ""))
         lines.append(
             f"  {i}. <b>{c['name']}</b>{viol_tag}\n"
-            f"     Долг: {_fmt(c['amount'])} тг · Просрочка: {c['days']} дн. · L{c['level']}\n"
+            f"     Долг: {_fmt(c['amount'])} тг · {_debt_age_text(c)} · L{c['level']}\n"
             f"     Отгрузки: {_fmt(c['debit'])} тг · Оплаты: {_fmt(c['credit'])} тг\n"
             f"     Тип: {type_label}\n"
             f"     Причина: {c.get('reason', '—')}"
@@ -803,7 +823,6 @@ def _format_admin_detail_text(batch: Dict[str, Any]) -> str:
             phone = c.get("phone", "") or "—"
             if c.get("invalid_phone"):
                 phone = f"{phone} ⚠️ {c.get('phone_issue')}"
-            days  = c.get("days", 0)
             viol_tag = " ⚠️" if c.get("violation_shipment") else ""
             type_label = _MSG_TYPE_LABELS.get(c.get("msg_type", ""), c.get("msg_type", ""))
             total_all += 1
@@ -820,7 +839,7 @@ def _format_admin_detail_text(batch: Dict[str, Any]) -> str:
 
             lines.append(
                 f"  {icon} <b>{name}</b>{viol_tag}\n"
-                f"     Долг: {_fmt(c['amount'])} тг · Просрочка: {days} дн. · L{c.get('level', '?')}\n"
+                f"     Долг: {_fmt(c['amount'])} тг · {_debt_age_text(c)} · L{c.get('level', '?')}\n"
                 f"     Отгрузки: {_fmt(c.get('debit', 0))} тг · Оплаты: {_fmt(c.get('credit', 0))} тг\n"
                 f"     Тип: {type_label} · {c.get('reason', '—')}\n"
                 f"     Тел: <code>{phone}</code>"

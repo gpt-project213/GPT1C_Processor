@@ -4,7 +4,7 @@
 collections/collections_engine.py
 Главный оркестратор AI-Коллектора долгов.
 
-Версия: 1.3.0 (2026-04-12)
+Версия: 1.4.0 (2026-04-12)
 
 CLI:
   python -m collector.collections_engine --dry-run
@@ -150,6 +150,20 @@ def _get_manager_chat_id(manager_name: str) -> Optional[int]:
         except (ValueError, TypeError):
             pass
     return None
+
+
+def _apply_collector_day_policy(client: Dict[str, Any], name: str, *, use_first_seen: bool) -> Dict[str, Any]:
+    """Apply first_seen day inflation only when residual debt age is unavailable."""
+    basis = str(client.get("debt_age_basis") or "")
+    if basis in ("movements_fifo", "opening_fallback", "no_debt"):
+        return dict(client)
+
+    real_days = get_debt_days_since_first_seen(name) if use_first_seen else 0
+    days_source = int(client.get("days", 0) or 0)
+    real_days = min(real_days, days_source + 7)
+    from collector.debt_monitor import _level_for_days
+    level = max(int(client.get("level", 0) or 0), _level_for_days(real_days))
+    return dict(client, level=level, days=max(days_source, real_days))
 
 
 def _get_client_manager_from_crm(client_name: str) -> str:
@@ -740,20 +754,8 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
     for client in debtors:
         name = client["name"]
 
-        # Пересчитываем уровень через собственный счётчик дней с первой отгрузки.
-        # days_silence из 1С сбрасывается на любую оплату — это ненадёжно.
-        # Наш счётчик считает дни с момента ПЕРВОГО обнаружения долга у клиента
-        # и сбрасывается только при полном погашении (debt=0).
-        # BUG-C5 fix: dry-run не должен регистрировать first_seen в state.
-        real_days = 0 if dry_run else get_debt_days_since_first_seen(name)
-        # FIX-3: ограничиваем real_days — не надуваем уровень более чем на 7 дней
-        # от фактических данных 1С. Старый first_seen (напр. 22 дня назад) не должен
-        # превращать клиента с days_1c=3 (уровень 0) в level 3.
-        _days_1c = client["days"]
-        real_days = min(real_days, _days_1c + 7)
-        from collector.debt_monitor import _level_for_days
-        level = max(client["level"], _level_for_days(real_days))
-        client = dict(client, level=level, days=max(_days_1c, real_days))
+        client = _apply_collector_day_policy(client, name, use_first_seen=not dry_run)
+        level = int(client.get("level", 0) or 0)
 
         # Фильтр по одному клиенту если задан
         if single_client and single_client.lower() not in name.lower():
@@ -1026,12 +1028,8 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
     for client in debtors:
         name = client["name"]
 
-        real_days = get_debt_days_since_first_seen(name)
-        _days_1c  = client["days"]
-        real_days = min(real_days, _days_1c + 7)
-        from collector.debt_monitor import _level_for_days
-        level = max(client["level"], _level_for_days(real_days))
-        client = dict(client, level=level, days=max(_days_1c, real_days))
+        client = _apply_collector_day_policy(client, name, use_first_seen=True)
+        level = int(client.get("level", 0) or 0)
 
         if single_client and single_client.lower() not in name.lower():
             continue
@@ -1108,6 +1106,12 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
             "opening":            client.get("opening", 0) or 0,
             "debit":              client.get("debit", 0) or 0,
             "credit":             client.get("credit", 0) or 0,
+            "payment_silence_days": client.get("payment_silence_days"),
+            "oldest_unpaid_date": client.get("oldest_unpaid_date"),
+            "unpaid_parts":       client.get("unpaid_parts", []),
+            "debt_age_basis":     client.get("debt_age_basis", ""),
+            "debt_age_confidence": client.get("debt_age_confidence", ""),
+            "active_turnover":    client.get("active_turnover", False),
             "violation_shipment": client.get("violation_shipment", False),
             "phone":              _phone,
             "language":           (contact or {}).get("language", "ru"),
