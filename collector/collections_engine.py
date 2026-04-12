@@ -4,7 +4,7 @@
 collections/collections_engine.py
 Главный оркестратор AI-Коллектора долгов.
 
-Версия: 1.2.0 (2026-04-12)
+Версия: 1.3.0 (2026-04-12)
 
 CLI:
   python -m collector.collections_engine --dry-run
@@ -1086,6 +1086,17 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
             logger.info(
                 "run_approval_preview: [%s] нет manager_name — пропуск (требует admin approval)",
                 name,
+            )
+            continue
+
+        # HIGH-3 fix: менеджер без chat_id не может получить preview → batch зависнет.
+        # Такие клиенты не включаются в batch; лог виден в precheck.
+        _preview_chat_id = _get_manager_chat_id(manager_name)
+        if not _preview_chat_id:
+            logger.info(
+                "run_approval_preview: [%s] пропуск — missing_manager_chat_id "
+                "для менеджера %s",
+                name, manager_name,
             )
             continue
 
