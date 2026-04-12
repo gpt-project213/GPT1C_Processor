@@ -164,3 +164,34 @@ audit/FIRST_CONTROLLED_LIVE_TEST_YYYY-MM-DD.md
 ```
 
 Do not proceed to a second client unless the report says `yes`.
+
+---
+
+## Phase 4 Residual Controls (added 2026-04-12)
+
+Phase 4 fixed the active-guard mismatch for stopped/auto_stopped clients.
+However, full dry-run vs preview parity is not yet proven by integration test —
+only by unit tests on `_collector_candidate_decision()`.
+
+**During Monday precheck, verify:**
+
+1. Run `--dry-run` and `--preview` in sequence.
+   Compare candidate lists manually.
+   They must match (same names, same reasons).
+   If they differ — stop and investigate before proceeding.
+
+2. Check Олжас phone specifically:
+   - `config/debtors_contacts.json` → `Е Олжас` → `whatsapp` field
+   - Must be non-empty, non-placeholder, non-test
+   - If `_needs_phone: true` or `whatsapp: ""` → Олжас must NOT enter `approved_clients`
+   - Phone validation in `--send-approved` will also block it, but confirm earlier
+
+3. Confirm in batch summary after `--preview`:
+   - Any `invalid_phone` rows must be listed explicitly
+   - `approved_clients` must start empty
+   - Олжас and Tangirs: if no phone → appear as `no_phone`, not as `approved_clients`
+
+4. Honest engineering status:
+   - active-guard mismatch for stopped/auto_stopped: **FIXED** (e2bef30)
+   - full dry-run vs preview parity: **must be verified during precheck**
+   - Олжас phone validity: **must be checked manually**
