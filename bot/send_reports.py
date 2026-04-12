@@ -3650,6 +3650,7 @@ async def check_and_send_silence_alerts(context=None):
             if not clients_data:
                 logger.warning(f"⚠️ Не удалось распарсить данные для {manager}")
                 continue
+            clients_data = alert.apply_residual_debt_age(clients_data)
             # shipment_violation из debt_ext JSON
             _json_path = JSON_DIR / (latest_report.stem + ".json")
             if _json_path.exists():
@@ -3931,6 +3932,7 @@ async def force_report_to_user(report_type: str, chat_id: int, context) -> str:
                 clients = alert.parse_html_silence_days(latest)
                 if not clients:
                     continue
+                clients = alert.apply_residual_debt_age(clients)
                 # v1.4: исторические дни молчания из предыдущего файла
                 prev = alert.get_prev_debt_report(HTML_DIR, mgr)
                 hist_map = alert.build_historical_silence_map(prev) if prev else {}

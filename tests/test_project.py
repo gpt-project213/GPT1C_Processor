@@ -222,6 +222,21 @@ _all_cats = (cat.get("critical", []) + cat.get("alarm", []) + cat.get("silence",
 check("Мелкий долг пропущен",
       not any(c["client"] == "Мелкий" for c in _all_cats))
 
+clients_residual = [
+    {"client": "Свежий остаток", "debt": 64_415, "debt_str": "64 415,00", "silence_days": 19,
+     "residual_debt_age_days": 3, "oldest_unpaid_date": "2026-04-08",
+     "debit_amount": 1_219_010, "paid_amount": 1_324_594},
+    {"client": "Старый остаток", "debt": 100_000, "debt_str": "100 000,00", "silence_days": 1,
+     "residual_debt_age_days": 15, "oldest_unpaid_date": "2026-03-27",
+     "debit_amount": 0, "paid_amount": 0},
+]
+cat_residual = alert.categorize_by_silence(clients_residual)
+check("residual age: свежий остаток не попадает в молчунов, даже если silence_days=19",
+      not any(c["client"] == "Свежий остаток"
+              for bucket in cat_residual.values() for c in bucket))
+check("residual age: старый остаток попадает в alarm, даже если silence_days=1",
+      any(c["client"] == "Старый остаток" for c in cat_residual["alarm"]))
+
 # Проверяем формат строки: непрерывный счётчик effective_days
 # ТОО Тест: historical_days=19, silence_days=2 → effective=21
 # ИП Тест2: effective_days=0 (нет сброса)
@@ -236,9 +251,9 @@ clients_pp = [
 cat_pp = {"critical": [], "alarm": [], "warning": [], "partial_payment": clients_pp}
 msg = alert.format_manager_alert("Ергали", cat_pp, report_date="01.03.2026 - 13.03.2026")
 
-check("format — '~21 дн' (effective) присутствует", "~21 дн" in msg,
+check("format — 'остаток 21 дн' присутствует", "остаток 21 дн" in msg,
       f"фрагмент не найден в:\n{msg[:300]}")
-check("format — '~0 дн' (без сброса) присутствует", "~0 дн" in msg)
+check("format — 'остаток 0 дн' присутствует", "остаток 0 дн" in msg)
 check("format — 'оплачено: 100 000,00' присутствует", "100 000,00" in msg)
 check("format — старый 'было N дн молчания' НЕ присутствует",
       "было" not in msg, "старый формат всё ещё есть!")

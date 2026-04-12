@@ -253,6 +253,58 @@ class SilenceAlert:
         except Exception as e:
             logger.error(f"Ошибка при парсинге {html_path}: {e}", exc_info=True)
             return []
+
+    @staticmethod
+    def _norm_client_name(name: str) -> str:
+        return " ".join(str(name or "").lower().split())
+
+    def apply_residual_debt_age(self, clients_data: List[Dict]) -> List[Dict]:
+        """Adds Phase 5 residual debt age to short debt notifications."""
+        try:
+            from collector.debt_monitor import classify_debtors, load_latest_debt_json
+            classified = classify_debtors(load_latest_debt_json())
+        except Exception as exc:
+            logger.warning("apply_residual_debt_age: fallback to silence_days: %s", exc)
+            return clients_data
+
+        by_name = {
+            self._norm_client_name(c.get("name")): c
+            for c in classified
+            if c.get("name")
+        }
+        matched = 0
+        for client in clients_data:
+            profile = by_name.get(self._norm_client_name(client.get("client")))
+            if not profile:
+                continue
+            client["residual_debt_age_days"] = int(
+                profile.get("residual_debt_age_days", profile.get("days", client.get("silence_days", 0))) or 0
+            )
+            client["oldest_unpaid_date"] = profile.get("oldest_unpaid_date") or ""
+            client["debt_age_basis"] = profile.get("debt_age_basis", "")
+            client["payment_silence_days"] = profile.get("payment_silence_days", client.get("silence_days", 0))
+            client["active_turnover"] = bool(profile.get("active_turnover", False))
+            matched += 1
+        logger.info("apply_residual_debt_age: matched %d/%d clients", matched, len(clients_data))
+        return clients_data
+
+    @staticmethod
+    def _age_days(client: Dict) -> int:
+        value = client.get("residual_debt_age_days")
+        if value is None or value == "":
+            value = client.get("effective_days", client.get("silence_days", 0))
+        try:
+            return int(value or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    @classmethod
+    def _age_text(cls, client: Dict) -> str:
+        text = f"остаток {cls._age_days(client)} дн"
+        oldest = client.get("oldest_unpaid_date")
+        if oldest:
+            text += f", с {oldest}"
+        return text
     
     def categorize_by_silence(self, clients_data: List[Dict],
                               historical_map: Optional[Dict[str, int]] = None,
@@ -294,7 +346,7 @@ class SilenceAlert:
         weekly_set = set(weekly_clients or [])
 
         for client in clients_data:
-            days   = client['silence_days']
+            days   = self._age_days(client)
             debt   = client['debt']
             debit  = client.get('debit_amount', 0.0)
             credit = client.get('paid_amount', 0.0)
@@ -320,7 +372,8 @@ class SilenceAlert:
 
             # Исторические данные (счётчик мог быть сброшен оплатой в 1С)
             _raw_hist = (historical_map or {}).get(client['client']) if historical_map else None
-            _counter_reset = bool(_raw_hist and _raw_hist > days + 2)
+            _has_residual = client.get("residual_debt_age_days") is not None
+            _counter_reset = bool((not _has_residual) and _raw_hist and _raw_hist > days + 2)
             effective_days = (_raw_hist + days) if _counter_reset else days
 
             base = dict(
@@ -328,6 +381,7 @@ class SilenceAlert:
                 is_imitation=is_imitation,
                 historical_days=_raw_hist if _counter_reset else None,
                 effective_days=effective_days,
+                age_days=days,
             )
 
             if days >= self.CRITICAL_DAYS:
@@ -388,7 +442,7 @@ class SilenceAlert:
             for c in clients[:limit]:
                 suffix = _imitation_suffix(c) + _violation_suffix(c)
                 msg_lines.append(
-                    f"  • {c['client']} — {c['debt_str']} ({c['silence_days']} дн){suffix}"
+                    f"  • {c['client']} — {c['debt_str']} ({self._age_text(c)}){suffix}"
                 )
                 total += c['debt']
             if len(clients) > limit:
@@ -425,10 +479,9 @@ class SilenceAlert:
             for c in categorized['partial_payment'][:5]:
                 paid_str    = c.get('paid_str', '') or self.format_amount(c.get('paid_amount', 0))
                 initial_str = c.get('initial_str', '') or self.format_amount(c.get('initial_amount', 0))
-                eff = c.get('effective_days', c['silence_days'])
                 msg_lines.append(
                     f"  • {c['client']} — "
-                    f"нач: {initial_str} → оплачено: {paid_str} → остаток: {c['debt_str']} (~{eff} дн)"
+                    f"нач: {initial_str} → оплачено: {paid_str} → остаток: {c['debt_str']} ({self._age_text(c)})"
                 )
                 total_partial += c['debt']
             if len(categorized['partial_payment']) > 5:
@@ -543,7 +596,7 @@ class SilenceAlert:
             for c in clients[:limit]:
                 suffix = _imitation_suffix(c)
                 msg_lines.append(
-                    f"  • {c['client']} — {c['debt_str']} ({c['silence_days']} дн){suffix}"
+                    f"  • {c['client']} — {c['debt_str']} ({self._age_text(c)}){suffix}"
                 )
                 total += c['debt']
             if len(clients) > limit:
@@ -599,10 +652,9 @@ class SilenceAlert:
                 for c in categorized['partial_payment'][:10]:
                     paid_str    = c.get('paid_str', '') or self.format_amount(c.get('paid_amount', 0))
                     initial_str = c.get('initial_str', '') or self.format_amount(c.get('initial_amount', 0))
-                    eff = c.get('effective_days', c['silence_days'])
                     msg_lines.append(
                         f"  • {c['client']} — "
-                        f"нач: {initial_str} → оплачено: {paid_str} → остаток: {c['debt_str']} (~{eff} дн)"
+                        f"нач: {initial_str} → оплачено: {paid_str} → остаток: {c['debt_str']} ({self._age_text(c)})"
                     )
                     partial_total += c['debt']
                 rest = categorized['partial_payment'][10:]
