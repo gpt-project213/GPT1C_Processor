@@ -1,8 +1,8 @@
 """
 Модуль для генерации кратких сводок по остаткам
 
-Версия: 1.4
-Дата: 2026-04-07
+Версия: 1.5
+Дата: 2026-04-13
 Изменения v1.4:
   - Fix #INV-2: parse_inventory_json() читает новый JSON-формат inventory.py
     (total_qty / categories[].item_list[].qty вместо total_quantity / items[].quantity)
@@ -153,35 +153,35 @@ class InventorySummary:
     def format_summary(self, data: Dict) -> str:
         """Форматирует краткую сводку"""
         msg_lines = [f"📦 ОСТАТКИ на {data['date']}", ""]
-        
+
         total = data['total_quantity']
-        msg_lines.append(f"Общее количество: {self.format_number(total)} ед")
+        msg_lines.append(f"Общее количество: {self.format_number(total)} кг")
         msg_lines.append("")
-        
+
         low_stock = [item for item in data['items'] if item['quantity'] < self.LOW_STOCK_THRESHOLD]
         low_stock.sort(key=lambda x: x['quantity'])
-        
+
         if low_stock:
-            msg_lines.append("⚠️ Товаров менее 50 ед:")
+            msg_lines.append("⚠️ Товаров менее 50 кг:")
             for item in low_stock[:10]:
                 product_short = item['product'][:40]
-                msg_lines.append(f"  • {product_short} — {self.format_number(item['quantity'])} кг/шт")
+                msg_lines.append(f"  • {product_short} — {self.format_number(item['quantity'])} кг")
             if len(low_stock) > 10:
                 msg_lines.append(f"  ... и ещё {len(low_stock) - 10} товаров")
             msg_lines.append("")
-        
+
         category_totals = {}
         for item in data['items']:
             cat = item['category']
             if cat:
                 category_totals[cat] = category_totals.get(cat, 0.0) + item['quantity']
-        
+
         sorted_categories = sorted(category_totals.items(), key=lambda x: x[1], reverse=True)
         if sorted_categories:
             msg_lines.append("📊 По категориям (топ-5):")
             for i, (cat, qty) in enumerate(sorted_categories[:5], 1):
-                msg_lines.append(f"  {i}. {cat} — {self.format_number(qty)} кг/шт")
-        
+                msg_lines.append(f"  {i}. {cat} — {self.format_number(qty)} кг")
+
         return "\n".join(msg_lines)
     
     @staticmethod
@@ -198,7 +198,7 @@ class InventorySummary:
         return latest
 
     def parse_inventory_json(self, json_path: Path) -> Dict:
-        """v1.4: Читает новый JSON-формат inventory.py v1.1+."""
+        """v1.5: Читает JSON-формат inventory.py v1.1.6+. Дата берётся из поля period (1C)."""
         try:
             data = json.loads(json_path.read_text(encoding="utf-8"))
             total_qty = float(data.get("total_qty") or 0)
@@ -211,13 +211,19 @@ class InventorySummary:
                         "product": item.get("product", ""),
                         "quantity": float(item.get("qty") or 0),
                     })
-            # Дата из имени файла (fallback — mtime)
-            try:
-                mtime = json_path.stat().st_mtime
-                date_str = datetime.fromtimestamp(mtime).strftime("%d.%m.%Y")
-            except Exception:
-                date_str = ""
-            logger.info(f"📊 JSON: {len(items)} товаров, итого {total_qty:.0f} ед")
+            # Дата периода из 1C (поле period сохраняется с v1.1.6)
+            # Fallback: mtime файла
+            date_str = ""
+            period_raw = data.get("period", "")
+            if period_raw and period_raw != "Не указан":
+                date_str = period_raw
+            if not date_str:
+                try:
+                    mtime = json_path.stat().st_mtime
+                    date_str = datetime.fromtimestamp(mtime).strftime("%d.%m.%Y")
+                except Exception:
+                    date_str = ""
+            logger.info(f"📊 JSON: {len(items)} товаров, итого {total_qty:.0f} кг")
             return {"date": date_str, "total_quantity": total_qty, "items": items}
         except Exception as e:
             logger.error(f"Ошибка при разборе JSON {json_path}: {e}", exc_info=True)

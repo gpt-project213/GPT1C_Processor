@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-inventory.py v1.1.5 (2026-04-09) — Остатки товаров на складах (с группировкой по категориям)
+inventory.py v1.1.6 (2026-04-13) — Остатки товаров на складах (с группировкой по категориям)
 Генерирует HTML и JSON отчёты.
 Сортировка: категории по убыванию общего количества, товары по убыванию количества.
 Fix v1.1.4: TZ timezone(timedelta(hours=5)) → ZoneInfo("Asia/Almaty") (Bug TZ)
@@ -365,6 +365,7 @@ def build_report(xlsx: Path) -> Path:
     df = raw.iloc[data_start:data_end + 1].reset_index(drop=True)
 
     data = parse_grouped(df, colmap)
+    data["period"] = period  # сохраняем период из 1C в JSON
 
     # Slug для имён файлов
     slug = re.sub(r"[^\w\-]+", "_", f"{xlsx.stem}_{period}").strip("_").lower()
