@@ -37,4 +37,5 @@ tools/sync_project_to_github.runtime.log.txt
 # Cursor IDE
 .cursorignore
 .cursor/
+.codex
 config/clients.json
