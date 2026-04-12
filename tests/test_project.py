@@ -419,6 +419,60 @@ for s, expected in cases_debt:
           abs(got - expected) < 0.01, f"got={got} expected={expected}")
 
 # ═══════════════════════════════════════════════════════════════
+# 12. CRM → contacts.xlsx mirror
+# ═══════════════════════════════════════════════════════════════
+section("12. CRM → contacts.xlsx mirror")
+
+import crm_clients as _crm
+from openpyxl import load_workbook as _load_workbook
+
+_orig_config_dir = _crm.CONFIG_DIR
+_orig_clients_path = _crm.CLIENTS_PATH
+_orig_xlsx_path = _crm.CONTACTS_XLSX_PATH
+_orig_backup_dir = _crm.CONTACTS_XLSX_BACKUP_DIR
+
+with _tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
+    td_path = Path(td)
+    _crm.CONFIG_DIR = td_path / "config"
+    _crm.CLIENTS_PATH = _crm.CONFIG_DIR / "clients.json"
+    _crm.CONTACTS_XLSX_PATH = td_path / "contacts.xlsx"
+    _crm.CONTACTS_XLSX_BACKUP_DIR = td_path / "backups"
+    _crm.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    _crm.CONTACTS_XLSX_PATH.write_text("old excel placeholder", encoding="utf-8")
+
+    try:
+        _crm.save_clients({
+            "clients": {
+                "ТОО Тест CRM": {
+                    "manager": "Алена",
+                    "whatsapp": "87010000000",
+                    "display_name": "Тест",
+                    "language": "ru",
+                    "sources": ["debt"],
+                    "first_seen": "2026-04-12",
+                    "last_seen": "2026-04-12",
+                    "do_not_call": False,
+                }
+            }
+        })
+        check("CRM mirror: contacts.xlsx создан после save_clients", _crm.CONTACTS_XLSX_PATH.exists())
+        wb = _load_workbook(_crm.CONTACTS_XLSX_PATH, read_only=True, data_only=True)
+        ws = wb[wb.sheetnames[0]]
+        values = [ws.cell(2, c).value for c in range(1, 5)]
+        wb.close()
+        check("CRM mirror: Excel содержит клиента из clients.json",
+              values[0] == "ТОО Тест CRM" and values[1] == "Алена" and values[3] == "87010000000",
+              str(values))
+        backups = list(_crm.CONTACTS_XLSX_BACKUP_DIR.glob("contacts_*.xlsx"))
+        check("CRM mirror: старый contacts.xlsx забэкаплен перед перезаписью",
+              len(backups) == 1, str(backups))
+    finally:
+        _crm.CONFIG_DIR = _orig_config_dir
+        _crm.CLIENTS_PATH = _orig_clients_path
+        _crm.CONTACTS_XLSX_PATH = _orig_xlsx_path
+        _crm.CONTACTS_XLSX_BACKUP_DIR = _orig_backup_dir
+
+# ═══════════════════════════════════════════════════════════════
 # ИТОГ
 # ═══════════════════════════════════════════════════════════════
 print(f"\n{'═'*60}")

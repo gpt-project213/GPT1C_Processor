@@ -24,6 +24,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import tempfile
 from datetime import date, datetime
 from pathlib import Path
@@ -41,6 +42,8 @@ ROOT_DIR   = Path(__file__).resolve().parent.parent
 JSON_DIR   = ROOT_DIR / "reports" / "json"
 CONFIG_DIR = ROOT_DIR / "config"
 CLIENTS_PATH = CONFIG_DIR / "clients.json"
+CONTACTS_XLSX_PATH = ROOT_DIR / "contacts.xlsx"
+CONTACTS_XLSX_BACKUP_DIR = ROOT_DIR / "backups" / "contacts_xlsx"
 
 logger = logging.getLogger(__name__)
 
@@ -76,8 +79,45 @@ def save_clients(data: Dict[str, Any]) -> None:
         tmp.close()
         os.replace(tmp.name, CLIENTS_PATH)
         logger.debug("clients.json сохранён (%d клиентов)", len(data.get("clients", {})))
+        refresh_contacts_xlsx_mirror(reason="save_clients")
     except OSError as e:
         logger.error("Ошибка записи clients.json: %s", e)
+
+
+def _backup_contacts_xlsx_once_per_day() -> Optional[Path]:
+    if not CONTACTS_XLSX_PATH.exists():
+        return None
+    today = datetime.now(tz=TZ).strftime("%Y%m%d")
+    CONTACTS_XLSX_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    if any(CONTACTS_XLSX_BACKUP_DIR.glob(f"contacts_{today}_*.xlsx")):
+        return None
+    stamp = datetime.now(tz=TZ).strftime("%Y%m%d_%H%M%S")
+    backup_path = CONTACTS_XLSX_BACKUP_DIR / f"contacts_{stamp}.xlsx"
+    shutil.copy2(CONTACTS_XLSX_PATH, backup_path)
+    return backup_path
+
+
+def refresh_contacts_xlsx_mirror(reason: str = "") -> bool:
+    """Refreshes contacts.xlsx from the live CRM database without importing back."""
+    try:
+        backup_path = _backup_contacts_xlsx_once_per_day()
+        if backup_path:
+            logger.info("contacts.xlsx backup created before CRM mirror refresh: %s", backup_path)
+        from tools.contacts_sync import export_to_excel
+        count = export_to_excel(CONTACTS_XLSX_PATH, clients_path=CLIENTS_PATH)
+        logger.info(
+            "contacts.xlsx refreshed from clients.json (%d clients, reason=%s)",
+            count,
+            reason or "-",
+        )
+        return True
+    except Exception as e:
+        logger.warning(
+            "contacts.xlsx mirror refresh failed (CRM data is saved; reason=%s): %s",
+            reason or "-",
+            e,
+        )
+        return False
 
 
 # ─────────────────────────────────────────────

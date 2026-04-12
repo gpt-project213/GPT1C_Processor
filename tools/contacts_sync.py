@@ -81,11 +81,11 @@ COL_EDITABLE = [c[2] for c in COLUMNS]
 # Загрузка / сохранение clients.json
 # ─────────────────────────────────────────────────────────────
 
-def _load_clients() -> dict:
-    if not CLIENTS_PATH.exists():
+def _load_clients(path: Path = CLIENTS_PATH) -> dict:
+    if not path.exists():
         return {"clients": {}}
     try:
-        with open(CLIENTS_PATH, encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             data = json.load(f)
         if not isinstance(data.get("clients"), dict):
             data["clients"] = {}
@@ -136,9 +136,9 @@ def _border():
 # ЭКСПОРТ: clients.json → Excel
 # ─────────────────────────────────────────────────────────────
 
-def export_to_excel(xlsx_path: Path) -> int:
+def export_to_excel(xlsx_path: Path, clients_path: Path = CLIENTS_PATH) -> int:
     """Экспортирует clients.json в Excel. Возвращает количество строк."""
-    data = _load_clients()
+    data = _load_clients(clients_path)
     clients_db = data.get("clients", {})
 
     wb = openpyxl.Workbook()
@@ -230,6 +230,7 @@ def export_to_excel(xlsx_path: Path) -> int:
     ws2.column_dimensions["C"].width = 25
 
     wb.save(xlsx_path)
+    wb.close()
     count = len(sorted_clients)
     logger.info("Экспорт завершён: %d клиентов → %s", count, xlsx_path)
     return count
@@ -352,6 +353,7 @@ def import_from_excel(xlsx_path: Path) -> dict:
 
     data["clients"] = clients_db
     _save_clients(data)
+    wb.close()
 
     logger.info(
         "Импорт завершён: обновлено %d, без изменений %d, не найдено %d",
