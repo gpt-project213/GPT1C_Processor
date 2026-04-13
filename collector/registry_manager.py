@@ -4,7 +4,7 @@
 collector/registry_manager.py
 Управление реестром должников: авторегистрация + Excel-экспорт.
 
-Версия: 1.0.0 (2026-03-18)
+Версия: 1.0.1 (2026-04-13)
 """
 
 import json
@@ -119,7 +119,7 @@ def update_client_phone(name: str, phone: str) -> bool:
     if not _save_contacts(contacts):
         return False
 
-    logger.info("Телефон обновлён для %s: %s", name, phone)
+    logger.info("Телефон обновлён для клиента: ***%s", phone[-4:] if len(phone) >= 4 else "****")
     export_registry_excel(contacts)
     return True
 
