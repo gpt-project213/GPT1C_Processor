@@ -150,6 +150,7 @@ def _build_initial_message(dialog: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]
         f"📋 <b>AI Коллектор — новый должник</b>\n",
         f"Клиент в 1С: {dialog['client_name']}",
         f"Просрочка: {dialog['days']} дн. | {_fmt_amount(dialog['amount'])} тг | Уровень: {dialog['level']}\n",
+        "Если не ответите сразу, бот будет напоминать каждые 30 минут и усиливать тон.\n",
     ]
 
     keyboard_rows: List[List[Tuple[str, str]]] = []
@@ -192,7 +193,8 @@ def _build_final_confirm_message(dialog: Dict[str, Any]) -> Tuple[str, Dict[str,
         f"Клиент: {display_name}\n"
         f"Телефон: {phone}\n"
         f"Просрочка: {dialog['days']} дн. | {_fmt_amount(dialog['amount'])} тг\n\n"
-        f"Отправить WhatsApp-уведомление?"
+        f"Отправить WhatsApp-уведомление?\n\n"
+        f"<i>Если не ответите, запрос будет повторяться каждые 30 минут.</i>"
     )
     markup = _inline([
         [
@@ -249,7 +251,8 @@ def _build_reminder_text(dialog: Dict[str, Any], count: int) -> str:
     return (
         f"{prefix}\n\n"
         f"Клиент: <b>{dialog['client_name']}</b>\n"
-        f"Просрочка: {dialog['days']} дн. | Сумма: {_fmt_amount(dialog['amount'])} тг"
+        f"Просрочка: {dialog['days']} дн. | Сумма: {_fmt_amount(dialog['amount'])} тг\n\n"
+        f"<i>Запрос будет повторяться, пока не будет закрыт.</i>"
     )
 
 
@@ -594,7 +597,8 @@ async def _on_update(dialog: Dict[str, Any], mid: int) -> None:
         mid,
         "✏️ <b>Обновление данных</b>\n\n"
         "Отправьте обновлённые данные контакта текстом.\n"
-        "Например: телефон +77011234567, контакт Иванов Иван",
+        "Например: телефон +77011234567, контакт Иванов Иван\n\n"
+        "<i>Если не отправите данные, бот будет напоминать каждые 30 минут.</i>",
     )
 
 
@@ -606,7 +610,8 @@ async def _on_reject_request(dialog: Dict[str, Any], mid: int) -> None:
         mid,
         "❌ <b>Причина отказа</b>\n\n"
         "Напишите причину, по которой не нужно отправлять сообщение клиенту.\n"
-        "Причина будет передана руководителю.",
+        "Причина будет передана руководителю.\n\n"
+        "<i>Если не написать причину, бот будет напоминать каждые 30 минут.</i>",
     )
 
 

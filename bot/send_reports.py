@@ -180,7 +180,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.44/13.04.2026"
+__VERSION__ = "v9.4.47/13.04.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
@@ -4863,6 +4863,62 @@ def _crm_name_prompt_text(
     )
 
 
+async def _crm_notify_admin_unresolved(
+    context: ContextTypes.DEFAULT_TYPE,
+    chat_id: int,
+    pending: Dict[str, Any],
+    remind_count: int,
+) -> None:
+    if not ADMIN_CHAT_ID:
+        return
+    if remind_count < 3:
+        return
+    if int(pending.get("admin_notice_count", 0) or 0) >= remind_count:
+        return
+    pending["admin_notice_count"] = remind_count
+    manager = pending.get("manager") or _chat_to_manager(chat_id) or "?"
+    client_key = pending.get("client_key", "?")
+    state = pending.get("state", "?")
+    manager_pending = [
+        p for p in _CRM_PHONE_PENDING.values()
+        if (p.get("manager") or "") == manager
+    ]
+    total_reminders = sum(int(p.get("remind_count", 0) or 0) for p in manager_pending)
+    max_reminders = max([int(p.get("remind_count", 0) or 0) for p in manager_pending] or [0])
+    ignored_lines = []
+    for item in sorted(
+        manager_pending,
+        key=lambda p: int(p.get("remind_count", 0) or 0),
+        reverse=True,
+    )[:10]:
+        ignored_lines.append(
+            f"• {item.get('client_key', '?')} — "
+            f"{int(item.get('remind_count', 0) or 0)} напомин."
+        )
+    ignored_details = "\n".join(ignored_lines) or "Нет открытых CRM-запросов"
+    try:
+        await context.bot.send_message(
+            chat_id=ADMIN_CHAT_ID,
+            text=(
+                f"🚨 <b>Менеджер не выполняет CRM-запрос</b>\n\n"
+                f"Менеджер: <b>{manager}</b>\n"
+                f"Клиент: <b>{client_key}</b>\n"
+                f"Этап: <b>{state}</b>\n\n"
+                f"Напоминаний менеджеру уже: <b>{remind_count}</b>.\n"
+                f"Данные всё ещё не заполнены.\n\n"
+                f"📊 <b>Статистика игнора по менеджеру</b>\n"
+                f"Открытых CRM-запросов: <b>{len(manager_pending)}</b>\n"
+                f"Всего CRM-напоминаний: <b>{total_reminders}</b>\n"
+                f"Максимум по одному клиенту: <b>{max_reminders}</b>\n\n"
+                f"<b>По каждому открытому запросу:</b>\n"
+                f"{ignored_details}"
+            ),
+            parse_mode="HTML",
+        )
+    except Exception as e:
+        logger.warning("CRM admin unresolved notify error chat_id=%s client=%s: %s", chat_id, client_key, e)
+
+
 def _crm_cleanup_pending() -> None:
     """Убирает просроченные CRM pending-кейсы с явной записью в лог."""
     now = datetime.now(TZ)
@@ -6890,6 +6946,7 @@ async def crm_phone_reminder_task(context: ContextTypes.DEFAULT_TYPE):
                 )
             pending["remind_count"] = remind_count
             pending["last_sent"] = now.isoformat()
+            await _crm_notify_admin_unresolved(context, chat_id, pending, remind_count)
             _crm_save_pending()
             logger.info("CRM escalating reminder → chat_id=%s client=%s count=%d", chat_id, client_key, remind_count)
         except Exception as e:

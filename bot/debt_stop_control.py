@@ -522,6 +522,8 @@ async def send_manager_requests(bot) -> None:
             f"У каждого клиента нет оплаты {OVERDUE_MIN}+ дней.\n\n"
             f"✅ <i>Договорились</i> — исключить из стоп-листа сегодня\n"
             f"🚫 <i>Нет, стоп</i> — передать руководителю\n\n"
+            f"Если не ответишь с первого раза — бот будет напоминать каждые 30 минут "
+            f"и усиливать тон.\n"
             f"Если не ответишь до 19:00 — передаётся автоматически."
         )
         try:
@@ -534,7 +536,9 @@ async def send_manager_requests(bot) -> None:
             text = (
                 f"{icon} <b>{c['client']}</b>\n"
                 f"Молчит: <b>{c['days_silence']}\u202fдн.</b>  |  "
-                f"Долг: <b>{_fmt(c['debt'])}</b>"
+                f"Долг: <b>{_fmt(c['debt'])}</b>\n\n"
+                f"<i>Ответьте сразу: если запрос останется без ответа, "
+                f"напоминания будут повторяться каждые 30 минут.</i>"
             )
             kb = InlineKeyboardMarkup([[
                 InlineKeyboardButton("✅ Договорились", callback_data=f"dstop_yes|{cid}"),
@@ -704,6 +708,55 @@ async def send_manager_reminders(bot) -> None:
             _schedule_delete(chat_id, msg.message_id, msg.date.timestamp())
         except Exception as e:
             LOG.warning("Ошибка напоминания менеджеру %s по %s: %s", c.get("manager"), c.get("client"), e)
+
+        admin_id = _get_admin_chat_id()
+        if admin_id and count >= 3 and int(c.get("manager_admin_notice_count", 0) or 0) < count:
+            c["manager_admin_notice_count"] = count
+            manager_name = c.get("manager")
+            mgr_open = [
+                item for item in candidates.values()
+                if item.get("manager") == manager_name
+                and item.get("manager_response") is None
+                and item.get("admin_approved") is None
+                and not item.get("skip_manager")
+            ]
+            mgr_total_reminders = sum(int(item.get("manager_remind_count", 0) or 0) for item in mgr_open)
+            mgr_max_reminders = max(
+                [int(item.get("manager_remind_count", 0) or 0) for item in mgr_open] or [0]
+            )
+            ignored_lines = []
+            for item in sorted(
+                mgr_open,
+                key=lambda x: int(x.get("manager_remind_count", 0) or 0),
+                reverse=True,
+            )[:10]:
+                ignored_lines.append(
+                    f"• {item.get('client')} — "
+                    f"{int(item.get('manager_remind_count', 0) or 0)} напомин."
+                )
+            ignored_details = "\n".join(ignored_lines) or "Нет открытых запросов"
+            try:
+                await bot.send_message(
+                    chat_id=admin_id,
+                    text=(
+                        f"🚨 <b>Менеджер не выполняет запрос стоп-листа</b>\n\n"
+                        f"Менеджер: <b>{manager_name}</b>\n"
+                        f"Клиент: <b>{c.get('client')}</b>\n"
+                        f"Долг: <b>{_fmt(c.get('debt', 0))}</b>\n"
+                        f"Молчит: <b>{c.get('days_silence')}\u202fдн.</b>\n\n"
+                        f"Напоминаний менеджеру уже: <b>{count}</b>.\n"
+                        f"Ответа нет.\n\n"
+                        f"📊 <b>Статистика игнора по менеджеру</b>\n"
+                        f"Открытых запросов: <b>{len(mgr_open)}</b>\n"
+                        f"Всего напоминаний: <b>{mgr_total_reminders}</b>\n"
+                        f"Максимум по одному клиенту: <b>{mgr_max_reminders}</b>\n\n"
+                        f"<b>По каждому открытому запросу:</b>\n"
+                        f"{ignored_details}"
+                    ),
+                    parse_mode="HTML",
+                )
+            except Exception as e:
+                LOG.warning("Ошибка уведомления руководителя о молчании менеджера %s: %s", c.get("manager"), e)
 
     if changed:
         save_state(state)
