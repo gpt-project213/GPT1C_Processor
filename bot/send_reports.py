@@ -180,7 +180,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.48/13.04.2026"
+__VERSION__ = "v9.4.49/13.04.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
@@ -5063,7 +5063,7 @@ async def cmd_guide(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
     except Exception as e:
         logger.error("cmd_guide error: %s", e)
-        await context.bot.send_message(chat_id=chat_id, text=f"❌ Ошибка отправки: {e}")
+        await context.bot.send_message(chat_id=chat_id, text="❌ Ошибка отправки инструкции. Попробуйте позже.")
 
 
 async def cmd_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
