@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-debt_stop_control.py · v1.0.3 (2026-04-13)
+debt_stop_control.py · v1.0.4 (2026-04-13)
 
 Контроль стоп-листа отгрузки — уведомление Саиды-бухгалтера.
 
@@ -86,10 +86,13 @@ FULL_PAYMENT_THRESHOLD = float(os.getenv("SHIPMENT_FULL_PAYMENT_THRESHOLD", "100
 
 def _save_json(path: Path, data: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    with open(tmp, "w", encoding="utf-8") as f:
+    with tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", suffix=".tmp",
+        dir=path.parent, delete=False,
+    ) as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
-    tmp.replace(path)
+        tmp_path = Path(f.name)
+    tmp_path.replace(path)
 
 
 def _load_json(path: Path, default: Any = None) -> Any:
