@@ -30,7 +30,7 @@ import json
 import logging
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Windows: принудительно UTF-8 для stdout/stderr
 if hasattr(sys.stdout, "buffer"):
@@ -977,6 +977,16 @@ async def _send_approved_client(client: Dict[str, Any]) -> Dict[str, Any]:
     try:
         from collector.client_dialog import start_client_dialog
         phone_clean = "".join(c for c in phone if c.isdigit())
+        report_date = str(client.get("report_date") or client.get("period_max") or client.get("_period_max") or "")
+        if not report_date:
+            oldest_unpaid = str(client.get("oldest_unpaid_date") or "")
+            if oldest_unpaid and days:
+                try:
+                    report_date = (
+                        datetime.fromisoformat(oldest_unpaid).date() + timedelta(days=days)
+                    ).isoformat()
+                except ValueError:
+                    report_date = ""
         await start_client_dialog(
             phone=phone_clean,
             client_name=name,
@@ -986,6 +996,7 @@ async def _send_approved_client(client: Dict[str, Any]) -> Dict[str, Any]:
             days=days,
             amount=amount,
             message_text=text,
+            report_date=report_date,
         )
     except Exception as e:
         logger.error("[%s] start_client_dialog after approved send error: %s", name, e)
@@ -1145,6 +1156,7 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
             "debit":              client.get("debit", 0) or 0,
             "credit":             client.get("credit", 0) or 0,
             "payment_silence_days": client.get("payment_silence_days"),
+            "report_date":        client.get("report_date", ""),
             "oldest_unpaid_date": client.get("oldest_unpaid_date"),
             "unpaid_parts":       client.get("unpaid_parts", []),
             "debt_age_basis":     client.get("debt_age_basis", ""),

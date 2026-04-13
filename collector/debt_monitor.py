@@ -534,6 +534,7 @@ def classify_debtors(debt_data: Dict[str, Any]) -> List[Dict[str, Any]]:
             "level": level,
             "residual_debt_age_days": days,
             "payment_silence_days": payment_silence_days,
+            "report_date": client.get("_period_max", ""),
             "oldest_unpaid_date": debt_age_profile.get("oldest_unpaid_date"),
             "unpaid_parts": debt_age_profile.get("unpaid_parts", []),
             "ignored_tail_parts": debt_age_profile.get("ignored_tail_parts", []),

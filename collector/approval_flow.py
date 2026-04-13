@@ -157,6 +157,7 @@ def create_batch(
                 "debit":             float(c.get("debit", 0) or 0),
                 "credit":            float(c.get("credit", 0) or 0),
                 "payment_silence_days": c.get("payment_silence_days"),
+                "report_date":       c.get("report_date", ""),
                 "oldest_unpaid_date": c.get("oldest_unpaid_date"),
                 "unpaid_parts":      c.get("unpaid_parts", []),
                 "ignored_tail_parts": c.get("ignored_tail_parts", []),

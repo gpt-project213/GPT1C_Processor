@@ -16,6 +16,7 @@ import json
 import logging
 import os
 import tempfile
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -42,6 +43,7 @@ ASSEMBLYAI_SPEECH_MODELS = [
     for m in os.getenv("ASSEMBLYAI_SPEECH_MODELS", "universal-3-pro,universal-2").split(",")
     if m.strip()
 ]
+SAVE_WA_AUDIO = os.getenv("SAVE_WA_AUDIO", "1").lower() in ("1", "true", "yes")
 TEST_MODE      = os.getenv("TEST_MODE", "0") == "1"
 TEST_WA_PHONE  = os.getenv("TEST_WA_PHONE", "")
 
@@ -61,6 +63,7 @@ def _extract_phone(sender: str) -> str:
 
 
 _CLIENT_DIALOGS_PATH = Path(__file__).resolve().parents[1] / "logs" / "collector_client_dialogs.json"
+_AUDIO_ARCHIVE_DIR = Path(__file__).resolve().parents[1] / "logs" / "whatsapp_audio"
 
 
 def _has_active_collector_dialog(phone: str) -> bool:
@@ -83,7 +86,7 @@ def _has_active_collector_dialog(phone: str) -> bool:
     return False
 
 
-async def _download_audio_to_temp(audio_url: str) -> tuple[Optional[str], str]:
+async def _download_audio_to_temp(audio_url: str, archive_label: str = "") -> tuple[Optional[str], str]:
     """Скачивает аудио Green API во временный файл."""
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.get(audio_url)
@@ -92,6 +95,18 @@ async def _download_audio_to_temp(audio_url: str) -> tuple[Optional[str], str]:
         return None, ".ogg"
 
     suffix = ".ogg"  # Green API обычно отдаёт ogg/opus
+    if SAVE_WA_AUDIO:
+        try:
+            _AUDIO_ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
+            safe_label = "".join(c if c.isalnum() else "_" for c in archive_label).strip("_")
+            stamp = datetime.now(tz=TZ).strftime("%Y%m%d_%H%M%S")
+            archive_name = f"{stamp}_{safe_label or 'unknown'}{suffix}"
+            archive_path = _AUDIO_ARCHIVE_DIR / archive_name
+            archive_path.write_bytes(resp.content)
+            logger.info("WhatsApp аудио сохранено: %s", archive_path)
+        except OSError as e:
+            logger.warning("Не удалось сохранить WhatsApp аудио локально: %s", e)
+
     tmp_fd, tmp_path = tempfile.mkstemp(suffix=suffix, prefix="wa_audio_")
     try:
         with os.fdopen(tmp_fd, "wb") as f:
@@ -235,7 +250,7 @@ async def _transcribe_with_openai_file(tmp_path: str, suffix: str) -> str:
             return ""
 
 
-async def transcribe_audio(audio_url: str) -> str:
+async def transcribe_audio(audio_url: str, archive_label: str = "") -> str:
     """Скачивает аудио по URL и транскрибирует через выбранный STT-провайдер.
 
     Args:
@@ -246,7 +261,7 @@ async def transcribe_audio(audio_url: str) -> str:
     """
     tmp_path: Optional[str] = None
     try:
-        tmp_path, suffix = await _download_audio_to_temp(audio_url)
+        tmp_path, suffix = await _download_audio_to_temp(audio_url, archive_label=archive_label)
         if not tmp_path:
             return ""
 
@@ -351,7 +366,7 @@ async def poll_once() -> None:
                 )
                 if download_url:
                     logger.info("Входящее аудио от %s — транскрибирую...", phone)
-                    text = await transcribe_audio(download_url)
+                    text = await transcribe_audio(download_url, archive_label=phone)
                     if not text:
                         text = "[аудио не распознано]"
                 else:

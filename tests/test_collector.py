@@ -699,6 +699,7 @@ try:
     check("start_client_dialog: exchanges has bot message",
           len(d.get("exchanges", [])) == 1 and d["exchanges"][0]["role"] == "bot")
     check("start_client_dialog: amount", d.get("amount") == 500000.0)
+    check("start_client_dialog: report_date default empty", d.get("report_date") == "")
 
     # handle_incoming обновляет exchange_count (мокаем DeepSeek)
     with patch("collector.collection_agent._call_deepseek") as mock_ds:
@@ -808,14 +809,14 @@ try:
         days=31,
         amount=830781.58,
         message_text="Остаток не закрыт уже 31 день.",
+        report_date="2026-04-11",
     ))
-    with patch("collector.client_dialog._report_date_context", return_value="2026-04-11"):
-        with patch("collector.client_dialog._reply_to_client") as mock_qr_reply:
-            mock_qr_reply.return_value = None
-            asyncio.run(cd_mod.handle_incoming(
-                "77011234572",
-                "За выходные QR оплаты прошли, сегодня ещё упадёт, в 1С не разнесено",
-            ))
+    with patch("collector.client_dialog._reply_to_client") as mock_qr_reply:
+        mock_qr_reply.return_value = None
+        asyncio.run(cd_mod.handle_incoming(
+            "77011234572",
+            "За выходные QR оплаты прошли, сегодня ещё упадёт, в 1С не разнесено",
+        ))
     d_qr = cd_mod._get_client_dialog("77011234572")
     qr_bot_replies = [ex["text"] for ex in d_qr.get("exchanges", []) if ex["role"] == "bot"]
     check("recent payment: бот уточняет дату отчёта и сумму оплаты",
@@ -1620,6 +1621,7 @@ _h4_debtors = {
         "phone": "+77771234567",
         "language": "ru",
         "msg_type": "stoplist_reminder",
+        "oldest_unpaid_date": "2026-03-11",
         "reason": "auto_stopped: долг не закрыт",
         "stop_status": "auto_stopped",
         "review_action": "client_approval",
@@ -1642,22 +1644,30 @@ check("H4 T2: approved_clients сохраняет msg_type после {**c, 'man
 from collector.collections_engine import _send_approved_client
 
 _captured_msg_type = []
+_captured_start_dialog = []
 
 def _mock_generate_message(**kwargs):
     _captured_msg_type.append(kwargs.get("msg_type", "__NOT_SET__"))
     return "тестовое сообщение"
+
+async def _mock_start_client_dialog(**kwargs):
+    _captured_start_dialog.append(kwargs)
 
 with patch("collector.collections_engine.send_whatsapp", return_value=True), \
      patch("collector.collections_engine.generate_message", side_effect=_mock_generate_message), \
      patch("collector.collections_engine.already_contacted_today", return_value=False), \
      patch("collector.collections_engine._get_manager_chat_id", return_value=99999999), \
      patch("collector.collections_engine.update_after_contact"), \
-     patch("collector.client_dialog.start_client_dialog", return_value=None):
+     patch("collector.client_dialog.start_client_dialog", side_effect=_mock_start_client_dialog):
     asyncio.run(_send_approved_client(_h4_approved_client))
 
 check("H4 T3: _send_approved_client передаёт msg_type=stoplist_reminder в generate_message",
       _captured_msg_type == ["stoplist_reminder"],
       f"captured: {_captured_msg_type}")
+check("H4 T4: _send_approved_client сохраняет дату отчёта в клиентский диалог",
+      _captured_start_dialog
+      and _captured_start_dialog[0].get("report_date") == "2026-04-05",
+      f"captured: {_captured_start_dialog}")
 
 
 # ═══════════════════════════════════════════════════════════════

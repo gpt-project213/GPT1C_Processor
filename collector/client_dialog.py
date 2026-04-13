@@ -154,14 +154,24 @@ def _gender_pronoun(manager_name: str) -> str:
     return "Он"
 
 
-def _report_date_context() -> str:
+def _report_date_context(dialog: Optional[Dict[str, Any]] = None) -> str:
     """Возвращает дату отчёта дебиторки для честного ответа клиенту."""
+    if dialog and dialog.get("report_date"):
+        return str(dialog["report_date"])
     try:
         from collector.debt_monitor import load_latest_debt_json
         data = load_latest_debt_json()
         period_max = data.get("period_max") if isinstance(data, dict) else None
         if period_max:
             return str(period_max)
+        if isinstance(data, dict):
+            dates = [
+                str(c.get("_period_max"))
+                for c in data.get("clients", [])
+                if isinstance(c, dict) and c.get("_period_max")
+            ]
+            if dates:
+                return max(dates)
     except Exception as e:
         logger.debug("Не удалось определить дату отчёта дебиторки: %s", e)
     return "последнего отчёта 1С"
@@ -306,6 +316,7 @@ async def start_client_dialog(
     days: int,
     amount: float,
     message_text: str,
+    report_date: str = "",
 ) -> None:
     """Регистрирует диалог с клиентом после отправки WhatsApp-сообщения.
 
@@ -330,6 +341,7 @@ async def start_client_dialog(
         "level":             level,
         "days":              days,
         "amount":            amount,
+        "report_date":       report_date,
         "exchanges": [
             {"role": "bot", "text": message_text, "timestamp": now}
         ],
@@ -387,7 +399,7 @@ async def handle_incoming(phone: str, text: str) -> None:
     language = detect_language(text)
 
     if _mentions_recent_unposted_payment(text):
-        report_date = _report_date_context()
+        report_date = _report_date_context(dialog)
         reply = (
             f"Поняли. Задолженность указана по данным отчёта на {report_date}. "
             "Если оплата уже прошла после этой даты или ещё не разнесена в 1С, "
