@@ -180,7 +180,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.49/13.04.2026"
+__VERSION__ = "v9.4.50/13.04.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
@@ -2872,7 +2872,7 @@ def kb_main(user_role: str, chat_id: int = 0) -> InlineKeyboardMarkup:
             [InlineKeyboardButton("🔔 Уведомления сейчас", callback_data="menu_notify")],
             [InlineKeyboardButton("🗄️ Архив", callback_data="archive|root")],
         ]
-    else:  # manager
+    elif user_role == "manager":
         my_name = get_my_manager_name(chat_id) or "Unknown"
         rows = [
             [InlineKeyboardButton("📊 Дебиторка", callback_data="menu_debt_manager")],
@@ -2880,6 +2880,10 @@ def kb_main(user_role: str, chat_id: int = 0) -> InlineKeyboardMarkup:
             [InlineKeyboardButton("🛒 Продажи", callback_data="menu_sales_manager")],
             [InlineKeyboardButton("💰 Валовая", callback_data=f"direct|GROSS_PCT|{my_name}")],
             [InlineKeyboardButton("🗄️ Архив", callback_data="archive|root")],
+        ]
+    else:
+        rows = [
+            [InlineKeyboardButton("📦 Остатки", callback_data="direct|INVENTORY_SIMPLE|general")],
         ]
     return InlineKeyboardMarkup(rows)
 
