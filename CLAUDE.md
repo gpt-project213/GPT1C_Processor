@@ -1,5 +1,5 @@
 # CLAUDE.md
-<!-- Единственный мастер-документ проекта. Обновлён: 2026-03-20 -->
+<!-- Единственный мастер-документ проекта. Обновлён: 2026-04-13 -->
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -233,7 +233,7 @@ Run: `python -X utf8 tests/test_project.py && python -X utf8 tests/test_collecto
 | ARCH-3 | `expenses_parser.py` | Inline HTML в парсере — изолированный модуль, работает корректно |
 
 ### OPEN — LOW
-- `bot/send_reports.py:388` — `logging.Formatter.formatTime` monkey-patch глобальный (BSR-01)
+- ~~`bot/send_reports.py:388` — `logging.Formatter.formatTime` monkey-patch глобальный (BSR-01)~~ → FIXED 2026-04-13 (replaced with `_TzFormatter` subclass)
 
 ### FIXED — 2026-03-20 (C:/sync session)
 | ID | Fix |
@@ -295,6 +295,49 @@ Run: `python -X utf8 tests/test_project.py && python -X utf8 tests/test_collecto
 | A2 | `bot/user_tracker.py` | TZ hardcode → `ZoneInfo(os.getenv("TZ","Asia/Almaty"))` |
 | A3 | `bot/send_reports.py` | 4 missing `schedule_message_deletion` calls added |
 | A4 | `bot/gross_summary.py` | 2× `except Exception` → specific types |
+
+### Session 2026-04-13 (full audit + safe surgery — коммиты 6449778–ef82c7b)
+
+**Полный аудит:** `аудит/ПОЛНЫЙ_СВОД_АУДИТА_13.04.2026.md` (21 секция, 9 критических, 11 высоких, 50+ low)
+
+| ID | Коммит | File | Fix |
+|----|--------|------|-----|
+| CRIT-1 | `6449778` | `collector/voice_calls.py` | `logger` init перед `try/except` — NameError |
+| CRIT-2 | `1907556` | `run_pipeline_all_mp.py` | `.work` → `.xlsx` при ошибке (файлы застревали) |
+| CRIT-3 | `cb1d6c3` | `dso_aging_report.py` | Убран fallback `closing` — enforced `debt`-only |
+| DEAD-1 | `bdaf933` | `collector/manager_dialog.py` | Удалено 119 строк мёртвого кода после `return False` |
+| TEST | `3d58a17` | `tests/test_collector.py` | Mock datetime в REMIND тестах (time-dependent) |
+| HIGH-1 | `0962b95` | `rfm_clients_report.py`, `revenue_concentration_report.py` | Дедупликация по `total` вместо несуществующего `revenue` |
+| HIGH-2 | `d2a6908` | `bot/debt_stop_control.py` | `NamedTemporaryFile` вместо `.tmp` (race condition) |
+| HIGH-3 | `a831ee5` | `config.py` | `int(val)` вместо `isinstance(val, int)` для `chat_id` |
+| R3 | `323d98e` | `debt_auto_report.py` | Warning лог при fallback `find_header → [0,1]` |
+| R4 | `67df3f9` | `collector/debt_monitor.py` | `date.today()` → `datetime.now(TZ).date()` |
+| R5 | `f88a91f` | `collector/registry_manager.py` | Маскировка телефонов в логах (PII) |
+| SEC-3 | `472dcf3` | `bot/send_reports.py` | Generic error вместо `f"Ошибка: {e}"` пользователю |
+| CB-2 | `569fe52` | `bot/send_reports.py` | Удалён двойной `query.answer()` |
+| LOW-1 | `f1eca89` | `bot/send_reports.py` | `_TzFormatter` subclass вместо monkey-patch |
+| ACL-1 | `8bed42f`+`ef82c7b` | `bot/send_reports.py` | Полная блокировка unknown: `_acl_gate()` во всех entry points |
+
+**Также исправлено до аудита (начало сессии):**
+| ID | Fix |
+|----|-----|
+| Issue-1 | `debt_collector_daily` fallback `--dry-run` → `--preview` |
+| Issue-2 | `collector_prompts.json` WARNING → DEBUG |
+| Issue-3 | `+77001234567` → generic placeholders в 6 местах |
+| Issue-5 | `create_batch` — client names в логе при skip без `manager_name` |
+
+**Оставшиеся OPEN (не баги, требуют решений):**
+| ID | Тип | Описание |
+|----|-----|----------|
+| REFACTOR | Массовый | ~50+ `except Exception` по всему проекту |
+| ARCH-1 | Архитектурное | `txt_to_html` дублируется в 2 местах |
+| ARCH-3 | Архитектурное | Inline HTML в `expenses_parser.py` |
+| D5 | Архитектурное | `money()` дублируется с разной сигнатурой |
+| HARDCODE | Бизнес-решения | ~25+ hardcoded порогов/процентов/лимитов |
+| FEATURE | Feature request | Retry для AI API вызовов |
+| FEATURE | Feature request | Тесты для `silence_alerts`, `opportunity_loss` |
+| DOCS | Документация | 7 расхождений CLAUDE.md ↔ код |
+| Issue-4 | Не реализовано | Условная отгрузка (4 кнопки для админа в debt_stop_control) |
 
 ### Session 2026-03-10 (pipeline audit)
 | ID | File | Fix |
