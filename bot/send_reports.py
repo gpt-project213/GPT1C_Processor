@@ -180,7 +180,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.43/13.04.2026"
+__VERSION__ = "v9.4.44/13.04.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
@@ -227,6 +227,7 @@ try:
     from debt_stop_control import (
         monitor_exceptions        as _dstop_monitor,
         send_manager_requests     as _dstop_managers,
+        send_manager_reminders    as _dstop_manager_reminders,
         escalate_unanswered       as _dstop_escalate,
         send_saida_final          as _dstop_saida,
         handle_dstop_callback     as _dstop_callback,
@@ -235,7 +236,7 @@ try:
 except ImportError as e:
     print(f"⚠️ [STARTUP] debt_stop_control не найден: {e}")
     _DEBT_STOP_AVAILABLE = False
-    _dstop_monitor = _dstop_managers = _dstop_escalate = _dstop_saida = _dstop_callback = None
+    _dstop_monitor = _dstop_managers = _dstop_manager_reminders = _dstop_escalate = _dstop_saida = _dstop_callback = None
 
 # v9.4.26: Модуль упущенной прибыли
 try:
@@ -4830,15 +4831,35 @@ def _crm_phone_choice_kb(client_key: str) -> Optional[InlineKeyboardMarkup]:
     return InlineKeyboardMarkup(rows)
 
 
-def _crm_name_prompt_text(client_key: str, done_today: int, total: int, daily_limit: int, reminder: bool = False) -> str:
-    header = "⏰ <b>Напоминание CRM</b> — ждём ответа:\n\n" if reminder else ""
+def _crm_escalation_header(count: int, area: str = "CRM") -> str:
+    if count <= 0:
+        return ""
+    if count == 1:
+        return f"⏰ <b>Напоминание {area}</b> — ждём ответа:\n\n"
+    if count == 2:
+        return f"⚠️ <b>Повторное напоминание {area}</b> — запрос не закрыт:\n\n"
+    if count == 3:
+        return f"🚨 <b>Срочно {area}</b> — последнее предупреждение перед эскалацией:\n\n"
+    return f"🔥 <b>{area}: просроченный запрос #{count}</b> — выполнить сейчас:\n\n"
+
+
+def _crm_name_prompt_text(
+    client_key: str,
+    done_today: int,
+    total: int,
+    daily_limit: int,
+    reminder: bool = False,
+    remind_count: int = 0,
+) -> str:
+    header = _crm_escalation_header(remind_count or 1, "CRM") if reminder else ""
     prefix = "📋 Нужно внести контакты клиентов" if done_today == 0 else "📋 Продолжаем CRM-очередь"
     return (
         f"{header}"
         f"{prefix} — <b>{done_today + 1} из {min(daily_limit, done_today + total)}</b>\n\n"
         f"<b>{client_key}</b>\n\n"
         f"Как к нему обращаться?\n"
-        f"Можно ввести удобное имя, оставить как в системе или вернуться к имени позже."
+        f"Можно ввести удобное имя, оставить как в системе или вернуться к имени позже.\n\n"
+        f"<i>Запрос будет повторяться, пока данные не будут заполнены.</i>"
     )
 
 
@@ -4860,13 +4881,13 @@ def _crm_cleanup_pending() -> None:
         if age_hours <= CRM_PENDING_TTL_HOURS:
             continue
         logger.warning(
-            "CRM pending expired: chat_id=%s client=%s state=%s age_hours=%.1f",
+            "CRM pending stale but kept active: chat_id=%s client=%s state=%s age_hours=%.1f",
             chat_id,
             pending.get("client_key"),
             pending.get("state"),
             age_hours,
         )
-        stale_chat_ids.append(chat_id)
+        pending["stale_logged_at"] = now.isoformat()
     for chat_id in stale_chat_ids:
         _CRM_PHONE_PENDING.pop(chat_id, None)
 
@@ -6838,6 +6859,7 @@ async def crm_phone_reminder_task(context: ContextTypes.DEFAULT_TYPE):
             prompt = "Введите адрес торговой точки"
 
         try:
+            remind_count = int(pending.get("remind_count", 0) or 0) + 1
             if state == "clarify_name":
                 await context.bot.send_message(
                     chat_id=chat_id,
@@ -6847,23 +6869,29 @@ async def crm_phone_reminder_task(context: ContextTypes.DEFAULT_TYPE):
                         total=total,
                         daily_limit=daily_limit,
                         reminder=True,
+                        remind_count=remind_count,
                     ),
                     parse_mode="HTML",
                     reply_markup=_crm_name_choice_kb(),
                 )
             else:
+                header = _crm_escalation_header(remind_count, "CRM")
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text=(
-                        f"⏰ <b>Напоминание CRM</b> — ждём ответа:\n\n"
+                        f"{header}"
                         f"<b>{client_key}</b>\n\n"
                         f"{prompt}\n\n"
-                        f"Выполнено сегодня: {done_today} из {min(daily_limit, done_today + total)}"
+                        f"Выполнено сегодня: {done_today} из {min(daily_limit, done_today + total)}\n\n"
+                        f"<i>Запрос будет повторяться, пока данные не будут заполнены.</i>"
                     ),
                     parse_mode="HTML",
                     reply_markup=_crm_phone_choice_kb(client_key) if state == "clarify_phone" else None,
                 )
-            logger.info("CRM hourly reminder → chat_id=%s client=%s", chat_id, client_key)
+            pending["remind_count"] = remind_count
+            pending["last_sent"] = now.isoformat()
+            _crm_save_pending()
+            logger.info("CRM escalating reminder → chat_id=%s client=%s count=%d", chat_id, client_key, remind_count)
         except Exception as e:
             logger.warning("crm_phone_reminder_task chat_id=%s: %s", chat_id, e)
 
@@ -7379,19 +7407,19 @@ def main():
 
         job_queue.run_repeating(
             crm_phone_reminder_task,
-            interval=3600,
+            interval=1800,
             first=600,
             name="crm_phone_reminders",
         )
-        logger.info("📋 Настроены CRM-напоминания о телефонах: каждый час (09–19)")
+        logger.info("📋 Настроены CRM-напоминания о телефонах: каждые 30 мин (09–19)")
 
         job_queue.run_repeating(
             collector_reminder_task,
-            interval=3600,
+            interval=1800,
             first=300,
             name="collector_reminders",
         )
-        logger.info("📨 Настроен AI Коллектор: напоминания менеджерам каждые 60 мин")
+        logger.info("📨 Настроен AI Коллектор: напоминания менеджерам каждые 30 мин")
 
         job_queue.run_repeating(
             whatsapp_poller_task,
@@ -7422,6 +7450,16 @@ def main():
                     await _dstop_managers(ctx.bot)
                 except Exception as e:
                     logger.error("debt_stop managers error: %s", e)
+
+            async def _job_dstop_manager_reminders(ctx):
+                from bot.workday_checker import is_holiday_today
+                if is_holiday_today():
+                    logger.info("_job_dstop_manager_reminders: выходной — пропуск")
+                    return
+                try:
+                    await _dstop_manager_reminders(ctx.bot)
+                except Exception as e:
+                    logger.error("debt_stop manager reminders error: %s", e)
 
             async def _job_dstop_escalate(ctx):
                 from bot.workday_checker import is_holiday_today
@@ -7456,6 +7494,14 @@ def main():
                 name="debt_stop_managers",
             )
             logger.info("🚫 Настроен запрос менеджерам по стоп-листу: ежедневно 17:00")
+
+            job_queue.run_repeating(
+                _job_dstop_manager_reminders,
+                interval=1800,
+                first=1800,
+                name="debt_stop_manager_reminders",
+            )
+            logger.info("🚫 Настроены напоминания менеджерам по стоп-листу: каждые 30 мин")
 
             job_queue.run_daily(
                 _job_dstop_escalate,

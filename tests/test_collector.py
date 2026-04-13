@@ -1785,10 +1785,12 @@ class _FakeDstopBot:
 _orig_dstop_state = _dstop.STATE_FILE
 _orig_dstop_registry = _dstop.REGISTRY_FILE
 _orig_dstop_saida = _dstop.SAIDA_CHAT_ID
+_orig_dstop_deletion = _dstop.DELETION_QUEUE
 _dstop_tmpdir = tempfile.mkdtemp()
 try:
     _dstop.STATE_FILE = Path(_dstop_tmpdir) / "debt_stop_state.json"
     _dstop.REGISTRY_FILE = Path(_dstop_tmpdir) / "debt_stop_registry.json"
+    _dstop.DELETION_QUEUE = Path(_dstop_tmpdir) / "deletion_queue.json"
     _dstop.SAIDA_CHAT_ID = 0
     _fake_dstop_bot = _FakeDstopBot()
     _admin_id = 123456
@@ -1835,9 +1837,38 @@ try:
     check("DSTOP LIMIT T2b: старый стоп закрыт с лимитом",
           _rec2.get("status") == "cleared_limited" and _rec2.get("shipment_limit") == 500_000,
           str(_rec2))
+
+    _dstop.save_state({
+        "date": _today,
+        "next_id": 2,
+        "saida_sent": False,
+        "candidates": {
+            "1": {
+                "client": "ТОО Напоминание",
+                "manager": "Магира",
+                "manager_chat_id": 777,
+                "days_silence": 9,
+                "debt": 250_000,
+                "level": "7-9",
+                "manager_response": None,
+                "admin_approved": None,
+            }
+        },
+    })
+    _fake_dstop_bot.messages.clear()
+    asyncio.run(_dstop.send_manager_reminders(_fake_dstop_bot))
+    _state_after_remind = _dstop.load_state()
+    _cand_after_remind = _state_after_remind["candidates"]["1"]
+    check("DSTOP REMIND T1: менеджеру отправлено напоминание",
+          len(_fake_dstop_bot.messages) == 1 and _fake_dstop_bot.messages[0]["chat_id"] == 777,
+          str(_fake_dstop_bot.messages))
+    check("DSTOP REMIND T1b: счётчик напоминаний растёт",
+          _cand_after_remind.get("manager_remind_count") == 1,
+          str(_cand_after_remind))
 finally:
     _dstop.STATE_FILE = _orig_dstop_state
     _dstop.REGISTRY_FILE = _orig_dstop_registry
+    _dstop.DELETION_QUEUE = _orig_dstop_deletion
     _dstop.SAIDA_CHAT_ID = _orig_dstop_saida
 
 

@@ -29,9 +29,9 @@ _ROOT = Path(__file__).resolve().parent.parent
 BOT_TOKEN              = os.getenv("TG_BOT_TOKEN") or os.getenv("BOT_TOKEN", "")
 DEEPSEEK_API_KEY       = os.getenv("DEEPSEEK_API_KEY", "")
 DEEPSEEK_MODEL         = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
-COLLECTOR_REMINDER_HOURS = float(os.getenv("COLLECTOR_REMINDER_HOURS", "1"))
+COLLECTOR_REMINDER_HOURS = float(os.getenv("COLLECTOR_REMINDER_HOURS", "0.5"))
 COLLECTOR_DEADLINE_DAYS  = int(os.getenv("COLLECTOR_DEADLINE_DAYS", "5"))
-COLLECTOR_MANAGER_SILENCE_HOURS = float(os.getenv("COLLECTOR_MANAGER_SILENCE_HOURS", "4"))
+COLLECTOR_MANAGER_SILENCE_HOURS = float(os.getenv("COLLECTOR_MANAGER_SILENCE_HOURS", "2"))
 COMPANY_NAME             = os.getenv("COMPANY_NAME", "Минбаракат")
 TEST_MODE                = os.getenv("TEST_MODE", "0") == "1"
 TEST_TG_CHAT_IDS: List[int] = [

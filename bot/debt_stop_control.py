@@ -1,14 +1,15 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-debt_stop_control.py · v1.0.2 (2026-04-13)
+debt_stop_control.py · v1.0.3 (2026-04-13)
 
 Контроль стоп-листа отгрузки — уведомление Саиды-бухгалтера.
 
 Расписание (рабочие дни):
   14:00 → мониторинг: одобренные исключения перешли 15 дней → авто-стоп
   17:00 → запросы менеджерам по новым кандидатам
-  19:00 → нет ответа за 2 часа → эскалация руководителю
+  каждые 30 мин → напоминания менеджерам по незакрытым запросам
+  19:00 → нет ответа → эскалация руководителю
   22:00 → Саида получает финальный список «не отгружать»
 
 Пороги:
@@ -36,7 +37,7 @@ import logging
 import os
 import re
 import tempfile
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
@@ -630,6 +631,82 @@ async def escalate_unanswered(bot) -> None:
 
     save_state(state)
     LOG.info("Эскалировано к руководителю: %d", len(pending))
+
+
+async def send_manager_reminders(bot) -> None:
+    """Напоминает менеджерам о незакрытых запросах стоп-листа по нарастающей."""
+    state = load_state()
+    candidates = state.get("candidates", {})
+    now = datetime.now(TZ)
+    if not (9 <= now.hour < 23):
+        return
+
+    changed = False
+    for cid, c in candidates.items():
+        if c.get("skip_manager"):
+            continue
+        if c.get("manager_response") is not None:
+            continue
+        if c.get("admin_approved") is not None:
+            continue
+        chat_id = c.get("manager_chat_id")
+        if not chat_id:
+            continue
+
+        last_raw = c.get("manager_last_reminded") or c.get("response_at")
+        if last_raw:
+            try:
+                last_dt = datetime.fromisoformat(str(last_raw))
+                if last_dt.tzinfo is None:
+                    last_dt = last_dt.replace(tzinfo=TZ)
+                if now - last_dt < timedelta(minutes=30):
+                    continue
+            except (TypeError, ValueError):
+                pass
+
+        count = int(c.get("manager_remind_count", 0) or 0) + 1
+        c["manager_remind_count"] = count
+        c["manager_last_reminded"] = now.isoformat()
+        changed = True
+
+        if count == 1:
+            header = "⏰ <b>Напоминание</b>"
+            tone = "Нужно выбрать действие по клиенту."
+        elif count == 2:
+            header = "⚠️ <b>Повторное напоминание</b>"
+            tone = "Запрос всё ещё не закрыт. Ответ обязателен."
+        elif count == 3:
+            header = "🚨 <b>Последнее предупреждение менеджеру</b>"
+            tone = "Если не ответите, вопрос будет у руководителя как неотработанный."
+        else:
+            header = f"🔥 <b>Просроченный запрос #{count}</b>"
+            tone = "Кейс висит без ответа. Требуется действие сейчас."
+
+        kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton("✅ Договорились", callback_data=f"dstop_yes|{cid}"),
+            InlineKeyboardButton("🚫 Нет, стоп", callback_data=f"dstop_no|{cid}"),
+        ]])
+        text = (
+            f"{header}\n\n"
+            f"<b>{c['client']}</b>\n"
+            f"Молчит: <b>{c['days_silence']}\u202fдн.</b>  |  "
+            f"Долг: <b>{_fmt(c['debt'])}</b>\n\n"
+            f"{tone}\n"
+            f"Пока вы не ответите, запрос остаётся активным."
+        )
+        try:
+            msg = await bot.send_message(
+                chat_id=chat_id,
+                text=text,
+                parse_mode="HTML",
+                reply_markup=kb,
+            )
+            _schedule_delete(chat_id, msg.message_id, msg.date.timestamp())
+        except Exception as e:
+            LOG.warning("Ошибка напоминания менеджеру %s по %s: %s", c.get("manager"), c.get("client"), e)
+
+    if changed:
+        save_state(state)
 
 
 # ══════════════════════════════════════════════════════════════════════
