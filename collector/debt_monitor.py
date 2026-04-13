@@ -4,7 +4,7 @@
 collections/debt_monitor.py
 Анализ дебиторки, классификация должников по уровням давления.
 
-Версия: 1.0.5 (2026-04-11)
+Версия: 1.0.6 (2026-04-13)
 
 Уровни:
   0–9 дней   → level 0 (пропустить)
@@ -242,7 +242,7 @@ def get_overdue_days(client_data: Dict[str, Any]) -> int:
         try:
             from datetime import datetime as _dt
             d = _dt.strptime(str(invoice_date_str)[:10], "%Y-%m-%d").date()
-            return (date.today() - d).days
+            return (datetime.now(TZ).date() - d).days
         except (ValueError, TypeError):
             pass
     return 0
@@ -305,7 +305,7 @@ def compute_residual_debt_profile(
         as_of_date
         or _parse_movement_date(client_data.get("_as_of_date"))
         or _parse_movement_date(client_data.get("_period_max"))
-        or date.today()
+        or datetime.now(TZ).date()
     )
     payment_silence_days = get_overdue_days(client_data)
     movements = client_data.get("_movements")
