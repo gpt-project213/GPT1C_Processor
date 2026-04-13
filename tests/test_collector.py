@@ -1699,27 +1699,19 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as _td_wa:
           _wa_poller._has_active_collector_dialog("+77750000000") is False)
     _wa_poller._CLIENT_DIALOGS_PATH = _orig_dialogs_path
 
-with patch.object(_wa_poller, "VOICE_STT_PROVIDER", "assemblyai"), \
-     patch.object(_wa_poller, "ASSEMBLYAI_API_KEY", "aai-key"), \
-     patch.object(_wa_poller, "OPENAI_API_KEY", "openai-key"), \
+with patch.object(_wa_poller, "ASSEMBLYAI_API_KEY", "aai-key"), \
      patch.object(_wa_poller, "_download_audio_to_temp", new=AsyncMock(return_value=("fake.ogg", ".ogg"))), \
-     patch.object(_wa_poller, "_transcribe_with_assemblyai_file", new=AsyncMock(return_value="оплачу завтра")) as _aai_mock, \
-     patch.object(_wa_poller, "_transcribe_with_openai_file", new=AsyncMock(return_value="openai text")) as _openai_mock:
+     patch.object(_wa_poller, "_transcribe_with_assemblyai_file", new=AsyncMock(return_value="оплачу завтра")) as _aai_mock:
     _stt_text = asyncio.run(_wa_poller.transcribe_audio("https://example.test/audio.ogg"))
-    check("WA STT T3: AssemblyAI используется первым",
-          _stt_text == "оплачу завтра" and _aai_mock.await_count == 1 and _openai_mock.await_count == 0)
+    check("WA STT T3: AssemblyAI транскрибирует успешно",
+          _stt_text == "оплачу завтра" and _aai_mock.await_count == 1)
 
-with patch.object(_wa_poller, "VOICE_STT_PROVIDER", "assemblyai"), \
-     patch.object(_wa_poller, "ASSEMBLYAI_API_KEY", "aai-key"), \
-     patch.object(_wa_poller, "OPENAI_API_KEY", "openai-key"), \
+with patch.object(_wa_poller, "ASSEMBLYAI_API_KEY", "aai-key"), \
      patch.object(_wa_poller, "_download_audio_to_temp", new=AsyncMock(return_value=("fake.ogg", ".ogg"))), \
-     patch.object(_wa_poller, "_transcribe_with_assemblyai_file", new=AsyncMock(return_value="")) as _aai_empty_mock, \
-     patch.object(_wa_poller, "_transcribe_with_openai_file", new=AsyncMock(return_value="fallback text")) as _openai_fallback_mock:
+     patch.object(_wa_poller, "_transcribe_with_assemblyai_file", new=AsyncMock(return_value="")) as _aai_empty_mock:
     _fallback_text = asyncio.run(_wa_poller.transcribe_audio("https://example.test/audio.ogg"))
-    check("WA STT T4: при ошибке AssemblyAI есть fallback на OpenAI",
-          _fallback_text == "fallback text"
-          and _aai_empty_mock.await_count == 1
-          and _openai_fallback_mock.await_count == 1)
+    check("WA STT T4: при ошибке AssemblyAI возвращается пустая строка (нет fallback на OpenAI)",
+          _fallback_text == "" and _aai_empty_mock.await_count == 1)
 
 
 # ═══════════════════════════════════════════════════════════════

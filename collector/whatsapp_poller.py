@@ -4,7 +4,7 @@
 collector/whatsapp_poller.py
 Green API polling — получает входящие сообщения WhatsApp каждые 30 секунд.
 
-Версия: 1.1.0 (2026-04-13)
+Версия: 1.1.1 (2026-04-13)
 
 Endpoints (используется instance-specific URL, напр. https://7107.api.greenapi.com):
   GET  https://{ID[:4]}.api.greenapi.com/waInstance{ID}/receiveNotification/{TOKEN}
@@ -34,15 +34,11 @@ TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 
 GREENAPI_ID    = os.getenv("GREENAPI_ID", "")
 GREENAPI_TOKEN = os.getenv("GREENAPI_TOKEN", "")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY", "")
-VOICE_STT_PROVIDER = os.getenv("VOICE_STT_PROVIDER", "assemblyai").strip().lower()
 ASSEMBLYAI_POLL_SECONDS = int(os.getenv("ASSEMBLYAI_POLL_SECONDS", "18"))
-ASSEMBLYAI_SPEECH_MODELS = [
-    m.strip()
-    for m in os.getenv("ASSEMBLYAI_SPEECH_MODELS", "universal-3-pro,universal-2").split(",")
-    if m.strip()
-]
+# Russian (ru) не поддерживается universal-3-pro отдельно —
+# оба провайдера нужны для 99 языков включая ru и kk.
+_ASSEMBLYAI_SPEECH_MODELS = ["universal-3-pro", "universal-2"]
 SAVE_WA_AUDIO = os.getenv("SAVE_WA_AUDIO", "1").lower() in ("1", "true", "yes")
 TEST_MODE      = os.getenv("TEST_MODE", "0") == "1"
 TEST_WA_PHONE  = os.getenv("TEST_WA_PHONE", "")
@@ -163,7 +159,7 @@ async def _transcribe_with_assemblyai_file(tmp_path: str) -> str:
                 headers=headers,
                 json={
                     "audio_url": upload_url,
-                    "speech_models": ASSEMBLYAI_SPEECH_MODELS,
+                    "speech_models": _ASSEMBLYAI_SPEECH_MODELS,
                     "language_detection": True,
                 },
             )
@@ -217,65 +213,26 @@ async def _transcribe_with_assemblyai_file(tmp_path: str) -> str:
         return ""
 
 
-async def _transcribe_with_openai_file(tmp_path: str, suffix: str) -> str:
-    """Транскрибирует локальный аудиофайл через OpenAI Whisper."""
-    if not OPENAI_API_KEY:
-        logger.warning("OPENAI_API_KEY не задан — OpenAI Whisper недоступен")
-        return ""
-
-    headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
-    with open(tmp_path, "rb") as audio_file:
-        files = {"file": (f"audio{suffix}", audio_file, "audio/ogg")}
-        data = {"model": "whisper-1"}
-        try:
-            async with httpx.AsyncClient(timeout=60) as client:
-                whisper_resp = await client.post(
-                    "https://api.openai.com/v1/audio/transcriptions",
-                    headers=headers,
-                    files=files,
-                    data=data,
-                )
-            if whisper_resp.status_code == 200:
-                result = whisper_resp.json().get("text", "").strip()
-                logger.info("Whisper транскрипция: %s...", result[:60])
-                return result
-            logger.warning(
-                "Whisper ошибка %d: %s",
-                whisper_resp.status_code,
-                whisper_resp.text[:200],
-            )
-            return ""
-        except (httpx.RequestError, httpx.TimeoutException) as e:
-            logger.error("Whisper сетевая ошибка: %s: %s", type(e).__name__, e or repr(e))
-            return ""
-
-
 async def transcribe_audio(audio_url: str, archive_label: str = "") -> str:
-    """Скачивает аудио по URL и транскрибирует через выбранный STT-провайдер.
+    """Скачивает аудио по URL и транскрибирует через AssemblyAI.
 
     Args:
-        audio_url: Прямая ссылка на аудиофайл от Green API.
+        audio_url:     Прямая ссылка на аудиофайл от Green API.
+        archive_label: Метка для имени архивного файла (номер телефона).
 
     Returns:
         Транскрибированный текст или пустая строка при ошибке.
     """
+    if not ASSEMBLYAI_API_KEY:
+        logger.warning("ASSEMBLYAI_API_KEY не задан — транскрипция недоступна")
+        return ""
+
     tmp_path: Optional[str] = None
     try:
-        tmp_path, suffix = await _download_audio_to_temp(audio_url, archive_label=archive_label)
+        tmp_path, _ = await _download_audio_to_temp(audio_url, archive_label=archive_label)
         if not tmp_path:
             return ""
-
-        if VOICE_STT_PROVIDER in ("assemblyai", "auto") and ASSEMBLYAI_API_KEY:
-            text = await _transcribe_with_assemblyai_file(tmp_path)
-            if text:
-                return text
-            logger.warning("AssemblyAI не вернул текст — пробуем fallback, если он доступен")
-
-        if VOICE_STT_PROVIDER in ("openai", "auto", "assemblyai") and OPENAI_API_KEY:
-            return await _transcribe_with_openai_file(tmp_path, suffix)
-
-        logger.warning("Нет доступного провайдера транскрибации аудио")
-        return ""
+        return await _transcribe_with_assemblyai_file(tmp_path)
 
     except (httpx.RequestError, httpx.TimeoutException) as e:
         logger.error("Ошибка скачивания аудио: %s", e)

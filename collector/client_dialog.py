@@ -208,18 +208,26 @@ def _build_escalation_text(
     manager_name = dialog.get("manager_name", "менеджеру")
     pronoun = _gender_pronoun(manager_name)
 
-    # Последние 4 обмена
-    last_exchanges = exchanges[-4:] if len(exchanges) > 4 else exchanges
+    # Компактная история: только клиентские сообщения в полном виде,
+    # бот — одна строка-заглушка чтобы не занимать место.
+    last_exchanges = exchanges[-6:] if len(exchanges) > 6 else exchanges
     exchange_lines = []
+    bot_shown = False
     for ex in last_exchanges:
         role = ex.get("role", "")
-        text = ex.get("text", "")
+        msg = ex.get("text", "")
         if role == "bot":
-            exchange_lines.append(f"🤖 Бот: \"{text[:120]}\"")
+            if not bot_shown:
+                exchange_lines.append("🤖 Бот: напоминание отправлено")
+                bot_shown = True
         elif role == "client":
-            exchange_lines.append(f"👤 Клиент: \"{text[:120]}\"")
+            exchange_lines.append(f"👤 {msg[:200]}")
 
     exchanges_block = "\n".join(exchange_lines) if exchange_lines else "(нет переписки)"
+
+    # Обещание если есть
+    promise_date = dialog.get("promise_date")
+    promise_line = f"\n📅 Обещание оплаты: {promise_date}" if promise_date else ""
 
     # Описание намерения
     intent_map = {
@@ -237,14 +245,11 @@ def _build_escalation_text(
     intent_desc = intent_map.get(reason, reason)
 
     return (
-        f"📋 Клиент <b>{name}</b> — требуется ваше участие\n\n"
-        f"💰 Долг: {_fmt_amount(amount)} тг | {days} дней просрочки\n\n"
-        f"📊 Итог переписки:\n"
-        f"• Обменов: {exchange_count}\n"
-        f"• Намерение клиента: {intent_desc}\n\n"
-        f"💬 Последние сообщения:\n{exchanges_block}\n\n"
-        f"⚠️ Причина передачи: {summary}\n\n"
-        f"👉 {pronoun} свяжется с вами в ближайшее время."
+        f"📋 <b>{name}</b> — требуется участие {manager_name}\n\n"
+        f"💰 {_fmt_amount(amount)} тг | {days} дн. просрочки{promise_line}\n"
+        f"📌 {intent_desc}\n\n"
+        f"💬 Переписка:\n{exchanges_block}\n\n"
+        f"⚠️ {summary}"
     )
 
 
@@ -472,17 +477,28 @@ async def handle_incoming(phone: str, text: str) -> None:
         return
 
     if intent == "promise":
-        # Подтверждаем дату обещания
-        date_str = f" {promise_date}" if promise_date else ""
+        # Сохраняем дату обещания в диалог
+        if promise_date:
+            dialog["promise_date"] = promise_date
+        date_str = f" до {promise_date}" if promise_date else ""
+        # Форматируем дату для клиента: YYYY-MM-DD → ДД.ММ.ГГГГ
+        date_display = ""
+        if promise_date:
+            try:
+                from datetime import date as _date
+                parsed = _date.fromisoformat(promise_date)
+                date_display = f" до {parsed.strftime('%d.%m.%Y')}"
+            except ValueError:
+                date_display = date_str
         reply = (
-            f"Спасибо! Фиксируем вашу договорённость об оплате{date_str}. "
-            f"Если возникнут вопросы — обращайтесь."
+            f"Принято, фиксируем оплату{date_display}. "
+            f"Как оплатите — пришлите чек, пожалуйста."
         )
         dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
         dialog["state"] = "escalated"
         _set_client_dialog(phone_clean, dialog)
         await _reply_to_client(phone_clean, reply)
-        summary = f"Клиент пообещал оплатить{date_str}"
+        summary = f"Клиент обещал оплатить{date_str}"
         await escalate_to_manager(dialog, "promise", summary, phone_clean)
         return
 
