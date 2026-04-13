@@ -1248,7 +1248,7 @@ async def check_workday_task(context: ContextTypes.DEFAULT_TYPE):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 async def debt_collector_daily(context: ContextTypes.DEFAULT_TYPE):
-    """Ежедневный запуск AI-коллектора в 17:30 Asia/Almaty."""
+    """Ежедневный запуск AI-коллектора в 17:00 Asia/Almaty."""
     from bot.workday_checker import is_holiday_today
     if is_holiday_today():
         logger.info("debt_collector_daily: выходной — пропуск")
@@ -6013,7 +6013,7 @@ async def post_init(app: Application):
                 f"· 09:00 — остатки\n"
                 f"· 14:00 — молчание{_oploss_line}\n"
                 f"· 18:00 — база клиентов (CRM)\n"
-                f"· 17:30 — коллектор\n"
+                f"· 17:00 — коллектор\n"
                 f"· 20:00 — валовая\n"
                 f"· 21:00 — продажи + молчание\n"
                 f"· 22:00 — аналитика\n"
@@ -7205,13 +7205,13 @@ def main():
         )
         logger.info("👥 Настроена CRM: обновление базы + запрос телефонов ежедневно 18:00")
 
-        # AI Debt Collector (17:30 — после CRM)
+        # AI Debt Collector (17:00 — после разноски оплат Саидой)
         job_queue.run_daily(
             debt_collector_daily,
-            time=dt_time(17, 30, tzinfo=TZ),
+            time=dt_time(17, 0, tzinfo=TZ),
             name="debt_collector_daily",
         )
-        logger.info("💰 Настроен AI Debt Collector: ежедневно 17:30")
+        logger.info("💰 Настроен AI Debt Collector: ежедневно 17:00")
 
         job_queue.run_daily(
             debt_collector_promises,

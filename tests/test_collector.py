@@ -798,6 +798,35 @@ try:
     check("promise_without_date 'Передам на оплату': fallback содержит 'дату'",
           any("дату" in t.lower() for t in bot_replies_pwd2))
 
+    # ─── recent unposted payment: QR / сегодня / не разнесено ────────────────
+    asyncio.run(cd_mod.start_client_dialog(
+        phone="77011234572",
+        client_name="Е Олжас",
+        manager_name="Ергали",
+        manager_chat_id=123,
+        level=5,
+        days=31,
+        amount=830781.58,
+        message_text="Остаток не закрыт уже 31 день.",
+    ))
+    with patch("collector.client_dialog._report_date_context", return_value="2026-04-11"):
+        with patch("collector.client_dialog._reply_to_client") as mock_qr_reply:
+            mock_qr_reply.return_value = None
+            asyncio.run(cd_mod.handle_incoming(
+                "77011234572",
+                "За выходные QR оплаты прошли, сегодня ещё упадёт, в 1С не разнесено",
+            ))
+    d_qr = cd_mod._get_client_dialog("77011234572")
+    qr_bot_replies = [ex["text"] for ex in d_qr.get("exchanges", []) if ex["role"] == "bot"]
+    check("recent payment: бот уточняет дату отчёта и сумму оплаты",
+          any("данным отчёта на 2026-04-11" in t.lower()
+              and "точную дату и сумму" in t.lower()
+              for t in qr_bot_replies),
+          str(qr_bot_replies))
+    check("recent payment: диалог остаётся active, не эскалируется сразу",
+          d_qr.get("state") == "active",
+          str(d_qr.get("state")))
+
     # ─── off_topic эскалация: пустой bot reply НЕ сохраняется ──────────────────
     asyncio.run(cd_mod.start_client_dialog(
         phone="77011234571",

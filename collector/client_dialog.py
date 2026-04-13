@@ -4,7 +4,7 @@
 collector/client_dialog.py
 Управление диалогами с должниками через WhatsApp.
 
-Версия: 1.0.5 (2026-04-12)
+Версия: 1.0.6 (2026-04-13)
 
 Хранилище: logs/collector_client_dialogs.json
 Ключ: номер телефона (цифры, без +, без @c.us)
@@ -152,6 +152,31 @@ def _gender_pronoun(manager_name: str) -> str:
     if name.endswith("а") or name.endswith("я"):
         return "Она"
     return "Он"
+
+
+def _report_date_context() -> str:
+    """Возвращает дату отчёта дебиторки для честного ответа клиенту."""
+    try:
+        from collector.debt_monitor import load_latest_debt_json
+        data = load_latest_debt_json()
+        period_max = data.get("period_max") if isinstance(data, dict) else None
+        if period_max:
+            return str(period_max)
+    except Exception as e:
+        logger.debug("Не удалось определить дату отчёта дебиторки: %s", e)
+    return "последнего отчёта 1С"
+
+
+def _mentions_recent_unposted_payment(text: str) -> bool:
+    """True, если клиент говорит про недавнюю оплату, которая могла не попасть в 1С."""
+    t = text.lower()
+    markers = (
+        "qr", "куар", "киар", "оплат", "упад", "поступ", "за выходные",
+        "сегодня", "завтра", "не разнес", "не провел", "не прошло",
+    )
+    return any(m in t for m in markers) and any(
+        m in t for m in ("оплат", "qr", "куар", "киар", "упад", "поступ")
+    )
 
 
 def _fmt_amount(amount: float) -> str:
@@ -360,6 +385,18 @@ async def handle_incoming(phone: str, text: str) -> None:
 
     # Определяем язык
     language = detect_language(text)
+
+    if _mentions_recent_unposted_payment(text):
+        report_date = _report_date_context()
+        reply = (
+            f"Поняли. Задолженность указана по данным отчёта на {report_date}. "
+            "Если оплата уже прошла после этой даты или ещё не разнесена в 1С, "
+            "напишите, пожалуйста, точную дату и сумму оплаты. Мы передадим информацию менеджеру."
+        )
+        dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
+        _set_client_dialog(phone_clean, dialog)
+        await _reply_to_client(phone_clean, reply)
+        return
 
     # Анализируем через DeepSeek (синхронный вызов — выносим в поток)
     try:
