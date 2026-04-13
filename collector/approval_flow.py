@@ -1014,13 +1014,16 @@ def is_ready_for_send(batch_id: str) -> bool:
     batch = load_batch(batch_id)
     if not batch:
         return False
-    return batch.get("status") == "admin_approved" and batch.get("admin_status") == "approved"
+    return (
+        batch.get("admin_status") == "approved"
+        and batch.get("status") in ("admin_approved", "partially_sent", "sent")
+    )
 
 
 def get_approved_clients(batch_id: str) -> List[Dict[str, Any]]:
     """Возвращает список одобренных клиентов после admin approve."""
     batch = load_batch(batch_id)
-    if not batch or batch.get("status") != "admin_approved":
+    if not batch or batch.get("admin_status") != "approved":
         return []
     return batch.get("approved_clients", [])
 
@@ -1032,22 +1035,42 @@ def record_send_results(batch_id: str, results: List[Dict[str, Any]]) -> Optiona
         return None
 
     now_iso = datetime.now(tz=TZ).isoformat()
-    sent = sum(1 for r in results if r.get("status") == "sent")
-    failed = sum(1 for r in results if r.get("status") == "failed")
-    skipped = sum(1 for r in results if r.get("status") == "skipped")
+    previous_results = batch.get("send_results") or []
+    merged: Dict[str, Dict[str, Any]] = {}
 
-    batch["send_results"] = results
+    def _result_key(row: Dict[str, Any]) -> str:
+        name = str(row.get("name") or "").strip().lower()
+        phone = "".join(c for c in str(row.get("phone") or "") if c.isdigit())
+        return f"{name}|{phone}"
+
+    for row in previous_results:
+        if isinstance(row, dict):
+            merged[_result_key(row)] = row
+    for row in results:
+        if isinstance(row, dict):
+            merged[_result_key(row)] = row
+
+    all_results = list(merged.values())
+    sent = sum(1 for r in all_results if r.get("status") == "sent")
+    failed = sum(1 for r in all_results if r.get("status") == "failed")
+    skipped = sum(1 for r in all_results if r.get("status") == "skipped")
+    approved_total = len(batch.get("approved_clients") or [])
+
+    batch["send_results"] = all_results
     batch["send_completed_at"] = now_iso
     batch["send_summary"] = {
         "sent": sent,
         "failed": failed,
         "skipped": skipped,
-        "total": len(results),
+        "total": len(all_results),
+        "approved_total": approved_total,
     }
-    if not results:
+    if not all_results:
         batch["status"] = "send_empty"
     elif failed or skipped:
         batch["status"] = "partially_sent" if sent else "send_failed"
+    elif approved_total and len(all_results) < approved_total:
+        batch["status"] = "partially_sent"
     else:
         batch["status"] = "sent"
     save_batch(batch)

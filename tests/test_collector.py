@@ -1035,6 +1035,7 @@ try:
         load_latest_batch,
         is_ready_for_send,
         get_approved_clients,
+        record_send_results,
         get_pending_managers,
         _all_managers_responded,
         _build_decisions,
@@ -1202,6 +1203,36 @@ try:
     check(
         "APPROVAL T8c: get_approved_clients возвращает 3 клиентов",
         len(_approved8) == 3,
+    )
+    record_send_results(_batch8["batch_id"], [{
+        "name": "ТОО Альфа",
+        "manager": "Алена",
+        "phone": "+77011111111",
+        "status": "sent",
+        "reason": "test",
+    }])
+    _after_partial8 = load_batch(_batch8["batch_id"])
+    check(
+        "APPROVAL T8d: частичная отправка не блокирует оставшихся approved-клиентов",
+        is_ready_for_send(_batch8["batch_id"]) is True
+        and _after_partial8.get("status") == "partially_sent"
+        and len(get_approved_clients(_batch8["batch_id"])) == 3,
+        str(_after_partial8.get("status")),
+    )
+    record_send_results(_batch8["batch_id"], [{
+        "name": "ИП Бета",
+        "manager": "Алена",
+        "phone": "+77012222222",
+        "status": "sent",
+        "reason": "test",
+    }])
+    _after_second8 = load_batch(_batch8["batch_id"])
+    check(
+        "APPROVAL T8e: результаты частичной отправки накапливаются, а не затираются",
+        len(_after_second8.get("send_results", [])) == 2
+        and _after_second8.get("send_summary", {}).get("sent") == 2
+        and _after_second8.get("send_summary", {}).get("approved_total") == 3,
+        str(_after_second8.get("send_summary")),
     )
 finally:
     _af_mod._BATCHES_PATH = _orig_path
