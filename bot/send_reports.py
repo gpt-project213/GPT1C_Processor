@@ -180,7 +180,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.50/13.04.2026"
+__VERSION__ = "v9.4.51/13.04.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
@@ -891,6 +891,17 @@ def get_user_role(chat_id: int) -> str:
         if m_chat_id == chat_id:
             return "manager"
     return "unknown"
+
+async def _acl_gate(chat_id: int, context) -> bool:
+    """Возвращает True если пользователь авторизован (admin/subadmin/manager).
+    Для unknown — отправляет сообщение и возвращает False."""
+    if get_user_role(chat_id) != "unknown":
+        return True
+    try:
+        await context.bot.send_message(chat_id=chat_id, text="⛔ Доступ запрещён. Обратитесь к администратору.")
+    except Exception:
+        pass
+    return False
 
 # v9.4.6.1: Упрощено - удалены избыточные проверки на "Арман" (его нет в конфиге)
 _SYSTEM_ACCOUNTS: set[str] = set(
@@ -2884,9 +2895,7 @@ def kb_main(user_role: str, chat_id: int = 0) -> InlineKeyboardMarkup:
             [InlineKeyboardButton("🗄️ Архив", callback_data="archive|root")],
         ]
     else:
-        rows = [
-            [InlineKeyboardButton("📦 Остатки", callback_data="direct|INVENTORY_SIMPLE|general")],
-        ]
+        rows = []
     return InlineKeyboardMarkup(rows)
 
 def kb_debt_menu(user_role: str) -> InlineKeyboardMarkup:
@@ -4717,6 +4726,8 @@ async def send_ai_file(ai_file: Path, manager: str, chat_id: int, context: Conte
 # Блок 11_______________Обработчики команд и callback_______________________
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
+    if not await _acl_gate(chat_id, context):
+        return
     user_role = get_user_role(chat_id)
     
     # v2.0: Трекинг пользователя
@@ -5055,6 +5066,8 @@ def _crm_claim_token() -> str:
 async def cmd_guide(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Отправляет HTML-инструкцию менеджеру."""
     chat_id = update.effective_chat.id
+    if not await _acl_gate(chat_id, context):
+        return
     guide_path = ROOT_DIR / "docs" / "Инструкция по работе с ботом.html"
     if not guide_path.exists():
         await context.bot.send_message(chat_id=chat_id, text="❌ Файл инструкции не найден.")
@@ -5375,6 +5388,8 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = q.data or ""
     chat_id = q.message.chat.id
 
+    if get_user_role(chat_id) == "unknown":
+        return
 
     # Выходной / рабочий день — ответ администратора
     if data.startswith("workday|"):
@@ -7050,6 +7065,8 @@ async def whatsapp_poller_task(context: ContextTypes.DEFAULT_TYPE):
 async def handle_voice_message_tg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик голосовых сообщений от менеджеров."""
     chat_id = update.effective_chat.id
+    if get_user_role(chat_id) == "unknown":
+        return
     voice = update.message.voice
     if voice:
         try:
@@ -7064,6 +7081,9 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
     """Обработчик команд от постоянного меню (v9.4.12)"""
     text = update.message.text
     chat_id = update.effective_chat.id
+
+    if not await _acl_gate(chat_id, context):
+        return
 
     # CRM: уточняющий диалог по шагам (clarify_name → clarify_phone → clarify_address)
     _crm_cleanup_pending()
