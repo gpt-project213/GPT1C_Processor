@@ -51,29 +51,24 @@ def _extract_phone(sender: str) -> str:
     return sender.split("@")[0] if "@" in sender else sender
 
 
-_CONTACTS_PATH = Path(__file__).resolve().parents[1] / "config" / "debtors_contacts.json"
+_CLIENT_DIALOGS_PATH = Path(__file__).resolve().parents[1] / "logs" / "collector_client_dialogs.json"
 
 
-def _is_known_debtor_phone(phone: str) -> bool:
-    """Возвращает True если телефон зарегистрирован в справочнике должников.
+def _has_active_collector_dialog(phone: str) -> bool:
+    """Возвращает True если у этого номера есть активный диалог коллектора.
 
-    Green API отдаёт номера без '+' (77012345678), контакты хранят с '+'
-    (+77012345678) — сравниваем только цифры.
+    Диалог появляется только когда бот сам отправил должнику сообщение.
+    Это правильный гейт: должник пишет Саиде лично — диалога нет → пропускаем.
+    Только ответы на сообщения коллектора обрабатываются.
     """
     phone_digits = "".join(c for c in phone if c.isdigit())
     if not phone_digits:
         return False
     try:
-        if not _CONTACTS_PATH.exists():
+        if not _CLIENT_DIALOGS_PATH.exists():
             return False
-        data = json.loads(_CONTACTS_PATH.read_text(encoding="utf-8"))
-        data.pop("_comment", None)
-        for entry in data.values():
-            if not isinstance(entry, dict):
-                continue
-            wa = "".join(c for c in str(entry.get("whatsapp") or "") if c.isdigit())
-            if wa and wa == phone_digits:
-                return True
+        data = json.loads(_CLIENT_DIALOGS_PATH.read_text(encoding="utf-8"))
+        return phone_digits in data
     except Exception:
         pass
     return False
@@ -199,11 +194,13 @@ async def poll_once() -> None:
                     await _delete_notification(receipt_id)
                     return
 
-            # Саида использует личный номер для Green API — все входящие сообщения
-            # проходят через бота. Пропускаем всё, что не от зарегистрированных должников,
-            # не тратя квоту Whisper на личные переписки Саиды.
-            if not _is_known_debtor_phone(phone):
-                logger.info("Неизвестный номер — не должник, пропуск (удаляем уведомление)")
+            # Саида использует личный номер для Green API — все её входящие сообщения
+            # (личные контакты, должники пишущие ей напрямую) проходят через бота.
+            # Пропускаем всё, у чего нет активного диалога коллектора — бот мог отправить
+            # сообщение только тем, кому сам написал первым. Это защищает личную переписку
+            # Саиды от перехвата и не тратит квоту Whisper на чужие аудио.
+            if not _has_active_collector_dialog(phone):
+                logger.info("Нет активного диалога коллектора для номера — пропуск")
                 return
 
             message_data = body.get("messageData", {})
