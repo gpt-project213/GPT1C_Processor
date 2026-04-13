@@ -37,6 +37,9 @@ RETELL_ENABLED  = os.getenv("RETELL_ENABLED", "false").lower() == "true"
 RETELL_API_KEY  = os.getenv("RETELL_API_KEY", "")
 RETELL_AGENT_ID = os.getenv("RETELL_AGENT_ID", "")
 COMPANY_PHONE   = os.getenv("COMPANY_PHONE", "")
+
+logger = logging.getLogger(__name__)
+
 try:
     CALL_LEVEL_MIN  = int(os.getenv("COLLECTOR_CALL_LEVEL", "4"))
     CALL_HOUR_START = int(os.getenv("COLLECTOR_HOUR_START", "9"))
@@ -46,8 +49,6 @@ except (ValueError, TypeError):
     logger.warning("Некорректные COLLECTOR_CALL_LEVEL/HOUR_START/HOUR_END — используются defaults")
 
 RETELL_BASE_URL = "https://api.retellai.com"
-
-logger = logging.getLogger(__name__)
 
 
 def is_call_allowed_time() -> bool:
