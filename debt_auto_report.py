@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 r"""
-debt_auto_report.py · v2.7.5 · 2026-03-16 | v2.7.6 · 2026-04-09: TZ → os.getenv
+debt_auto_report.py · v2.7.5 · 2026-03-16 | v2.7.7 · 2026-04-13: find_header fallback warning
 Правки: simple → убраны «Отгрузка/Оплата» во «Все клиенты»; extended → агрегаты в шапку,
 Δ (увеличение/уменьшение), сортировка «Движения» по убыванию closing, техданные без «Клиентов».
 
@@ -304,6 +304,7 @@ def find_header(raw: pd.DataFrame) -> list[int]:
         if RE_CLIENT_ANY.search(" | ".join(cells_i)):
             r1 = [c.lower() for c in _row_vals(raw, i+1)]
             if sum(1 for k in keys if any(k in c for c in r1)) >= 2: return [i, i+1]
+    log.warning("find_header: заголовок не найден — fallback на строки [0,1]")
     return [0, 1]
 
 def build_names_from_header(raw: pd.DataFrame, header_rows: list[int]) -> list[str]:
