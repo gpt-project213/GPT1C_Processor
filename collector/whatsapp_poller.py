@@ -37,6 +37,11 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY", "")
 VOICE_STT_PROVIDER = os.getenv("VOICE_STT_PROVIDER", "assemblyai").strip().lower()
 ASSEMBLYAI_POLL_SECONDS = int(os.getenv("ASSEMBLYAI_POLL_SECONDS", "18"))
+ASSEMBLYAI_SPEECH_MODELS = [
+    m.strip()
+    for m in os.getenv("ASSEMBLYAI_SPEECH_MODELS", "universal-3-pro,universal-2").split(",")
+    if m.strip()
+]
 TEST_MODE      = os.getenv("TEST_MODE", "0") == "1"
 TEST_WA_PHONE  = os.getenv("TEST_WA_PHONE", "")
 
@@ -141,7 +146,11 @@ async def _transcribe_with_assemblyai_file(tmp_path: str) -> str:
             transcript_resp = await client.post(
                 "https://api.assemblyai.com/v2/transcript",
                 headers=headers,
-                json={"audio_url": upload_url, "language_detection": True},
+                json={
+                    "audio_url": upload_url,
+                    "speech_models": ASSEMBLYAI_SPEECH_MODELS,
+                    "language_detection": True,
+                },
             )
             if transcript_resp.status_code not in (200, 201):
                 logger.warning(

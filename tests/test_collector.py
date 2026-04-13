@@ -1379,6 +1379,10 @@ check("PROMPTS T9d: stoplist_reminder использует 'Остаток не 
       "Остаток не закрыт уже {days} дней" in _stop_tpl, _stop_tpl)
 check("PROMPTS T9e: stoplist_reminder не пишет 'передан руководству'",
       "руководств" not in _stop_tpl.lower(), _stop_tpl)
+check("PROMPTS T9f: тон L5 не содержит 'критическая'",
+      "критичес" not in _tone5, _tone5)
+check("PROMPTS T9g: тон L5 не содержит 'передан руководству'",
+      "руководств" not in _tone5, _tone5)
 
 # ── T10: lang_instructions содержит ru и kz ──────────────────────────────────
 _lang = _loaded_prompts.get("lang_instructions", {})
@@ -1411,6 +1415,20 @@ check("PROMPTS T12d: fallback template не содержит ИИ/бот как 
           r'(?<![а-яёА-ЯЁa-zA-Z])робот(?![а-яёА-ЯЁa-zA-Z])',
       ]))
 check("PROMPTS T12e: fallback содержит 'напишите 1'", "напишите 1" in _tpl)
+_typed_stop_msg = _ca_mod.generate_message(
+    client_name="Е Олжас",
+    debt_amount=830781.58,
+    days_overdue=31,
+    level=5,
+    language="ru",
+    manager_name="Ергали",
+    msg_type="stoplist_reminder",
+)
+check("PROMPTS T12f: msg_type=stoplist_reminder использует шаблон без DeepSeek",
+      "критичес" not in _typed_stop_msg.lower()
+      and "руководств" not in _typed_stop_msg.lower()
+      and "Остаток не закрыт уже 31 дней" in _typed_stop_msg,
+      _typed_stop_msg)
 
 # ── T13: _get_tone возвращает строку для каждого уровня ──────────────────────
 for lvl in range(1, 6):
