@@ -407,20 +407,22 @@ def txt_to_html(txt_path: Path, html_path: Path):
     except Exception as e:
         raise Exception(f"Ошибка конвертации TXT в HTML: {e}")
 # Блок 3_______________Логирование (Asia/Almaty)_____________________________
-def _formatTime_almaty(self, record, datefmt=None):
-    dt = datetime.fromtimestamp(record.created, TZ)
-    return dt.strftime(datefmt or "%Y-%m-%d %H:%M:%S")
-logging.Formatter.formatTime = _formatTime_almaty
+class _TzFormatter(logging.Formatter):
+    def formatTime(self, record, datefmt=None):
+        dt = datetime.fromtimestamp(record.created, TZ)
+        return dt.strftime(datefmt or "%Y-%m-%d %H:%M:%S")
+
 LOG_FILE = LOGS_DIR / f"send_reports_{datetime.now(TZ).strftime('%Y%m%d')}.log"
+_log_fmt = _TzFormatter("%(asctime)s, %(levelname)s %(message)s")
+_fh = logging.FileHandler(LOG_FILE, encoding='utf-8')
+_fh.setFormatter(_log_fmt)
+_sh = logging.StreamHandler(
+    io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
+)
+_sh.setFormatter(_log_fmt)
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s, %(levelname)s %(message)s",
-    handlers=[
-        logging.FileHandler(LOG_FILE, encoding='utf-8'),
-        logging.StreamHandler(
-            io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
-        ),
-    ]
+    handlers=[_fh, _sh]
 )
 logger = logging.getLogger(__name__)
 
