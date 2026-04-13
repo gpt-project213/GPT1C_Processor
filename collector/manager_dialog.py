@@ -151,6 +151,7 @@ def _build_initial_message(dialog: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]
         f"Клиент в 1С: {dialog['client_name']}",
         f"Просрочка: {dialog['days']} дн. | {_fmt_amount(dialog['amount'])} тг | Уровень: {dialog['level']}\n",
         "Если не ответите сразу, бот будет напоминать каждые 30 минут и усиливать тон.\n",
+        "Статистика игнора ведётся по каждому менеджеру, видна руководителю и может повлиять на отношения с руководителем.\n",
     ]
 
     keyboard_rows: List[List[Tuple[str, str]]] = []
@@ -175,6 +176,7 @@ def _build_initial_message(dialog: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]
         ])
 
     keyboard_rows.append([("❌ Не отправлять сейчас", f"col_reject_{mid}")])
+    keyboard_rows.append([("❓ Не понимаю, что ответить", f"col_help_{mid}")])
 
     text = "\n".join(lines)
     markup = _inline(keyboard_rows)
@@ -194,13 +196,15 @@ def _build_final_confirm_message(dialog: Dict[str, Any]) -> Tuple[str, Dict[str,
         f"Телефон: {phone}\n"
         f"Просрочка: {dialog['days']} дн. | {_fmt_amount(dialog['amount'])} тг\n\n"
         f"Отправить WhatsApp-уведомление?\n\n"
-        f"<i>Если не ответите, запрос будет повторяться каждые 30 минут.</i>"
+        f"<i>Если не ответите, запрос будет повторяться каждые 30 минут. "
+        f"Статистика игнора видна руководителю.</i>"
     )
     markup = _inline([
         [
             ("🚀 Отправить",        f"col_confirm_{mid}"),
             ("❌ Не отправлять",    f"col_reject_{mid}"),
         ],
+        [("❓ Не понимаю, что ответить", f"col_help_{mid}")],
     ])
     return text, markup
 
@@ -236,6 +240,7 @@ def _build_data_confirm_message(dialog: Dict[str, Any]) -> Tuple[str, Dict[str, 
             ("✅ Подтвердить",    f"col_data_ok_{mid}"),
             ("✏️ Ввести заново",  f"col_data_edit_{mid}"),
         ],
+        [("❓ Не понимаю, что ответить", f"col_help_{mid}")],
     ])
     return text, markup
 
@@ -252,7 +257,8 @@ def _build_reminder_text(dialog: Dict[str, Any], count: int) -> str:
         f"{prefix}\n\n"
         f"Клиент: <b>{dialog['client_name']}</b>\n"
         f"Просрочка: {dialog['days']} дн. | Сумма: {_fmt_amount(dialog['amount'])} тг\n\n"
-        f"<i>Запрос будет повторяться, пока не будет закрыт.</i>"
+        f"<i>Запрос будет повторяться, пока не будет закрыт. "
+        f"Статистика игнора видна руководителю и может повлиять на отношения с руководителем.</i>"
     )
 
 
@@ -598,7 +604,9 @@ async def _on_update(dialog: Dict[str, Any], mid: int) -> None:
         "✏️ <b>Обновление данных</b>\n\n"
         "Отправьте обновлённые данные контакта текстом.\n"
         "Например: телефон +77011234567, контакт Иванов Иван\n\n"
-        "<i>Если не отправите данные, бот будет напоминать каждые 30 минут.</i>",
+        "<i>Если не отправите данные, бот будет напоминать каждые 30 минут. "
+        "Статистика игнора видна руководителю.</i>",
+        _inline([[("❓ Не понимаю, что ответить", f"col_help_{mid}")]]),
     )
 
 
@@ -611,8 +619,56 @@ async def _on_reject_request(dialog: Dict[str, Any], mid: int) -> None:
         "❌ <b>Причина отказа</b>\n\n"
         "Напишите причину, по которой не нужно отправлять сообщение клиенту.\n"
         "Причина будет передана руководителю.\n\n"
-        "<i>Если не написать причину, бот будет напоминать каждые 30 минут.</i>",
+        "<i>Если не написать причину, бот будет напоминать каждые 30 минут. "
+        "Статистика игнора видна руководителю.</i>",
+        _inline([[("❓ Не понимаю, что ответить", f"col_help_{mid}")]]),
     )
+
+
+async def _on_help(dialog: Dict[str, Any], mid: int) -> None:
+    """Объясняет менеджеру текущий запрос и кнопки через жёсткий DeepSeek-помощник."""
+    try:
+        from collector.manager_help import build_manager_help
+
+        help_text = await build_manager_help(
+            area="AI Коллектор — согласование WhatsApp и CRM-данных",
+            manager=dialog.get("manager_name", ""),
+            client=dialog.get("client_name", ""),
+            state=dialog.get("state", ""),
+            buttons=[
+                "Верно/актуален",
+                "Другое название/изменился",
+                "Отправить",
+                "Не отправлять",
+                "Подтвердить",
+                "Ввести заново",
+            ],
+            context={
+                "days": dialog.get("days"),
+                "amount": dialog.get("amount"),
+                "level": dialog.get("level"),
+                "name_confirmed": dialog.get("name_confirmed"),
+                "phone_confirmed": dialog.get("phone_confirmed"),
+                "current_contact": dialog.get("current_contact") or {},
+                "remind_count": dialog.get("remind_count", 0),
+            },
+        )
+    except Exception as e:
+        logger.warning("manager_dialog help error: %s", e)
+        help_text = (
+            "Что от вас хотят:\n"
+            "Нужно подтвердить данные клиента или объяснить, почему WhatsApp отправлять не надо.\n\n"
+            "Что нажать:\n"
+            "• Верно/актуален — если имя или телефон подходят.\n"
+            "• Другое название/изменился — если нужно исправить данные.\n"
+            "• Отправить — если всё проверено и можно готовить WhatsApp.\n"
+            "• Не отправлять — если есть причина, её надо написать.\n\n"
+            "Что будет если молчать:\n"
+            "Бот будет напоминать каждые 30 минут, затем передаст игнор руководителю. "
+            "Статистика игнора ведётся по каждому менеджеру и может повлиять на "
+            "отношения с руководителем."
+        )
+    await _send_msg(mid, f"❓ <b>Подсказка по запросу</b>\n\n{help_text}")
 
 
 async def _on_data_received(
@@ -1070,6 +1126,7 @@ async def handle_callback(data: str, chat_id: int, message_id: int) -> bool:
         ("col_name_edit_", "name_edit"),
         ("col_phone_ok_",  "phone_ok"),
         ("col_phone_edit_","phone_edit"),
+        ("col_help_",      "help"),
     ]
 
     action = None
@@ -1121,6 +1178,8 @@ async def handle_callback(data: str, chat_id: int, message_id: int) -> bool:
         await _on_phone_ok(dialog, mid)
     elif action == "phone_edit":
         await _on_phone_edit(dialog, mid)
+    elif action == "help":
+        await _on_help(dialog, mid)
     else:
         return False
 
@@ -1404,6 +1463,7 @@ async def send_reminders() -> None:
                 f"⏰ Напоминание #{count}\n\n"
                 f"Клиент: <b>{dialog['client_name']}</b>\n"
                 f"Отправьте обновлённые данные контакта текстом.",
+                _inline([[("❓ Не понимаю, что ответить", f"col_help_{mid}")]]),
             )
 
         elif state == STATE_AWAITING_REJECTION_REASON:
@@ -1412,6 +1472,7 @@ async def send_reminders() -> None:
                 f"⏰ Напоминание #{count}\n\n"
                 f"Клиент: <b>{dialog['client_name']}</b>\n"
                 f"Напишите причину отказа от отправки сообщения.",
+                _inline([[("❓ Не понимаю, что ответить", f"col_help_{mid}")]]),
             )
 
         elif state == STATE_AWAITING_DATA_CONFIRM:

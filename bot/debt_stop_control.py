@@ -524,6 +524,8 @@ async def send_manager_requests(bot) -> None:
             f"🚫 <i>Нет, стоп</i> — передать руководителю\n\n"
             f"Если не ответишь с первого раза — бот будет напоминать каждые 30 минут "
             f"и усиливать тон.\n"
+            f"По каждому менеджеру ведётся статистика игнора; она видна руководителю "
+            f"и может повлиять на отношения с руководителем.\n"
             f"Если не ответишь до 19:00 — передаётся автоматически."
         )
         try:
@@ -538,11 +540,14 @@ async def send_manager_requests(bot) -> None:
                 f"Молчит: <b>{c['days_silence']}\u202fдн.</b>  |  "
                 f"Долг: <b>{_fmt(c['debt'])}</b>\n\n"
                 f"<i>Ответьте сразу: если запрос останется без ответа, "
-                f"напоминания будут повторяться каждые 30 минут.</i>"
+                f"напоминания будут повторяться каждые 30 минут. "
+                f"Статистика игнора видна руководителю.</i>"
             )
             kb = InlineKeyboardMarkup([[
                 InlineKeyboardButton("✅ Договорились", callback_data=f"dstop_yes|{cid}"),
                 InlineKeyboardButton("🚫 Нет, стоп",    callback_data=f"dstop_no|{cid}"),
+            ], [
+                InlineKeyboardButton("❓ Не понимаю, что ответить", callback_data=f"dstop_help|{cid}"),
             ]])
             try:
                 msg = await bot.send_message(chat_id=chat_id, text=text,
@@ -689,6 +694,8 @@ async def send_manager_reminders(bot) -> None:
         kb = InlineKeyboardMarkup([[
             InlineKeyboardButton("✅ Договорились", callback_data=f"dstop_yes|{cid}"),
             InlineKeyboardButton("🚫 Нет, стоп", callback_data=f"dstop_no|{cid}"),
+        ], [
+            InlineKeyboardButton("❓ Не понимаю, что ответить", callback_data=f"dstop_help|{cid}"),
         ]])
         text = (
             f"{header}\n\n"
@@ -696,7 +703,9 @@ async def send_manager_reminders(bot) -> None:
             f"Молчит: <b>{c['days_silence']}\u202fдн.</b>  |  "
             f"Долг: <b>{_fmt(c['debt'])}</b>\n\n"
             f"{tone}\n"
-            f"Пока вы не ответите, запрос остаётся активным."
+            f"Пока вы не ответите, запрос остаётся активным.\n"
+            f"Ведётся статистика игнора; она видна руководителю и может повлиять "
+            f"на отношения с руководителем."
         )
         try:
             msg = await bot.send_message(
@@ -946,6 +955,11 @@ async def handle_dstop_callback(data: str, chat_id: int, bot) -> Optional[str]:
         response = "yes" if data.startswith("dstop_yes|") else "no"
         return await _handle_manager_response(cid, response, chat_id, bot)
 
+    if data.startswith("dstop_help|"):
+        cid = data.split("|", 1)[1]
+        await _send_manager_help(cid, chat_id, bot)
+        return None
+
     if (
         data.startswith("dstop_admin_ok|")
         or data.startswith("dstop_admin_remove|")
@@ -1005,6 +1019,55 @@ async def handle_dstop_callback(data: str, chat_id: int, bot) -> Optional[str]:
         return await _handle_admin_allow_after_saida(cid, chat_id, bot)
 
     return None
+
+
+async def _send_manager_help(cid: str, chat_id: int, bot) -> None:
+    state = load_state()
+    c = state.get("candidates", {}).get(cid)
+    if not c:
+        try:
+            await bot.send_message(chat_id=chat_id, text="CRM/стоп-запрос не найден или уже устарел.")
+        except Exception:
+            pass
+        return
+    if int(c.get("manager_chat_id") or 0) != int(chat_id):
+        return
+    try:
+        from collector.manager_help import build_manager_help
+        help_text = await build_manager_help(
+            area="Стоп-лист отгрузки",
+            manager=c.get("manager", ""),
+            client=c.get("client", ""),
+            state="ожидается решение менеджера",
+            buttons=["Договорились", "Нет, стоп"],
+            context={
+                "days_silence": c.get("days_silence"),
+                "debt": c.get("debt"),
+                "level": c.get("level"),
+                "remind_count": c.get("manager_remind_count", 0),
+            },
+        )
+    except Exception as e:
+        LOG.warning("dstop manager help error: %s", e)
+        help_text = (
+            "Что от вас хотят:\n"
+            "Нужно выбрать действие по клиенту.\n\n"
+            "Что нажать:\n"
+            "• Договорились — если есть понятная договорённость. Потом напишите дату, сумму и условия.\n"
+            "• Нет, стоп — если договорённости нет или клиент тянет.\n\n"
+            "Что будет если молчать:\n"
+            "Бот будет напоминать каждые 30 минут, затем передаст игнор руководителю. "
+            "Статистика игнора ведётся по каждому менеджеру и может повлиять на "
+            "отношения с руководителем."
+        )
+    try:
+        await bot.send_message(
+            chat_id=chat_id,
+            text=f"❓ <b>Подсказка по стоп-листу</b>\n\n{help_text}",
+            parse_mode="HTML",
+        )
+    except Exception as e:
+        LOG.warning("Ошибка отправки подсказки менеджеру %s: %s", c.get("manager"), e)
 
 
 async def _handle_manager_response(cid: str, response: str, chat_id: int, bot) -> str:

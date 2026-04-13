@@ -180,7 +180,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.47/13.04.2026"
+__VERSION__ = "v9.4.48/13.04.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
@@ -4783,6 +4783,7 @@ def _crm_name_choice_kb() -> InlineKeyboardMarkup:
         [InlineKeyboardButton("✏️ Ввести имя", callback_data="crm_name|edit")],
         [InlineKeyboardButton("✅ Оставить как в системе", callback_data="crm_name|keep")],
         [InlineKeyboardButton("⏳ Позже", callback_data="crm_name|later")],
+        [InlineKeyboardButton("❓ Не понимаю, что ответить", callback_data="crm_help")],
     ])
 
 
@@ -4828,7 +4829,14 @@ def _crm_phone_choice_kb(client_key: str) -> Optional[InlineKeyboardMarkup]:
         for idx, phone in enumerate(suggestions[:5]):
             rows.append([InlineKeyboardButton(f"✅ Записать {phone}", callback_data=f"crm_phone|suggest|{idx}")])
     rows.append([InlineKeyboardButton("✏️ Указать другой номер", callback_data="crm_phone|edit")])
+    rows.append([InlineKeyboardButton("❓ Не понимаю, что ответить", callback_data="crm_help")])
     return InlineKeyboardMarkup(rows)
+
+
+def _crm_phone_help_only_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("❓ Не понимаю, что ответить", callback_data="crm_help")]
+    ])
 
 
 def _crm_escalation_header(count: int, area: str = "CRM") -> str:
@@ -4859,7 +4867,9 @@ def _crm_name_prompt_text(
         f"<b>{client_key}</b>\n\n"
         f"Как к нему обращаться?\n"
         f"Можно ввести удобное имя, оставить как в системе или вернуться к имени позже.\n\n"
-        f"<i>Запрос будет повторяться, пока данные не будут заполнены.</i>"
+        f"<i>Запрос будет повторяться, пока данные не будут заполнены. "
+        f"Статистика игнора ведётся по каждому менеджеру, видна руководителю "
+        f"и может повлиять на отношения с руководителем.</i>"
     )
 
 
@@ -5610,6 +5620,49 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await handle_analytics(update, context, data)
         return
 
+    if data == "crm_help":
+        pending = _CRM_PHONE_PENDING.get(chat_id)
+        if not pending or not str(pending.get("state", "")).startswith("clarify_"):
+            await q.answer("CRM-запрос не найден.")
+            return
+        await q.answer("Готовлю подсказку...")
+        state = pending.get("state", "")
+        client_key = pending.get("client_key", "?")
+        buttons = (
+            ["Ввести имя", "Оставить как в системе", "Позже"]
+            if state == "clarify_name"
+            else ["Записать найденный номер", "Указать другой номер"]
+        )
+        try:
+            from collector.manager_help import build_manager_help
+            help_text = await build_manager_help(
+                area="CRM-заполнение базы",
+                manager=pending.get("manager") or _chat_to_manager(chat_id) or "",
+                client=client_key,
+                state=state,
+                buttons=buttons,
+                context={
+                    "done_today": pending.get("done_today"),
+                    "daily_limit": pending.get("daily_limit"),
+                    "total_no_phone": pending.get("total_no_phone"),
+                    "remind_count": pending.get("remind_count", 0),
+                },
+            )
+        except Exception as e:
+            logger.warning("crm_help error: %s", e)
+            help_text = _html.escape(
+                "Нужно закрыть текущий CRM-запрос. Если не ответить, бот будет "
+                "напоминать каждые 30 минут и передаст игнор руководителю. "
+                "Статистика игнора ведётся по каждому менеджеру и может повлиять "
+                "на отношения с руководителем."
+            )
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"❓ <b>Подсказка по CRM-запросу</b>\n\n{help_text}",
+            parse_mode="HTML",
+        )
+        return
+
     if data.startswith("crm_name|"):
         pending = _CRM_PHONE_PENDING.get(chat_id)
         if not pending or pending.get("state") != "clarify_name":
@@ -5647,7 +5700,7 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 chat_id=chat_id,
                 text=_crm_phone_prompt_text(client_key),
                 parse_mode="HTML",
-                reply_markup=_crm_phone_choice_kb(client_key),
+                reply_markup=_crm_phone_choice_kb(client_key) or _crm_phone_help_only_kb(),
             )
             return
         if action == "later":
@@ -5663,7 +5716,7 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"{_crm_phone_prompt_text(client_key)}"
                 ),
                 parse_mode="HTML",
-                reply_markup=_crm_phone_choice_kb(client_key),
+                reply_markup=_crm_phone_choice_kb(client_key) or _crm_phone_help_only_kb(),
             )
             return
         await q.answer("Неизвестное действие CRM")
@@ -6942,7 +6995,11 @@ async def crm_phone_reminder_task(context: ContextTypes.DEFAULT_TYPE):
                         f"<i>Запрос будет повторяться, пока данные не будут заполнены.</i>"
                     ),
                     parse_mode="HTML",
-                    reply_markup=_crm_phone_choice_kb(client_key) if state == "clarify_phone" else None,
+                reply_markup=(
+                    (_crm_phone_choice_kb(client_key) or _crm_phone_help_only_kb())
+                    if state == "clarify_phone"
+                    else _crm_name_choice_kb()
+                ),
                 )
             pending["remind_count"] = remind_count
             pending["last_sent"] = now.isoformat()
@@ -7032,7 +7089,7 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
                 await update.message.reply_text(
                     _crm_phone_prompt_text(client_key),
                     parse_mode="HTML",
-                    reply_markup=_crm_phone_choice_kb(client_key),
+                    reply_markup=_crm_phone_choice_kb(client_key) or _crm_phone_help_only_kb(),
                 )
                 return
 
