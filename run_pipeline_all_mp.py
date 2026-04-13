@@ -1,4 +1,4 @@
-# run_pipeline_all_mp.py · v1.5.3 · Asia/Almaty · 2026-04-13
+# run_pipeline_all_mp.py · v1.5.4 · Asia/Almaty · 2026-04-13
 # Оркестратор всех типов отчётов: DEBT / SALES / GROSS / INVENTORY / EXPENSE
 # Fix P-002: datetime.now() → datetime.now(ZoneInfo(...)) в _move_to_processed (naive datetime)
 # Fix P-001: исправлен импорт expenses_parser — реальное имя функции вместо build_report
@@ -437,7 +437,12 @@ def _process_one(src: Path) -> Tuple[str, List[Path]]:
         if moved:
             _release(work)
         elif work.exists():
-            _log(f"[FS] {work.name} preserved in queue for retry")
+            original = work.with_name(work.name.removesuffix(".work"))
+            try:
+                work.rename(original)
+                _log(f"[FS] {work.name} → {original.name} (returned to queue for retry)")
+            except OSError as rename_err:
+                _log(f"[FS] cannot rename {work.name} back: {rename_err}", err=True)
 
 def _imap_once() -> None:
     """
