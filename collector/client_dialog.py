@@ -4,7 +4,7 @@
 collector/client_dialog.py
 Управление диалогами с должниками через WhatsApp.
 
-Версия: 1.0.6 (2026-04-13)
+Версия: 1.0.7 (2026-04-13)
 
 Хранилище: logs/collector_client_dialogs.json
 Ключ: номер телефона (цифры, без +, без @c.us)
@@ -135,13 +135,19 @@ def detect_language(text: str) -> str:
 
 # ─── Telegram уведомление менеджера ──────────────────────────────────────────
 
-async def _send_tg(chat_id: int, text: str) -> None:
+async def _send_tg(chat_id: int, text: str, reply_markup: Any = None) -> None:
     """Отправляет Telegram-сообщение менеджеру и планирует авто-удаление через 24ч."""
     try:
-        from collector.communications import send_telegram
-        message_id = await send_telegram(chat_id, text)
-        if message_id:
-            _schedule_tg_deletion(chat_id, message_id, delay_hours=24)
+        if reply_markup is not None:
+            from collector.communications import send_telegram_with_markup
+            ok = await send_telegram_with_markup(chat_id, text, reply_markup)
+            # send_telegram_with_markup не возвращает message_id — удаление не планируем
+            # (сообщения с кнопками удалять нежелательно пока кнопки активны)
+        else:
+            from collector.communications import send_telegram
+            message_id = await send_telegram(chat_id, text)
+            if message_id:
+                _schedule_tg_deletion(chat_id, message_id, delay_hours=24)
     except Exception as e:
         logger.error("Ошибка отправки Telegram chat_id=%d: %s", chat_id, e)
 
@@ -253,6 +259,31 @@ def _build_escalation_text(
     )
 
 
+def _build_shipment_keyboard(phone: str) -> Any:
+    """Строит inline-клавиатуру контроля отгрузки для эскалации.
+
+    Callback format: cdlg_ship|{action}|{phone_key}
+    phone_key — первые 20 цифр номера (Telegram limit: 64 байта на callback_data).
+    """
+    try:
+        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    except ImportError:
+        return None
+
+    phone_key = "".join(c for c in phone if c.isdigit())[:20]
+    rows = [
+        [
+            InlineKeyboardButton("✅ Разрешить сейчас",       callback_data=f"cdlg_ship|allow|{phone_key}"),
+            InlineKeyboardButton("🚫 Запретить",              callback_data=f"cdlg_ship|block|{phone_key}"),
+        ],
+        [
+            InlineKeyboardButton("⏳ После полной оплаты",    callback_data=f"cdlg_ship|allow_after|{phone_key}"),
+            InlineKeyboardButton("🔒 Запретить до оплаты",    callback_data=f"cdlg_ship|block_until|{phone_key}"),
+        ],
+    ]
+    return InlineKeyboardMarkup(rows)
+
+
 async def escalate_to_manager(
     dialog: Dict[str, Any],
     reason: str,
@@ -276,6 +307,9 @@ async def escalate_to_manager(
 
     text = _build_escalation_text(dialog, reason, summary)
 
+    # Кнопки контроля отгрузки — только менеджеру (не наблюдателям)
+    keyboard = _build_shipment_keyboard(phone)
+
     # Получаем всех наблюдателей
     try:
         from collector.communications import get_observer_ids
@@ -289,7 +323,9 @@ async def escalate_to_manager(
         observer_ids = [manager_chat_id] + observer_ids
 
     for obs_id in observer_ids:
-        await _send_tg(obs_id, text)
+        # Кнопки только менеджеру — у наблюдателей нет права принимать решение
+        mkb = keyboard if obs_id == manager_chat_id else None
+        await _send_tg(obs_id, text, reply_markup=mkb)
 
     logger.info(
         "[%s] диалог эскалирован менеджеру %s (reason=%s)",

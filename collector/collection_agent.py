@@ -78,7 +78,7 @@ def load_prompts() -> dict:
         logger.debug("Промты коллектора загружены из %s", _PROMPTS_PATH)
         return data
     except (OSError, json.JSONDecodeError) as e:
-        logger.warning("Не удалось загрузить collector_prompts.json: %s — используются defaults", e)
+        logger.debug("collector_prompts.json не найден: %s — используются defaults", e)
         return {}
 
 

@@ -1765,9 +1765,111 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as _td_hold:
 
 
 # ═══════════════════════════════════════════════════════════════
-# 19. ИТОГ
+# 19. Shipment control — collector/shipment_control.py
 # ═══════════════════════════════════════════════════════════════
-section("ИТОГ")  # секция 19
+section("19. Shipment control (условная отгрузка)")
+
+import tempfile as _tmpmod
+_ship_tmpdir = _tmpmod.mkdtemp()
+_ship_path = Path(_ship_tmpdir) / "collector_shipment_decisions.json"
+
+try:
+    import collector.shipment_control as _ship
+    _orig_ship_path = _ship._DECISIONS_PATH
+    _ship._DECISIONS_PATH = _ship_path
+
+    # SC-1: set_decision записывает валидное решение
+    try:
+        rec = _ship.set_decision("77011112233", "ТОО Тест Отгрузка", "allow_after",
+                                  manager_name="Алена", manager_chat_id=12345, amount=500000)
+        check("SC-1: set_decision сохраняет allow_after",
+              rec.get("decision") == "allow_after" and rec.get("client_name") == "ТОО Тест Отгрузка")
+    except Exception as e:
+        check("SC-1: set_decision сохраняет allow_after", False, str(e))
+
+    # SC-2: get_decision возвращает активную запись
+    try:
+        got = _ship.get_decision("ТОО Тест Отгрузка")
+        check("SC-2: get_decision возвращает запись", got is not None and got.get("decision") == "allow_after")
+    except Exception as e:
+        check("SC-2: get_decision возвращает запись", False, str(e))
+
+    # SC-3: resolve_decision закрывает запись
+    try:
+        ok = _ship.resolve_decision("ТОО Тест Отгрузка", "debt_cleared")
+        after = _ship.get_decision("ТОО Тест Отгрузка")
+        check("SC-3: resolve_decision закрывает, get_decision возвращает None",
+              ok and after is None)
+    except Exception as e:
+        check("SC-3: resolve_decision закрывает", False, str(e))
+
+    # SC-4: list_pending возвращает только незакрытые allow_after/block_until
+    try:
+        _ship.set_decision("77011112244", "ТОО Ромашка", "block_until", amount=200000)
+        _ship.set_decision("77011112255", "ИП Иванов", "allow", amount=50000)  # allow не попадает в pending
+        pending = _ship.list_pending()
+        names = [r.get("client_name") for r in pending]
+        check("SC-4: list_pending возвращает только allow_after/block_until",
+              "ТОО Ромашка" in names and "ИП Иванов" not in names and "ТОО Тест Отгрузка" not in names)
+    except Exception as e:
+        check("SC-4: list_pending фильтрует правильно", False, str(e))
+
+    # SC-5: set_decision с невалидным решением → ValueError
+    try:
+        _ship.set_decision("77011112266", "Кто-то", "invalid_action")
+        check("SC-5: set_decision с невалидным решением → ValueError", False, "исключение не было поднято")
+    except ValueError:
+        check("SC-5: set_decision с невалидным решением → ValueError", True)
+    except Exception as e:
+        check("SC-5: set_decision с невалидным решением → ValueError", False, str(e))
+
+    # SC-6: нормализация имени — регистр и пробелы не важны
+    try:
+        _ship.set_decision("77011112277", "  ТОО  ЗАРЯ  ", "block", amount=999)
+        got1 = _ship.get_decision("ТОО ЗАРЯ")
+        got2 = _ship.get_decision("тоо заря")
+        check("SC-6: нормализация имени работает (регистр/пробелы)",
+              got1 is not None and got2 is not None)
+    except Exception as e:
+        check("SC-6: нормализация имени работает", False, str(e))
+
+    # SC-7: check_pending_decisions разрешает allow_after при долге ≤ threshold
+    try:
+        import asyncio as _aio
+        _ship.set_decision("77011112288", "ТОО ОплатилА", "allow_after",
+                            manager_chat_id=0, amount=300000)
+        # Мок debt_monitor.load_latest_debt_json
+        _fake_debt = {"clients": [{"name": "ТОО ОплатилА", "amount": 500}]}  # 500 ₸ ≤ 1000
+        with patch("collector.debt_monitor.load_latest_debt_json", return_value=_fake_debt):
+            resolved = _aio.run(_ship.check_pending_decisions(None))
+        after = _ship.get_decision("ТОО ОплатилА")
+        check("SC-7: check_pending_decisions закрывает allow_after при долге ≤ 1000 ₸",
+              resolved >= 1 and after is None)
+    except Exception as e:
+        check("SC-7: check_pending_decisions авто-закрытие", False, str(e))
+
+    # SC-8: check_pending_decisions НЕ закрывает при долге > threshold
+    try:
+        _ship.set_decision("77011112299", "ТОО НеЗакрыл", "allow_after",
+                            manager_chat_id=0, amount=300000)
+        _fake_debt2 = {"clients": [{"name": "ТОО НеЗакрыл", "amount": 50000}]}  # 50k > 1000
+        with patch("collector.debt_monitor.load_latest_debt_json", return_value=_fake_debt2):
+            resolved2 = _aio.run(_ship.check_pending_decisions(None))
+        still = _ship.get_decision("ТОО НеЗакрыл")
+        check("SC-8: check_pending_decisions не закрывает при долге > 1000 ₸",
+              resolved2 == 0 and still is not None)
+    except Exception as e:
+        check("SC-8: check_pending_decisions не закрывает при долге > 1000 ₸", False, str(e))
+
+finally:
+    _ship._DECISIONS_PATH = _orig_ship_path
+    import shutil as _sh2
+    _sh2.rmtree(_ship_tmpdir, ignore_errors=True)
+
+# ═══════════════════════════════════════════════════════════════
+# 20. ИТОГ
+# ═══════════════════════════════════════════════════════════════
+section("ИТОГ")  # секция 20
 total  = len(results)
 passed = sum(1 for _, ok in results if ok)
 failed = total - passed

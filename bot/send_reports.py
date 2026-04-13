@@ -180,7 +180,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.42/11.04.2026"
+__VERSION__ = "v9.4.43/13.04.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
@@ -1271,10 +1271,11 @@ async def debt_collector_daily(context: ContextTypes.DEFAULT_TYPE):
         logger.debug("expire_old_batches error: %s", _e)
 
     log_event("collector_daily_start", dry_run=dry_run)
+    mode_flag = "--dry-run" if dry_run else "--preview"
     try:
         rc, stdout, stderr = await run_script_async(
             "collector/collections_engine.py",
-            "--dry-run",
+            mode_flag,
             timeout=900,
         )
         if rc != 0:
@@ -4796,7 +4797,7 @@ def _crm_phone_suggestions(client_key: str) -> List[str]:
 def _crm_phone_prompt_text(client_key: str, suggestions: Optional[List[str]] = None) -> str:
     suggestions = suggestions if suggestions is not None else _crm_phone_suggestions(client_key)
     if not suggestions:
-        return "Введите телефон WhatsApp:\n<code>+77001234567</code>"
+        return "Введите телефон WhatsApp:\n<code>+7XXXXXXXXXX</code>"
     if len(suggestions) == 1:
         return (
             "У клиента нет WhatsApp в CRM.\n\n"
@@ -4990,7 +4991,7 @@ async def cmd_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(args) < 2:
         await _send_auto(
             context, chat_id,
-            "ℹ️ Использование: /phone <Имя клиента> <+77001234567>\n\n"
+            "ℹ️ Использование: /phone <Имя клиента> <номер>\n\n"
             "Пример: /phone ТОО Асем +77771234567",
         )
         return
@@ -5006,7 +5007,7 @@ async def cmd_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await _send_auto(
             context, chat_id,
             "⚠️ Неверный формат номера.\n"
-            "Допустимо: <code>+77001234567</code> / <code>77001234567</code> / <code>87001234567</code>",
+            "Допустимо: <code>+7XXXXXXXXXX</code> / <code>7XXXXXXXXXX</code> / <code>8XXXXXXXXXX</code>",
             parse_mode="HTML",
         )
         return
@@ -5421,6 +5422,66 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error("collector callback error: %s", e)
         return
 
+    # Shipment control callbacks (cdlg_ship|action|phone_key)
+    if data.startswith("cdlg_ship|"):
+        try:
+            parts = data.split("|")
+            if len(parts) == 3:
+                _, action, phone_key = parts
+                from collector.shipment_control import set_decision, VALID_DECISIONS
+                from collector.collections_db import load_state
+
+                # Ищем клиента по phone_key в диалогах
+                client_name = ""
+                amount = 0.0
+                manager_name = get_my_manager_name(chat_id) or ""
+                try:
+                    from collector.client_dialog import _load_client_dialogs
+                    dialogs = _load_client_dialogs()
+                    for ph, dlg in dialogs.items():
+                        if ph.startswith(phone_key[:15]) or phone_key.startswith(ph[:15]):
+                            client_name = dlg.get("client_name", "")
+                            amount = float(dlg.get("amount", 0) or 0)
+                            if not manager_name:
+                                manager_name = dlg.get("manager_name", "")
+                            break
+                except Exception as _e:
+                    logger.warning("cdlg_ship: ошибка поиска диалога: %s", _e)
+
+                if action not in VALID_DECISIONS:
+                    await q.answer("Неверное действие.")
+                    return
+
+                set_decision(
+                    phone=phone_key,
+                    client_name=client_name or phone_key,
+                    decision=action,
+                    manager_name=manager_name,
+                    manager_chat_id=chat_id,
+                    amount=amount,
+                )
+
+                labels = {
+                    "allow":       "✅ Отгрузка разрешена",
+                    "allow_after": "⏳ Разрешить после полной оплаты",
+                    "block_until": "🔒 Запрет до полной оплаты",
+                    "block":       "🚫 Отгрузка запрещена",
+                }
+                label = labels.get(action, action)
+                name_display = client_name or phone_key
+                result_text = f"{label}\n<b>{name_display}</b>"
+                try:
+                    await q.edit_message_text(result_text, parse_mode="HTML")
+                except Exception:
+                    await q.answer(label)
+                log_event("shipment_decision", action=action, client=name_display)
+            else:
+                await q.answer("Неверный формат callback.")
+        except Exception as e:
+            logger.error("cdlg_ship callback error: %s", e)
+            await q.answer("Ошибка обработки решения.")
+        return
+
     # WhatsApp approval flow callbacks (wa_appr_mgr_* / wa_appr_cli_* / wa_appr_adm_*)
     if data.startswith("wa_appr_"):
         try:
@@ -5603,7 +5664,7 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             _crm_save_pending()
             await context.bot.send_message(
                 chat_id=chat_id,
-                text="Введите другой телефон WhatsApp:\n<code>+77001234567</code>",
+                text="Введите другой телефон WhatsApp:\n<code>+7XXXXXXXXXX</code>",
                 parse_mode="HTML",
             )
             return
@@ -5617,7 +5678,7 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await q.answer("Номер уже недоступен. Введите другой номер.")
                 await context.bot.send_message(
                     chat_id=chat_id,
-                    text="Введите телефон WhatsApp:\n<code>+77001234567</code>",
+                    text="Введите телефон WhatsApp:\n<code>+7XXXXXXXXXX</code>",
                     parse_mode="HTML",
                 )
                 return
@@ -6952,7 +7013,7 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
                 if not _re.fullmatch(r"7\d{10}", phone_digits):
                     await update.message.reply_text(
                         f"❌ Неверный формат.\n"
-                        f"Введите: <code>+77001234567</code>",
+                        f"Введите: <code>+7XXXXXXXXXX</code>",
                         parse_mode="HTML",
                     )
                     return
@@ -7350,6 +7411,26 @@ def main():
             name="collector_trigger_check",
         )
         logger.info("⚡ Настроен event-driven триггер коллектора: проверка каждые 30 мин")
+
+        # Контроль отгрузки: проверка allow_after / block_until после разноски оплат
+        async def _job_shipment_check(ctx):
+            from bot.workday_checker import is_holiday_today
+            if is_holiday_today():
+                return
+            try:
+                from collector.shipment_control import check_pending_decisions
+                resolved = await check_pending_decisions(ctx.bot)
+                if resolved:
+                    logger.info("shipment_check: закрыто %d решений об отгрузке", resolved)
+            except Exception as e:
+                logger.error("shipment_check job error: %s", e)
+
+        job_queue.run_daily(
+            _job_shipment_check,
+            time=dt_time(14, 0, tzinfo=TZ),
+            name="shipment_check",
+        )
+        logger.info("🚚 Настроен контроль отгрузки: проверка allow_after/block_until ежедневно 14:00")
 
         job_queue.run_repeating(
             crm_phone_reminder_task,

@@ -131,9 +131,10 @@ def create_batch(
     for manager_name, clients in debtors_by_manager.items():
         # Пропускаем пустые списки и клиентов без менеджера
         if not manager_name or not manager_name.strip():
+            client_names = [c.get("name", "?") for c in clients]
             logger.warning(
-                "create_batch: %d клиент(ов) без manager_name — пропускаем",
-                len(clients),
+                "create_batch: %d клиент(ов) без manager_name — пропускаем: %s",
+                len(clients), ", ".join(client_names),
             )
             continue
         if not clients:

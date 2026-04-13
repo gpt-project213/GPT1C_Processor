@@ -1138,8 +1138,9 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
         if not manager_name:
             manager_name = _get_client_manager_from_crm(name)
         if not manager_name:
-            logger.info(
-                "run_approval_preview: [%s] нет manager_name — пропуск (требует admin approval)",
+            logger.warning(
+                "run_approval_preview: [%s] нет manager_name — пропуск (требует admin approval). "
+                "Добавьте менеджера в debtors_contacts.json или CRM.",
                 name,
             )
             continue
