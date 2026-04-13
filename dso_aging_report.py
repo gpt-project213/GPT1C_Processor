@@ -52,7 +52,7 @@ LOGS.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("dso")
 
-__VERSION__ = "1.1.1"
+__VERSION__ = "1.1.2"
 NBSP = "\u202f"
 
 def _mtime(p: Path) -> float:
@@ -169,7 +169,7 @@ def _ext_to_simple_clients(ext: dict) -> list:
             continue
         result.append({
             "client":  c.get("client"),
-            "debt":    c.get("debt", c.get("closing")),
+            "debt":    c.get("debt", 0.0),
             "opening": c.get("opening"),
             "debit":   c.get("debit"),
             "credit":  c.get("credit"),
@@ -309,7 +309,7 @@ def generate_report():
     # Обработка долгов
     for client_data in debt_data.get("clients", []):
         client_name = (client_data.get("client") or client_data.get("name") or "")
-        closing_debt = client_data.get("debt", client_data.get("closing", 0.0))  # debt_auto_report → "debt"
+        closing_debt = client_data.get("debt", 0.0)
         
         if closing_debt <= 0:
             continue
