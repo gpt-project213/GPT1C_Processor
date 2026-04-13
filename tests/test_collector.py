@@ -69,7 +69,8 @@ section("2. debt_monitor._level_for_days")
 
 from collector.debt_monitor import (
     _level_for_days, get_overdue_days, classify_debtors,
-    load_contacts, match_client, _strip_prefix, compute_residual_debt_profile,
+    load_contacts, load_latest_debt_json, match_client, _strip_prefix,
+    compute_residual_debt_profile,
 )
 
 cases = [
@@ -358,6 +359,41 @@ check("P5 T14: approval text shows residual age without payment-silence ambiguit
       "старейшая часть" not in _p5_debt_text and
       "активный оборот" in _p5_debt_text,
       _p5_debt_text)
+
+_p5_tmp_dir = Path(tempfile.mkdtemp(prefix="collector_debt_period_"))
+try:
+    _p5_newer_file = _p5_tmp_dir / "debt_ext_Детальный Дебиторы Алена (134).json"
+    _p5_older_file = _p5_tmp_dir / "debt_ext_Ведомость_по_взаиморасчетам_с_контрагентами_Алена (324).json"
+    _p5_newer_file.write_text(json.dumps({
+        "manager": "Алена",
+        "period_min": "11.03.2026",
+        "period_max": "11.04.2026",
+        "clients": [{
+            "name": "А ТД 77 павильон тест",
+            "amount": 10000.0,
+            "days_silence": 1,
+        }],
+    }, ensure_ascii=False), encoding="utf-8")
+    _p5_older_file.write_text(json.dumps({
+        "manager": "Алена",
+        "period_min": "10.03.2026",
+        "period_max": "10.04.2026",
+        "clients": [{
+            "name": "А ТД 77 павильон тест",
+            "amount": 10000.0,
+            "days_silence": 31,
+        }],
+    }, ensure_ascii=False), encoding="utf-8")
+    with patch("collector.debt_monitor.JSON_DIR", _p5_tmp_dir):
+        _p5_loaded = load_latest_debt_json()
+    _p5_loaded_client = _p5_loaded["clients"][0]
+    check("P5 T15: loader берёт свежий period_max, а не старый с большим days_silence",
+          len(_p5_loaded["clients"]) == 1 and
+          _p5_loaded_client["days_silence"] == 1 and
+          _p5_loaded_client["_period_max"] == "11.04.2026",
+          str(_p5_loaded))
+finally:
+    shutil.rmtree(_p5_tmp_dir, ignore_errors=True)
 
 section("5. debt_monitor.match_client")
 

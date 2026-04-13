@@ -92,10 +92,27 @@ def load_latest_debt_json() -> Dict[str, Any]:
         base = re.sub(r"^(debt_ext_)\d{14}_", r"\1", base)
         groups.setdefault(base, []).append(p)
 
+    latest_by_group = {base: max(paths, key=_safe_mtime) for base, paths in groups.items()}
+    latest_period_by_manager: Dict[str, date] = {}
+    for latest in latest_by_group.values():
+        try:
+            with open(latest, encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            continue
+        file_mgr = (data.get("manager") or "") if isinstance(data, dict) else ""
+        if not file_mgr or file_mgr in ("?", "-", "—", "ABSENT"):
+            continue
+        period_max = _parse_movement_date(data.get("period_max"))
+        if not period_max:
+            continue
+        current = latest_period_by_manager.get(file_mgr)
+        if current is None or period_max > current:
+            latest_period_by_manager[file_mgr] = period_max
+
     merged_clients: Dict[str, Dict[str, Any]] = {}
     loaded = 0
-    for base, paths in groups.items():
-        latest = max(paths, key=_safe_mtime)
+    for base, latest in latest_by_group.items():
         try:
             with open(latest, encoding="utf-8") as f:
                 data = json.load(f)
@@ -108,6 +125,14 @@ def load_latest_debt_json() -> Dict[str, Any]:
         file_mgr = (data.get("manager") or "") if isinstance(data, dict) else ""
         if not file_mgr or file_mgr in ("?", "-", "—", "ABSENT"):
             logger.debug("Пропускаем общий файл (нет менеджера): %s", latest.name)
+            continue
+        period_max = _parse_movement_date(data.get("period_max")) if isinstance(data, dict) else None
+        latest_period = latest_period_by_manager.get(file_mgr)
+        if period_max and latest_period and period_max < latest_period:
+            logger.info(
+                "Пропускаем устаревший debt JSON: %s (manager=%s, period_max=%s < %s)",
+                latest.name, file_mgr, _fmt_iso(period_max), _fmt_iso(latest_period),
+            )
             continue
         logger.info("Загружаем debt JSON: %s", latest.name)
 
