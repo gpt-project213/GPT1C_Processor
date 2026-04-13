@@ -1,3 +1,4 @@
+# v. 9.4.35 / 2026-04-13 - feat: event-driven collector trigger после обработки debt_ext файлов
 # v. 9.4.34 / 2026-03-16 - Fix: p.stat().st_mtime в _extract_date обёрнут в try/except (audit fix)
 # v. 9.4.33 / 2026-03-10 - Fix: bare except: → except (ValueError, OverflowError) в _parse_period_date (Bug S5)
 # v. 9.4.32 / 09.03.2026 - Fix bugs: #INV-1, #MENU-SILENCE, #AI-MENU, упущенная прибыль → еженедельно (пятница 14:05)
@@ -1299,6 +1300,127 @@ async def debt_collector_promises(context: ContextTypes.DEFAULT_TYPE):
             log_event("collector_promises_error", rc=rc, stderr=stderr[:300], level="WARNING")
     except (OSError, ValueError) as e:
         log_event("collector_promises_error", error=str(e), level="ERROR")
+
+
+_COLLECTOR_TRIGGER_PATH = LOGS_DIR / "collector_trigger.flag"
+_COLLECTOR_TRIGGER_LAST_RUN_PATH = LOGS_DIR / "collector_trigger_last_run.json"
+# Не запускать повторно если коллектор уже сработал по триггеру в последние N часов
+_COLLECTOR_TRIGGER_COOLDOWN_HOURS = 4
+# Триггер считается устаревшим если флаг старше N часов (pipeline завис, не надо реагировать)
+_COLLECTOR_TRIGGER_MAX_AGE_HOURS = 6
+
+
+async def debt_collector_trigger_check(context: ContextTypes.DEFAULT_TYPE):
+    """Event-driven: запускает --preview коллектора когда появились свежие debt_ext файлы.
+
+    run_pipeline_all_mp.py пишет logs/collector_trigger.flag после успешной
+    обработки DEBT-файла. Этот job читает флаг каждые 30 минут и запускает
+    коллектор сразу, не дожидаясь планового 17:00.
+
+    Защиты:
+    - только рабочие дни 09:00–18:00 Asia/Almaty
+    - cooldown: не запускать повторно если уже запускали < 4 часов назад
+    - флаг считается устаревшим (и удаляется без запуска) если старше 6 часов
+    """
+    from bot.workday_checker import is_holiday_today
+    now = datetime.now(TZ)
+
+    if is_holiday_today():
+        return
+    if not (9 <= now.hour < 18):
+        return
+    if not _COLLECTOR_TRIGGER_PATH.exists():
+        return
+
+    # Читаем флаг
+    try:
+        flag_data = json.loads(_COLLECTOR_TRIGGER_PATH.read_text(encoding="utf-8"))
+        triggered_at_raw = flag_data.get("triggered_at", "")
+        triggered_at = datetime.fromisoformat(triggered_at_raw)
+        if triggered_at.tzinfo is None:
+            triggered_at = triggered_at.replace(tzinfo=TZ)
+    except (OSError, json.JSONDecodeError, ValueError) as e:
+        logger.warning("debt_collector_trigger_check: не удалось прочитать флаг: %s", e)
+        try:
+            _COLLECTOR_TRIGGER_PATH.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return
+
+    age_hours = (now - triggered_at).total_seconds() / 3600
+
+    # Флаг устарел — удаляем без запуска
+    if age_hours > _COLLECTOR_TRIGGER_MAX_AGE_HOURS:
+        logger.info(
+            "debt_collector_trigger_check: флаг устарел (%.1f ч) — удаляем без запуска",
+            age_hours,
+        )
+        try:
+            _COLLECTOR_TRIGGER_PATH.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return
+
+    # Проверяем cooldown — не запускать если уже запускали недавно
+    try:
+        if _COLLECTOR_TRIGGER_LAST_RUN_PATH.exists():
+            last_run_data = json.loads(_COLLECTOR_TRIGGER_LAST_RUN_PATH.read_text(encoding="utf-8"))
+            last_run_at = datetime.fromisoformat(last_run_data.get("ran_at", ""))
+            if last_run_at.tzinfo is None:
+                last_run_at = last_run_at.replace(tzinfo=TZ)
+            since_last = (now - last_run_at).total_seconds() / 3600
+            if since_last < _COLLECTOR_TRIGGER_COOLDOWN_HOURS:
+                logger.debug(
+                    "debt_collector_trigger_check: cooldown (%.1f ч < %d ч) — пропуск",
+                    since_last, _COLLECTOR_TRIGGER_COOLDOWN_HOURS,
+                )
+                # Флаг уже обработан (или cooldown) — удаляем
+                try:
+                    _COLLECTOR_TRIGGER_PATH.unlink(missing_ok=True)
+                except OSError:
+                    pass
+                return
+    except (OSError, json.JSONDecodeError, ValueError):
+        pass  # нет файла или битый JSON — продолжаем
+
+    # Удаляем флаг до запуска (атомарная операция — не даём повторному проходу сработать)
+    try:
+        _COLLECTOR_TRIGGER_PATH.unlink(missing_ok=True)
+    except OSError as e:
+        logger.warning("debt_collector_trigger_check: не удалось удалить флаг: %s", e)
+        return
+
+    # Записываем время последнего запуска
+    try:
+        _COLLECTOR_TRIGGER_LAST_RUN_PATH.write_text(
+            json.dumps({"ran_at": now.isoformat()}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except OSError as e:
+        logger.warning("debt_collector_trigger_check: не удалось записать last_run: %s", e)
+
+    debt_count = flag_data.get("debt_files_count", "?")
+    logger.info(
+        "debt_collector_trigger_check: запускаю --preview (новых debt файлов: %s, возраст флага: %.1f ч)",
+        debt_count, age_hours,
+    )
+    log_event("collector_triggered_by_debt_ext", debt_files_count=debt_count)
+
+    try:
+        rc, stdout, stderr = await run_script_async(
+            "collector/collections_engine.py",
+            "--preview",
+            timeout=600,
+        )
+        if rc != 0:
+            logger.warning(
+                "debt_collector_trigger_check: --preview завершился с rc=%d: %s",
+                rc, stderr[:300],
+            )
+            log_event("collector_trigger_error", rc=rc, stderr=stderr[:300], level="WARNING")
+    except (OSError, ValueError) as e:
+        logger.error("debt_collector_trigger_check: ошибка запуска: %s", e)
+        log_event("collector_trigger_error", error=str(e), level="ERROR")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -7205,13 +7327,13 @@ def main():
         )
         logger.info("👥 Настроена CRM: обновление базы + запрос телефонов ежедневно 18:00")
 
-        # AI Debt Collector (17:00 — после разноски оплат Саидой)
+        # AI Debt Collector (17:00 — резервный запуск, если триггер не сработал)
         job_queue.run_daily(
             debt_collector_daily,
             time=dt_time(17, 0, tzinfo=TZ),
             name="debt_collector_daily",
         )
-        logger.info("💰 Настроен AI Debt Collector: ежедневно 17:00")
+        logger.info("💰 Настроен AI Debt Collector: ежедневно 17:00 (резервный)")
 
         job_queue.run_daily(
             debt_collector_promises,
@@ -7219,6 +7341,15 @@ def main():
             name="debt_collector_promises",
         )
         logger.info("💰 Настроена проверка обещаний: ежедневно 10:00")
+
+        # Event-driven: --preview после появления свежих debt_ext файлов
+        job_queue.run_repeating(
+            debt_collector_trigger_check,
+            interval=1800,   # каждые 30 минут
+            first=120,       # первый check через 2 мин после старта
+            name="collector_trigger_check",
+        )
+        logger.info("⚡ Настроен event-driven триггер коллектора: проверка каждые 30 мин")
 
         job_queue.run_repeating(
             crm_phone_reminder_task,

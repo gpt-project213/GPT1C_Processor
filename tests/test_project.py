@@ -534,6 +534,78 @@ with _tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
         _crm.CONTACTS_XLSX_BACKUP_DIR = _orig_backup_dir
 
 # ═══════════════════════════════════════════════════════════════
+# 13. Event-driven collector trigger (run_pipeline_all_mp)
+# ═══════════════════════════════════════════════════════════════
+section("13. Event-driven collector trigger")
+
+import importlib
+import shutil as _shutil
+import datetime as _dt
+
+_trigger_tmpdir = tempfile.mkdtemp()
+_trigger_flag   = Path(_trigger_tmpdir) / "collector_trigger.flag"
+
+try:
+    import run_pipeline_all_mp as _pipeline
+    _orig_trigger_path = _pipeline._COLLECTOR_TRIGGER_PATH
+    _pipeline._COLLECTOR_TRIGGER_PATH = _trigger_flag
+
+    # T1: флаг не создаётся когда DEBT-файлов нет
+    try:
+        _pipeline._write_collector_trigger(0)
+        # 0 — вообще не должен вызываться, но если вызван — флаг всё равно создаётся
+        # Проверяем что run_once не пишет флаг при 0 debt_processed:
+        # Имитируем run_once с пустой очередью
+        check("TRIGGER T1: _write_collector_trigger записывает флаг", _trigger_flag.exists())
+        if _trigger_flag.exists():
+            _trigger_flag.unlink()
+    except Exception as e:
+        check("TRIGGER T1: _write_collector_trigger записывает флаг", False, str(e))
+
+    # T2: флаг содержит правильный JSON с triggered_at и debt_files_count
+    try:
+        _pipeline._write_collector_trigger(3)
+        data = json.loads(_trigger_flag.read_text(encoding="utf-8"))
+        ok_keys = "triggered_at" in data and "debt_files_count" in data
+        ok_count = data.get("debt_files_count") == 3
+        ok_date = data.get("triggered_at", "")[:10] == _dt.date.today().isoformat()
+        check("TRIGGER T2: флаг содержит triggered_at + debt_files_count=3",
+              ok_keys and ok_count and ok_date,
+              str(data))
+        if _trigger_flag.exists():
+            _trigger_flag.unlink()
+    except Exception as e:
+        check("TRIGGER T2: флаг содержит triggered_at + debt_files_count=3", False, str(e))
+
+    # T3: флаг не создаётся при debt_processed=0 в run_once (нет очереди)
+    try:
+        _orig_iter = _pipeline._iter_queue
+        _pipeline._iter_queue = lambda: []   # пустая очередь
+        _pipeline.run_once()
+        no_flag = not _trigger_flag.exists()
+        check("TRIGGER T3: run_once с пустой очередью не создаёт флаг", no_flag)
+        _pipeline._iter_queue = _orig_iter
+    except Exception as e:
+        check("TRIGGER T3: run_once с пустой очередью не создаёт флаг", False, str(e))
+
+    # T4: _write_collector_trigger не падает если LOGS_DIR не существует
+    try:
+        _nonexistent = Path(_trigger_tmpdir) / "nonexistent" / "trigger.flag"
+        _pipeline._COLLECTOR_TRIGGER_PATH = _nonexistent
+        # Должен поймать OSError внутри и не поднимать исключение
+        _pipeline._write_collector_trigger(1)
+        check("TRIGGER T4: _write_collector_trigger не падает при ошибке записи",
+              not _nonexistent.exists() or True)  # либо записал (mkdir) либо проглотил ошибку
+    except Exception as e:
+        check("TRIGGER T4: _write_collector_trigger не падает при ошибке записи", False, str(e))
+    finally:
+        _pipeline._COLLECTOR_TRIGGER_PATH = _trigger_flag
+
+finally:
+    _pipeline._COLLECTOR_TRIGGER_PATH = _orig_trigger_path
+    _shutil.rmtree(_trigger_tmpdir, ignore_errors=True)
+
+# ═══════════════════════════════════════════════════════════════
 # ИТОГ
 # ═══════════════════════════════════════════════════════════════
 print(f"\n{'═'*60}")

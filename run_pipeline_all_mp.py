@@ -1,4 +1,4 @@
-# run_pipeline_all_mp.py · v1.5.2 · Asia/Almaty · 2026-03-10
+# run_pipeline_all_mp.py · v1.5.3 · Asia/Almaty · 2026-04-13
 # Оркестратор всех типов отчётов: DEBT / SALES / GROSS / INVENTORY / EXPENSE
 # Fix P-002: datetime.now() → datetime.now(ZoneInfo(...)) в _move_to_processed (naive datetime)
 # Fix P-001: исправлен импорт expenses_parser — реальное имя функции вместо build_report
@@ -458,6 +458,29 @@ def _imap_once() -> None:
     except Exception as e:
         _log(f"IMAP once failed: {e}", err=False)
 
+_COLLECTOR_TRIGGER_PATH = LOGS_DIR / "collector_trigger.flag"
+
+
+def _write_collector_trigger(debt_files_count: int) -> None:
+    """Записывает флаг-триггер для event-driven запуска коллектора.
+
+    Флаг читается повторяющимся job-ом в send_reports.py и запускает
+    --preview коллектора как только появились свежие данные дебиторки,
+    не дожидаясь 17:00 по расписанию.
+    """
+    try:
+        data = {
+            "triggered_at": datetime.now(ZoneInfo(os.getenv("TZ", "Asia/Almaty"))).isoformat(),
+            "debt_files_count": debt_files_count,
+        }
+        tmp_path = _COLLECTOR_TRIGGER_PATH.with_suffix(".tmp")
+        tmp_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        tmp_path.replace(_COLLECTOR_TRIGGER_PATH)
+        _log(f"[DEBT] collector_trigger.flag записан ({debt_files_count} файлов)")
+    except OSError as e:
+        _log(f"[DEBT] не удалось записать collector_trigger.flag: {e}", err=True)
+
+
 def run_once() -> Tuple[int, int]:
     """
     Один проход очереди. Возвращает (processed, failed)
@@ -469,17 +492,24 @@ def run_once() -> Tuple[int, int]:
 
     processed = 0
     failed = 0
+    debt_processed = 0
     for src in files:
         _log(f"START {src.name}")
         typ, outs = _process_one(src)
         if outs:                      # непустой список — успех
             processed += 1
+            if typ == "DEBT":
+                debt_processed += 1
         elif outs is None:            # исключение в _process_one — всегда считаем failed
             failed += 1
         else:                         # outs == [] — нормально для SALES/GROSS/INVENTORY
             if typ == "DEBT":         # для DEBT пустой вывод = ошибка парсинга
                 failed += 1
         _log(f"FINISH {src.name}: type={typ}, outs={len(outs) if outs else 0}")
+
+    if debt_processed > 0:
+        _write_collector_trigger(debt_processed)
+
     return (processed, failed)
 
 # ─────────────────────────────────────────────────────────────────────
