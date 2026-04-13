@@ -1406,7 +1406,9 @@ _stop_tpl = _loaded_prompts.get("fallback_templates", {}).get("stoplist_reminder
 check("PROMPTS T9c: stoplist_reminder без слова 'критическая'",
       "критичес" not in _stop_tpl.lower(), _stop_tpl)
 check("PROMPTS T9d: stoplist_reminder использует 'Остаток не закрыт уже'",
-      "Остаток не закрыт уже {days} дней" in _stop_tpl, _stop_tpl)
+      "Остаток не закрыт уже {days_text}" in _stop_tpl, _stop_tpl)
+check("PROMPTS T9d2: stoplist_reminder указывает дату отчёта рядом с остатком",
+      "остаток задолженности{report_date_part} составляет" in _stop_tpl, _stop_tpl)
 check("PROMPTS T9e: stoplist_reminder не пишет 'передан руководству'",
       "руководств" not in _stop_tpl.lower(), _stop_tpl)
 check("PROMPTS T9f: тон L5 не содержит 'критическая'",
@@ -1453,11 +1455,13 @@ _typed_stop_msg = _ca_mod.generate_message(
     language="ru",
     manager_name="Ергали",
     msg_type="stoplist_reminder",
+    report_date="2026-04-11",
 )
 check("PROMPTS T12f: msg_type=stoplist_reminder использует шаблон без DeepSeek",
       "критичес" not in _typed_stop_msg.lower()
       and "руководств" not in _typed_stop_msg.lower()
-      and "Остаток не закрыт уже 31 дней" in _typed_stop_msg,
+      and "остаток задолженности на 11.04.2026 составляет 830 782 тг" in _typed_stop_msg.lower()
+      and "Остаток не закрыт уже 31 день" in _typed_stop_msg,
       _typed_stop_msg)
 
 # ── T13: _get_tone возвращает строку для каждого уровня ──────────────────────
@@ -1644,10 +1648,12 @@ check("H4 T2: approved_clients сохраняет msg_type после {**c, 'man
 from collector.collections_engine import _send_approved_client
 
 _captured_msg_type = []
+_captured_report_date = []
 _captured_start_dialog = []
 
 def _mock_generate_message(**kwargs):
     _captured_msg_type.append(kwargs.get("msg_type", "__NOT_SET__"))
+    _captured_report_date.append(kwargs.get("report_date", "__NOT_SET__"))
     return "тестовое сообщение"
 
 async def _mock_start_client_dialog(**kwargs):
@@ -1664,6 +1670,9 @@ with patch("collector.collections_engine.send_whatsapp", return_value=True), \
 check("H4 T3: _send_approved_client передаёт msg_type=stoplist_reminder в generate_message",
       _captured_msg_type == ["stoplist_reminder"],
       f"captured: {_captured_msg_type}")
+check("H4 T3b: _send_approved_client передаёт дату отчёта в generate_message",
+      _captured_report_date == ["2026-04-05"],
+      f"captured: {_captured_report_date}")
 check("H4 T4: _send_approved_client сохраняет дату отчёта в клиентский диалог",
       _captured_start_dialog
       and _captured_start_dialog[0].get("report_date") == "2026-04-05",

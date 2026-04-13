@@ -113,6 +113,19 @@ def _today_str() -> str:
     return date.today().isoformat()
 
 
+def _client_report_date(client: Dict[str, Any], days: int = 0) -> str:
+    report_date = str(client.get("report_date") or client.get("period_max") or client.get("_period_max") or "")
+    if report_date:
+        return report_date
+    oldest_unpaid = str(client.get("oldest_unpaid_date") or "")
+    if oldest_unpaid and days:
+        try:
+            return (datetime.fromisoformat(oldest_unpaid).date() + timedelta(days=days)).isoformat()
+        except ValueError:
+            return ""
+    return ""
+
+
 def _live_send_allowed(reason_prefix: str = "LIVE SEND BLOCKED") -> bool:
     if not is_allowed_time():
         logger.error("%s: outside allowed time window", reason_prefix)
@@ -471,6 +484,7 @@ async def _process_single(
     manager_name = contact.get("manager", "")
     do_not_call = contact.get("do_not_call", False)
     manager_chat_id = _get_manager_chat_id(manager_name) if manager_name else None
+    report_date = _client_report_date(client, days)
 
     result: Dict[str, Any] = {
         "name": name,
@@ -553,6 +567,7 @@ async def _process_single(
         language=language,
         manager_name=manager_name,
         msg_type=msg_type,
+        report_date=report_date,
     )
     logger.info("[%s] level=%d days=%d | текст: %s...", name, level, days, text[:60])
 
@@ -600,6 +615,7 @@ async def _process_single(
                         days=days,
                         amount=amount,
                         message_text=text,
+                        report_date=report_date,
                     )
                 except Exception as e:
                     logger.error("[%s] start_client_dialog ошибка: %s", name, e)
@@ -954,6 +970,7 @@ async def _send_approved_client(client: Dict[str, Any]) -> Dict[str, Any]:
     level = int(client.get("level", 0) or 0)
     language = str(client.get("language") or "ru")
     msg_type = str(client.get("msg_type") or "")
+    report_date = _client_report_date(client, days)
 
     text = generate_message(
         client_name=name,
@@ -963,6 +980,7 @@ async def _send_approved_client(client: Dict[str, Any]) -> Dict[str, Any]:
         language=language,
         manager_name=manager_name,
         msg_type=msg_type,
+        report_date=report_date,
     )
 
     if not send_whatsapp(phone, text):
@@ -977,16 +995,6 @@ async def _send_approved_client(client: Dict[str, Any]) -> Dict[str, Any]:
     try:
         from collector.client_dialog import start_client_dialog
         phone_clean = "".join(c for c in phone if c.isdigit())
-        report_date = str(client.get("report_date") or client.get("period_max") or client.get("_period_max") or "")
-        if not report_date:
-            oldest_unpaid = str(client.get("oldest_unpaid_date") or "")
-            if oldest_unpaid and days:
-                try:
-                    report_date = (
-                        datetime.fromisoformat(oldest_unpaid).date() + timedelta(days=days)
-                    ).isoformat()
-                except ValueError:
-                    report_date = ""
         await start_client_dialog(
             phone=phone_clean,
             client_name=name,

@@ -4,7 +4,7 @@
 collections/collection_agent.py
 AI-диалоговый агент взыскания долгов через DeepSeek.
 
-Версия: 1.0.6 (2026-04-12)
+Версия: 1.0.7 (2026-04-13)
 
 Функции:
   generate_message()  — генерирует текст сообщения должнику
@@ -115,10 +115,49 @@ def _get_fallback_template(msg_type: str, **kwargs) -> str:
             kwargs = {**kwargs, "amount": f"{int(kwargs['amount']):,}".replace(",", " ")}
         except (ValueError, TypeError):
             pass
+    kwargs = {
+        **kwargs,
+        "report_date_part": _report_date_part(kwargs.get("report_date", "")),
+        "report_date": _format_report_date(kwargs.get("report_date", "")),
+        "days_text": _format_days_text(kwargs.get("days", 0)),
+    }
     try:
         return template.format(**kwargs)
     except KeyError:
         return template
+
+
+def _format_report_date(raw: str) -> str:
+    if not raw:
+        return ""
+    s = str(raw).strip()
+    for fmt in ("%Y-%m-%d", "%d.%m.%Y"):
+        try:
+            return datetime.strptime(s[:10], fmt).strftime("%d.%m.%Y")
+        except ValueError:
+            pass
+    return s
+
+
+def _report_date_part(raw: str) -> str:
+    formatted = _format_report_date(raw)
+    return f" на {formatted}" if formatted else ""
+
+
+def _format_days_text(days: int) -> str:
+    try:
+        n = abs(int(days))
+    except (TypeError, ValueError):
+        return f"{days} дней"
+    if 11 <= n % 100 <= 14:
+        word = "дней"
+    elif n % 10 == 1:
+        word = "день"
+    elif 2 <= n % 10 <= 4:
+        word = "дня"
+    else:
+        word = "дней"
+    return f"{days} {word}"
 
 
 def _call_deepseek(system_prompt: str, user_prompt: str, max_tokens: int = 500) -> str:
@@ -162,7 +201,8 @@ _FALLBACK_TEMPLATES_DEFAULT = {
         "Здравствуйте! Это {company}, отдел по работе с клиентами.\n\n"
         "Пишем по имеющейся задолженности: {client_name}.\n"
         "Ответственный менеджер: {manager_name}.\n\n"
-        "По нашим данным, остаётся задолженность {amount} тг, просрочка {days} дней.\n"
+        "По нашим данным, остаток задолженности{report_date_part} составляет {amount} тг. "
+        "Остаток не закрыт уже {days_text}.\n"
         "Подскажите, пожалуйста, когда планируете следующий платёж?\n\n"
         "Если удобнее обсудить с менеджером — напишите 1, передадим {manager_name}."
     ),
@@ -170,7 +210,8 @@ _FALLBACK_TEMPLATES_DEFAULT = {
         "Здравствуйте! Это {company}, отдел по работе с клиентами.\n\n"
         "Пишем по имеющейся задолженности: {client_name}.\n"
         "Ответственный менеджер: {manager_name}.\n\n"
-        "Видим, что оплаты поступают, но остаток {amount} тг пока не закрыт ({days} дней).\n"
+        "Видим, что оплаты поступают, но остаток задолженности{report_date_part} составляет {amount} тг. "
+        "Остаток не закрыт уже {days_text}.\n"
         "Подскажите, по какому графику планируете закрыть остаток?\n\n"
         "Если удобнее — напишите 1, передадим {manager_name}."
     ),
@@ -178,8 +219,8 @@ _FALLBACK_TEMPLATES_DEFAULT = {
         "Здравствуйте! Это {company}, отдел по работе с клиентами.\n\n"
         "Пишем по имеющейся задолженности: {client_name}.\n"
         "Ответственный менеджер: {manager_name}.\n\n"
-        "По нашим данным, остаток задолженности составляет {amount} тг. "
-        "Остаток не закрыт уже {days} дней.\n"
+        "По нашим данным, остаток задолженности{report_date_part} составляет {amount} тг. "
+        "Остаток не закрыт уже {days_text}.\n"
         "Пожалуйста, сообщите, когда сможете оплатить остаток.\n\n"
         "Если удобнее обсудить детали — напишите 1, передадим {manager_name}."
     ),
@@ -187,8 +228,8 @@ _FALLBACK_TEMPLATES_DEFAULT = {
         "Здравствуйте! Это {company}, отдел по работе с клиентами.\n\n"
         "Пишем по имеющейся задолженности: {client_name}.\n"
         "Ответственный менеджер: {manager_name}.\n\n"
-        "По нашим данным, остаток задолженности составляет {amount} тг. "
-        "Остаток не закрыт уже {days} дней, поэтому дальнейшие отгрузки ограничены до его закрытия.\n"
+        "По нашим данным, остаток задолженности{report_date_part} составляет {amount} тг. "
+        "Остаток не закрыт уже {days_text}, поэтому дальнейшие отгрузки ограничены до его закрытия.\n"
         "Пожалуйста, сообщите, когда сможете оплатить остаток.\n\n"
         "Если удобнее обсудить с менеджером — напишите 1, передадим {manager_name}."
     ),
@@ -204,6 +245,7 @@ def generate_message(
     previous_promise: Optional[str] = None,
     manager_name: str = "",
     msg_type: str = "",
+    report_date: str = "",
 ) -> str:
     """Генерирует персонализированный текст первого сообщения должнику через DeepSeek.
 
@@ -217,6 +259,7 @@ def generate_message(
         manager_name:     Имя менеджера
         msg_type:         Тип сообщения: soft_reminder / payment_plan_control /
                           strict_reminder / stoplist_reminder
+        report_date:      Дата отчёта 1С, по которому рассчитан остаток.
 
     Returns:
         Текст сообщения. Завершается вопросом о дате оплаты и фразой про менеджера.
@@ -228,9 +271,10 @@ def generate_message(
     company = COMPANY_NAME
 
     if msg_type:
-        return _get_fallback_template(msg_type).format(
+        return _get_fallback_template(msg_type,
             company=company, client_name=client_name,
             manager_name=mgr, amount=amount_str, days=days_overdue,
+            report_date=report_date,
         )
 
     promise_note = ""
