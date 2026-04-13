@@ -1341,6 +1341,13 @@ check("PROMPTS T9: тон L4 без юридических угроз",
 check("PROMPTS T9b: тон L5 без юридических угроз",
       len(_found_legal5) == 0,
       f"Найдены угрозы: {_found_legal5}")
+_stop_tpl = _loaded_prompts.get("fallback_templates", {}).get("stoplist_reminder", "")
+check("PROMPTS T9c: stoplist_reminder без слова 'критическая'",
+      "критичес" not in _stop_tpl.lower(), _stop_tpl)
+check("PROMPTS T9d: stoplist_reminder использует 'Остаток не закрыт уже'",
+      "Остаток не закрыт уже {days} дней" in _stop_tpl, _stop_tpl)
+check("PROMPTS T9e: stoplist_reminder не пишет 'передан руководству'",
+      "руководств" not in _stop_tpl.lower(), _stop_tpl)
 
 # ── T10: lang_instructions содержит ru и kz ──────────────────────────────────
 _lang = _loaded_prompts.get("lang_instructions", {})
