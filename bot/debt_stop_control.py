@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-debt_stop_control.py · v1.0.1 (2026-04-09)
+debt_stop_control.py · v1.0.2 (2026-04-13)
 
 Контроль стоп-листа отгрузки — уведомление Саиды-бухгалтера.
 
@@ -76,6 +76,7 @@ AUTO_STOP_MIN = 15   # 15+ дней: авто-стоп даже для одоб�
 
 # Минимальная сумма долга — игнорировать мелочь
 MIN_DEBT = 50_000.0
+FULL_PAYMENT_THRESHOLD = float(os.getenv("SHIPMENT_FULL_PAYMENT_THRESHOLD", "1000"))
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -243,6 +244,19 @@ def _fmt(amount: float) -> str:
     return f"{amount:,.0f}".replace(",", "\u202f") + "\u202f₸"
 
 
+def _parse_amount(text: str) -> Optional[float]:
+    raw = str(text or "").lower().replace("тг", "").replace("тенге", "")
+    raw = raw.replace("\u202f", "").replace(" ", "").replace(",", ".")
+    raw = re.sub(r"[^0-9.]", "", raw)
+    if not raw:
+        return None
+    try:
+        amount = float(raw)
+    except ValueError:
+        return None
+    return amount if amount > 0 else None
+
+
 # ══════════════════════════════════════════════════════════════════════
 # 14:00 — мониторинг реестра: авто-стоп при 15+ днях
 # ══════════════════════════════════════════════════════════════════════
@@ -302,17 +316,27 @@ async def monitor_exceptions(bot) -> None:
                                         client_name, chat_id, e)
 
         # ── Условная отгрузка: долг оплачен → авто-снятие ────────────
-        elif status == "conditional":
+        elif status in ("conditional", "allow_after_payment"):
             current = _get_client_current_state(client_name)
-            if current and current["debt"] <= 0:
-                rec["status"] = "cleared"
+            if current and current["debt"] <= FULL_PAYMENT_THRESHOLD:
+                limit = float(rec.get("shipment_limit") or 0)
+                rec["status"] = "cleared_limited" if limit > 0 else "cleared"
                 rec["cleared_at"] = today
-                LOG.info("Условная отгрузка выполнена (оплата разнесена): %s", client_name)
+                LOG.info("Условие полной оплаты выполнено: %s", client_name)
                 mgr_id = rec.get("manager_chat_id", 0)
-                note = (
-                    f"✅ <b>{client_name}</b> — условная отгрузка выполнена.\n"
-                    f"Оплата разнесена в 1С. Клиент снят с контроля."
-                )
+                if limit > 0:
+                    note = (
+                        f"✅ <b>{client_name}</b> — старая задолженность закрыта.\n"
+                        f"Остаток в 1С: <b>{_fmt(current['debt'])}</b>\n"
+                        f"Отгрузка разрешена с новым лимитом: <b>{_fmt(limit)}</b>.\n"
+                        f"Больше лимита не отгружать без отдельного разрешения руководителя."
+                    )
+                else:
+                    note = (
+                        f"✅ <b>{client_name}</b> — полная оплата видна в 1С.\n"
+                        f"Остаток: <b>{_fmt(current['debt'])}</b>\n"
+                        f"Клиент снят с контроля. Отгрузка разрешена."
+                    )
                 for cid_tg in {admin_id, mgr_id, SAIDA_CHAT_ID}:
                     if cid_tg:
                         try:
@@ -322,11 +346,11 @@ async def monitor_exceptions(bot) -> None:
                                         client_name, e)
 
         # ── Проверка полной оплаты (авто-стоп или утверждённый стоп) ──
-        elif status in ("auto_stopped", "stopped"):
+        elif status in ("auto_stopped", "stopped", "block_until_payment"):
             current = _get_client_current_state(client_name)
             if not current:
                 continue
-            if current["debt"] <= 0:
+            if current["debt"] <= FULL_PAYMENT_THRESHOLD:
                 rec["status"] = "pending_clearance"
                 paid_in_full_today.append(client_name)
                 LOG.info("Полная оплата: %s", client_name)
@@ -334,18 +358,22 @@ async def monitor_exceptions(bot) -> None:
                 kb = InlineKeyboardMarkup([
                     [
                         InlineKeyboardButton(
-                            "✅ Снять со стопа",
+                            "✅ Разрешить сейчас",
                             callback_data=f"dstop_clear|{client_name[:26]}"
                         ),
                         InlineKeyboardButton(
-                            "🚫 Оставить на стопе",
-                            callback_data=f"dstop_keep|{client_name[:26]}"
+                            "📉 Разрешить с лимитом",
+                            callback_data=f"dstop_limit_clear|{client_name[:26]}"
                         ),
                     ],
                     [
                         InlineKeyboardButton(
-                            "⚠️ Условная отгрузка",
-                            callback_data=f"dstop_conditional|{client_name[:26]}"
+                            "🔒 Запретить до оплаты",
+                            callback_data=f"dstop_keep_until_paid|{client_name[:26]}"
+                        ),
+                        InlineKeyboardButton(
+                            "🚫 Запретить",
+                            callback_data=f"dstop_keep|{client_name[:26]}"
                         ),
                     ],
                 ])
@@ -355,8 +383,10 @@ async def monitor_exceptions(bot) -> None:
                     note = f"Был на стопе {rec.get('days_at_stop', '?')} дн.\n"
                 msg = (
                     f"💰 <b>{client_name}</b> — полностью рассчитался.\n"
+                    f"Остаток в 1С: <b>{_fmt(current['debt'])}</b> "
+                    f"(полная оплата считается до {_fmt(FULL_PAYMENT_THRESHOLD)}).\n"
                     f"{note}"
-                    f"Снять со стопа?"
+                    f"Выбери решение по отгрузке:"
                 )
                 if admin_id:
                     try:
@@ -396,7 +426,8 @@ def _build_candidates() -> Dict[str, Any]:
     already_controlled = {
         name for name, rec in registry.items()
         if rec.get("status") in ("exception", "auto_stopped", "pending_clearance",
-                                  "stopped", "conditional")
+                                  "stopped", "conditional", "allow_after_payment",
+                                  "block_until_payment", "awaiting_clearance_limit")
     }
 
     # Нарушители дисциплины (были авто-остановлены ранее, но уже cleared)
@@ -582,8 +613,11 @@ async def escalate_unanswered(bot) -> None:
             f"<i>{note}</i>"
         )
         kb = InlineKeyboardMarkup([[
-            InlineKeyboardButton("✅ Утвердить стоп",  callback_data=f"dstop_admin_ok|{cid}"),
-            InlineKeyboardButton("❌ Убрать из списка", callback_data=f"dstop_admin_remove|{cid}"),
+            InlineKeyboardButton("✅ Разрешить сейчас", callback_data=f"dstop_admin_remove|{cid}"),
+            InlineKeyboardButton("📉 После оплаты с лимитом", callback_data=f"dstop_admin_limit_after|{cid}"),
+        ], [
+            InlineKeyboardButton("🔒 Запретить до оплаты", callback_data=f"dstop_admin_block_until|{cid}"),
+            InlineKeyboardButton("🚫 Запретить", callback_data=f"dstop_admin_ok|{cid}"),
         ]])
         try:
             msg = await bot.send_message(chat_id=admin_id, text=text,
@@ -672,7 +706,7 @@ async def send_saida_final(bot) -> None:
     # Из реестра: авто-стопы и утверждённые стопы (включая сегодняшние)
     auto_stopped = [
         (name, rec) for name, rec in registry.items()
-        if rec.get("status") in ("auto_stopped", "stopped")
+        if rec.get("status") in ("auto_stopped", "stopped", "allow_after_payment", "block_until_payment")
     ]
 
     total = len(approved_daily) + len(auto_stopped)
@@ -701,17 +735,31 @@ async def send_saida_final(bot) -> None:
         LOG.warning("Ошибка отправки заголовка Саиде: %s", e)
 
     # Каждый клиент — отдельное сообщение с кнопкой «Оплата получена»
-    all_items: List[Tuple[str, int, str, str]] = []  # (name, days, debt_fmt, manager)
+    all_items: List[Tuple[str, int, str, str, str, float]] = []  # name, days, debt_fmt, manager, level, limit
     for name, rec in sorted(auto_stopped, key=lambda x: x[1].get("days_at_stop", 0), reverse=True):
-        all_items.append((name, rec.get("days_at_stop", 0), "?", rec.get("manager", ""), "auto"))
+        status = rec.get("status", "auto_stopped")
+        level = status if status in ("allow_after_payment", "block_until_payment") else "auto"
+        all_items.append((
+            name, rec.get("days_at_stop", 0), "?", rec.get("manager", ""), level,
+            float(rec.get("shipment_limit") or 0),
+        ))
     for cid, c in sorted(approved_daily, key=lambda x: -x[1]["days_silence"]):
-        all_items.append((c["client"], c["days_silence"], _fmt(c["debt"]), c["manager"], c["level"]))
+        all_items.append((c["client"], c["days_silence"], _fmt(c["debt"]), c["manager"], c["level"], 0.0))
 
     for item in all_items:
-        name, days, debt_str, manager, level = item
+        name, days, debt_str, manager, level, limit = item
         if level == "auto":
             icon = "🚫"
             note = "нарушение фин. дисциплины"
+        elif level == "allow_after_payment":
+            icon = "⏳"
+            if limit > 0:
+                note = f"после полной оплаты, лимит новой отгрузки {_fmt(limit)}"
+            else:
+                note = f"после полной оплаты (до {_fmt(FULL_PAYMENT_THRESHOLD)})"
+        elif level == "block_until_payment":
+            icon = "🔒"
+            note = f"запрет до полной оплаты (до {_fmt(FULL_PAYMENT_THRESHOLD)})"
         elif level == "10+":
             icon = "🔴"
             note = f"долг: {debt_str}"
@@ -768,16 +816,38 @@ async def handle_dstop_callback(data: str, chat_id: int, bot) -> Optional[str]:
         response = "yes" if data.startswith("dstop_yes|") else "no"
         return await _handle_manager_response(cid, response, chat_id, bot)
 
-    if data.startswith("dstop_admin_ok|") or data.startswith("dstop_admin_remove|"):
+    if (
+        data.startswith("dstop_admin_ok|")
+        or data.startswith("dstop_admin_remove|")
+        or data.startswith("dstop_admin_limit_after|")
+        or data.startswith("dstop_admin_block_until|")
+    ):
         parts  = data.split("|", 1)
         cid    = parts[1]
-        action = "ok" if data.startswith("dstop_admin_ok|") else "remove"
+        if data.startswith("dstop_admin_ok|"):
+            action = "ok"
+        elif data.startswith("dstop_admin_remove|"):
+            action = "remove"
+        elif data.startswith("dstop_admin_limit_after|"):
+            return await _handle_admin_limit_after_request(cid, chat_id, bot)
+        else:
+            action = "block_until"
         return await _handle_admin_response(cid, action, chat_id, bot)
 
-    if data.startswith("dstop_clear|") or data.startswith("dstop_keep|"):
+    if (
+        data.startswith("dstop_clear|")
+        or data.startswith("dstop_keep|")
+        or data.startswith("dstop_limit_clear|")
+        or data.startswith("dstop_keep_until_paid|")
+    ):
         parts       = data.split("|", 1)
         client_key  = parts[1]
-        action      = "clear" if data.startswith("dstop_clear|") else "keep"
+        if data.startswith("dstop_limit_clear|"):
+            return await _handle_clearance_limit_request(client_key, chat_id, bot)
+        if data.startswith("dstop_clear|"):
+            action = "clear"
+        else:
+            action = "keep"
         return await _handle_clearance(client_key, action, chat_id, bot)
 
     if data.startswith("dstop_conditional|"):
@@ -848,8 +918,11 @@ async def _escalate_yes_to_admin(cid: str, c: dict, bot) -> None:
         f"{detail_line}"
     )
     kb = InlineKeyboardMarkup([[
-        InlineKeyboardButton("✅ Разрешить отгрузку", callback_data=f"dstop_admin_remove|{cid}"),
-        InlineKeyboardButton("🚫 Утвердить стоп",    callback_data=f"dstop_admin_ok|{cid}"),
+        InlineKeyboardButton("✅ Разрешить сейчас", callback_data=f"dstop_admin_remove|{cid}"),
+        InlineKeyboardButton("📉 После оплаты с лимитом", callback_data=f"dstop_admin_limit_after|{cid}"),
+    ], [
+        InlineKeyboardButton("🔒 Запретить до оплаты", callback_data=f"dstop_admin_block_until|{cid}"),
+        InlineKeyboardButton("🚫 Запретить", callback_data=f"dstop_admin_ok|{cid}"),
     ]])
     if admin_id:
         try:
@@ -870,6 +943,53 @@ async def handle_dstop_detail_message(chat_id: int, text: str, bot) -> bool:
     """
     state = load_state()
     candidates = state.get("candidates", {})
+
+    admin_id = _get_admin_chat_id()
+    if chat_id == admin_id:
+        registry = load_registry()
+        for client_name, rec in registry.items():
+            if rec.get("status") == "awaiting_clearance_limit":
+                amount = _parse_amount(text)
+                if amount is None:
+                    try:
+                        await bot.send_message(
+                            chat_id=chat_id,
+                            text=(
+                                "Не понял сумму лимита.\n"
+                                "Введите число, например: <code>1000000</code>"
+                            ),
+                            parse_mode="HTML",
+                        )
+                    except Exception as e:
+                        LOG.warning("Ошибка запроса лимита после оплаты: %s", e)
+                    return True
+                await _apply_clearance_limit(client_name, rec, amount, bot)
+                return True
+
+    for cid, c in candidates.items():
+        if c.get("awaiting_shipment_limit") and chat_id == admin_id:
+            amount = _parse_amount(text)
+            if amount is None:
+                try:
+                    await bot.send_message(
+                        chat_id=chat_id,
+                        text=(
+                            "Не понял сумму лимита.\n"
+                            "Введите число, например: <code>1000000</code>"
+                        ),
+                        parse_mode="HTML",
+                    )
+                except Exception as e:
+                    LOG.warning("Ошибка запроса лимита отгрузки: %s", e)
+                return True
+
+            c["awaiting_shipment_limit"] = False
+            c["shipment_limit"] = amount
+            c["admin_approved"] = True
+            c["admin_decision"] = "allow_after_payment_with_limit"
+            save_state(state)
+            await _register_allow_after_payment_with_limit(cid, c, amount, bot)
+            return True
 
     # Ищем кандидата с pending-деталью для этого менеджера
     found_cid = None
@@ -912,14 +1032,22 @@ async def _handle_admin_response(cid: str, action: str, chat_id: int, bot) -> st
     if c.get("admin_approved") is not None:
         return "ℹ️ Решение уже принято."
 
-    c["admin_approved"] = (action == "ok")
+    c["admin_approved"] = action in ("ok", "allow_after", "block_until")
     save_state(state)
 
     mgr_chat_id = c.get("manager_chat_id")
     today = datetime.now(TZ).strftime("%Y-%m-%d")
 
-    if action == "ok":
+    if action in ("ok", "block_until"):
         # Стоп — записываем в реестр для отслеживания оплаты
+        status_by_action = {
+            "ok": "stopped",
+            "block_until": "block_until_payment",
+        }
+        added_by_by_action = {
+            "ok": "admin_manual",
+            "block_until": "admin_block_until_payment",
+        }
         registry = load_registry()
         registry[c["client"]] = {
             "manager":              c["manager"],
@@ -927,14 +1055,28 @@ async def _handle_admin_response(cid: str, action: str, chat_id: int, bot) -> st
             "approved_at":          today,
             "days_at_approval":     c["days_silence"],
             "debt_at_approval":     c["debt"],
-            "status":               "stopped",
-            "added_by":             "admin_manual",
+            "status":               status_by_action[action],
+            "added_by":             added_by_by_action[action],
             "auto_stopped_at":      None,
             "days_at_stop":         c["days_silence"],
             "discipline_violation": False,
             "cleared_at":           None,
         }
         save_registry(registry)
+        saida_action_line = {
+            "ok": "Не отгружать до отдельного разрешения руководителя.",
+            "block_until": (
+                f"Не отгружать до полной оплаты в 1С "
+                f"(остаток до {_fmt(FULL_PAYMENT_THRESHOLD)}). После оплаты руководитель проверит решение."
+            ),
+        }[action]
+        manager_action_line = {
+            "ok": "Отгрузка запрещена.",
+            "block_until": (
+                f"Отгрузка запрещена до полной оплаты в 1С "
+                f"(остаток до {_fmt(FULL_PAYMENT_THRESHOLD)})."
+            ),
+        }[action]
         # Уведомить Саиду в реальном времени
         try:
             await bot.send_message(
@@ -943,7 +1085,7 @@ async def _handle_admin_response(cid: str, action: str, chat_id: int, bot) -> st
                     f"🚫 <b>Стоп-лист обновлён</b>\n"
                     f"<b>{c['client']}</b> — добавлен.\n"
                     f"Молчит {c['days_silence']}\u202fдн., долг: {_fmt(c['debt'])}\n"
-                    f"<i>Не отгружать до разрешения руководителя.</i>"
+                    f"<i>{saida_action_line}</i>"
                 ),
                 parse_mode="HTML"
             )
@@ -960,13 +1102,20 @@ async def _handle_admin_response(cid: str, action: str, chat_id: int, bot) -> st
                 ]])
                 await bot.send_message(
                     chat_id=mgr_chat_id,
-                    text=f"🚫 <b>Руководитель утвердил стоп</b>\n{c['client']}\nОтгрузка запрещена.",
+                    text=(
+                        f"🚫 <b>Решение руководителя по отгрузке</b>\n"
+                        f"{c['client']}\n{manager_action_line}"
+                    ),
                     parse_mode="HTML",
                     reply_markup=kb_mgr
                 )
             except Exception as e:
                 LOG.warning("Ошибка уведомления менеджера о стопе %s: %s", c["client"], e)
-        return f"✅ Стоп утверждён — <b>{c['client']}</b>"
+        result_labels = {
+            "ok": "🚫 Запрет утверждён",
+            "block_until": "🔒 Запрет до полной оплаты зафиксирован",
+        }
+        return f"{result_labels[action]} — <b>{c['client']}</b>"
     else:
         # Разрешил — если менеджер говорил "yes", записываем как exception
         if c.get("manager_response") == "yes":
@@ -996,6 +1145,86 @@ async def _handle_admin_response(cid: str, action: str, chat_id: int, bot) -> st
             except Exception as e:
                 LOG.warning("Ошибка уведомления менеджера о разрешении %s: %s", c["client"], e)
         return f"✅ Разрешено — <b>{c['client']}</b>"
+
+
+async def _handle_admin_limit_after_request(cid: str, chat_id: int, bot) -> str:
+    """Руководитель выбрал: после полной оплаты разрешить новую отгрузку с лимитом."""
+    admin_id = _get_admin_chat_id()
+    if chat_id != admin_id:
+        return "⛔ Решение по лимиту может принять только руководитель."
+
+    state = load_state()
+    c = state["candidates"].get(cid)
+    if not c:
+        return "❓ Клиент не найден."
+    if c.get("admin_approved") is not None:
+        return "ℹ️ Решение уже принято."
+
+    c["awaiting_shipment_limit"] = True
+    c["limit_requested_at"] = datetime.now(TZ).strftime("%H:%M")
+    save_state(state)
+    return (
+        f"📉 <b>{c['client']}</b>\n\n"
+        f"Введите лимит новой отгрузки после полной оплаты.\n"
+        f"Например: <code>1000000</code>\n\n"
+        f"Старый долг должен быть закрыт в 1С до {_fmt(FULL_PAYMENT_THRESHOLD)}. "
+        f"После этого Саида получит разрешение отгружать только в пределах указанного лимита."
+    )
+
+
+async def _register_allow_after_payment_with_limit(
+    cid: str,
+    c: Dict[str, Any],
+    limit: float,
+    bot,
+) -> None:
+    """Сохраняет решение: после закрытия старого долга отгрузка разрешена с лимитом."""
+    today = datetime.now(TZ).strftime("%Y-%m-%d")
+    registry = load_registry()
+    registry[c["client"]] = {
+        "manager":              c["manager"],
+        "manager_chat_id":      c.get("manager_chat_id"),
+        "approved_at":          today,
+        "days_at_approval":     c["days_silence"],
+        "debt_at_approval":     c["debt"],
+        "status":               "allow_after_payment",
+        "added_by":             "admin_allow_after_payment_with_limit",
+        "shipment_limit":       limit,
+        "auto_stopped_at":      None,
+        "days_at_stop":         c["days_silence"],
+        "discipline_violation": False,
+        "cleared_at":           None,
+    }
+    save_registry(registry)
+
+    mgr_chat_id = c.get("manager_chat_id")
+    client = c["client"]
+    saida_msg = (
+        f"⏳ <b>Отгрузка после полной оплаты с лимитом</b>\n"
+        f"<b>{client}</b>\n\n"
+        f"Сейчас не отгружать. Старый долг должен быть закрыт в 1С "
+        f"(остаток до {_fmt(FULL_PAYMENT_THRESHOLD)}).\n\n"
+        f"После закрытия старого долга новая отгрузка разрешена "
+        f"только в пределах <b>{_fmt(limit)}</b>.\n"
+        f"Больше лимита не отгружать без отдельного разрешения руководителя."
+    )
+    mgr_msg = (
+        f"⏳ <b>Решение руководителя по отгрузке</b>\n"
+        f"{client}\n\n"
+        f"После полной оплаты старого долга клиенту можно будет отгружать "
+        f"с лимитом <b>{_fmt(limit)}</b>."
+    )
+    admin_msg = (
+        f"✅ Зафиксировано — <b>{client}</b>\n"
+        f"После полной оплаты: лимит новой отгрузки <b>{_fmt(limit)}</b>."
+    )
+
+    for target, msg in ((SAIDA_CHAT_ID, saida_msg), (mgr_chat_id, mgr_msg), (_get_admin_chat_id(), admin_msg)):
+        if target:
+            try:
+                await bot.send_message(chat_id=target, text=msg, parse_mode="HTML")
+            except Exception as e:
+                LOG.warning("Ошибка уведомления лимита отгрузки %s (chat=%s): %s", client, target, e)
 
 
 async def _handle_saida_payment(client_key: str, chat_id: int, bot) -> str:
@@ -1126,6 +1355,63 @@ async def _handle_conditional_clearance(client_key: str, chat_id: int, bot) -> s
 
     LOG.info("Условная отгрузка: %s", matched_key)
     return f"⚠️ Условная отгрузка — <b>{matched_key}</b>. Менеджер и Саида уведомлены."
+
+
+async def _handle_clearance_limit_request(client_key: str, chat_id: int, bot) -> str:
+    """Руководитель выбрал лимит новой отгрузки после уже закрытого долга."""
+    if chat_id != _get_admin_chat_id():
+        return "⛔ Лимит отгрузки может задать только руководитель."
+
+    registry = load_registry()
+    matched_key = None
+    for name in registry:
+        if name.startswith(client_key) or name[:26] == client_key[:26]:
+            matched_key = name
+            break
+
+    if not matched_key:
+        return "❓ Клиент не найден в реестре."
+
+    rec = registry[matched_key]
+    if rec.get("status") != "pending_clearance":
+        return "ℹ️ Статус клиента уже изменён."
+
+    rec["status"] = "awaiting_clearance_limit"
+    rec["limit_requested_at"] = datetime.now(TZ).strftime("%H:%M")
+    save_registry(registry)
+    return (
+        f"📉 <b>{matched_key}</b>\n\n"
+        f"Введите лимит новой отгрузки.\n"
+        f"Например: <code>1000000</code>\n\n"
+        f"Саида получит разрешение отгружать только в пределах указанного лимита."
+    )
+
+
+async def _apply_clearance_limit(client_name: str, rec: Dict[str, Any], limit: float, bot) -> None:
+    """Снимает старый стоп после оплаты и сохраняет лимит новой отгрузки."""
+    registry = load_registry()
+    stored = registry.get(client_name, rec)
+    today = datetime.now(TZ).strftime("%Y-%m-%d")
+    stored["status"] = "cleared_limited"
+    stored["cleared_at"] = today
+    stored["shipment_limit"] = limit
+    registry[client_name] = stored
+    save_registry(registry)
+
+    mgr_chat_id = stored.get("manager_chat_id") or _load_managers().get(stored.get("manager", ""), 0)
+    note = (
+        f"✅ <b>{client_name}</b> — отгрузка разрешена с лимитом.\n\n"
+        f"Старый долг закрыт.\n"
+        f"Новый лимит отгрузки: <b>{_fmt(limit)}</b>.\n"
+        f"Больше лимита не отгружать без отдельного разрешения руководителя."
+    )
+    for target in {_get_admin_chat_id(), mgr_chat_id, SAIDA_CHAT_ID}:
+        if target:
+            try:
+                await bot.send_message(chat_id=target, text=note, parse_mode="HTML")
+            except Exception as e:
+                LOG.warning("Ошибка уведомления лимита после оплаты %s (chat=%s): %s",
+                            client_name, target, e)
 
 
 # ══════════════════════════════════════════════════════════════════════

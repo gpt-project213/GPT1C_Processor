@@ -5424,62 +5424,7 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Shipment control callbacks (cdlg_ship|action|phone_key)
     if data.startswith("cdlg_ship|"):
-        try:
-            parts = data.split("|")
-            if len(parts) == 3:
-                _, action, phone_key = parts
-                from collector.shipment_control import set_decision, VALID_DECISIONS
-                from collector.collections_db import load_state
-
-                # Ищем клиента по phone_key в диалогах
-                client_name = ""
-                amount = 0.0
-                manager_name = get_my_manager_name(chat_id) or ""
-                try:
-                    from collector.client_dialog import _load_client_dialogs
-                    dialogs = _load_client_dialogs()
-                    for ph, dlg in dialogs.items():
-                        if ph.startswith(phone_key[:15]) or phone_key.startswith(ph[:15]):
-                            client_name = dlg.get("client_name", "")
-                            amount = float(dlg.get("amount", 0) or 0)
-                            if not manager_name:
-                                manager_name = dlg.get("manager_name", "")
-                            break
-                except Exception as _e:
-                    logger.warning("cdlg_ship: ошибка поиска диалога: %s", _e)
-
-                if action not in VALID_DECISIONS:
-                    await q.answer("Неверное действие.")
-                    return
-
-                set_decision(
-                    phone=phone_key,
-                    client_name=client_name or phone_key,
-                    decision=action,
-                    manager_name=manager_name,
-                    manager_chat_id=chat_id,
-                    amount=amount,
-                )
-
-                labels = {
-                    "allow":       "✅ Отгрузка разрешена",
-                    "allow_after": "⏳ Разрешить после полной оплаты",
-                    "block_until": "🔒 Запрет до полной оплаты",
-                    "block":       "🚫 Отгрузка запрещена",
-                }
-                label = labels.get(action, action)
-                name_display = client_name or phone_key
-                result_text = f"{label}\n<b>{name_display}</b>"
-                try:
-                    await q.edit_message_text(result_text, parse_mode="HTML")
-                except Exception:
-                    await q.answer(label)
-                log_event("shipment_decision", action=action, client=name_display)
-            else:
-                await q.answer("Неверный формат callback.")
-        except Exception as e:
-            logger.error("cdlg_ship callback error: %s", e)
-            await q.answer("Ошибка обработки решения.")
+        await q.answer("Решения по отгрузке теперь принимает руководитель через стоп-лист.")
         return
 
     # WhatsApp approval flow callbacks (wa_appr_mgr_* / wa_appr_cli_* / wa_appr_adm_*)

@@ -259,31 +259,6 @@ def _build_escalation_text(
     )
 
 
-def _build_shipment_keyboard(phone: str) -> Any:
-    """Строит inline-клавиатуру контроля отгрузки для эскалации.
-
-    Callback format: cdlg_ship|{action}|{phone_key}
-    phone_key — первые 20 цифр номера (Telegram limit: 64 байта на callback_data).
-    """
-    try:
-        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-    except ImportError:
-        return None
-
-    phone_key = "".join(c for c in phone if c.isdigit())[:20]
-    rows = [
-        [
-            InlineKeyboardButton("✅ Разрешить сейчас",       callback_data=f"cdlg_ship|allow|{phone_key}"),
-            InlineKeyboardButton("🚫 Запретить",              callback_data=f"cdlg_ship|block|{phone_key}"),
-        ],
-        [
-            InlineKeyboardButton("⏳ После полной оплаты",    callback_data=f"cdlg_ship|allow_after|{phone_key}"),
-            InlineKeyboardButton("🔒 Запретить до оплаты",    callback_data=f"cdlg_ship|block_until|{phone_key}"),
-        ],
-    ]
-    return InlineKeyboardMarkup(rows)
-
-
 async def escalate_to_manager(
     dialog: Dict[str, Any],
     reason: str,
@@ -307,9 +282,6 @@ async def escalate_to_manager(
 
     text = _build_escalation_text(dialog, reason, summary)
 
-    # Кнопки контроля отгрузки — только менеджеру (не наблюдателям)
-    keyboard = _build_shipment_keyboard(phone)
-
     # Получаем всех наблюдателей
     try:
         from collector.communications import get_observer_ids
@@ -323,9 +295,7 @@ async def escalate_to_manager(
         observer_ids = [manager_chat_id] + observer_ids
 
     for obs_id in observer_ids:
-        # Кнопки только менеджеру — у наблюдателей нет права принимать решение
-        mkb = keyboard if obs_id == manager_chat_id else None
-        await _send_tg(obs_id, text, reply_markup=mkb)
+        await _send_tg(obs_id, text)
 
     logger.info(
         "[%s] диалог эскалирован менеджеру %s (reason=%s)",

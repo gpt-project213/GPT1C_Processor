@@ -1765,9 +1765,86 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as _td_hold:
 
 
 # ═══════════════════════════════════════════════════════════════
-# 19. Shipment control — collector/shipment_control.py
+# 19. Debt stop admin shipment limit — после оплаты с лимитом
 # ═══════════════════════════════════════════════════════════════
-section("19. Shipment control (условная отгрузка)")
+section("19. Debt stop admin shipment limit")
+
+import bot.debt_stop_control as _dstop
+
+class _FakeDstopBot:
+    def __init__(self):
+        self.messages = []
+
+    async def send_message(self, **kwargs):
+        self.messages.append(kwargs)
+        return type("Msg", (), {
+            "message_id": len(self.messages),
+            "date": datetime.now(),
+        })()
+
+_orig_dstop_state = _dstop.STATE_FILE
+_orig_dstop_registry = _dstop.REGISTRY_FILE
+_orig_dstop_saida = _dstop.SAIDA_CHAT_ID
+_dstop_tmpdir = tempfile.mkdtemp()
+try:
+    _dstop.STATE_FILE = Path(_dstop_tmpdir) / "debt_stop_state.json"
+    _dstop.REGISTRY_FILE = Path(_dstop_tmpdir) / "debt_stop_registry.json"
+    _dstop.SAIDA_CHAT_ID = 0
+    _fake_dstop_bot = _FakeDstopBot()
+    _admin_id = 123456
+    _today = datetime.now(_dstop.TZ).strftime("%Y-%m-%d")
+
+    _dstop.save_state({
+        "date": _today,
+        "next_id": 2,
+        "saida_sent": False,
+        "candidates": {
+            "1": {
+                "client": "ТОО Лимит После Оплаты",
+                "manager": "Ергали",
+                "manager_chat_id": 654321,
+                "days_silence": 31,
+                "debt": 4_000_000,
+                "level": "10+",
+                "admin_approved": None,
+                "awaiting_shipment_limit": True,
+            }
+        },
+    })
+    with patch.dict(os.environ, {"ADMIN_CHAT_ID": str(_admin_id)}):
+        _handled = asyncio.run(_dstop.handle_dstop_detail_message(_admin_id, "1000000", _fake_dstop_bot))
+    _rec = _dstop.load_registry().get("ТОО Лимит После Оплаты", {})
+    check("DSTOP LIMIT T1: ввод лимита админом обработан", _handled is True)
+    check("DSTOP LIMIT T1b: решение хранится как после оплаты с лимитом",
+          _rec.get("status") == "allow_after_payment" and _rec.get("shipment_limit") == 1_000_000,
+          str(_rec))
+
+    _dstop.save_registry({
+        "ТОО Уже Оплатил": {
+            "manager": "Алена",
+            "manager_chat_id": 111,
+            "status": "awaiting_clearance_limit",
+            "debt_at_approval": 700_000,
+        }
+    })
+    with patch.dict(os.environ, {"ADMIN_CHAT_ID": str(_admin_id)}):
+        _handled2 = asyncio.run(_dstop.handle_dstop_detail_message(_admin_id, "500000", _fake_dstop_bot))
+    _rec2 = _dstop.load_registry().get("ТОО Уже Оплатил", {})
+    check("DSTOP LIMIT T2: после полной оплаты можно задать лимит новой отгрузки",
+          _handled2 is True)
+    check("DSTOP LIMIT T2b: старый стоп закрыт с лимитом",
+          _rec2.get("status") == "cleared_limited" and _rec2.get("shipment_limit") == 500_000,
+          str(_rec2))
+finally:
+    _dstop.STATE_FILE = _orig_dstop_state
+    _dstop.REGISTRY_FILE = _orig_dstop_registry
+    _dstop.SAIDA_CHAT_ID = _orig_dstop_saida
+
+
+# ═══════════════════════════════════════════════════════════════
+# 20. Shipment control — collector/shipment_control.py
+# ═══════════════════════════════════════════════════════════════
+section("20. Shipment control (условная отгрузка)")
 
 import tempfile as _tmpmod
 _ship_tmpdir = _tmpmod.mkdtemp()
