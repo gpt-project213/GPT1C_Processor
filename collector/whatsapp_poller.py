@@ -4,13 +4,14 @@
 collector/whatsapp_poller.py
 Green API polling — получает входящие сообщения WhatsApp каждые 30 секунд.
 
-Версия: 1.0.3 (2026-04-13)
+Версия: 1.1.0 (2026-04-13)
 
 Endpoints (используется instance-specific URL, напр. https://7107.api.greenapi.com):
   GET  https://{ID[:4]}.api.greenapi.com/waInstance{ID}/receiveNotification/{TOKEN}
   DELETE https://{ID[:4]}.api.greenapi.com/waInstance{ID}/deleteNotification/{TOKEN}/{receiptId}
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -33,6 +34,9 @@ TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 GREENAPI_ID    = os.getenv("GREENAPI_ID", "")
 GREENAPI_TOKEN = os.getenv("GREENAPI_TOKEN", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY", "")
+VOICE_STT_PROVIDER = os.getenv("VOICE_STT_PROVIDER", "assemblyai").strip().lower()
+ASSEMBLYAI_POLL_SECONDS = int(os.getenv("ASSEMBLYAI_POLL_SECONDS", "18"))
 TEST_MODE      = os.getenv("TEST_MODE", "0") == "1"
 TEST_WA_PHONE  = os.getenv("TEST_WA_PHONE", "")
 
@@ -74,8 +78,156 @@ def _has_active_collector_dialog(phone: str) -> bool:
     return False
 
 
+async def _download_audio_to_temp(audio_url: str) -> tuple[Optional[str], str]:
+    """Скачивает аудио Green API во временный файл."""
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.get(audio_url)
+    if resp.status_code != 200:
+        logger.warning("Ошибка скачивания аудио %d: %s", resp.status_code, audio_url[:80])
+        return None, ".ogg"
+
+    suffix = ".ogg"  # Green API обычно отдаёт ogg/opus
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix=suffix, prefix="wa_audio_")
+    try:
+        with os.fdopen(tmp_fd, "wb") as f:
+            f.write(resp.content)
+    except OSError as e:
+        logger.error("Ошибка записи аудио во временный файл: %s", e)
+        try:
+            os.close(tmp_fd)
+        except OSError:
+            pass
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        return None, suffix
+    return tmp_path, suffix
+
+
+async def _transcribe_with_assemblyai_file(tmp_path: str) -> str:
+    """Транскрибирует локальный аудиофайл через AssemblyAI."""
+    if not ASSEMBLYAI_API_KEY:
+        logger.warning("ASSEMBLYAI_API_KEY не задан — AssemblyAI недоступен")
+        return ""
+
+    headers = {"authorization": ASSEMBLYAI_API_KEY}
+    try:
+        audio_bytes = Path(tmp_path).read_bytes()
+    except OSError as e:
+        logger.error("AssemblyAI: не удалось прочитать аудиофайл: %s", e)
+        return ""
+
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            upload_resp = await client.post(
+                "https://api.assemblyai.com/v2/upload",
+                headers=headers,
+                content=audio_bytes,
+            )
+            if upload_resp.status_code not in (200, 201):
+                logger.warning(
+                    "AssemblyAI upload ошибка %d: %s",
+                    upload_resp.status_code,
+                    upload_resp.text[:200],
+                )
+                return ""
+
+            upload_url = upload_resp.json().get("upload_url")
+            if not upload_url:
+                logger.warning("AssemblyAI upload не вернул upload_url")
+                return ""
+
+            transcript_resp = await client.post(
+                "https://api.assemblyai.com/v2/transcript",
+                headers=headers,
+                json={"audio_url": upload_url, "language_detection": True},
+            )
+            if transcript_resp.status_code not in (200, 201):
+                logger.warning(
+                    "AssemblyAI transcript ошибка %d: %s",
+                    transcript_resp.status_code,
+                    transcript_resp.text[:200],
+                )
+                return ""
+
+            transcript_id = transcript_resp.json().get("id")
+            if not transcript_id:
+                logger.warning("AssemblyAI transcript не вернул id")
+                return ""
+
+            deadline = ASSEMBLYAI_POLL_SECONDS
+            while deadline > 0:
+                await asyncio.sleep(2)
+                deadline -= 2
+                status_resp = await client.get(
+                    f"https://api.assemblyai.com/v2/transcript/{transcript_id}",
+                    headers=headers,
+                )
+                if status_resp.status_code != 200:
+                    logger.warning(
+                        "AssemblyAI status ошибка %d: %s",
+                        status_resp.status_code,
+                        status_resp.text[:200],
+                    )
+                    return ""
+
+                payload = status_resp.json()
+                status = payload.get("status")
+                if status == "completed":
+                    text = (payload.get("text") or "").strip()
+                    lang = payload.get("language_code") or "auto"
+                    logger.info("AssemblyAI транскрипция (%s): %s...", lang, text[:60])
+                    return text
+                if status == "error":
+                    logger.warning("AssemblyAI ошибка распознавания: %s", payload.get("error"))
+                    return ""
+
+            logger.warning("AssemblyAI не успел вернуть транскрипцию за %d сек", ASSEMBLYAI_POLL_SECONDS)
+            return ""
+    except (httpx.RequestError, httpx.TimeoutException) as e:
+        logger.error("AssemblyAI сетевая ошибка: %s: %s", type(e).__name__, e or repr(e))
+        return ""
+    except (KeyError, ValueError, TypeError) as e:
+        logger.error("AssemblyAI ошибка разбора ответа: %s", e)
+        return ""
+
+
+async def _transcribe_with_openai_file(tmp_path: str, suffix: str) -> str:
+    """Транскрибирует локальный аудиофайл через OpenAI Whisper."""
+    if not OPENAI_API_KEY:
+        logger.warning("OPENAI_API_KEY не задан — OpenAI Whisper недоступен")
+        return ""
+
+    headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
+    with open(tmp_path, "rb") as audio_file:
+        files = {"file": (f"audio{suffix}", audio_file, "audio/ogg")}
+        data = {"model": "whisper-1"}
+        try:
+            async with httpx.AsyncClient(timeout=60) as client:
+                whisper_resp = await client.post(
+                    "https://api.openai.com/v1/audio/transcriptions",
+                    headers=headers,
+                    files=files,
+                    data=data,
+                )
+            if whisper_resp.status_code == 200:
+                result = whisper_resp.json().get("text", "").strip()
+                logger.info("Whisper транскрипция: %s...", result[:60])
+                return result
+            logger.warning(
+                "Whisper ошибка %d: %s",
+                whisper_resp.status_code,
+                whisper_resp.text[:200],
+            )
+            return ""
+        except (httpx.RequestError, httpx.TimeoutException) as e:
+            logger.error("Whisper сетевая ошибка: %s: %s", type(e).__name__, e or repr(e))
+            return ""
+
+
 async def transcribe_audio(audio_url: str) -> str:
-    """Скачивает аудио по URL и транскрибирует через OpenAI Whisper.
+    """Скачивает аудио по URL и транскрибирует через выбранный STT-провайдер.
 
     Args:
         audio_url: Прямая ссылка на аудиофайл от Green API.
@@ -83,54 +235,23 @@ async def transcribe_audio(audio_url: str) -> str:
     Returns:
         Транскрибированный текст или пустая строка при ошибке.
     """
-    if not OPENAI_API_KEY:
-        logger.warning("OPENAI_API_KEY не задан — транскрипция недоступна")
-        return ""
-
-    # Скачиваем аудио во временный файл
     tmp_path: Optional[str] = None
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.get(audio_url)
-        if resp.status_code != 200:
-            logger.warning("Ошибка скачивания аудио %d: %s", resp.status_code, audio_url[:80])
+        tmp_path, suffix = await _download_audio_to_temp(audio_url)
+        if not tmp_path:
             return ""
 
-        suffix = ".ogg"  # Green API обычно отдаёт ogg/opus
-        tmp_fd, tmp_path = tempfile.mkstemp(suffix=suffix, prefix="wa_audio_")
-        try:
-            with os.fdopen(tmp_fd, "wb") as f:
-                f.write(resp.content)
-        except OSError as e:
-            logger.error("Ошибка записи аудио во временный файл: %s", e)
-            return ""
+        if VOICE_STT_PROVIDER in ("assemblyai", "auto") and ASSEMBLYAI_API_KEY:
+            text = await _transcribe_with_assemblyai_file(tmp_path)
+            if text:
+                return text
+            logger.warning("AssemblyAI не вернул текст — пробуем fallback, если он доступен")
 
-        # Отправляем в Whisper
-        headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
-        with open(tmp_path, "rb") as audio_file:
-            files = {"file": (f"audio{suffix}", audio_file, "audio/ogg")}
-            data = {"model": "whisper-1"}
-            try:
-                async with httpx.AsyncClient(timeout=60) as client:
-                    whisper_resp = await client.post(
-                        "https://api.openai.com/v1/audio/transcriptions",
-                        headers=headers,
-                        files=files,
-                        data=data,
-                    )
-                if whisper_resp.status_code == 200:
-                    result = whisper_resp.json().get("text", "").strip()
-                    logger.info("Whisper транскрипция: %s...", result[:60])
-                    return result
-                logger.warning(
-                    "Whisper ошибка %d: %s",
-                    whisper_resp.status_code,
-                    whisper_resp.text[:200],
-                )
-                return ""
-            except (httpx.RequestError, httpx.TimeoutException) as e:
-                logger.error("Whisper сетевая ошибка: %s: %s", type(e).__name__, e or repr(e))
-                return ""
+        if VOICE_STT_PROVIDER in ("openai", "auto", "assemblyai") and OPENAI_API_KEY:
+            return await _transcribe_with_openai_file(tmp_path, suffix)
+
+        logger.warning("Нет доступного провайдера транскрибации аудио")
+        return ""
 
     except (httpx.RequestError, httpx.TimeoutException) as e:
         logger.error("Ошибка скачивания аудио: %s", e)

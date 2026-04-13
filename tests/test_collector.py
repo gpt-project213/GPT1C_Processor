@@ -12,7 +12,7 @@ import tempfile
 import shutil
 from datetime import date
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -1583,7 +1583,50 @@ check("H4 T3: _send_approved_client передаёт msg_type=stoplist_reminder 
 
 
 # ═══════════════════════════════════════════════════════════════
-# 17. SAIDA PAYMENT HOLD — collector suppression
+# 17. WHATSAPP AUDIO STT — AssemblyAI primary, safe fallback
+# ═══════════════════════════════════════════════════════════════
+section("WhatsApp audio STT: AssemblyAI primary")
+
+import collector.whatsapp_poller as _wa_poller
+
+_orig_dialogs_path = _wa_poller._CLIENT_DIALOGS_PATH
+with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as _td_wa:
+    _wa_poller._CLIENT_DIALOGS_PATH = Path(_td_wa) / "collector_client_dialogs.json"
+    _wa_poller._CLIENT_DIALOGS_PATH.write_text(
+        json.dumps({"77753306745": {"client": "Е ИП Трое Нурлан"}}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    check("WA STT T1: активный диалог определяется по collector_client_dialogs",
+          _wa_poller._has_active_collector_dialog("+77753306745") is True)
+    check("WA STT T2: должник без активного диалога не проходит гейт",
+          _wa_poller._has_active_collector_dialog("+77750000000") is False)
+    _wa_poller._CLIENT_DIALOGS_PATH = _orig_dialogs_path
+
+with patch.object(_wa_poller, "VOICE_STT_PROVIDER", "assemblyai"), \
+     patch.object(_wa_poller, "ASSEMBLYAI_API_KEY", "aai-key"), \
+     patch.object(_wa_poller, "OPENAI_API_KEY", "openai-key"), \
+     patch.object(_wa_poller, "_download_audio_to_temp", new=AsyncMock(return_value=("fake.ogg", ".ogg"))), \
+     patch.object(_wa_poller, "_transcribe_with_assemblyai_file", new=AsyncMock(return_value="оплачу завтра")) as _aai_mock, \
+     patch.object(_wa_poller, "_transcribe_with_openai_file", new=AsyncMock(return_value="openai text")) as _openai_mock:
+    _stt_text = asyncio.run(_wa_poller.transcribe_audio("https://example.test/audio.ogg"))
+    check("WA STT T3: AssemblyAI используется первым",
+          _stt_text == "оплачу завтра" and _aai_mock.await_count == 1 and _openai_mock.await_count == 0)
+
+with patch.object(_wa_poller, "VOICE_STT_PROVIDER", "assemblyai"), \
+     patch.object(_wa_poller, "ASSEMBLYAI_API_KEY", "aai-key"), \
+     patch.object(_wa_poller, "OPENAI_API_KEY", "openai-key"), \
+     patch.object(_wa_poller, "_download_audio_to_temp", new=AsyncMock(return_value=("fake.ogg", ".ogg"))), \
+     patch.object(_wa_poller, "_transcribe_with_assemblyai_file", new=AsyncMock(return_value="")) as _aai_empty_mock, \
+     patch.object(_wa_poller, "_transcribe_with_openai_file", new=AsyncMock(return_value="fallback text")) as _openai_fallback_mock:
+    _fallback_text = asyncio.run(_wa_poller.transcribe_audio("https://example.test/audio.ogg"))
+    check("WA STT T4: при ошибке AssemblyAI есть fallback на OpenAI",
+          _fallback_text == "fallback text"
+          and _aai_empty_mock.await_count == 1
+          and _openai_fallback_mock.await_count == 1)
+
+
+# ═══════════════════════════════════════════════════════════════
+# 18. SAIDA PAYMENT HOLD — collector suppression
 # ═══════════════════════════════════════════════════════════════
 section("Saida payment hold: collector skips clients waiting for 1C posting")
 
@@ -1633,9 +1676,9 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as _td_hold:
 
 
 # ═══════════════════════════════════════════════════════════════
-# 18. ИТОГ
+# 19. ИТОГ
 # ═══════════════════════════════════════════════════════════════
-section("ИТОГ")  # секция 18
+section("ИТОГ")  # секция 19
 total  = len(results)
 passed = sum(1 for _, ok in results if ok)
 failed = total - passed
