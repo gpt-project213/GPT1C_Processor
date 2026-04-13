@@ -65,6 +65,10 @@ _LEVEL_THRESHOLDS = [
     (0,  0),
 ]
 
+_TECHNICAL_TAIL_MIN = 1000.0
+_TECHNICAL_TAIL_MAX = 5000.0
+_TECHNICAL_TAIL_SHARE = 0.01
+
 
 def _level_for_days(days: int) -> int:
     """Определяет уровень давления по кол-ву дней просрочки."""
@@ -72,6 +76,13 @@ def _level_for_days(days: int) -> int:
         if days >= threshold:
             return level
     return 0
+
+
+def _technical_tail_threshold(debt_amount: float) -> float:
+    """Returns the amount below which an old unpaid fragment is just a tail."""
+    if debt_amount <= 0:
+        return 0.0
+    return min(_TECHNICAL_TAIL_MAX, max(_TECHNICAL_TAIL_MIN, debt_amount * _TECHNICAL_TAIL_SHARE))
 
 
 def load_latest_debt_json() -> Dict[str, Any]:
@@ -403,10 +414,24 @@ def compute_residual_debt_profile(
             "explanation": "positive debt but FIFO queue is empty; using payment silence",
         }
 
-    oldest_date = queue[0][0]
+    technical_tail_threshold = _technical_tail_threshold(debt_amount)
+    significant_queue = [
+        item for item in queue
+        if item[1] > technical_tail_threshold
+    ]
+    ignored_tail_parts = [
+        {"date": _fmt_iso(item_date), "amount": round(amount, 2), "source": source}
+        for item_date, amount, source in queue
+        if 0.005 < amount <= technical_tail_threshold
+    ]
+    age_queue = significant_queue or queue
+
+    oldest_date = age_queue[0][0]
     age_days = max((as_of - oldest_date).days, 0)
-    basis = "opening_fallback" if queue[0][2] == "opening" else "movements_fifo"
-    confidence = "medium" if basis == "opening_fallback" else "high"
+    basis = "opening_fallback" if age_queue[0][2] == "opening" else "movements_fifo"
+    if significant_queue and ignored_tail_parts:
+        basis = f"{basis}_significant"
+    confidence = "medium" if basis.startswith("opening_fallback") else "high"
     unpaid_parts = [
         {"date": _fmt_iso(item_date), "amount": round(amount, 2), "source": source}
         for item_date, amount, source in queue
@@ -418,6 +443,8 @@ def compute_residual_debt_profile(
         "payment_silence_days": payment_silence_days,
         "oldest_unpaid_date": _fmt_iso(oldest_date),
         "unpaid_parts": unpaid_parts,
+        "ignored_tail_parts": ignored_tail_parts,
+        "technical_tail_threshold": round(technical_tail_threshold, 2),
         "basis": basis,
         "confidence": confidence,
         "active_turnover": recent_shipment and recent_payment,
@@ -509,6 +536,8 @@ def classify_debtors(debt_data: Dict[str, Any]) -> List[Dict[str, Any]]:
             "payment_silence_days": payment_silence_days,
             "oldest_unpaid_date": debt_age_profile.get("oldest_unpaid_date"),
             "unpaid_parts": debt_age_profile.get("unpaid_parts", []),
+            "ignored_tail_parts": debt_age_profile.get("ignored_tail_parts", []),
+            "technical_tail_threshold": debt_age_profile.get("technical_tail_threshold"),
             "debt_age_basis": debt_age_profile.get("basis", ""),
             "debt_age_confidence": debt_age_profile.get("confidence", ""),
             "active_turnover": bool(debt_age_profile.get("active_turnover", False)),

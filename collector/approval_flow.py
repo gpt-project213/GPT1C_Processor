@@ -159,6 +159,7 @@ def create_batch(
                 "payment_silence_days": c.get("payment_silence_days"),
                 "oldest_unpaid_date": c.get("oldest_unpaid_date"),
                 "unpaid_parts":      c.get("unpaid_parts", []),
+                "ignored_tail_parts": c.get("ignored_tail_parts", []),
                 "debt_age_basis":    c.get("debt_age_basis", ""),
                 "debt_age_confidence": c.get("debt_age_confidence", ""),
                 "active_turnover":   bool(c.get("active_turnover", False)),
@@ -213,6 +214,10 @@ _MSG_TYPE_LABELS = {
 _PLACEHOLDER_PHONE_KEYS = {
     "77001234567",
 }
+
+
+def _fmt_amount(n: float) -> str:
+    return f"{n:,.0f}".replace(",", " ")
 
 
 def _normalize_phone_key(phone: str) -> str:
@@ -366,6 +371,11 @@ def _debt_age_text(c: Dict[str, Any]) -> str:
     oldest = c.get("oldest_unpaid_date")
     if oldest:
         text += f" · Остаток с: {oldest}"
+    small_old_parts = c.get("ignored_tail_parts") or []
+    if small_old_parts:
+        amount = sum(float(p.get("amount", 0) or 0) for p in small_old_parts if isinstance(p, dict))
+        if amount > 0:
+            text += f" · Малый старый остаток: {_fmt_amount(amount)} тг"
     if c.get("active_turnover"):
         text += " · активный оборот"
     return text

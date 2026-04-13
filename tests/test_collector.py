@@ -297,6 +297,31 @@ check("P5 T9: округление не ломает FIFO-остаток",
       abs(sum(p["amount"] for p in _p5_rounding_profile["unpaid_parts"]) - 64.41) < 0.02,
       str(_p5_rounding_profile))
 
+_p5_mv4 = {
+    "name": "Е ТОО МВ4 (Азамат)",
+    "debt": 792307.51,
+    "opening": 3.01,
+    "debit": 3266302.0,
+    "credit": 2473997.5,
+    "days_silence": 1,
+    "_period_min": "2026-03-11",
+    "_period_max": "2026-04-11",
+    "_movements": [
+        {"date": "2026-03-18", "debit": 908661.0, "credit": 0.0},
+        {"date": "2026-03-20", "debit": 0.0, "credit": 908661.0},
+        {"date": "2026-03-27", "debit": 1565336.5, "credit": 0.0},
+        {"date": "2026-03-30", "debit": 0.0, "credit": 1565336.5},
+        {"date": "2026-04-10", "debit": 792304.5, "credit": 0.0},
+    ],
+}
+_p5_mv4_profile = compute_residual_debt_profile(_p5_mv4, as_of_date=date(2026, 4, 11))
+check("P5 T9b: малый старый остаток 3 тг не задаёт возраст долга МВ4",
+      _p5_mv4_profile["oldest_unpaid_date"] == "2026-04-10" and
+      _p5_mv4_profile["residual_debt_age_days"] == 1 and
+      _p5_mv4_profile["basis"] == "movements_fifo_significant" and
+      _p5_mv4_profile["ignored_tail_parts"][0]["amount"] == 3.01,
+      str(_p5_mv4_profile))
+
 check("P5 T10: классификатор сохраняет обе метрики",
       _p5_classified["residual_debt_age_days"] == 3 and
       _p5_classified["payment_silence_days"] == 19 and
@@ -359,6 +384,16 @@ check("P5 T14: approval text shows residual age without payment-silence ambiguit
       "старейшая часть" not in _p5_debt_text and
       "активный оборот" in _p5_debt_text,
       _p5_debt_text)
+
+_p5_mv4_debt_text = _p5_debt_age_text({
+    "days": 1,
+    "oldest_unpaid_date": "2026-04-10",
+    "ignored_tail_parts": [{"date": "2026-03-27", "amount": 3.01, "source": "shipment"}],
+})
+check("P5 T14b: approval text says 'Малый старый остаток', not technical tail",
+      "Малый старый остаток: 3 тг" in _p5_mv4_debt_text and
+      "техничес" not in _p5_mv4_debt_text.lower(),
+      _p5_mv4_debt_text)
 
 _p5_tmp_dir = Path(tempfile.mkdtemp(prefix="collector_debt_period_"))
 try:
