@@ -234,6 +234,18 @@ def _collector_candidate_decision(
     if amount <= 0:
         return {"action": "skip", "reason": "долг закрыт"}
 
+    try:
+        from collector.payment_hold import get_hold_for_client
+        hold = get_hold_for_client(str(client.get("name") or client.get("client") or ""))
+    except Exception:
+        hold = None
+    if hold:
+        return {
+            "action": "skip",
+            "reason": "Саида подтвердила оплату, ждём разноски в 1С",
+            "payment_hold_status": hold.get("status", ""),
+        }
+
     if _flag_enabled(contact, "do_not_notify", "do_not_write", "do_not_contact", "collector_skip"):
         return {"action": "skip", "reason": "ручной запрет уведомления в CRM"}
     if _flag_enabled(stop_rec, "do_not_notify", "do_not_write", "do_not_contact", "collector_skip"):
@@ -665,6 +677,11 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
         return
 
     debtors = classify_debtors(debt_data)
+    try:
+        from collector.payment_hold import sync_holds_with_debtors
+        sync_holds_with_debtors(debtors)
+    except Exception as _e:
+        logger.debug("payment hold sync skipped: %s", _e)
     # CRM: объединяем clients.json + debtors_contacts.json для поиска телефонов
     try:
         from bot.crm_clients import load_contacts_compat as _crm_contacts
@@ -808,6 +825,14 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
             logger.info("[%s] пропуск — долг погашен или отрицательный (amount=%.0f)",
                         name, client.get("amount", 0))
             continue
+        try:
+            from collector.payment_hold import get_hold_for_client
+            _payment_hold = get_hold_for_client(name)
+        except Exception:
+            _payment_hold = None
+        if _payment_hold:
+            logger.info("[%s] пропуск — Саида подтвердила оплату, ждём разноски в 1С", name)
+            continue
 
         # Уже контактировали сегодня — пропускаем
         if not dry_run and already_contacted_today(name):
@@ -903,6 +928,14 @@ async def _send_approved_client(client: Dict[str, Any]) -> Dict[str, Any]:
 
     if not name:
         result["reason"] = "missing client name"
+        return result
+    try:
+        from collector.payment_hold import get_hold_for_client
+        hold = get_hold_for_client(name)
+    except Exception:
+        hold = None
+    if hold:
+        result["reason"] = "Saida confirmed payment, waiting for 1C posting"
         return result
     if not phone:
         result["reason"] = "missing WhatsApp phone in approved batch"
@@ -1014,6 +1047,11 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
         return None
 
     debtors = classify_debtors(debt_data)
+    try:
+        from collector.payment_hold import sync_holds_with_debtors
+        sync_holds_with_debtors(debtors)
+    except Exception as _e:
+        logger.debug("payment hold sync skipped: %s", _e)
     try:
         from bot.crm_clients import load_contacts_compat as _crm_contacts
         contacts = _crm_contacts()

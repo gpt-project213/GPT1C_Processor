@@ -263,6 +263,11 @@ class SilenceAlert:
         try:
             from collector.debt_monitor import classify_debtors, load_latest_debt_json
             classified = classify_debtors(load_latest_debt_json())
+            try:
+                from collector.payment_hold import sync_holds_with_debtors
+                sync_holds_with_debtors(classified)
+            except Exception as hold_exc:
+                logger.warning("sync payment holds failed: %s", hold_exc)
         except Exception as exc:
             logger.warning("apply_residual_debt_age: fallback to silence_days: %s", exc)
             return clients_data
@@ -286,6 +291,27 @@ class SilenceAlert:
             client["active_turnover"] = bool(profile.get("active_turnover", False))
             matched += 1
         logger.info("apply_residual_debt_age: matched %d/%d clients", matched, len(clients_data))
+        return clients_data
+
+    def apply_payment_holds(self, clients_data: List[Dict]) -> List[Dict]:
+        """Marks clients confirmed by Saida as waiting for 1C posting."""
+        try:
+            from collector.payment_hold import get_hold_for_client
+        except Exception as exc:
+            logger.warning("apply_payment_holds: unavailable: %s", exc)
+            return clients_data
+
+        marked = 0
+        for client in clients_data:
+            hold = get_hold_for_client(client.get("client", ""))
+            if not hold:
+                continue
+            client["payment_hold"] = True
+            client["payment_hold_status"] = hold.get("status", "")
+            client["payment_hold_since"] = hold.get("saida_confirmed_at") or hold.get("updated_at", "")
+            marked += 1
+        if marked:
+            logger.info("apply_payment_holds: marked %d clients as waiting for posting", marked)
         return clients_data
 
     @staticmethod
@@ -352,6 +378,12 @@ class SilenceAlert:
             credit = client.get('paid_amount', 0.0)
 
             if debt < self.MIN_DEBT_AMOUNT:
+                continue
+            if client.get("payment_hold"):
+                logger.info(
+                    "silence skip: [%s] оплата подтверждена Саидой, ждём разноски",
+                    client.get("client", ""),
+                )
                 continue
 
             # Флаг имитации: нет отгрузок + платит, но < 10% долга (сброс счётчика).

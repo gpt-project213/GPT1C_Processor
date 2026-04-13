@@ -3628,6 +3628,69 @@ async def _suggest_weekly_clients(context, chat_id: int, categorized: dict, week
             logger.warning("_suggest_weekly_clients send error: %s", e)
 
 
+def _silence_clients_flat(categorized: dict) -> List[Dict[str, Any]]:
+    clients: List[Dict[str, Any]] = []
+    for key in ("critical", "alarm", "silence", "overdue", "partial_payment", "on_stop"):
+        clients.extend(categorized.get(key, []) or [])
+    return clients
+
+
+def _get_saida_chat_id() -> int:
+    try:
+        val = (ROLES.get("accountants") or {}).get("Саида")
+        if val:
+            return int(val)
+    except Exception:
+        pass
+    try:
+        return int(os.getenv("SAIDA_CHAT_ID", "920236287"))
+    except Exception:
+        return 0
+
+
+async def _send_payment_check_buttons(context, chat_id: int, manager: str, categorized: dict) -> None:
+    """Send a compact action panel after the short debt alert."""
+    clients = _silence_clients_flat(categorized)
+    if not clients:
+        return
+    try:
+        from collector.payment_hold import create_manager_payment_request
+    except Exception as exc:
+        logger.warning("payment hold module unavailable: %s", exc)
+        return
+
+    rows = []
+    for c in clients[:12]:
+        rec = create_manager_payment_request(
+            manager=manager,
+            client=c.get("client", ""),
+            debt=float(c.get("debt", 0) or 0),
+            debt_str=str(c.get("debt_str", "")),
+            manager_chat_id=chat_id,
+        )
+        rows.append([
+            InlineKeyboardButton(
+                f"Проверить у Саиды: {str(c.get('client', ''))[:32]}",
+                callback_data=f"payhold_req|{rec['token']}",
+            )
+        ])
+    if not rows:
+        return
+    try:
+        msg = await context.bot.send_message(
+            chat_id=chat_id,
+            text=(
+                "Если по клиенту уже оплатили, но в 1С ещё не разнесено, "
+                "отправьте запрос Саиде:"
+            ),
+            reply_markup=InlineKeyboardMarkup(rows),
+            parse_mode=None,
+        )
+        schedule_message_deletion(chat_id, msg.message_id, msg.date.timestamp(), delay_hours=24)
+    except Exception as exc:
+        logger.warning("payment check buttons send error manager=%s: %s", manager, exc)
+
+
 async def check_and_send_silence_alerts(context=None):
     """Проверяет дни молчания у всех менеджеров и отправляет уведомления"""
     from bot.workday_checker import is_holiday_today
@@ -3651,6 +3714,7 @@ async def check_and_send_silence_alerts(context=None):
                 logger.warning(f"⚠️ Не удалось распарсить данные для {manager}")
                 continue
             clients_data = alert.apply_residual_debt_age(clients_data)
+            clients_data = alert.apply_payment_holds(clients_data)
             # shipment_violation из debt_ext JSON
             _json_path = JSON_DIR / (latest_report.stem + ".json")
             if _json_path.exists():
@@ -3739,6 +3803,7 @@ async def check_and_send_silence_alerts(context=None):
             if context:
                 try:
                     await _tg_send_long(context, chat_id, message, parse_mode=None, delay_hours=24)
+                    await _send_payment_check_buttons(context, chat_id, manager, categorized)
                     logger.info(f"✅ Уведомление отправлено субадмину {manager} (свои: {total_silent}, подшефные: {'есть' if has_subordinate_alerts else 'нет'})")
                     await send_main_menu(context, chat_id, get_user_role(chat_id))  # Fix #MENU-SILENCE
                 except Exception as e:
@@ -3748,6 +3813,7 @@ async def check_and_send_silence_alerts(context=None):
             if message and context:
                 try:
                     await _tg_send_long(context, chat_id, message, parse_mode=None, delay_hours=24)
+                    await _send_payment_check_buttons(context, chat_id, manager, categorized)
                     logger.info(f"✅ Уведомление отправлено: {manager} ({total_silent} клиентов)")
                     await send_main_menu(context, chat_id, get_user_role(chat_id))  # Fix #MENU-SILENCE
                 except Exception as e:
@@ -3933,6 +3999,7 @@ async def force_report_to_user(report_type: str, chat_id: int, context) -> str:
                 if not clients:
                     continue
                 clients = alert.apply_residual_debt_age(clients)
+                clients = alert.apply_payment_holds(clients)
                 # v1.4: исторические дни молчания из предыдущего файла
                 prev = alert.get_prev_debt_report(HTML_DIR, mgr)
                 hist_map = alert.build_historical_silence_map(prev) if prev else {}
@@ -4144,6 +4211,9 @@ async def force_report_to_user(report_type: str, chat_id: int, context) -> str:
 
         # ── Отправка (с разбивкой на чанки — сообщение может превышать 4096 символов)
         await _tg_send_long(context, chat_id, msg_text, parse_mode=None, delay_hours=24)
+        if report_type == "silence" and role != "admin":
+            if manager_name and manager_name in all_managers_data:
+                await _send_payment_check_buttons(context, chat_id, manager_name, all_managers_data[manager_name])
         logger.info(f"✅ force_report: {label} отправлен chat_id={chat_id}")
         return f"✅ {label} отправлен"
 
@@ -5125,6 +5195,98 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             logger.error("dstop callback error: %s", e)
         return
+
+    if data.startswith("payhold_"):
+        try:
+            from collector.payment_hold import confirm_by_saida, get_request
+            parts = data.split("|", 1)
+            action = parts[0]
+            token = parts[1] if len(parts) > 1 else ""
+            rec = get_request(token)
+            if not rec:
+                await q.answer("Запрос не найден или устарел.")
+                return
+
+            saida_chat_id = _get_saida_chat_id()
+            admin_id = ADMIN_CHAT_ID
+
+            if action == "payhold_req":
+                if chat_id != int(rec.get("manager_chat_id") or 0):
+                    await q.answer("Это запрос другого менеджера.")
+                    return
+                kb = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("Да, оплата есть", callback_data=f"payhold_full|{token}")],
+                    [InlineKeyboardButton("Частично", callback_data=f"payhold_partial|{token}")],
+                    [InlineKeyboardButton("Не вижу оплаты", callback_data=f"payhold_none|{token}")],
+                ])
+                if not saida_chat_id:
+                    await q.answer("Не найден chat_id Саиды.")
+                    return
+                await context.bot.send_message(
+                    chat_id=saida_chat_id,
+                    text=(
+                        f"Проверь оплату по клиенту:\n\n"
+                        f"Менеджер: {rec.get('manager', '')}\n"
+                        f"Клиент: {rec.get('client', '')}\n"
+                        f"Долг в отчёте: {rec.get('debt_str') or rec.get('debt', '')}\n\n"
+                        f"Если оплата есть, но ещё не разнесена в 1С, нажми подтверждение."
+                    ),
+                    reply_markup=kb,
+                    parse_mode=None,
+                )
+                await q.answer("Запрос Саиде отправлен.")
+                return
+
+            if chat_id != saida_chat_id:
+                await q.answer("Подтверждать может только Саида.")
+                return
+            status = {
+                "payhold_full": "full",
+                "payhold_partial": "partial",
+                "payhold_none": "none",
+            }.get(action)
+            updated = confirm_by_saida(token, status or "")
+            if not updated:
+                await q.answer("Не удалось сохранить ответ.")
+                return
+            client = updated.get("client", "")
+            manager = updated.get("manager", "")
+            manager_chat_id = int(updated.get("manager_chat_id") or 0)
+            if status in ("full", "partial"):
+                answer_text = (
+                    f"Принято: по клиенту {client} оплата подтверждена. "
+                    f"Ждём разноски в 1С."
+                )
+                notify_text = (
+                    f"Саида подтвердила оплату по клиенту:\n\n"
+                    f"{client}\n"
+                    f"Менеджер: {manager}\n"
+                    f"Статус: {'оплата есть' if status == 'full' else 'частичная оплата'}\n\n"
+                    f"Клиент временно не будет попадать под давление до обновления 1С."
+                )
+            else:
+                answer_text = f"Принято: по клиенту {client} Саида не видит оплату."
+                notify_text = (
+                    f"Саида не видит оплату по клиенту:\n\n"
+                    f"{client}\n"
+                    f"Менеджер: {manager}\n\n"
+                    f"Клиент остаётся в обычной дебиторке."
+                )
+            for target in {manager_chat_id, admin_id}:
+                if target:
+                    try:
+                        await context.bot.send_message(chat_id=target, text=notify_text, parse_mode=None)
+                    except Exception as send_exc:
+                        logger.warning("payhold notify error target=%s: %s", target, send_exc)
+            try:
+                await q.edit_message_text(answer_text)
+            except Exception:
+                await q.answer("Ответ сохранён.")
+            return
+        except Exception as e:
+            logger.error("payment hold callback error: %s", e, exc_info=True)
+            await q.answer("Ошибка обработки оплаты.")
+            return
 
     # Collector dialog callbacks
     if data.startswith("col_"):

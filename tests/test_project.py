@@ -237,6 +237,37 @@ check("residual age: свежий остаток не попадает в мол
 check("residual age: старый остаток попадает в alarm, даже если silence_days=1",
       any(c["client"] == "Старый остаток" for c in cat_residual["alarm"]))
 
+import collector.payment_hold as _payment_hold
+_orig_hold_path = _payment_hold.PAYMENT_HOLD_PATH
+with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
+    _payment_hold.PAYMENT_HOLD_PATH = Path(td) / "saida_payment_holds.json"
+    _rec = _payment_hold.create_manager_payment_request(
+        manager="Магира",
+        client="М Халал тест",
+        debt=40438.20,
+        debt_str="40 438,20",
+        manager_chat_id=123,
+    )
+    check("Saida hold: создаётся pending-запрос менеджера",
+          _rec.get("status") == "pending_saida" and bool(_rec.get("token")), str(_rec))
+    _confirmed = _payment_hold.confirm_by_saida(_rec["token"], "full")
+    check("Saida hold: подтверждение Саиды сохраняет confirmed_full",
+          _confirmed and _confirmed.get("status") == "confirmed_full", str(_confirmed))
+    _clients_hold = [{
+        "client": "М Халал тест",
+        "debt": 40438.20,
+        "debt_str": "40 438,20",
+        "silence_days": 31,
+        "debit_amount": 0,
+        "paid_amount": 0,
+    }]
+    alert.apply_payment_holds(_clients_hold)
+    _cat_hold = alert.categorize_by_silence(_clients_hold)
+    check("Saida hold: краткая дебиторка не включает подтверждённого клиента",
+          not any(c["client"] == "М Халал тест" for bucket in _cat_hold.values() for c in bucket),
+          str(_cat_hold))
+    _payment_hold.PAYMENT_HOLD_PATH = _orig_hold_path
+
 # Проверяем формат строки: непрерывный счётчик effective_days
 # ТОО Тест: historical_days=19, silence_days=2 → effective=21
 # ИП Тест2: effective_days=0 (нет сброса)

@@ -1576,9 +1576,59 @@ check("H4 T3: _send_approved_client передаёт msg_type=stoplist_reminder 
 
 
 # ═══════════════════════════════════════════════════════════════
-# 17. ИТОГ
+# 17. SAIDA PAYMENT HOLD — collector suppression
 # ═══════════════════════════════════════════════════════════════
-section("ИТОГ")  # секция 17
+section("Saida payment hold: collector skips clients waiting for 1C posting")
+
+import collector.payment_hold as _payment_hold
+_orig_hold_path = _payment_hold.PAYMENT_HOLD_PATH
+with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as _td_hold:
+    _payment_hold.PAYMENT_HOLD_PATH = Path(_td_hold) / "saida_payment_holds.json"
+    _hold_rec = _payment_hold.create_manager_payment_request(
+        manager="Магира",
+        client="М Халал тест",
+        debt=40438.20,
+        debt_str="40 438,20",
+        manager_chat_id=123,
+    )
+    _payment_hold.confirm_by_saida(_hold_rec["token"], "full")
+    _hold_decision = _collector_candidate_decision(
+        {
+            "name": "М Халал тест",
+            "amount": 40438.20,
+            "days": 31,
+            "opening": 0.0,
+            "debit": 0.0,
+            "credit": 0.0,
+        },
+        {"whatsapp": "+77771234567"},
+        {},
+    )
+    check("PAYHOLD T1: preview decision пропускает клиента с подтверждением Саиды",
+          _hold_decision.get("action") == "skip" and "Саида" in _hold_decision.get("reason", ""),
+          str(_hold_decision))
+
+    _hold_send_client = {
+        "name": "М Халал тест",
+        "manager": "Магира",
+        "phone": "+77771234567",
+        "amount": 40438.20,
+        "days": 31,
+        "level": 5,
+        "language": "ru",
+    }
+    with patch("collector.collections_engine.send_whatsapp", return_value=True) as _send_mock:
+        _hold_send_result = asyncio.run(_send_approved_client(_hold_send_client))
+    check("PAYHOLD T2: send-approved не отправляет клиента с подтверждением Саиды",
+          _hold_send_result.get("status") == "skipped" and not _send_mock.called,
+          str(_hold_send_result))
+    _payment_hold.PAYMENT_HOLD_PATH = _orig_hold_path
+
+
+# ═══════════════════════════════════════════════════════════════
+# 18. ИТОГ
+# ═══════════════════════════════════════════════════════════════
+section("ИТОГ")  # секция 18
 total  = len(results)
 passed = sum(1 for _, ok in results if ok)
 failed = total - passed
