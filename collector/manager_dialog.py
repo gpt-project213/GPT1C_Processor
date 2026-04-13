@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-collector/manager_dialog.py
+collector/manager_dialog.py · v1.0.1 · 2026-04-13
 Движок диалогов менеджеров с AI Коллектором.
 
 Telegram-взаимодействие через httpx (без python-telegram-bot).
@@ -402,125 +402,6 @@ async def _send_whatsapp_and_notify(dialog: Dict[str, Any]) -> bool:
         client_name,
     )
     return False
-
-    import asyncio as _asyncio
-    from collector.collection_agent import generate_message
-    from collector.communications import send_whatsapp, get_observer_ids
-    from collector.collections_db import update_after_contact
-    from collector.dialog_store import update_dialog, STATE_CONFIRMED
-
-    client_name  = dialog["client_name"]
-    manager_name = dialog["manager_name"]
-    contact      = dialog.get("current_contact") or {}
-    level        = dialog["level"]
-    days         = dialog["days"]
-    amount       = dialog["amount"]
-    language     = contact.get("language", "ru")
-    phone        = contact.get("whatsapp") or contact.get("phone", "")
-    manager_chat_id = dialog.get("manager_chat_id")
-
-    # Получаем display_name из контакта
-    display_name = (
-        contact.get("display_name")
-        or contact.get("contact_person")
-        or client_name
-    )
-
-    # Генерируем текст сообщения
-    try:
-        message_text = generate_message(
-            client_name=display_name,
-            debt_amount=amount,
-            days_overdue=days,
-            level=level,
-            language=language,
-            manager_name=manager_name,
-        )
-    except Exception as e:
-        logger.error("[%s] generate_message ошибка: %s", client_name, e)
-        message_text = f"Уважаемый клиент, у вас просроченная задолженность {_fmt_amount(amount)} тг."
-
-    # Отправка WhatsApp с повторными попытками (до 3 раз, интервал 5 мин)
-    wa_ok = False
-    if phone:
-        for attempt in range(3):
-            try:
-                wa_ok = send_whatsapp(phone, message_text)
-            except Exception as e:
-                logger.error("[%s] send_whatsapp попытка %d ошибка: %s", client_name, attempt + 1, e)
-                wa_ok = False
-            if wa_ok:
-                break
-            if attempt < 2:
-                logger.info("[%s] WhatsApp не отправлен, повтор через 5 мин (попытка %d/3)", client_name, attempt + 1)
-                await _asyncio.sleep(300)
-
-    # Если все попытки провалились — уведомляем наблюдателей
-    if phone and not wa_ok:
-        try:
-            observer_ids_fail = get_observer_ids(manager_name)
-        except Exception as e:
-            logger.error("get_observer_ids ошибка: %s", e)
-            observer_ids_fail = []
-        if manager_chat_id and manager_chat_id not in observer_ids_fail:
-            observer_ids_fail = [manager_chat_id] + observer_ids_fail
-        for obs_id in observer_ids_fail:
-            await _send_msg(
-                obs_id,
-                f"❌ Не удалось отправить WhatsApp клиенту {display_name} после 3 попыток. "
-                f"Телефон: {phone}",
-            )
-
-    # Обновляем БД если отправлено
-    if wa_ok:
-        try:
-            update_after_contact(client_name, "whatsapp", level, message_text)
-        except Exception as e:
-            logger.error("[%s] update_after_contact ошибка: %s", client_name, e)
-        if manager_chat_id:
-            update_dialog(int(manager_chat_id), state=STATE_CONFIRMED)
-            dialog["state"] = STATE_CONFIRMED
-
-        # Регистрируем клиентский диалог
-        if phone and manager_chat_id:
-            try:
-                from collector.client_dialog import start_client_dialog
-                phone_clean = "".join(c for c in phone if c.isdigit())
-                await start_client_dialog(
-                    phone=phone_clean,
-                    client_name=display_name,
-                    manager_name=manager_name,
-                    manager_chat_id=int(manager_chat_id),
-                    level=level,
-                    days=days,
-                    amount=amount,
-                    message_text=message_text,
-                )
-            except Exception as e:
-                logger.error("[%s] start_client_dialog ошибка: %s", client_name, e)
-
-    # Уведомляем наблюдателей
-    status_icon = "✅" if wa_ok else "⚠️"
-    status_text = "WhatsApp отправлен" if wa_ok else "WhatsApp НЕ отправлен (ошибка)"
-    preview = message_text[:300] + ("..." if len(message_text) > 300 else "")
-    notify_text = (
-        f"📨 <b>AI Коллектор — подтверждение отправки</b>\n\n"
-        f"{status_icon} {status_text}\n\n"
-        f"Клиент: {client_name}\n"
-        f"Просрочка: {days} дн. | Сумма: {_fmt_amount(amount)} тг\n"
-        f"Уровень: {level}\n\n"
-        f"Текст сообщения:\n<i>{preview}</i>"
-    )
-
-    try:
-        observer_ids = get_observer_ids(manager_name)
-    except Exception as e:
-        logger.error("get_observer_ids ошибка: %s", e)
-        observer_ids = []
-
-    for obs_id in observer_ids:
-        await _send_msg(obs_id, notify_text)
-    return wa_ok
 
 
 async def _escalate_to_admin(dialog: Dict[str, Any]) -> None:
