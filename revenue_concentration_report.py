@@ -46,7 +46,7 @@ LOGS.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("concentration")
 
-__VERSION__ = "1.1.4"
+__VERSION__ = "1.1.5"
 NBSP = "\u202f"
 
 def _mtime(p: Path) -> float:
@@ -147,9 +147,9 @@ def load_all_jsons_merged(pattern: str, min_clients: int = 0, skip_keywords: lis
         key = normalize_client_name(str(c.get("client", "")))
         if not key:
             continue
-        rev = float(c.get("revenue", 0.0) or 0.0)
+        rev = float(c.get("total", 0.0) or 0.0)
         prev = by_key.get(key)
-        if (prev is None) or (rev > float(prev.get("revenue", 0.0) or 0.0)):
+        if (prev is None) or (rev > float(prev.get("total", 0.0) or 0.0)):
             by_key[key] = c
     merged_clients = list(by_key.values())
     LOG.info(f"Итого: файлов={loaded_files}, клиентов={len(merged_clients)}")

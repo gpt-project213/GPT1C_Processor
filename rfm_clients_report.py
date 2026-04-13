@@ -58,7 +58,7 @@ LOGS.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("rfm")
 
-__VERSION__ = "1.1.4"
+__VERSION__ = "1.1.5"
 NBSP = "\u202f"
 
 def _mtime(p: Path) -> float:
@@ -171,12 +171,12 @@ def load_all_jsons_merged(pattern: str, min_clients: int = 0, skip_keywords: lis
         key = _norm(c.get("client", ""))
         if not key:
             continue
-        rev = float(c.get("revenue", 0.0) or 0.0)
+        rev = float(c.get("total", 0.0) or 0.0)
         prev = by_client.get(key)
-        if (prev is None) or (rev > float(prev.get("revenue", 0.0) or 0.0)):
+        if (prev is None) or (rev > float(prev.get("total", 0.0) or 0.0)):
             by_client[key] = c
     merged_clients = list(by_client.values())
-    merged_revenue = sum(float(c.get("revenue", 0.0) or 0.0) for c in merged_clients)
+    merged_revenue = sum(float(c.get("total", 0.0) or 0.0) for c in merged_clients)
     merged = dict(reference_data)
     merged["clients"]       = merged_clients
     merged["total_revenue"] = merged_revenue
