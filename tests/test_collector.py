@@ -1856,7 +1856,11 @@ try:
         },
     })
     _fake_dstop_bot.messages.clear()
-    asyncio.run(_dstop.send_manager_reminders(_fake_dstop_bot))
+    _mock_daytime = MagicMock(wraps=datetime)
+    _mock_daytime.now = MagicMock(return_value=datetime.now(_dstop.TZ).replace(hour=12, minute=0, second=0))
+    _mock_daytime.fromisoformat = datetime.fromisoformat
+    with patch("bot.debt_stop_control.datetime", _mock_daytime):
+        asyncio.run(_dstop.send_manager_reminders(_fake_dstop_bot))
     _state_after_remind = _dstop.load_state()
     _cand_after_remind = _state_after_remind["candidates"]["1"]
     check("DSTOP REMIND T1: менеджеру отправлено напоминание",
