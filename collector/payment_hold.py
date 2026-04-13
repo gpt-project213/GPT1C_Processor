@@ -17,7 +17,7 @@ from tempfile import NamedTemporaryFile
 from typing import Any, Dict, Iterable, Optional
 
 ROOT = Path(__file__).resolve().parents[1]
-TZ_NAME = os.getenv("TZ", "Asia/Qyzylorda")
+TZ_NAME = os.getenv("TZ", "Asia/Almaty")
 try:
     from zoneinfo import ZoneInfo
     TZ = ZoneInfo(TZ_NAME)

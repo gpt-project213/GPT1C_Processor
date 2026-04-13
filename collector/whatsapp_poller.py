@@ -4,13 +4,14 @@
 collector/whatsapp_poller.py
 Green API polling — получает входящие сообщения WhatsApp каждые 30 секунд.
 
-Версия: 1.0.2 (2026-04-08)
+Версия: 1.0.3 (2026-04-13)
 
 Endpoints (используется instance-specific URL, напр. https://7107.api.greenapi.com):
   GET  https://{ID[:4]}.api.greenapi.com/waInstance{ID}/receiveNotification/{TOKEN}
   DELETE https://{ID[:4]}.api.greenapi.com/waInstance{ID}/deleteNotification/{TOKEN}/{receiptId}
 """
 
+import json
 import logging
 import os
 import tempfile
@@ -48,6 +49,34 @@ logger = logging.getLogger(__name__)
 def _extract_phone(sender: str) -> str:
     """Извлекает номер телефона из формата '77011234567@c.us' → '77011234567'."""
     return sender.split("@")[0] if "@" in sender else sender
+
+
+_CONTACTS_PATH = Path(__file__).resolve().parents[1] / "config" / "debtors_contacts.json"
+
+
+def _is_known_debtor_phone(phone: str) -> bool:
+    """Возвращает True если телефон зарегистрирован в справочнике должников.
+
+    Green API отдаёт номера без '+' (77012345678), контакты хранят с '+'
+    (+77012345678) — сравниваем только цифры.
+    """
+    phone_digits = "".join(c for c in phone if c.isdigit())
+    if not phone_digits:
+        return False
+    try:
+        if not _CONTACTS_PATH.exists():
+            return False
+        data = json.loads(_CONTACTS_PATH.read_text(encoding="utf-8"))
+        data.pop("_comment", None)
+        for entry in data.values():
+            if not isinstance(entry, dict):
+                continue
+            wa = "".join(c for c in str(entry.get("whatsapp") or "") if c.isdigit())
+            if wa and wa == phone_digits:
+                return True
+    except Exception:
+        pass
+    return False
 
 
 async def transcribe_audio(audio_url: str) -> str:
@@ -169,6 +198,13 @@ async def poll_once() -> None:
                     # Удаляем уведомление и выходим
                     await _delete_notification(receipt_id)
                     return
+
+            # Саида использует личный номер для Green API — все входящие сообщения
+            # проходят через бота. Пропускаем всё, что не от зарегистрированных должников,
+            # не тратя квоту Whisper на личные переписки Саиды.
+            if not _is_known_debtor_phone(phone):
+                logger.info("Неизвестный номер — не должник, пропуск (удаляем уведомление)")
+                return
 
             message_data = body.get("messageData", {})
             msg_type = message_data.get("typeMessage", "")
