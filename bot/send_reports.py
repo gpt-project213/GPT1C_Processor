@@ -6750,7 +6750,6 @@ def _pick_latest_expenses_slug(want: str) -> Optional[str]:
 async def handle_expenses(update: Update, context: ContextTypes.DEFAULT_TYPE, data: str):
     """Отправка отчёта затрат (HTML) — v9.4.12: с period в caption + детальные логи"""
     query = update.callback_query
-    await query.answer()
     chat_id = query.message.chat_id
     user_role = get_user_role(chat_id)
 
@@ -6817,7 +6816,6 @@ async def handle_analytics(update: Update, context: ContextTypes.DEFAULT_TYPE, d
     с наиболее свежей датой генерации — по одному на каждого менеджера.
     """
     query = update.callback_query
-    await query.answer()
     chat_id = query.message.chat_id
     user_role = get_user_role(chat_id)
 
