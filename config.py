@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-config.py · v3.6.1 · 2026-03-10
+config.py · v3.6.2 · 2026-04-13
 
 Совместимость с вашим кодом:
 • utils_excel.py → EXCEL_CLEAN_DIR, QUEUE_DIR, setup_logging
@@ -139,7 +139,10 @@ def _load_managers_json() -> Dict[str, Optional[int]]:
     result: Dict[str, Optional[int]] = {}
     if isinstance(raw, dict):
         for name, val in raw.items():
-            result[str(name)] = int(val) if isinstance(val, int) else None
+            try:
+                result[str(name)] = int(val)
+            except (TypeError, ValueError):
+                result[str(name)] = None
     return result
 
 def _load_yaml_overrides() -> Dict[str, Any]:
