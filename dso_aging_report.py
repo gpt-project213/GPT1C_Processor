@@ -9,8 +9,8 @@ Fix P-016: _mtime() helper — p.stat().st_mtime обёрнут в try/except (F
 ────────────────────────────────────────────────────────────────────
 Отчёт "DSO + Aging дебиторки"
 
-DSO = Days Sales Outstanding (средний срок оплаты)
-Aging = структура долгов по срокам
+DSO = Days Sales Outstanding: дебиторка ÷ среднедневная выручка за период отчёта (не календарные дни оплаты).
+Aging = структура долгов по срокам (days_silence).
 
 Источники:
 - reports/json/debt_*.json   (дебиторка по клиентам)
@@ -52,7 +52,7 @@ LOGS.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("dso")
 
-__VERSION__ = "1.3.0"
+__VERSION__ = "1.3.2"
 NBSP = "\u202f"
 
 def _mtime(p: Path) -> float:
@@ -356,16 +356,25 @@ def generate_report():
     
     # Расчёт DSO per-manager
     for manager, data in managers_data.items():
-        dr = mgr_daily_revenue.get(manager, 0)
+        dr = mgr_daily_revenue.get(manager, 0.0)
+        td = data["total_debt"]
         if dr > 0:
-            data["dso"] = data["total_debt"] / dr
+            data["dso"] = td / dr
+        else:
+            data["dso"] = 0.0
+        data["_daily_revenue"] = dr
+        data["_dso_undefined"] = bool(td > 0 and dr <= 0)
     
     # Генерация отчётов
     for manager, data in managers_data.items():
         dso = data["dso"]
-        
-        # Оценка DSO
-        if dso >= 20:
+        dr = float(data.get("_daily_revenue", 0.0) or 0.0)
+        dso_undefined = bool(data.get("_dso_undefined", False))
+
+        if dso_undefined:
+            dso_status = "ℹ️ DSO не считается"
+            dso_color = "#64748b"
+        elif dso >= 20:
             dso_status = "🚨 МЕДЛЕННО"
             dso_color = "#c00000"
         elif dso >= 15:
@@ -425,7 +434,7 @@ tr:hover{{background:#f0f4f8}}
 .alert{{background:rgba(224,144,0,.08);border:1px solid #e09000;padding:12px 14px;border-radius:6px;margin:14px 0}}
 a,button{{touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.04)}}
 .table-wrap{{overflow:auto;border:1px solid rgba(26,58,92,.15);border-radius:8px;margin:10px 0}}
-.footer{{margin-top:20px;padding-top:12px;border-top:1px solid rgba(26,58,92,.15);text-align:center;color:rgba(26,58,92,.55);font-size:11px}}
+.footer{{margin-top:20px;padding-top:12px;border-top:1px solid rgba(26,58,92,.15);text-align:center;color:rgba(26,58,92,.55);font-size:12px}}
 @media(max-width:768px){{body{{padding:8px}}.container{{padding:12px 14px 18px}}h1{{font-size:17px}}h2{{font-size:14px}}table{{min-width:auto!important;table-layout:auto}}th,td{{padding:6px 7px;font-size:12px}}}}
 </style>
 </head>
@@ -437,7 +446,7 @@ a,button{{touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.04)}
 
 <div class="dso-card">
 <div class="dso-status">{dso_status}</div>
-<div style="font-size:14px;color:rgba(26,58,92,.55)">Средний срок оплаты:</div>
+<div style="font-size:13px;color:rgba(26,58,92,.55)">DSO = дебиторка ÷ средн. дн. выручка:</div>
 <div class="dso-value">{dso:.0f} дней</div>
 <div class="dso-label">Дебиторка: {fmt_money(total_debt)}</div>
 </div>
@@ -445,9 +454,9 @@ a,button{{touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.04)}
 <div class="alert">
 <div style="font-weight:600;margin-bottom:8px">📞 ДЕЙСТВИЕ:</div>
 <div style="color:rgba(26,58,92,.55)">
-{"Срок оплаты высокий! Нужна помощь с взысканием долгов. Обратить внимание на проблемных клиентов." if dso >= 20 else
- "Срок оплаты средний. Контролировать ситуацию с долгами 10+ дней." if dso >= 15 else
- "Срок оплаты нормальный. Клиенты платят вовремя."}
+{"DSO высокий! Нужна помощь с взысканием долгов. Обратить внимание на проблемных клиентов." if dso >= 20 else
+ "DSO средний. Контролировать ситуацию с долгами 10+ дней." if dso >= 15 else
+ "DSO в норме. Клиенты платят вовремя."}
 </div>
 </div>
 
