@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-revenue_concentration_report.py · v1.1.5 (2026-04-14)
+revenue_concentration_report.py · v1.1.6 (2026-04-14)
 FIX: Bug #RC1 - добавлена normalize_client_name (NameError при каждом запуске)
 Fix P-016: _mtime() helper — p.stat().st_mtime обёрнут в try/except (FileNotFoundError, OSError)
 ────────────────────────────────────────────────────────────────────
@@ -46,7 +46,7 @@ LOGS.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("concentration")
 
-__VERSION__ = "1.1.5"
+__VERSION__ = "1.1.6"
 NBSP = "\u202f"
 
 def _mtime(p: Path) -> float:
@@ -108,7 +108,6 @@ def load_all_jsons_merged(pattern: str, min_clients: int = 0, skip_keywords: lis
     for c in reference_data.get("clients", []):
         c["_manager"] = ref_manager
         merged_clients.append(c)
-    merged_revenue = reference_data.get("total_revenue", 0.0)
     loaded_files   = 1
 
     for path in files:
@@ -132,7 +131,6 @@ def load_all_jsons_merged(pattern: str, min_clients: int = 0, skip_keywords: lis
             for c in clients:
                 c["_manager"] = mgr
             merged_clients.extend(clients)
-            merged_revenue += data.get("total_revenue", 0.0)
             loaded_files   += 1
             LOG.info(f"Добавляю: {path.name} | менеджер='{mgr}' | +{len(clients)} клиентов")
         except Exception as e:
@@ -152,6 +150,8 @@ def load_all_jsons_merged(pattern: str, min_clients: int = 0, skip_keywords: lis
         if (prev is None) or (rev > float(prev.get("total", 0.0) or 0.0)):
             by_key[key] = c
     merged_clients = list(by_key.values())
+    # После дедупа total должен совпадать с суммой строк (иначе KPI по концентрации врут).
+    merged_revenue = sum(float(c.get("total", 0.0) or 0.0) for c in merged_clients)
     LOG.info(f"Итого: файлов={loaded_files}, клиентов={len(merged_clients)}")
     merged = dict(reference_data)
     merged["clients"]       = merged_clients
@@ -216,13 +216,16 @@ def generate_report():
         # Определение риска
         if top5_pct >= 70:
             risk = "🚨 ВЫСОКИЙ"
-            risk_color = "#dc3545"
+            risk_color = "#c00000"
+            risk_bg = "rgba(192,0,0,0.08)"
         elif top5_pct >= 50:
             risk = "⚠️ СРЕДНИЙ"
-            risk_color = "#ffc107"
+            risk_color = "#e09000"
+            risk_bg = "rgba(224,144,0,0.10)"
         else:
             risk = "✅ НИЗКИЙ"
-            risk_color = "#28a745"
+            risk_color = "#107c41"
+            risk_bg = "rgba(16,124,65,0.08)"
         
         # Таблица топ-5
         top5_rows = ""
@@ -236,6 +239,7 @@ def generate_report():
                 <td>{client['name']}</td>
                 <td style="text-align:right">{fmt_money(client['revenue'])}</td>
                 <td style="text-align:right">{pct:.1f}%</td>
+                <td style="text-align:right">{cumulative_pct:.1f}%</td>
             </tr>"""
         
         # Версия с суммами (для admin)
@@ -272,7 +276,7 @@ h2{{color:#1a3a5c;margin-top:30px;font-size:17px}}
 <h1>🎯 Концентрация выручки: {manager}</h1>
 <div class="meta">ADMIN версия (с суммами) | {datetime.now(TZ).strftime("%d.%m.%Y %H:%M")}</div>
 
-<div class="alert" style="background:rgba(220,53,69,0.1);border:2px solid {risk_color}">
+<div class="alert" style="background:{risk_bg};border:2px solid {risk_color}">
 <div class="alert-risk" style="color:{risk_color}">{risk}</div>
 <div style="font-size:14px;color:#666;margin-bottom:10px">Топ-5 клиентов дают:</div>
 <div class="alert-value" style="color:{risk_color}">{top5_pct:.1f}%</div>
@@ -287,6 +291,7 @@ h2{{color:#1a3a5c;margin-top:30px;font-size:17px}}
 <th>Клиент</th>
 <th style="width:150px;text-align:right">Выручка</th>
 <th style="width:100px;text-align:right">Доля</th>
+<th style="width:100px;text-align:right">Накопл.</th>
 </tr>
 </thead>
 <tbody>
@@ -352,7 +357,7 @@ h2{{color:#1a3a5c;margin-top:30px;font-size:17px}}
 <h1>🎯 Концентрация выручки: {manager}</h1>
 <div class="meta">Manager версия (только %) | {datetime.now(TZ).strftime("%d.%m.%Y %H:%M")}</div>
 
-<div class="alert" style="background:rgba(220,53,69,0.1);border:2px solid {risk_color}">
+<div class="alert" style="background:{risk_bg};border:2px solid {risk_color}">
 <div class="alert-risk" style="color:{risk_color}">{risk}</div>
 <div style="font-size:14px;color:#666;margin-bottom:10px">Топ-5 клиентов дают:</div>
 <div class="alert-value" style="color:{risk_color}">{top5_pct:.1f}%</div>
@@ -360,7 +365,7 @@ h2{{color:#1a3a5c;margin-top:30px;font-size:17px}}
 </div>
 
 <h2>📊 Топ-5 клиентов</h2>
-<table>
+<div class="table-wrap"><table>
 <thead>
 <tr>
 <th style="width:40px">#</th>
