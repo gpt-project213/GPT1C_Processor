@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-inventory_turnover_report.py · v1.1.4 (2026-03-10)
+inventory_turnover_report.py · v1.1.5 (2026-04-14)
 ────────────────────────────────────────────────────────────────────
 Отчёт "Мертвый запас + Оборачиваемость"
 
@@ -13,9 +13,9 @@ inventory_turnover_report.py · v1.1.4 (2026-03-10)
 - reports/analytics/turnover_<date>.html
 
 Показывает:
-- Товары без продаж >30 дней (мертвый запас)
-- Сколько денег заморожено
-- Оборачиваемость товаров
+- Товары без продаж в выбранном периоде sales JSON (сопоставление с inventory)
+- Сколько денег заморожено (оценка по себестоимости остатка)
+- Быстрые позиции: продажи за период > 2× стоимость остатка (не классический DIO)
 
 Доступ: ТОЛЬКО Admin
 
@@ -47,7 +47,7 @@ LOGS.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("turnover")
 
-__VERSION__ = "1.1.4"
+__VERSION__ = "1.1.5"
 NBSP = "\u202f"
 
 
@@ -184,7 +184,11 @@ def generate_report() -> None:
     # Сводный файл хранит в "products" имена клиентов, а не названия товаров
     sales_dict = load_sales_products_merged()
     if not sales_dict:
-        LOG.warning("sales_dict пуст — мёртвый запас будет завышен")
+        LOG.error(
+            "sales_dict пуст: нет данных продаж для сопоставления. "
+            "Отчёт не создаётся (иначе весь остаток ошибочно попадал бы в «мёртвый запас»)."
+        )
+        return
 
     # Собрать плоский список товаров из возможных форматов JSON:
     # - inventory.py сохраняет: {"categories": [{"item_list": [{product, qty, cost}, ...]}]}
@@ -244,11 +248,15 @@ def generate_report() -> None:
     # Построение HTML
     dead_rows = ""
     for i, item in enumerate(dead_stock[:20], 1):
+        try:
+            qv = float(item.get("qty") or 0.0)
+        except (TypeError, ValueError):
+            qv = 0.0
         dead_rows += f"""
         <tr>
             <td>{i}</td>
             <td>{item['product']}</td>
-            <td style="text-align:right">{item['qty']:.1f}</td>
+            <td style="text-align:right">{qv:.1f}</td>
             <td style="text-align:right">{fmt_money(item['cost'])}</td>
         </tr>"""
 
@@ -302,8 +310,8 @@ h2{{color:#1a3a5c;margin-top:30px;padding-bottom:8px;border-bottom:2px solid #00
 <div style="color:#666">В товарах без продаж (мертвый запас)</div>
 </div>
 
-<h2>🚫 Мертвый запас (топ-20)</h2>
-<p style="color:#666">Товары БЕЗ продаж в последнем отчёте:</p>
+<h2>🚫 Мёртвый запас (топ-20)</h2>
+<p style="color:#666">Товары без продаж в выбранном периоде sales JSON (нет совпадения по названию после нормализации):</p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -318,8 +326,8 @@ h2{{color:#1a3a5c;margin-top:30px;padding-bottom:8px;border-bottom:2px solid #00
 </tbody>
 </table></div>
 
-<h2>🚀 Быстрооборачиваемые (топ-10)</h2>
-<p style="color:#666">Товары с высокими продажами относительно остатков:</p>
+<h2>🚀 Быстрые позиции (топ-10)</h2>
+<p style="color:#666">Продажи за период &gt; 2× оценочная стоимость остатка (не DIO в днях):</p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
