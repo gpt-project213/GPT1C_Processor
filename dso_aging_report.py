@@ -303,12 +303,12 @@ def generate_report():
     
     # Aging-корзины синхронизированы с collector/debt_monitor.py _LEVEL_THRESHOLDS
     _AGING_BUCKETS = [
-        ("0-9",   0,  9, 0, "#28a745"),   # level 0 — норма
-        ("10-14", 10, 14, 1, "#8bc34a"),   # level 1 — мягкое
-        ("15-19", 15, 19, 2, "#ffc107"),   # level 2 — среднее
-        ("20-24", 20, 24, 3, "#ff9800"),   # level 3 — настойчиво
-        ("25-29", 25, 29, 4, "#e65100"),   # level 4 — строго
-        ("30+",   30, 999, 5, "#dc3545"),  # level 5 — жёстко
+        ("0-9",   0,  9, 0, "#107c41"),   # level 0 — норма   (--good)
+        ("10-14", 10, 14, 1, "#6ba368"),   # level 1 — мягкое
+        ("15-19", 15, 19, 2, "#e09000"),   # level 2 — среднее (--warn)
+        ("20-24", 20, 24, 3, "#d07000"),   # level 3 — настойчиво
+        ("25-29", 25, 29, 4, "#b04000"),   # level 4 — строго
+        ("30+",   30, 999, 5, "#c00000"),  # level 5 — жёстко  (--bad)
     ]
 
     managers_data = defaultdict(lambda: {
@@ -357,13 +357,13 @@ def generate_report():
         # Оценка DSO
         if dso >= 20:
             dso_status = "🚨 МЕДЛЕННО"
-            dso_color = "#dc3545"
+            dso_color = "#c00000"
         elif dso >= 15:
             dso_status = "⚠️ СРЕДНЕ"
-            dso_color = "#ffc107"
+            dso_color = "#e09000"
         else:
             dso_status = "✅ БЫСТРО"
-            dso_color = "#28a745"
+            dso_color = "#107c41"
         
         aging_rows = ""
         total_debt = data["total_debt"]
@@ -385,7 +385,7 @@ def generate_report():
             <tr>
                 <td>{i}</td>
                 <td>{client['name']}</td>
-                <td style="text-align:right;color:#dc3545;font-weight:600">{fmt_money(client['debt'])}</td>
+                <td style="text-align:right;color:#c00000;font-weight:600">{fmt_money(client['debt'])}</td>
                 <td style="text-align:right">{client.get('days', 0)}</td>
             </tr>"""
         
@@ -468,7 +468,7 @@ a,button{{touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.04)}
 </tr>
 </thead>
 <tbody>
-{problem_rows if problem_rows else '<tr><td colspan="4" style="text-align:center;color:#28a745">Нет проблемных клиентов ✅</td></tr>'}
+{problem_rows if problem_rows else '<tr><td colspan="4" style="text-align:center;color:#107c41">Нет проблемных клиентов ✅</td></tr>'}
 </tbody>
 </table></div>
 
