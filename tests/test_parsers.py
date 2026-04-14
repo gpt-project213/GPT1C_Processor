@@ -293,14 +293,20 @@ if m:
 else:
     skip("normalize_manager_name", "не найдена")
 
-# _classify_type — извлекаем полное тело функции (включая пустые строки внутри)
-m2_start = _re.search(r"^def _classify_type\b", src, _re.MULTILINE)
+# _classify_type — извлекаем helper + полное тело функции (включая пустые строки внутри)
+m2_start = _re.search(r"^def _is_manager_debt_extended_name\b", src, _re.MULTILINE)
 if m2_start:
     after = src[m2_start.start():]
-    # Найти следующую top-level def/class
-    m2_end = _re.search(r"^(?:def |class |\Z)", after[1:], _re.MULTILINE)
-    func_src = after[:m2_end.start() + 1] if m2_end else after
-    env2 = {"re": _re, "Optional": Optional, "Path": Path, "__builtins__": __builtins__}
+    # Найти следующий top-level def/class после _classify_type
+    m2_end = _re.search(r"^def _parse_period_to_date\b", after, _re.MULTILINE)
+    func_src = after[:m2_end.start()] if m2_end else after
+    env2 = {
+        "re": _re,
+        "Optional": Optional,
+        "Path": Path,
+        "normalize_manager_name": lambda x: str(x).strip().replace("ё", "е").replace("Ё", "Е"),
+        "__builtins__": __builtins__,
+    }
     try:
         exec(func_src, env2)
         clf = env2["_classify_type"]
@@ -311,6 +317,9 @@ if m2_start:
             ("gross_Ергали_gross.html",                   "GROSS_SUM"),   # _gross.html → GROSS_SUM
             ("gross_Ергали_gross_pct.html",               "GROSS_PCT"),   # _gross_pct.html → GROSS_PCT
             ("debt_ext_Детальный_Дебиторы_Магира.html",   "DEBT_EXTENDED"),
+            ("debt_ext_Детальный Дебиторы Ергали (135).html", "DEBT_EXTENDED"),
+            ("debt_ext_Ведомость_по_взаиморасчетам_с_контрагентами_Ергали.html", "UNKNOWN"),
+            ("debt_ext_Детальный_по_взаиморасчетам_с_контрагентами.html", "UNKNOWN"),
             ("inventory_simple_Склад_20260312.html",      "INVENTORY_SIMPLE"),
             ("expenses_Расход_20260312.html",             "EXPENSES"),
             ("random_file.html",                          "UNKNOWN"),

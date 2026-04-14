@@ -180,7 +180,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.51/13.04.2026"
+__VERSION__ = "v9.4.52/14.04.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
@@ -2562,6 +2562,30 @@ def _extract_date(full_text: str, file_name: str, p: Path) -> str:
     except (FileNotFoundError, OSError):
         return datetime.now(tz=TZ).strftime("%d.%m.%Y")
 
+def _is_manager_debt_extended_name(name: str, manager: Optional[str] = None) -> bool:
+    """True only for per-manager detailed debt reports.
+
+    Safe source example:
+      debt_ext_Детальный Дебиторы Ергали (...).html
+
+    Unsafe sources such as debt_ext_Ведомость... and
+    debt_ext_Детальный_по_взаиморасчетам... must never be sent to managers
+    as DEBT_EXTENDED.
+    """
+    lname = name.lower().replace("ё", "е")
+    words = re.sub(r"[_\-\s]+", " ", lname).strip()
+    if "debt_ext_" not in lname:
+        return False
+    if "детальный дебиторы" not in words:
+        return False
+    if manager:
+        mgr = normalize_manager_name(manager).lower().replace("ё", "е")
+        mgr_words = re.sub(r"[_\-\s]+", " ", mgr).strip()
+        if mgr_words and mgr_words not in words:
+            return False
+    return True
+
+
 def _classify_type(name: str, full_path: Optional[Path] = None) -> str:
     """Классификация типа отчета по названию файла"""
     lname = name.lower()
@@ -2582,9 +2606,13 @@ def _classify_type(name: str, full_path: Optional[Path] = None) -> str:
     if "sales_grouped_" in lname_norm or ("продажи" in lname_norm and "товар" not in lname_norm):
         return "SALES_SIMPLE"
     
-    # Дебиторка: сначала проверяем ДЕТАЛЬНУЮ по названию
+    # Дебиторка: детальный менеджерский отчёт — только "Детальный Дебиторы <менеджер>".
+    # debt_ext_Ведомость... и debt_ext_Детальный_по_взаиморасчетам... являются
+    # небезопасными источниками для менеджеров: там может быть лишняя информация.
     if "debt_ext_" in lname_norm:
-        return "DEBT_EXTENDED"
+        if _is_manager_debt_extended_name(name):
+            return "DEBT_EXTENDED"
+        return "UNKNOWN"
     
     # Потом ПРОСТУЮ по _debt.html в конце (это файлы Ведомость)
     if "_debt.html" in lname_norm:
@@ -3105,17 +3133,18 @@ async def send_with_acl(section: str, intended_mgr: str,
     # поэтому per-manager файлы в индексе отсутствуют. Сводный содержит всех клиентов.
     sales_summary_fallback = False
     if (not p or not p.exists()) and section in ("SALES_SIMPLE", "SALES_EXTENDED") and intended_mgr != "Сводный отчёт":
-        p = find_report(section, None)
-        if p and p.exists():
-            sales_summary_fallback = True
-            log_event("sales_summary_fallback", section=section, intended_mgr=intended_mgr,
-                      file=p.name, level="INFO")
-    # Bug fix: SALES_EXTENDED (По товару) никогда не имеет sales_products_* файлов —
-    # sales_report.py в grouped-режиме (≥3 клиентов) генерирует только sales_grouped_*.
-    # Fallback: показываем sales_grouped_* (содержит и товарные данные внутри клиентских секций).
+        if user_role == "admin":
+            p = find_report(section, None)
+            if p and p.exists():
+                sales_summary_fallback = True
+                log_event("sales_summary_fallback", section=section, intended_mgr=intended_mgr,
+                          file=p.name, level="INFO")
     if (not p or not p.exists()) and section == "SALES_EXTENDED":
         _fb_mgr = intended_mgr if intended_mgr != "Сводный отчёт" else None
-        p = find_report("SALES_SIMPLE", _fb_mgr) or find_report("SALES_SIMPLE", None)
+        p = find_report("SALES_SIMPLE", _fb_mgr)
+        if not p or not p.exists():
+            if user_role == "admin":
+                p = find_report("SALES_SIMPLE", None)
         if p and p.exists():
             sales_summary_fallback = True
             log_event("sales_extended_fallback_to_simple", intended_mgr=intended_mgr,
@@ -3124,6 +3153,24 @@ async def send_with_acl(section: str, intended_mgr: str,
         log_event("report_not_found", section=section, manager=intended_mgr)
         await _send_auto(context, chat_id, f"❌ Отчёт не найден: {section_rus} для '{intended_mgr}'.")
         return
+
+    if user_role != "admin" and section == "DEBT_EXTENDED":
+        if intended_mgr == "Сводный отчёт" or not _is_manager_debt_extended_name(p.name, intended_mgr):
+            log_event(
+                "debt_extended_source_blocked",
+                intended_mgr=intended_mgr,
+                file=p.name,
+                level="ERROR",
+            )
+            await _send_auto(
+                context,
+                chat_id,
+                "⛔ Детальная дебиторка не отправлена: найден не именной отчёт по дебиторке. "
+                "Сообщите администратору.",
+            )
+            log_user_delivery(chat_id, section, False)
+            return
+
     full_text = _read_full(p)
     real_mgr = _extract_manager(full_text, p.name)
 
