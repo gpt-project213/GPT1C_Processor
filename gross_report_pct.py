@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 r"""
-gross_report_pct.py · v1.5.7 · 2025-09-27 (Asia/Almaty)
+gross_report_pct.py · v1.5.8 · 2026-04-14 (Asia/Almaty)
 
 ИЗМЕНЕНО: Логика извлечения метаданных полностью унифицирована с gross_report.py.
 Удалены старые функции, исправлен вызов в основной функции.
@@ -17,7 +17,9 @@ import pandas as pd
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from zoneinfo import ZoneInfo
 from utils_excel import ensure_clean_xlsx
-from gross_report import _try_extract_meta
+import html as html_stdlib
+
+from gross_report import _try_extract_meta, _find_hdr_row
 
 ROOT    = Path(__file__).resolve().parent
 OUT_DIR = ROOT / "reports" / "html"
@@ -44,7 +46,6 @@ def _get_tpl():
 
 NBSP = "\u202f"
 TOTAL_RE   = re.compile(r"^(итог|итого|всего|total)\b", re.I)
-SERVICE_RE = re.compile(r"(группиров|показател|дополнит)", re.I)
 
 TOP_N = 15
 DELTA_RATE_TOL = 0.10
@@ -77,19 +78,6 @@ def _make_unique(headers: List[str]) -> List[str]:
         used[key] = used.get(key, 0) + 1
         out.append(key if used[key] == 1 else f"{key}_{used[key]}")
     return out
-
-def _find_hdr_row(df: pd.DataFrame, max_scan: int = 40) -> int:
-    best_i, best_cnt = 0, -1
-    for i in range(min(max_scan, len(df))):
-        row = df.iloc[i].astype(str)
-        if SERVICE_RE.search(" ".join(row)):
-            continue
-        cnt = int(row.replace("", pd.NA).notna().sum())
-        if cnt > best_cnt:
-            best_cnt, best_i = cnt, i
-    if best_cnt < 0:
-        raise ValueError("Не найдена строка заголовка")
-    return best_i
 
 def _map_cols(headers: List[str]) -> Dict[str, str]:
     used: set[str] = set()
@@ -138,7 +126,7 @@ def build_gross_report_percent(xlsx: str | Path) -> Optional[Path]:
     #    LOG.info("Summary report detected → percent-html skipped")
 
     raw = pd.read_excel(clean_xlsx, header=None, dtype=str).fillna("")
-    hdr = _find_hdr_row(raw)
+    hdr = _find_hdr_row(raw)  # как gross_report.py — строка с колонкой «товар»
     headers = _make_unique([str(c) for c in raw.iloc[hdr]])
     df = raw.copy(); df.columns = headers
 
@@ -159,10 +147,8 @@ def build_gross_report_percent(xlsx: str | Path) -> Optional[Path]:
         tmp[cols["gp"]] = gp = _money_to_float(tmp[cols["gp"]])
 
     if "margin" in cols:
-        margin_s = (tmp[cols["margin"]].astype(str)
-                    .str.replace(r"[^\d.-]", "", regex=True)
-                    .str.replace(",", "."))
-        tmp["__margin_row"] = pd.to_numeric(margin_s, errors="coerce")
+        # Как gross_report._money_to_float: не выкидывать запятую до замены на точку (иначе 12,5% → 125).
+        tmp["__margin_row"] = _money_to_float(tmp[cols["margin"]].astype(str))
     elif (sale is not None) and (gp is not None):
         tmp["__margin_row"] = (tmp[cols["gp"]] / tmp[cols["sale"]].replace(0, pd.NA) * 100)
     else:
@@ -203,7 +189,10 @@ def build_gross_report_percent(xlsx: str | Path) -> Optional[Path]:
         out = ['<div class="table-wrap"><table>',
                "<thead><tr><th>#</th><th>Товар</th><th>%</th></tr></thead><tbody>"]
         for i, r in dfv.reset_index(drop=True).iterrows():
-            out.append(f"<tr><td>{i+1}</td><td>{str(r['product'])}</td><td>{_fmt_pct(float(r['margin'])) if pd.notna(r['margin']) else ''}</td></tr>")
+            out.append(
+                f"<tr><td>{i+1}</td><td>{html_stdlib.escape(str(r['product']), quote=True)}</td>"
+                f"<td>{_fmt_pct(float(r['margin'])) if pd.notna(r['margin']) else ''}</td></tr>"
+            )
         out.append("</tbody></table></div>")
         return "".join(out)
 
