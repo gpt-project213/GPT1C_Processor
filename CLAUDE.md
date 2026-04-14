@@ -1,5 +1,5 @@
 # CLAUDE.md
-<!-- Единственный мастер-документ проекта. Обновлён: 2026-04-13 -->
+<!-- Единственный мастер-документ проекта. Обновлён: 2026-04-14 -->
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -295,6 +295,16 @@ Run: `python -X utf8 tests/test_project.py && python -X utf8 tests/test_collecto
 | A2 | `bot/user_tracker.py` | TZ hardcode → `ZoneInfo(os.getenv("TZ","Asia/Almaty"))` |
 | A3 | `bot/send_reports.py` | 4 missing `schedule_message_deletion` calls added |
 | A4 | `bot/gross_summary.py` | 2× `except Exception` → specific types |
+
+### Session 2026-04-14 (data leak fixes — коммиты e54da79–2c1f832)
+
+| ID | Коммит | Файл | Fix |
+|----|--------|------|-----|
+| LEAK-1 | `e54da79` | `dso_aging_report.py` | Сводный debt JSON (manager="—") исключён из `load_best_debt_json()` |
+| LEAK-2 | `9f75c6c` | `rfm_clients_report.py`, `revenue_concentration_report.py` | em-dash `"—"` добавлен в `_SKIP_MANAGERS` |
+| LEAK-3 | `2c1f832` | `bot/send_reports.py`, `tests/test_parsers.py` | Дебиторка: `_is_manager_debt_extended_name` + classify + ACL. Sales fallback на сводный — только admin |
+
+Верифицированы ранее подготовленные правки дебиторки (из stash предыдущей сессии) — корректны.
 
 ### Session 2026-04-13 (full audit + safe surgery — коммиты 6449778–ef82c7b)
 

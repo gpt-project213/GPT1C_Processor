@@ -1,7 +1,79 @@
 # SESSION CONTEXT
 
-Дата последней фиксации: 2026-04-13
+Дата последней фиксации: 2026-04-14
 Проект: `GPT1C_Processor_analitica`
+
+---
+
+## Сессия 2026-04-14: фиксы утечки данных + верификация дебиторки
+
+### Режим работы
+
+Продолжение «SAFE SURGERY PROJECT MODE». Фокус — утечка данных в аналитических отчётах.
+
+### Контекст проблемы
+
+Субадмин (Алена) получала в DSO/аналитике данные внутренних клиентов (Минай, Алибек, Минбаракат), которые не должны быть ей видны. Причина — сводный debt JSON (manager="—", 517 клиентов) мёржился с именными файлами в `load_best_debt_json()`, а `_PREFIX_MAP` по первой букве назначал внутренних клиентов реальным менеджерам.
+
+### Верификация дебиторки (твои правки из предыдущей сессии)
+
+Проверены правки из stash (до моих изменений):
+- `_is_manager_debt_extended_name()` — helper проверки именных файлов
+- `_classify_type()` — сводные debt_ext → UNKNOWN (не индексируются)
+- `send_with_acl()` — двойная защита DEBT_EXTENDED для не-admin
+- `tests/test_parsers.py` — 3 новых кейса
+
+**Вердикт: правки корректные, ничего лишнего не сделано.**
+
+### 3 коммита утечки данных
+
+| # | Коммит | Файл | Суть |
+|---|--------|------|------|
+| 1 | `e54da79` | `dso_aging_report.py` | `load_best_debt_json()` пропускает сводный файл (manager="—"/""/ None) |
+| 2 | `9f75c6c` | `rfm_clients_report.py`, `revenue_concentration_report.py` | `"—"` добавлен в `_SKIP_MANAGERS` (превентивный) |
+| 3 | `2c1f832` | `bot/send_reports.py`, `tests/test_parsers.py` | 1) Дебиторка: classify+ACL защита. 2) Sales fallback на сводный — только admin |
+
+### Доказательства
+
+- DSO: тест `_tmp_dso_leak_proof.py` — 411 клиентов из 4 именных файлов, 0 внутренних
+- `test_parsers.py`: 61/61 тестов прошло, 0 упало
+- Компиляция всех файлов — OK
+- Worktree чистый после коммитов
+- Все 25 коммитов запушены на GitHub (origin/master = HEAD)
+
+### Текущие версии файлов
+
+- `bot/send_reports.py` → v9.4.52/14.04.2026
+- `dso_aging_report.py` → v1.1.3
+- `rfm_clients_report.py` → v1.1.5
+- `revenue_concentration_report.py` → v1.1.5
+
+### Что ещё не сделано (из предыдущей сессии — OPEN)
+
+**Функциональное:**
+1. `debt_collector_daily` (17:00) всегда `--dry-run` — fallback не работает
+2. `config/collector_prompts.json` не существует → WARNING при каждом запуске
+3. `+77001234567` в 6 UI-подсказках — Вадим просил убрать
+4. Условная отгрузка (4 кнопки) — не реализована полностью
+5. 1 клиент без `manager_name` в `create_batch`
+
+**Архитектурное:**
+- ARCH-1: `txt_to_html` в двух местах — разные интерфейсы
+- ARCH-3: inline HTML в `expenses_parser.py`
+- BSR-01: `logging.Formatter.formatTime` monkey-patch (FIXED в send_reports, но может быть в других)
+
+**Данные:**
+- Сверка `config/debtors_contacts.json` vs `collector/debtors_contacts.json`
+- Очистка test-like записей из runtime-state
+
+### Ключевые знания о проекте
+
+- Алена = субадмин + менеджер (двойная роль), подшефные: Магира, Оксана
+- Сводные debt-файлы имеют `manager="—"` (em-dash), sales — `"Не определён"`
+- `_PREFIX_MAP` по первой букве клиента — ненадёжен для внутренних клиентов
+- unknown пользователи = полный 0 доступа (реализовано `_acl_gate`)
+- DSO/RFM/Concentration используют `load_best_debt_json` / `load_all_jsons_merged` для мёржа
+- Sales fallback на сводный — теперь только для admin
 
 ---
 
