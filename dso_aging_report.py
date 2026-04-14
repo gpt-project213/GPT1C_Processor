@@ -52,7 +52,7 @@ LOGS.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("dso")
 
-__VERSION__ = "1.2.0"
+__VERSION__ = "1.2.1"
 NBSP = "\u202f"
 
 def _mtime(p: Path) -> float:
@@ -304,10 +304,10 @@ def generate_report():
     # Aging-корзины синхронизированы с collector/debt_monitor.py _LEVEL_THRESHOLDS
     _AGING_BUCKETS = [
         ("0-9",   0,  9, 0, "#107c41"),   # level 0 — норма   (--good)
-        ("10-14", 10, 14, 1, "#6ba368"),   # level 1 — мягкое
+        ("10-14", 10, 14, 1, "#78a030"),   # level 1 — мягкое  (good→warn mix)
         ("15-19", 15, 19, 2, "#e09000"),   # level 2 — среднее (--warn)
-        ("20-24", 20, 24, 3, "#d07000"),   # level 3 — настойчиво
-        ("25-29", 25, 29, 4, "#b04000"),   # level 4 — строго
+        ("20-24", 20, 24, 3, "#d04500"),   # level 3 — настойчиво (warn→bad mix)
+        ("25-29", 25, 29, 4, "#c82000"),   # level 4 — строго  (ближе к --bad)
         ("30+",   30, 999, 5, "#c00000"),  # level 5 — жёстко  (--bad)
     ]
 
@@ -370,7 +370,7 @@ def generate_report():
         _color_map = {b[0]: b[4] for b in _AGING_BUCKETS}
         for period, amount in data["aging"].items():
             pct = (amount / total_debt * 100) if total_debt > 0 else 0
-            color = _color_map.get(period, "#666")
+            color = _color_map.get(period, "rgba(26,58,92,.55)")
             aging_rows += f"""
             <tr>
                 <td><span style="color:{color};font-weight:600">{period} дней</span></td>
@@ -396,26 +396,26 @@ def generate_report():
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DSO + Aging: {manager}</title>
 <style>
-body{{font-family:Arial,sans-serif;background:#f0f4f8;margin:0;padding:15px;color:#1a2332;font-size:14px;line-height:1.5}}
+body{{font-family:Arial,sans-serif;background:#f0f4f8;margin:0;padding:15px;color:#1a3a5c;font-size:14px;line-height:1.5}}
 .container{{max-width:1000px;margin:0 auto;background:#fff;padding:20px 26px 26px;border-radius:10px;box-shadow:0 2px 10px rgba(26,58,92,.10)}}
 .brand-bar{{display:flex;align-items:center;border-bottom:3px solid #1a3a5c;padding-bottom:10px;margin-bottom:18px}}
 .brand-name{{font-size:14px;font-weight:800;color:#1a3a5c;letter-spacing:.5px;text-transform:uppercase}}
 .brand-name::before{{content:"▲ ";color:#0070c0}}
-h1{{color:#1a2332;font-size:21px;margin:0 0 6px}}
-h2{{color:#1a2332;font-size:16px;margin:22px 0 8px;padding-bottom:7px;border-bottom:2px solid #0070c0}}
-.meta{{color:#64748b;font-size:13px;margin-bottom:16px}}
+h1{{color:#1a3a5c;font-size:21px;margin:0 0 6px}}
+h2{{color:#1a3a5c;font-size:16px;margin:22px 0 8px;padding-bottom:7px;border-bottom:2px solid #0070c0}}
+.meta{{color:rgba(26,58,92,.55);font-size:13px;margin-bottom:16px}}
 .dso-card{{padding:24px;border-radius:8px;margin:18px 0;text-align:center;border:2px solid {dso_color};background:rgba(0,0,0,.03)}}
 .dso-status{{font-size:16px;font-weight:700;color:{dso_color};margin-bottom:8px}}
 .dso-value{{font-size:44px;font-weight:700;color:{dso_color};margin:12px 0}}
-.dso-label{{font-size:13px;color:#64748b}}
+.dso-label{{font-size:13px;color:rgba(26,58,92,.55)}}
 table{{width:100%;border-collapse:collapse;margin:10px 0}}
-th,td{{padding:9px 11px;border-bottom:1px solid #d0d9e8}}
-th{{background:#eef2f8;font-weight:600;text-align:left;border-bottom:2px solid #d0d9e8}}
-tr:hover{{background:#f5f8fc}}
-.alert{{background:#fffbeb;border:1px solid #e09000;padding:12px 14px;border-radius:6px;margin:14px 0}}
+th,td{{padding:9px 11px;border-bottom:1px solid rgba(26,58,92,.15)}}
+th{{background:#f0f4f8;font-weight:600;text-align:left;border-bottom:2px solid rgba(26,58,92,.25)}}
+tr:hover{{background:#f0f4f8}}
+.alert{{background:rgba(224,144,0,.08);border:1px solid #e09000;padding:12px 14px;border-radius:6px;margin:14px 0}}
 a,button{{touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.04)}}
-.table-wrap{{overflow:auto;border:1px solid #d0d9e8;border-radius:8px;margin:10px 0}}
-.footer{{margin-top:20px;padding-top:12px;border-top:1px solid #d0d9e8;text-align:center;color:#64748b;font-size:11px}}
+.table-wrap{{overflow:auto;border:1px solid rgba(26,58,92,.15);border-radius:8px;margin:10px 0}}
+.footer{{margin-top:20px;padding-top:12px;border-top:1px solid rgba(26,58,92,.15);text-align:center;color:rgba(26,58,92,.55);font-size:11px}}
 @media(max-width:768px){{body{{padding:8px}}.container{{padding:12px 14px 18px}}h1{{font-size:17px}}h2{{font-size:14px}}table{{min-width:auto!important;table-layout:auto}}th,td{{padding:6px 7px;font-size:12px}}}}
 </style>
 </head>
@@ -427,14 +427,14 @@ a,button{{touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.04)}
 
 <div class="dso-card">
 <div class="dso-status">{dso_status}</div>
-<div style="font-size:14px;color:#666">DSO (средний срок оплаты):</div>
+<div style="font-size:14px;color:rgba(26,58,92,.55)">DSO (средний срок оплаты):</div>
 <div class="dso-value">{dso:.0f} дней</div>
 <div class="dso-label">Дебиторка: {fmt_money(total_debt)}</div>
 </div>
 
 <div class="alert">
 <div style="font-weight:600;margin-bottom:8px">📞 ДЕЙСТВИЕ:</div>
-<div style="color:#666">
+<div style="color:rgba(26,58,92,.55)">
 {"Срок оплаты высокий! Нужна помощь с взысканием долгов. Обратить внимание на проблемных клиентов." if dso >= 20 else
  "Срок оплаты средний. Контролировать ситуацию с долгами 10+ дней." if dso >= 15 else
  "Срок оплаты нормальный. Клиенты платят вовремя."}
@@ -442,7 +442,7 @@ a,button{{touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.04)}
 </div>
 
 <h2>📊 Aging дебиторки</h2>
-<p style="color:#666">Структура долгов по срокам:</p>
+<p style="color:rgba(26,58,92,.55)">Структура долгов по срокам:</p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -457,7 +457,7 @@ a,button{{touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.04)}
 </table></div>
 
 <h2>⚠️ Проблемные клиенты (10+ дней без оплаты)</h2>
-<p style="color:#666">Клиенты с просрочкой 10+ дней (уровни 1–5 коллектора):</p>
+<p style="color:rgba(26,58,92,.55)">Клиенты с просрочкой 10+ дней (уровни 1–5 коллектора):</p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
