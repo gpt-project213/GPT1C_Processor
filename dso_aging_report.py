@@ -52,7 +52,7 @@ LOGS.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("dso")
 
-__VERSION__ = "1.2.1"
+__VERSION__ = "1.3.0"
 NBSP = "\u202f"
 
 def _mtime(p: Path) -> float:
@@ -294,12 +294,21 @@ def generate_report():
                                       debt_period_min=period_min,
                                       debt_period_max=period_max)
 
-    # Дневная выручка по реальному периоду (не 30)
-    daily_revenue = 0.0
+    # Дневная выручка ПО МЕНЕДЖЕРАМ (не общая!)
+    mgr_daily_revenue: Dict[str, float] = {}
     if sales_data:
         total_revenue = float(sales_data.get("total_revenue", 0.0) or 0.0)
-        daily_revenue = total_revenue / period_days
-        LOG.info("Дневная выручка: %.0f / %d = %.0f тг/день", total_revenue, period_days, daily_revenue)
+        LOG.info("Общая выручка: %.0f / %d дней", total_revenue, period_days)
+        mgr_rev: Dict[str, float] = defaultdict(float)
+        for sc in sales_data.get("clients", []):
+            cname = sc.get("client") or sc.get("name") or ""
+            rev = float(sc.get("revenue") or sc.get("total") or sc.get("sales") or 0)
+            mgr = get_manager_from_client(cname)
+            if mgr != "Неизвестно":
+                mgr_rev[mgr] += rev
+        for mgr, rev in mgr_rev.items():
+            mgr_daily_revenue[mgr] = rev / period_days if period_days > 0 else 0
+            LOG.info("  %s: выручка=%.0f daily=%.0f", mgr, rev, mgr_daily_revenue[mgr])
     
     # Aging-корзины синхронизированы с collector/debt_monitor.py _LEVEL_THRESHOLDS
     _AGING_BUCKETS = [
@@ -345,10 +354,11 @@ def generate_report():
                 "days": days_silence,
             })
     
-    # Расчёт DSO
+    # Расчёт DSO per-manager
     for manager, data in managers_data.items():
-        if daily_revenue > 0:
-            data["dso"] = data["total_debt"] / daily_revenue
+        dr = mgr_daily_revenue.get(manager, 0)
+        if dr > 0:
+            data["dso"] = data["total_debt"] / dr
     
     # Генерация отчётов
     for manager, data in managers_data.items():
