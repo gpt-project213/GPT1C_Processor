@@ -127,7 +127,7 @@ NUM_RE    = re.compile(r"[^\d,.\-]")
 EXCL_RE   = re.compile(r"тов[\w.]*\s*под\s*з\s*[\/\\.]?\s*п", re.I)
 
 CLIENT_LEGAL_KZ = re.compile(r"\b(ИП|ТОО|ЖШС|АО)\b", re.I)
-CLIENT_BIZ_KW   = re.compile(r"\b(кафе|ресторан|столовая|бар|маркет|магазин|бутик|рынок|склад|цех|трц|университет|колледж|школa|садик|акимат|кгу|кгп)\b", re.I)
+CLIENT_BIZ_KW   = re.compile(r"\b(кафе|ресторан|столовая|бар|маркет|магазин|бутик|рынок|склад|цех|трц|университет|колледж|школа|садик|акимат|кгу|кгп)\b", re.I)
 CLIENT_TEL      = re.compile(r"(?:\+?7|8)\D?\d{3}\D?\d{3}\D?\d{2}\D?\d{2}")
 CLIENT_ADDR     = re.compile(r"\b(ул|улица|просп|пр-кт|пр-т|мкр|микрорайон|дом|д\.|корп|кв|№|г\.)\b", re.I)
 CLIENT_LETTER_PREF = re.compile(r"^[А-ЯЁA-Z]\s")
@@ -875,7 +875,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             if suspect:
                 LOG.info("Suspects: %s", suspect)
         except Exception as e:
-            LOG.error("FAILED on %s", f, exc_info=e)
+            LOG.error("FAILED on %s", f, exc_info=True)
             rc = 2
     LOG.info("done.")
     return rc

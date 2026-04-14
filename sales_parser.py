@@ -1,9 +1,12 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-sales_parser.py · v1.0.6 (2026-03-19)
+sales_parser.py · v1.0.7 (2026-04-14)
 ────────────────────────────────────────────────────────────────────
 Парсер отчётов "Продажи" из 1С в JSON формат.
+
+ИСПРАВЛЕНИЯ v1.0.7:
+- find_data_end: 2 подряд пустые строки (как sales_report.find_data_end), единый конец таблицы для JSON/HTML.
 
 ИСПРАВЛЕНИЯ v1.0.6:
 - БАГ #10: Двойной счёт при 3-уровневой иерархии 1С (Клиент→ТочкаОтгрузки→Товар).
@@ -285,7 +288,8 @@ def find_data_end(raw: pd.DataFrame, data_start: int, colmap: Dict[str, int]) ->
 
         if empty:
             empty_seq += 1
-            if empty_seq >= 3:
+            # Как sales_report.find_data_end: 2 подряд пустые строки — конец таблицы (JSON ↔ HTML).
+            if empty_seq >= 2:
                 return last
         else:
             empty_seq = 0
