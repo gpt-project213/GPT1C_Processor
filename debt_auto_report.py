@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 r"""
-debt_auto_report.py · v2.7.5 · 2026-03-16 | v2.7.7 · 2026-04-13: find_header fallback warning
+debt_auto_report.py · v2.7.7 · 2026-04-14: find_header без тихого fallback [0,1]
 Правки: simple → убраны «Отгрузка/Оплата» во «Все клиенты»; extended → агрегаты в шапку,
 Δ (увеличение/уменьшение), сортировка «Движения» по убыванию closing, техданные без «Клиентов».
 
@@ -33,7 +33,7 @@ from utils_excel import ensure_clean_xlsx
 from utils import money
 from analyze_debt_excel import parse_debt_report
 
-__VERSION__ = "debt_auto=v2.7.6"
+__VERSION__ = "debt_auto=v2.7.7"
 NBSP = "\u202f"
 
 log = getattr(config, "setup_logging", lambda name: logging.getLogger(name))("debt_auto_report")
@@ -304,8 +304,11 @@ def find_header(raw: pd.DataFrame) -> list[int]:
         if RE_CLIENT_ANY.search(" | ".join(cells_i)):
             r1 = [c.lower() for c in _row_vals(raw, i+1)]
             if sum(1 for k in keys if any(k in c for c in r1)) >= 2: return [i, i+1]
-    log.warning("find_header: заголовок не найден — fallback на строки [0,1]")
-    return [0, 1]
+    log.error("find_header: заголовок не найден — отказ (раньше был тихий fallback [0,1])")
+    raise ValueError(
+        "Не найдена строка заголовка дебиторки (контрагент / нач. остаток / кон. остаток). "
+        "Проверьте формат Excel."
+    )
 
 def build_names_from_header(raw: pd.DataFrame, header_rows: list[int]) -> list[str]:
     cells = raw.iloc[header_rows].astype(str).fillna("")
