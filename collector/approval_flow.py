@@ -4,7 +4,7 @@
 collector/approval_flow.py
 UX согласования рассылки WhatsApp — менеджер → администратор.
 
-Версия: 1.0.2 (2026-04-11)
+Версия: 1.0.3 (2026-04-14)
 
 Жизненный цикл:
   1. create_batch(debtors_by_manager)       → batch dict
@@ -311,11 +311,15 @@ def _classify_msg_type_and_reason(c: Dict[str, Any]) -> tuple:
 
 # ─── Telegram helpers ─────────────────────────────────────────────────────────
 
-async def _tg_send(chat_id: int, text: str, markup=None) -> Optional[int]:
-    """Отправляет Telegram-сообщение; возвращает message_id."""
+async def _tg_send(chat_id: int, text: str, markup=None, _retries: int = 3) -> Optional[int]:
+    """Отправляет Telegram-сообщение; возвращает message_id.
+
+    При сетевой ошибке делает до _retries попыток с задержкой 1–2–4с.
+    """
     if not BOT_TOKEN:
         logger.warning("BOT_TOKEN не задан — Telegram недоступен")
         return None
+    import asyncio
     import httpx
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload: Dict[str, Any] = {
@@ -325,14 +329,24 @@ async def _tg_send(chat_id: int, text: str, markup=None) -> Optional[int]:
     }
     if markup:
         payload["reply_markup"] = markup
-    try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.post(url, json=payload)
-        if resp.status_code == 200:
-            return resp.json().get("result", {}).get("message_id")
-        logger.warning("TG send error %d: %s", resp.status_code, resp.text[:200])
-    except Exception as e:
-        logger.error("TG send exception: %s", e)
+    for attempt in range(1, _retries + 1):
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.post(url, json=payload)
+            if resp.status_code == 200:
+                return resp.json().get("result", {}).get("message_id")
+            logger.warning("TG send error %d: %s", resp.status_code, resp.text[:200])
+            return None  # HTTP-ошибка — не ретраим (не сетевая проблема)
+        except Exception as e:
+            if attempt < _retries:
+                delay = 2 ** (attempt - 1)  # 1, 2, 4 секунды
+                logger.warning(
+                    "TG send attempt %d/%d failed (%s), retry in %ds",
+                    attempt, _retries, e, delay,
+                )
+                await asyncio.sleep(delay)
+            else:
+                logger.error("TG send exception (all %d attempts): %s", _retries, e)
     return None
 
 

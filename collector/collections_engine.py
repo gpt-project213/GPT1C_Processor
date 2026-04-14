@@ -1227,13 +1227,34 @@ def main() -> int:
                         help="Проверить просроченные обещания оплаты")
     parser.add_argument("--fix-first-seen", action="store_true",
                         help="Одноразовый патч: пересчитать first_seen у клиентов с датой 2026-03-19")
+    parser.add_argument("--resend-preview", action="store_true",
+                        help="Повторно отправить превью менеджерам из зависшего батча (требует --batch-id)")
     args = parser.parse_args()
 
     if (
         not args.dry_run and not args.send and not args.send_approved
         and not args.check_promises and not args.preview and not args.fix_first_seen
+        and not args.resend_preview
     ):
         parser.print_help()
+        return 0
+
+    if args.resend_preview:
+        if not args.batch_id:
+            logger.error("--resend-preview requires --batch-id")
+            return 1
+        from collector.approval_flow import load_batch, send_manager_previews
+        batch = load_batch(args.batch_id)
+        if not batch:
+            logger.error("Батч %s не найден", args.batch_id)
+            return 1
+        logger.info("Повторная отправка превью для батча %s", args.batch_id)
+        asyncio.run(send_manager_previews(batch))
+        pending = [m for m, s in batch["managers"].items() if not s.get("preview_message_id")]
+        if pending:
+            logger.warning("Не удалось отправить: %s", ", ".join(pending))
+        else:
+            logger.info("Все превью отправлены успешно")
         return 0
 
     if args.preview:
