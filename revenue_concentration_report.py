@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-revenue_concentration_report.py · v1.1.4 (2026-03-10)
+revenue_concentration_report.py · v1.1.5 (2026-04-14)
 FIX: Bug #RC1 - добавлена normalize_client_name (NameError при каждом запуске)
 Fix P-016: _mtime() helper — p.stat().st_mtime обёрнут в try/except (FileNotFoundError, OSError)
 ────────────────────────────────────────────────────────────────────
@@ -72,7 +72,7 @@ def load_all_jsons_merged(pattern: str, min_clients: int = 0, skip_keywords: lis
 
     # Сводные файлы (без реального менеджера) пропускаем.
     # В сводном Excel менеджер отсутствует — это норма, не баг.
-    _SKIP_MANAGERS = {"", "не определён", "неизвестно"}
+    _SKIP_MANAGERS = {"", "—", "не определён", "неизвестно"}
 
     reference_period = None
     reference_data   = None

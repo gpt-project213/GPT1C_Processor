@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-rfm_clients_report.py · v1.1.4 (2026-03-10)
+rfm_clients_report.py · v1.1.5 (2026-04-14)
 ────────────────────────────────────────────────────────────────────
 Отчёт "RFM-сегментация клиентов"
 
@@ -85,7 +85,7 @@ def load_all_jsons_merged(pattern: str, min_clients: int = 0, skip_keywords: lis
     # Шаг 1: эталонный период — самый свежий файл КОНКРЕТНОГО менеджера.
     # Сводные файлы (manager = "" / "Не определён") пропускаем: в них нет менеджера
     # по определению (Excel-источник не содержит поле менеджера).
-    _SKIP_MANAGERS = {"", "не определён", "неизвестно"}
+    _SKIP_MANAGERS = {"", "—", "не определён", "неизвестно"}
     reference_period = None
     reference_data   = None
     reference_path   = None
