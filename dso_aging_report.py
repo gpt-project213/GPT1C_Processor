@@ -380,7 +380,7 @@ def generate_report():
         
         # Проблемные клиенты
         problem_rows = ""
-        for i, client in enumerate(sorted(data["problem_clients"], key=lambda x: x["debt"], reverse=True)[:10], 1):
+        for i, client in enumerate(sorted(data["problem_clients"], key=lambda x: (-x["days"], -x["debt"]))[:10], 1):
             problem_rows += f"""
             <tr>
                 <td>{i}</td>
