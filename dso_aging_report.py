@@ -52,7 +52,7 @@ LOGS.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("dso")
 
-__VERSION__ = "1.1.3"
+__VERSION__ = "1.2.0"
 NBSP = "\u202f"
 
 def _mtime(p: Path) -> float:
@@ -301,15 +301,23 @@ def generate_report():
         daily_revenue = total_revenue / period_days
         LOG.info("Дневная выручка: %.0f / %d = %.0f тг/день", total_revenue, period_days, daily_revenue)
     
-    # Группировка по менеджерам
+    # Aging-корзины синхронизированы с collector/debt_monitor.py _LEVEL_THRESHOLDS
+    _AGING_BUCKETS = [
+        ("0-9",   0,  9, 0, "#28a745"),   # level 0 — норма
+        ("10-14", 10, 14, 1, "#8bc34a"),   # level 1 — мягкое
+        ("15-19", 15, 19, 2, "#ffc107"),   # level 2 — среднее
+        ("20-24", 20, 24, 3, "#ff9800"),   # level 3 — настойчиво
+        ("25-29", 25, 29, 4, "#e65100"),   # level 4 — строго
+        ("30+",   30, 999, 5, "#dc3545"),  # level 5 — жёстко
+    ]
+
     managers_data = defaultdict(lambda: {
         "total_debt": 0.0,
         "dso": 0.0,
-        "aging": {"0-7": 0.0, "8-14": 0.0, "15-30": 0.0, ">30": 0.0},
+        "aging": {b[0]: 0.0 for b in _AGING_BUCKETS},
         "problem_clients": []
     })
     
-    # Обработка долгов
     for client_data in debt_data.get("clients", []):
         client_name = (client_data.get("client") or client_data.get("name") or "")
         closing_debt = client_data.get("debt", 0.0)
@@ -323,23 +331,19 @@ def generate_report():
         
         managers_data[manager]["total_debt"] += closing_debt
 
-        # FIX Bug #DSO-2: реальная aging через поле days_silence из debt_ext JSON
-        # Убраны синтетические коэффициенты 0.1 / 0.2 / 0.3 / 0.4 / 0.6
         days_silence = int(client_data.get("days_silence") or 0)
 
-        if days_silence > 30:
-            managers_data[manager]["aging"][">30"] += closing_debt
+        for label, lo, hi, level, _ in _AGING_BUCKETS:
+            if lo <= days_silence <= hi:
+                managers_data[manager]["aging"][label] += closing_debt
+                break
+
+        if days_silence >= 10:
             managers_data[manager]["problem_clients"].append({
                 "name": client_name,
                 "debt": closing_debt,
                 "days": days_silence,
             })
-        elif days_silence > 14:
-            managers_data[manager]["aging"]["15-30"] += closing_debt
-        elif days_silence > 7:
-            managers_data[manager]["aging"]["8-14"] += closing_debt
-        else:
-            managers_data[manager]["aging"]["0-7"] += closing_debt
     
     # Расчёт DSO
     for manager, data in managers_data.items():
@@ -361,12 +365,12 @@ def generate_report():
             dso_status = "✅ БЫСТРО"
             dso_color = "#28a745"
         
-        # Aging таблица
         aging_rows = ""
         total_debt = data["total_debt"]
+        _color_map = {b[0]: b[4] for b in _AGING_BUCKETS}
         for period, amount in data["aging"].items():
             pct = (amount / total_debt * 100) if total_debt > 0 else 0
-            color = "#dc3545" if period == ">30" else "#ffc107" if period == "15-30" else "#28a745"
+            color = _color_map.get(period, "#666")
             aging_rows += f"""
             <tr>
                 <td><span style="color:{color};font-weight:600">{period} дней</span></td>
@@ -432,7 +436,7 @@ a,button{{touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.04)}
 <div style="font-weight:600;margin-bottom:8px">📞 ДЕЙСТВИЕ:</div>
 <div style="color:#666">
 {"Срок оплаты высокий! Нужна помощь с взысканием долгов. Обратить внимание на проблемных клиентов." if dso >= 20 else
- "Срок оплаты средний. Контролировать ситуацию с долгами >30 дней." if dso >= 15 else
+ "Срок оплаты средний. Контролировать ситуацию с долгами 10+ дней." if dso >= 15 else
  "Срок оплаты нормальный. Клиенты платят вовремя."}
 </div>
 </div>
@@ -452,8 +456,8 @@ a,button{{touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.04)}
 </tbody>
 </table></div>
 
-<h2>⚠️ Проблемные клиенты (>30 дней)</h2>
-<p style="color:#666">Клиенты требующие внимания:</p>
+<h2>⚠️ Проблемные клиенты (10+ дней без оплаты)</h2>
+<p style="color:#666">Клиенты с просрочкой 10+ дней (уровни 1–5 коллектора):</p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
