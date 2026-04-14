@@ -338,7 +338,7 @@ def generate_report():
                 managers_data[manager]["aging"][label] += closing_debt
                 break
 
-        if days_silence >= 10:
+        if days_silence >= 10 and closing_debt >= 1000:
             managers_data[manager]["problem_clients"].append({
                 "name": client_name,
                 "debt": closing_debt,
