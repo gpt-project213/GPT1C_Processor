@@ -180,7 +180,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.52/14.04.2026"
+__VERSION__ = "v9.4.53/14.04.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
@@ -6580,7 +6580,7 @@ def _build_manager_ranking(json_dir: Path, analytics_dir: Path) -> Optional[str]
         dso_s = ""
         if rev > 0 and debt > 0:
             dso = debt / (rev / 30)
-            dso_s = f"  DSO≈{dso:.0f}д"
+            dso_s = f"  Срок≈{dso:.0f}д"
         rev_s  = f"💰{_fmt(rev)}" if rev > 0 else "—"
         debt_s = f"💳{_fmt(debt)}" if debt > 0 else "—"
         lines.append(f"{medal} {mgr:<9}  {rev_s}  {debt_s}{dso_s}")
@@ -6696,22 +6696,22 @@ def _build_analytics_kb(user_role: str, chat_id: int = 0) -> Optional[InlineKeyb
             [InlineKeyboardButton("📊 Продажи+Рентабельность", callback_data="analytics|sales_profit")],
             [InlineKeyboardButton("💰 Чистая прибыль",         callback_data="analytics|net_profit_submenu")],
             [InlineKeyboardButton("📦 Мёртвый запас",          callback_data="analytics|turnover")],
-            [InlineKeyboardButton("👥 RFM-клиенты",            callback_data="analytics|rfm")],
+            [InlineKeyboardButton("👥 Активность клиентов",     callback_data="analytics|rfm")],
             [InlineKeyboardButton("🎯 Концентрация выручки",   callback_data="analytics|concentration")],
-            [InlineKeyboardButton("💳 DSO+Aging",              callback_data="analytics|dso")],
+            [InlineKeyboardButton("💳 Сроки оплаты",            callback_data="analytics|dso")],
             [InlineKeyboardButton("🤖 ИИ анализ",             callback_data="ai_type_menu")],
             [InlineKeyboardButton("🔄 Обновить аналитику",     callback_data="analytics|refresh")],
             [InlineKeyboardButton("🔙 Главное меню",           callback_data="back_main")],
         ])
     elif user_role == "subadmin":
         return InlineKeyboardMarkup([
-            [InlineKeyboardButton("💳 DSO+Aging", callback_data="analytics|dso")],
+            [InlineKeyboardButton("💳 Сроки оплаты", callback_data="analytics|dso")],
             [InlineKeyboardButton("🔙 Главное меню", callback_data="back_main")],
         ])
     elif user_role == "manager":
         return InlineKeyboardMarkup([
             [InlineKeyboardButton("📊 Продажи+Рентабельность", callback_data="analytics|sales_profit")],
-            [InlineKeyboardButton("👥 RFM-клиенты",            callback_data="analytics|rfm")],
+            [InlineKeyboardButton("👥 Активность клиентов",     callback_data="analytics|rfm")],
             [InlineKeyboardButton("🎯 Концентрация",           callback_data="analytics|concentration")],
             [InlineKeyboardButton("🔙 Главное меню",           callback_data="back_main")],
         ])

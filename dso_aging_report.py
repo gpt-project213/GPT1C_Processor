@@ -404,7 +404,7 @@ def generate_report():
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DSO + Aging: {manager}</title>
+<title>Сроки оплаты: {manager}</title>
 <style>
 body{{font-family:Arial,sans-serif;background:#f0f4f8;margin:0;padding:15px;color:#1a3a5c;font-size:14px;line-height:1.5}}
 .container{{max-width:1000px;margin:0 auto;background:#fff;padding:20px 26px 26px;border-radius:10px;box-shadow:0 2px 10px rgba(26,58,92,.10)}}
@@ -432,12 +432,12 @@ a,button{{touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.04)}
 <body>
 <div class="container">
 <div class="brand-bar"><span class="brand-name">AI 1C PRO</span></div>
-<h1>💳 DSO + Aging: {manager}</h1>
+<h1>💳 Сроки оплаты: {manager}</h1>
 <div class="meta">Для admin + subadmin | {datetime.now(TZ).strftime("%d.%m.%Y %H:%M")}</div>
 
 <div class="dso-card">
 <div class="dso-status">{dso_status}</div>
-<div style="font-size:14px;color:rgba(26,58,92,.55)">DSO (средний срок оплаты):</div>
+<div style="font-size:14px;color:rgba(26,58,92,.55)">Средний срок оплаты:</div>
 <div class="dso-value">{dso:.0f} дней</div>
 <div class="dso-label">Дебиторка: {fmt_money(total_debt)}</div>
 </div>
@@ -451,7 +451,7 @@ a,button{{touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.04)}
 </div>
 </div>
 
-<h2>📊 Aging дебиторки</h2>
+<h2>📊 Структура долгов по срокам</h2>
 <p style="color:rgba(26,58,92,.55)">Структура долгов по срокам:</p>
 <div class="table-wrap"><table>
 <thead>

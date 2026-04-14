@@ -58,7 +58,7 @@ LOGS.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("rfm")
 
-__VERSION__ = "1.1.5"
+__VERSION__ = "1.1.6"
 NBSP = "\u202f"
 
 def _mtime(p: Path) -> float:
@@ -299,7 +299,7 @@ def generate_report():
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RFM-клиенты: {manager}</title>
+<title>Активность клиентов: {manager}</title>
 <style>
 body{{font-family:Arial,sans-serif;background:#f0f4f8;margin:0;padding:15px;color:#1a2332;font-size:14px;line-height:1.5}}
 .container{{max-width:1200px;margin:0 auto;background:#fff;padding:20px 26px 26px;border-radius:10px;box-shadow:0 2px 10px rgba(26,58,92,.10)}}
@@ -327,7 +327,7 @@ h2{{color:#1a3a5c;margin-top:30px;padding-bottom:8px;border-bottom:2px solid #00
 <body>
 <div class="container">
 <div class="brand-bar"><span class="brand-name">AI 1C PRO</span></div>
-<h1>👥 RFM-клиенты: {manager}</h1>
+<h1>👥 Активность клиентов: {manager}</h1>
 <div class="meta">Менеджер: {manager} | {datetime.now(TZ).strftime("%d.%m.%Y %H:%M")}</div>
 
 <div class="stats">
