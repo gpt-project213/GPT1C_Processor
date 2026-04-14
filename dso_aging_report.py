@@ -52,7 +52,7 @@ LOGS.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("dso")
 
-__VERSION__ = "1.1.2"
+__VERSION__ = "1.1.3"
 NBSP = "\u202f"
 
 def _mtime(p: Path) -> float:
@@ -236,6 +236,9 @@ def load_best_debt_json() -> Optional[Dict[str, Any]]:
             with open(path, "r", encoding="utf-8") as fh:
                 data = json.load(fh)
             if data.get("period_max") != best_period_max:
+                continue
+            if data.get("manager") in ("—", "", None):
+                LOG.info("load_best_debt_json: пропускаю сводный %s", path.name)
                 continue
             clients = _ext_to_simple_clients(data)
             for c in clients:
