@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-inventory_turnover_report.py · v1.1.5 (2026-04-14)
+inventory_turnover_report.py · v1.1.6 (2026-04-14)
 ────────────────────────────────────────────────────────────────────
 Отчёт "Мертвый запас + Оборачиваемость"
 
@@ -19,6 +19,7 @@ inventory_turnover_report.py · v1.1.5 (2026-04-14)
 
 Доступ: ТОЛЬКО Admin
 
+v1.1.6: normalize_product — «кг.»/«kg.» → единый вид для матчинга с продажами
 v1.1.4: Fix P-008: добавлен load_dotenv() — TZ теперь читается из .env
 v1.1.3: TZ timezone(timedelta(hours=5)) → ZoneInfo("Asia/Almaty") (Bug TZ)
 """
@@ -47,7 +48,7 @@ LOGS.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("turnover")
 
-__VERSION__ = "1.1.5"
+__VERSION__ = "1.1.6"
 NBSP = "\u202f"
 
 
@@ -162,8 +163,9 @@ def fmt_money(x: float) -> str:
 
 
 def normalize_product(name: str) -> str:
-    """Нормализация названия товара для сравнения"""
+    """Нормализация названия товара для сравнения (остатки ↔ продажи)."""
     s = name.lower().strip()
+    s = s.replace("кг.", "кг").replace("kg.", "kg")
     s = s.replace("/", " ").replace("-", " ")
     s = s.replace("(", " ").replace(")", " ")
     s = re.sub(r"\s+", " ", s)

@@ -2,6 +2,7 @@
 # coding: utf-8
 """
 inventory_cost_parser.py — Парсер отчёта "Ведомость по партиям товаров на складах" (с себестоимостью)
+Версия 1.6.8 (2026-04-14) — HTML: палитра бренда, .table-wrap, @media
 Версия 1.6.6 (2026-03-10) — TZ timezone(timedelta(hours=5)) → ZoneInfo("Asia/Almaty") (Bug TZ)
 Версия 1.6.5 — исправлен пропуск строки "Оптовый" по колонке товара.
 """
@@ -47,7 +48,7 @@ logging.basicConfig(
 )
 LOG = logging.getLogger("inventory_cost_parser")
 
-__VERSION__ = "1.6.7"
+__VERSION__ = "1.6.8"
 NBSP = "\u202f"
 
 # Регулярные выражения
@@ -352,74 +353,88 @@ def save_html(data: Dict[str, Any], slug: str) -> Path:
     <style>
         body {{
             font-family: 'Segoe UI', Tahoma, sans-serif;
-            background: #f5f5f5;
-            margin: 20px;
-            color: #111;
+            background: #f0f4f8;
+            margin: 0;
+            padding: 16px;
+            color: #1a2332;
         }}
         .container {{
             max-width: 1400px;
             margin: 0 auto;
             background: #fff;
-            padding: 30px;
+            padding: 24px;
             border-radius: 10px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 10px rgba(26,58,92,.10);
         }}
         h1 {{
-            color: #2c3e50;
+            color: #1a3a5c;
             margin-bottom: 10px;
         }}
         .meta {{
-            color: #666;
+            color: #64748b;
             font-size: 14px;
-            margin-bottom: 30px;
+            margin-bottom: 24px;
         }}
         .kpi {{
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 12px;
-            margin-bottom: 30px;
+            margin-bottom: 24px;
         }}
         .card {{
-            background: #f8f9fa;
+            background: #eef2f8;
             border-radius: 8px;
             padding: 15px;
             text-align: center;
         }}
         .card-label {{
             font-size: 13px;
-            color: #666;
+            color: #64748b;
             text-transform: uppercase;
         }}
         .card-value {{
             font-size: 24px;
             font-weight: 700;
             margin-top: 5px;
-            color: #2c3e50;
+            color: #1a3a5c;
+        }}
+        .table-wrap {{
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            margin: 10px 0;
+            border: 1px solid #d0d9e8;
+            border-radius: 8px;
         }}
         table {{
             width: 100%;
             border-collapse: collapse;
             font-size: 13px;
+            min-width: 640px;
         }}
         th, td {{
             padding: 10px;
-            border-bottom: 1px solid #eee;
+            border-bottom: 1px solid #d0d9e8;
             text-align: left;
         }}
         th {{
-            background: #f8f9fa;
+            background: #eef2f8;
             font-weight: 600;
         }}
         tr:hover {{
-            background: #f8f9fa;
+            background: #f5f8fc;
         }}
         .footer {{
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid #eee;
+            margin-top: 24px;
+            padding-top: 16px;
+            border-top: 1px solid #d0d9e8;
             text-align: center;
-            color: #999;
+            color: #64748b;
             font-size: 12px;
+        }}
+        @media (max-width: 768px) {{
+            body {{ padding: 10px; }}
+            .container {{ padding: 14px; }}
+            th, td {{ font-size: 12px; padding: 8px; }}
         }}
     </style>
 </head>
@@ -447,7 +462,7 @@ def save_html(data: Dict[str, Any], slug: str) -> Path:
         </div>
     </div>
 
-    <table>
+    <div class="table-wrap"><table>
         <thead>
             <tr>
                 <th style="width:40px">#</th>
@@ -460,7 +475,7 @@ def save_html(data: Dict[str, Any], slug: str) -> Path:
         <tbody>
             {rows_html}
         </tbody>
-    </table>
+    </table></div>
 
     <div class="footer">
         Сформировано: {datetime.now(TZ).strftime("%d.%m.%Y %H:%M")} | inventory_cost_parser.py v{__VERSION__}

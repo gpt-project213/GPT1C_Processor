@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-revenue_concentration_report.py · v1.1.6 (2026-04-14)
+revenue_concentration_report.py · v1.1.7 (2026-04-14)
+v1.1.7: Пояснение в отчёте — доля топ-5 ≠ полное правило Парето 80/20
 FIX: Bug #RC1 - добавлена normalize_client_name (NameError при каждом запуске)
 Fix P-016: _mtime() helper — p.stat().st_mtime обёрнут в try/except (FileNotFoundError, OSError)
 ────────────────────────────────────────────────────────────────────
@@ -46,7 +47,7 @@ LOGS.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("concentration")
 
-__VERSION__ = "1.1.6"
+__VERSION__ = "1.1.7"
 NBSP = "\u202f"
 
 def _mtime(p: Path) -> float:
@@ -281,6 +282,7 @@ h2{{color:#1a3a5c;margin-top:30px;font-size:17px}}
 <div style="font-size:14px;color:#666;margin-bottom:10px">Топ-5 клиентов дают:</div>
 <div class="alert-value" style="color:{risk_color}">{top5_pct:.1f}%</div>
 <div style="font-size:14px;color:#666">от общей выручки ({fmt_money(top5_sum)} из {fmt_money(total)})</div>
+<div style="font-size:12px;color:#64748b;margin-top:10px;line-height:1.4">Показатель — доля выручки пяти крупнейших клиентов; не эквивалентен полному правилу Парето 80/20.</div>
 </div>
 
 <h2>📊 Топ-5 клиентов</h2>
@@ -362,6 +364,7 @@ h2{{color:#1a3a5c;margin-top:30px;font-size:17px}}
 <div style="font-size:14px;color:#666;margin-bottom:10px">Топ-5 клиентов дают:</div>
 <div class="alert-value" style="color:{risk_color}">{top5_pct:.1f}%</div>
 <div style="font-size:14px;color:#666">от вашей общей выручки</div>
+<div style="font-size:12px;color:#64748b;margin-top:10px;line-height:1.4">Доля топ-5 по выручке; не полное правило Парето 80/20.</div>
 </div>
 
 <h2>📊 Топ-5 клиентов</h2>

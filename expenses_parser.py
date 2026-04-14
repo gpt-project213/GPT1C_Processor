@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 expenses_parser.py – Универсальный парсер отчётов 1С "Затраты" (расходы)
+v1.1.2 (2026-04-14): HTML — палитра бренда, горизонтальный скролл таблиц, @media
 v1.1.1 (2026-03-16): audit fixes — narrow except clauses, datetime.now() TZ fallback
 Особенности:
 - Поддержка отчётов за день ("18 февраля 2026 г.") и за период ("01.02.2026 - 17.02.2026")
@@ -33,6 +34,7 @@ except ImportError:
 
 # Константы
 NBSP_NARROW = "\u202F"  # узкий неразрывный пробел (используется в 1С)
+__VERSION__ = "1.1.2"
 
 # Словарь месяцев (именительный и родительный падежи)
 MONTHS_RU = {
@@ -520,17 +522,17 @@ class UnifiedExpensesParser:
     <style>
         body {{
             font-family: 'Segoe UI', Tahoma, sans-serif;
-            background: #f5f5f5;
+            background: #f0f4f8;
             margin: 0;
-            padding: 20px;
-            color: #111;
+            padding: 16px;
+            color: #1a2332;
         }}
         .wrap {{
             max-width: 1200px;
             margin: 0 auto;
         }}
         .header {{
-            background: linear-gradient(135deg, #2c3e50, #4a6491);
+            background: linear-gradient(135deg, #1a3a5c, #0070c0);
             color: #fff;
             padding: 18px;
             border-radius: 10px;
@@ -550,12 +552,13 @@ class UnifiedExpensesParser:
             background: #fff;
             border-radius: 10px;
             padding: 14px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            box-shadow: 0 2px 10px rgba(26,58,92,.10);
         }}
         .kpi-val {{
             font-size: 22px;
             font-weight: 700;
             margin-top: 6px;
+            color: #1a3a5c;
         }}
         .badge {{
             display: inline-block;
@@ -569,17 +572,25 @@ class UnifiedExpensesParser:
         .type-mtd {{ background: #d1ecf1; color: #0c5460; }}
         .type-month {{ background: #fff3cd; color: #856404; }}
         .type-range {{ background: #f8d7da; color: #721c24; }}
+        .table-wrap {{
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            margin: 10px 0;
+            border: 1px solid #d0d9e8;
+            border-radius: 8px;
+        }}
         table {{
             width: 100%;
             border-collapse: collapse;
+            min-width: 520px;
         }}
         th, td {{
             padding: 10px 10px;
-            border-bottom: 1px solid #eee;
+            border-bottom: 1px solid #d0d9e8;
             font-size: 13px;
         }}
         th {{
-            background: #fafafa;
+            background: #eef2f8;
             text-align: left;
         }}
         .amount {{
@@ -588,13 +599,17 @@ class UnifiedExpensesParser:
         }}
         .subtotal td {{
             font-weight: 700;
-            background: #e8f4fd;
+            background: #e8f0fa;
         }}
         .footer {{
             text-align: center;
-            color: #666;
+            color: #64748b;
             font-size: 12px;
             margin: 18px 0;
+        }}
+        @media (max-width: 768px) {{
+            body {{ padding: 10px; }}
+            th, td {{ font-size: 12px; padding: 8px; }}
         }}
     </style>
 </head>
@@ -611,22 +626,22 @@ class UnifiedExpensesParser:
 
     <div class="kpi">
         <div class="card">
-            <div style="color:#666; font-size:12px; text-transform:uppercase;">Итого расходов</div>
+            <div style="color:#64748b; font-size:12px; text-transform:uppercase;">Итого расходов</div>
             <div class="kpi-val">{self._format_money(data.get('total_expenses'))} ₸</div>
         </div>
         <div class="card">
-            <div style="color:#666; font-size:12px; text-transform:uppercase;">Начало периода</div>
+            <div style="color:#64748b; font-size:12px; text-transform:uppercase;">Начало периода</div>
             <div class="kpi-val">{period_start}</div>
         </div>
         <div class="card">
-            <div style="color:#666; font-size:12px; text-transform:uppercase;">Конец периода</div>
+            <div style="color:#64748b; font-size:12px; text-transform:uppercase;">Конец периода</div>
             <div class="kpi-val">{period_end}</div>
         </div>
     </div>
 
     <div class="card">
         <div style="font-weight:800; margin-bottom:10px;">🏆 ТОП-5 статей расходов</div>
-        <table>
+        <div class="table-wrap"><table>
             <thead>
                 <tr>
                     <th style="width:40px">#</th>
@@ -637,12 +652,12 @@ class UnifiedExpensesParser:
             <tbody>
                 {top5_rows}
             </tbody>
-        </table>
+        </table></div>
     </div>
 
     <div class="card">
         <div style="font-weight:800; margin-bottom:10px;">📋 Детализация расходов (по убыванию суммы)</div>
-        <table>
+        <div class="table-wrap"><table>
             <thead>
                 <tr>
                     <th style="width:260px">Подразделение</th>
@@ -653,11 +668,11 @@ class UnifiedExpensesParser:
             <tbody>
                 {details_rows}
             </tbody>
-        </table>
+        </table></div>
     </div>
 
     <div class="footer">
-        Сформировано: {footer_time} ({self.timezone}) | expenses_parser_final v1.1.0
+        Сформировано: {footer_time} ({self.timezone}) | expenses_parser.py v{__VERSION__}
     </div>
 </div>
 </body>

@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-inventory.py v1.1.6 (2026-04-13) — Остатки товаров на складах (с группировкой по категориям)
+inventory.py v1.1.7 (2026-04-14) — Остатки товаров на складах (с группировкой по категориям)
 Генерирует HTML и JSON отчёты.
 Сортировка: категории по убыванию общего количества, товары по убыванию количества.
 Fix v1.1.4: TZ timezone(timedelta(hours=5)) → ZoneInfo("Asia/Almaty") (Bug TZ)
+v1.1.7: Логирование строк, не распознанных как категория/товар (подзаголовки, нестандартный формат)
 """
 
 from __future__ import annotations
@@ -270,6 +271,7 @@ def parse_grouped(df: pd.DataFrame, colmap: Dict[str, int]) -> Dict[str, Any]:
 
     LOG.info("=== ПАРСИНГ: определение категорий и товаров ===")
 
+    skipped_unclassified = 0
     for _, r in df.iterrows():
         row = r.tolist()
         name = clean(row[pj]) if 0 <= pj < len(row) else ""
@@ -316,6 +318,16 @@ def parse_grouped(df: pd.DataFrame, colmap: Dict[str, int]) -> Dict[str, Any]:
                 "qty": 0.0 if math.isnan(qty) else float(qty),
             }
             groups["Без категории"]["item_list"].append(item)
+            continue
+
+        skipped_unclassified += 1
+        LOG.debug("Парсинг остатков: пропуск строки без классификации: %r", name[:120])
+
+    if skipped_unclassified:
+        LOG.info(
+            "Парсинг остатков: пропущено %s строк без классификации (подзаголовки / нестандартный формат)",
+            skipped_unclassified,
+        )
 
     # Удаляем пустые категории
     groups = {cat: data for cat, data in groups.items() if data["item_list"]}

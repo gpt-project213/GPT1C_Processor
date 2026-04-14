@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-rfm_clients_report.py · v1.1.7 (2026-04-14)
+rfm_clients_report.py · v1.1.8 (2026-04-14)
 ────────────────────────────────────────────────────────────────────
 Отчёт "RFM-сегментация клиентов"
 
@@ -28,6 +28,7 @@ M = Monetary (на какую сумму)
 
 Доступ: Admin + Managers (свои)
 
+v1.1.8: Подпись footer 12px (доступность)
 v1.1.4: Fix P-016: _mtime() helper — p.stat().st_mtime обёрнут в try/except (FileNotFoundError, OSError)
 v1.1.3: Fix P-006: добавлен load_dotenv() — TZ теперь читается из .env
 v1.1.2: TZ timezone(timedelta(hours=5)) → ZoneInfo("Asia/Almaty") (Bug TZ)
@@ -58,7 +59,7 @@ LOGS.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("rfm")
 
-__VERSION__ = "1.1.7"
+__VERSION__ = "1.1.8"
 NBSP = "\u202f"
 
 def _mtime(p: Path) -> float:
@@ -330,7 +331,7 @@ h2{{color:#1a3a5c;margin-top:30px;padding-bottom:8px;border-bottom:2px solid #00
 .vip{{border-left:4px solid #e09000}}
 .loyal{{border-left:4px solid #107c41}}
 .table-wrap{{overflow:auto;border:1px solid #d0d9e8;border-radius:8px;margin:10px 0}}
-.footer{{margin-top:20px;padding-top:12px;border-top:1px solid #d0d9e8;text-align:center;color:#64748b;font-size:11px}}
+.footer{{margin-top:20px;padding-top:12px;border-top:1px solid #d0d9e8;text-align:center;color:#64748b;font-size:12px}}
 .footer strong{{color:#1a3a5c}}
 </style>
 </head>

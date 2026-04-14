@@ -85,6 +85,23 @@ class TestSalesParserDataEndAligned(unittest.TestCase):
         self.assertEqual(end, 2)
 
 
+class TestTurnoverNormalizeProduct(unittest.TestCase):
+    def test_kg_dot_matches_kg(self):
+        from inventory_turnover_report import normalize_product
+
+        self.assertEqual(
+            normalize_product("Молоко 1 кг."),
+            normalize_product("Молоко 1 кг"),
+        )
+
+
+class TestConcentrationParetoDisclaimer(unittest.TestCase):
+    def test_admin_html_contains_clarification(self):
+        src = (ROOT / "revenue_concentration_report.py").read_text(encoding="utf-8")
+        self.assertIn("Парето", src)
+        self.assertIn("топ-5", src.lower())
+
+
 class TestConcentrationManagerTemplate(unittest.TestCase):
     def test_pct_version_wraps_table_before_footer(self):
         src = (ROOT / "revenue_concentration_report.py").read_text(encoding="utf-8")

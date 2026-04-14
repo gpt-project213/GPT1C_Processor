@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 r"""
-debt_auto_report.py · v2.7.7 · 2026-04-14: find_header без тихого fallback [0,1]
+debt_auto_report.py · v2.7.8 · 2026-04-14: удалён неиспользуемый NBSP
 Правки: simple → убраны «Отгрузка/Оплата» во «Все клиенты»; extended → агрегаты в шапку,
 Δ (увеличение/уменьшение), сортировка «Движения» по убыванию closing, техданные без «Клиентов».
 
@@ -33,8 +33,7 @@ from utils_excel import ensure_clean_xlsx
 from utils import money
 from analyze_debt_excel import parse_debt_report
 
-__VERSION__ = "debt_auto=v2.7.7"
-NBSP = "\u202f"
+__VERSION__ = "debt_auto=v2.7.8"
 
 log = getattr(config, "setup_logging", lambda name: logging.getLogger(name))("debt_auto_report")
 

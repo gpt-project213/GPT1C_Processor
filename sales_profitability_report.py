@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-sales_profitability_report.py · v1.0.4 (2026-03-10)
+sales_profitability_report.py · v1.0.5 (2026-04-14)
+v1.0.5: JSON/HTML — revenue_with_margin + пояснение к средней марже; footer 12px
 Fix P-009: добавлен load_dotenv() — TZ теперь читается из .env
 Fix P-004: удалён unreachable code после return None в load_latest_sales (строки 153-168)
 ────────────────────────────────────────────────────────────────────
@@ -56,7 +57,7 @@ logging.basicConfig(
 )
 LOG = logging.getLogger("sales_profitability")
 
-__VERSION__ = "1.0.4"
+__VERSION__ = "1.0.5"
 NBSP = "\u202f"
 
 
@@ -400,6 +401,7 @@ def analyze_sales_with_profitability(sales_data: Dict[str, Any],
         clients_enriched.append({
             "client": client_name,
             "total_revenue": client_total,
+            "revenue_with_margin": client_revenue_with_margin,
             "avg_margin_pct": avg_margin,
             "total_profit": client_profit,
             "products": products_with_margin
@@ -510,7 +512,7 @@ tr:hover td {{ background:#f5f8fc }}
 .margin-low {{ color:#856404; font-weight:700 }}
 .margin-ok {{ color:var(--good) }}
 .table-wrap {{ overflow:auto; border:1px solid var(--border); border-radius:8px; margin:10px 0 }}
-.footer {{ margin-top:20px; padding-top:12px; border-top:1px solid var(--border); text-align:center; color:var(--muted); font-size:11px }}
+.footer {{ margin-top:20px; padding-top:12px; border-top:1px solid var(--border); text-align:center; color:var(--muted); font-size:12px }}
 .footer strong {{ color:var(--brand) }}
 </style>
 </head>
@@ -592,6 +594,7 @@ tr:hover td {{ background:#f5f8fc }}
   <div class="client-metrics">
     <div>Выручка: <strong>{fmt_money(client["total_revenue"])}</strong></div>
     <div>Средняя маржа: <strong>{fmt_pct(client["avg_margin_pct"])}</strong></div>
+    <div style="font-size:12px;line-height:1.4">Считается по выручке с известной маржой: {fmt_money(client["revenue_with_margin"])} из {fmt_money(client["total_revenue"])} общей</div>
     <div>Прибыль: <strong>{fmt_money(client["total_profit"])}</strong></div>
   </div>
   <div class="table-wrap"><table>

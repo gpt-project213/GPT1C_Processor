@@ -1,14 +1,13 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-net_profit_report.py · v1.2.6 (2026-03-10)
+net_profit_report.py · v1.2.7 (2026-04-14)
 ────────────────────────────────────────────────────────────────────
 Отчёт "Чистая прибыль" = Валовая - Расходы
 
 v1.2.4: Генерирует ДВА файла в поддиректории (day/mtd):
   - net_profit_day_YYYYMMDD.html    (за конкретный день)
   - net_profit_mtd_YYYYMMDD.html    (за период/нарастающим)
-v1.2.1: Строгое совпадение периодов (без fallback)
 v1.2.0: Исправлен мэтчинг MTD vs DAY
 
 Источники:
@@ -21,6 +20,7 @@ v1.2.0: Исправлен мэтчинг MTD vs DAY
 
 Доступ: ТОЛЬКО Admin
 
+v1.2.7: Документация (expenses: точный период, иначе fallback Δ≤1 дн.); footer/карточки ≥12px
 v1.2.6: Fix P-007: добавлен load_dotenv() — TZ теперь читается из .env
 v1.2.5: TZ timezone(timedelta(hours=5)) → ZoneInfo("Asia/Almaty") (Bug TZ)
 """
@@ -56,7 +56,7 @@ LOGS.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("net_profit")
 
-__VERSION__ = "1.2.6"
+__VERSION__ = "1.2.7"
 NBSP = "\u202f"
 
 
@@ -134,7 +134,7 @@ def load_all_jsons(pattern: str) -> List[Dict[str, Any]]:
 
 
 def find_matching_expenses(gross_period: str, all_expenses: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    """v1.2.1: Найти expenses с ТОЧНЫМ совпадением периода. Без fallback."""
+    """Найти JSON затрат для валовой: сначала точное совпадение периода; иначе fallback Δ≤1 день (см. код ниже)."""
     gross_start, gross_end = extract_period_dates(gross_period)
     if gross_start is None:
         LOG.error(f"❌ Не удалось распарсить период gross: '{gross_period}'")
@@ -213,12 +213,12 @@ h1{{color:#1a2332;font-size:21px;margin:0 0 5px}}
 .card{{background:#eef2f8;padding:16px 18px;border-radius:8px;border-left:4px solid #0070c0}}
 .card.green{{border-left-color:#107c41}}
 .card.red{{border-left-color:#c00000}}
-.card-label{{font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}}
+.card-label{{font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}}
 .card-value{{font-size:22px;font-weight:700;color:#1a2332}}
 .card-sub{{font-size:12px;color:#64748b;margin-top:4px}}
 .formula{{background:#f0f6ff;border:1px solid #0070c0;padding:10px 18px;border-radius:6px;margin:16px 0;text-align:center;font-size:15px;font-weight:600;color:#1a3a5c}}
 a,button{{touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.04)}}
-.footer{{margin-top:20px;padding-top:12px;border-top:1px solid #d0d9e8;text-align:center;color:#64748b;font-size:11px}}
+.footer{{margin-top:20px;padding-top:12px;border-top:1px solid #d0d9e8;text-align:center;color:#64748b;font-size:12px}}
 @media(max-width:768px){{body{{padding:8px}}.container{{padding:12px 14px 18px}}h1{{font-size:17px}}.kpi{{grid-template-columns:repeat(2,1fr)}}.card-value{{font-size:18px}}}}
 </style>
 </head>
