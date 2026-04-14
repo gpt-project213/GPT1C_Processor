@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-rfm_clients_report.py · v1.1.5 (2026-04-14)
+rfm_clients_report.py · v1.1.7 (2026-04-14)
 ────────────────────────────────────────────────────────────────────
 Отчёт "RFM-сегментация клиентов"
 
@@ -58,7 +58,7 @@ LOGS.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("rfm")
 
-__VERSION__ = "1.1.6"
+__VERSION__ = "1.1.7"
 NBSP = "\u202f"
 
 def _mtime(p: Path) -> float:
@@ -225,37 +225,47 @@ def generate_report():
         "small": []
     })
     
-    total_revenue = sales_data.get("total_revenue", 0.0)
-    
+    # Проход 1: только список клиентов и сумма выручки по менеджеру (знаменатель для долей).
     for client_data in sales_data.get("clients", []):
         client_name    = client_data.get("client", "")
-        client_revenue = client_data.get("total", 0)
-        # v1.1.2: если _manager пустой или "Не определён" — падаем к prefix-guess
+        client_revenue = float(client_data.get("total", 0) or 0.0)
         _mgr_tag = (client_data.get("_manager") or "").strip()
         if _mgr_tag and _mgr_tag not in ("Не определён", "Неизвестно"):
             manager = _mgr_tag
         else:
             manager = get_manager_from_client(client_name) or "Неизвестно"
 
-        segment = segment_client(client_revenue, total_revenue)
-        
-        client_info = {
+        managers_data[manager]["clients"].append({
             "name": client_name,
             "revenue": client_revenue,
-            "pct": (client_revenue / total_revenue * 100) if total_revenue > 0 else 0
-        }
-        
-        managers_data[manager]["clients"].append(client_info)
+        })
         managers_data[manager]["total_revenue"] += client_revenue
-        
-        if segment == "VIP":
-            managers_data[manager]["vip"].append(client_info)
-        elif segment == "LOYAL":
-            managers_data[manager]["loyal"].append(client_info)
-        elif segment == "REGULAR":
-            managers_data[manager]["regular"].append(client_info)
-        else:
-            managers_data[manager]["small"].append(client_info)
+
+    # Проход 2: VIP/лояльные по доле от выручки МЕНЕДЖЕРА (не от total компании).
+    for manager, data in list(managers_data.items()):
+        mgr_total = data["total_revenue"]
+        data["vip"] = []
+        data["loyal"] = []
+        data["regular"] = []
+        data["small"] = []
+        for ci in data["clients"]:
+            rev = ci["revenue"]
+            segment = segment_client(rev, mgr_total)
+            pct = (rev / mgr_total * 100) if mgr_total > 0 else 0.0
+            client_info = {"name": ci["name"], "revenue": rev, "pct": pct}
+            if segment == "VIP":
+                data["vip"].append(client_info)
+            elif segment == "LOYAL":
+                data["loyal"].append(client_info)
+            elif segment == "REGULAR":
+                data["regular"].append(client_info)
+            else:
+                data["small"].append(client_info)
+        # clients для шаблона — с процентами
+        data["clients"] = [
+            {"name": c["name"], "revenue": c["revenue"], "pct": (c["revenue"] / mgr_total * 100) if mgr_total > 0 else 0.0}
+            for c in data["clients"]
+        ]
     
     # Генерация отчётов для каждого менеджера
     known = {m: d for m, d in managers_data.items() if m != "Неизвестно"}
@@ -350,7 +360,7 @@ h2{{color:#1a3a5c;margin-top:30px;padding-bottom:8px;border-bottom:2px solid #00
 </div>
 
 <h2 class="vip">🏆 VIP клиенты (топ-10)</h2>
-<p style="color:#666">Клиенты дающие ≥10% от общей выручки:</p>
+<p style="color:#666">Клиенты дающие ≥10% от выручки менеджера:</p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -366,7 +376,7 @@ h2{{color:#1a3a5c;margin-top:30px;padding-bottom:8px;border-bottom:2px solid #00
 </table></div>
 
 <h2 class="loyal">⭐ Лояльные клиенты (топ-10)</h2>
-<p style="color:#666">Клиенты дающие 3-10% выручки:</p>
+<p style="color:#666">Клиенты дающие 3–10% выручки менеджера:</p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
