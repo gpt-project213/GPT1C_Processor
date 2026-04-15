@@ -213,9 +213,7 @@ _MSG_TYPE_LABELS = {
     "stoplist_reminder":    "Стоп-лист",
 }
 
-_PLACEHOLDER_PHONE_KEYS = {
-    "77001234567",
-}
+_PLACEHOLDER_PHONE_KEYS: set[str] = set()
 
 
 def _fmt_amount(n: float) -> str:

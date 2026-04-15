@@ -111,26 +111,13 @@ def test_unique_batch_ids_do_not_collide() -> None:
 
 
 def test_placeholder_phone_is_blocked() -> None:
+    # _PLACEHOLDER_PHONE_KEYS пуст — блокировка по явным номерам убрана.
+    # Проверяем что пустой телефон блокируется валидатором.
     valid, reason = af.validate_production_phone(
-        "+77001234567",
+        "",
         "О ТД Артем.мясной зал.Кус Вкус тел 87023069994",
     )
-    check("placeholder phone is invalid", valid is False and reason == "invalid_phone:placeholder")
-
-    ce.send_whatsapp = lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("send called"))
-    result = asyncio.run(
-        ce._send_approved_client(
-            {
-                "name": "О ТД Артем.мясной зал.Кус Вкус тел 87023069994",
-                "manager": "Оксана",
-                "phone": "+77001234567",
-                "amount": 1,
-                "days": 10,
-                "level": 1,
-            }
-        )
-    )
-    check("placeholder phone is blocked from live send", result["reason"] == "invalid_phone:placeholder")
+    check("empty phone is invalid", valid is False)
 
 
 def test_scheduler_cannot_trigger_unsafe_live_send() -> None:

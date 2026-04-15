@@ -573,13 +573,13 @@ check("WHATSAPP_ENABLED is a bool",
 _wa_saved = comm.WHATSAPP_ENABLED
 comm.WHATSAPP_ENABLED = False
 check("send_whatsapp returns False when disabled",
-      comm.send_whatsapp("+77001234567", "тест") is False)
+      comm.send_whatsapp("+77999000000", "тест") is False)
 
 # С включённым флагом — должен пойти в сеть (но GREENAPI_ID пустой → тоже False)
 comm.WHATSAPP_ENABLED = True
 comm.GREENAPI_ID = ""
 check("send_whatsapp returns False when no creds",
-      comm.send_whatsapp("+77001234567", "тест") is False)
+      comm.send_whatsapp("+77999000000", "тест") is False)
 comm.WHATSAPP_ENABLED = _wa_saved  # вернём как было
 
 

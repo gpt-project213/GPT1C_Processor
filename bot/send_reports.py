@@ -5640,7 +5640,7 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     #         if pending_client:
     #             await context.bot.send_message(chat_id=chat_id,
     #                 text=(f"📞 <b>Введите номер WhatsApp</b> для клиента:\n<b>{pending_client}</b>\n\n"
-    #                       f"Принимается любой формат:\n• +77001234567\n• 77001234567\n• 87001234567\n\n"
+    #                       f"Принимается любой формат:\n• +77XXXXXXXXXX\n• 77XXXXXXXXXX\n• 87XXXXXXXXXX\n\n"
     #                       f"🔴 <b>Проверьте номер дважды!</b>"),
     #                 parse_mode="HTML")
     #         else:
@@ -6125,7 +6125,6 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not admin_chat_id:
             await q.answer("Ошибка: admin chat_id не настроен")
             return
-        from telegram import InlineKeyboardMarkup, InlineKeyboardButton
         kb = InlineKeyboardMarkup([[
             InlineKeyboardButton("✅ Подтвердить", callback_data=f"weekly_confirm|{client_name}"),
             InlineKeyboardButton("❌ Отклонить",   callback_data=f"weekly_deny|{client_name}"),
@@ -7313,7 +7312,7 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
     #         else:
     #             await update.message.reply_text(
     #                 f"❌ Неверный формат: <code>{text.strip()}</code>\n"
-    #                 f"Введите: +77001234567 / 77001234567 / 87001234567", parse_mode="HTML")
+    #                 f"Введите: +77XXXXXXXXXX / 77XXXXXXXXXX / 87XXXXXXXXXX", parse_mode="HTML")
     #         return
     # except Exception as e:
     #     logger.error("phone input handler error: %s", e)
