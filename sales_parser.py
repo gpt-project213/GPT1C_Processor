@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-sales_parser.py · v1.0.7 (2026-04-14)
+sales_parser.py · v1.0.8 (2026-04-18)
 ────────────────────────────────────────────────────────────────────
 Парсер отчётов "Продажи" из 1С в JSON формат.
 
@@ -310,7 +310,9 @@ def is_client_header(row: List[str], colmap: Dict[str, int]) -> bool:
       - Строка товара:  имя, есть qty, есть price, есть sum
     Старая логика (отсутствие sale) была неверной — у клиентов тоже есть сумма.
     """
-    client_j = colmap.get("client", colmap.get("product", -1))
+    # Клиентская колонка (Контрагент/Покупатель) — строго без fallback на товарную.
+    # В отчётах 1С «Продажи» колонки всегда раздельные: клиент ≠ номенклатура.
+    client_j = colmap.get("client", -1)
     if client_j == -1 or client_j >= len(row):
         return False
 
@@ -322,7 +324,7 @@ def is_client_header(row: List[str], colmap: Dict[str, int]) -> bool:
     if name.lower() in ("номенклатура", "контрагент"):
         return False
 
-    # Проверяем qty и price — если оба пусты → строка клиента (итоговая)
+    # Клиент = есть имя в клиентской колонке, нет qty и нет price
     qty_j = colmap.get("qty", -1)
     price_j = colmap.get("price", -1)
 
@@ -338,7 +340,6 @@ def is_client_header(row: List[str], colmap: Dict[str, int]) -> bool:
         if not math.isnan(price_val) and abs(price_val) > 0.0001:
             price_empty = False
 
-    # Клиент = нет количества И нет цены (это итоговая строка клиента)
     if qty_empty and price_empty:
         return True
 
@@ -351,8 +352,12 @@ def is_client_header(row: List[str], colmap: Dict[str, int]) -> bool:
 # ──────────────────────────────────────────────────────────────────
 # Основной парсер
 def parse_sales_grouped(df: pd.DataFrame, colmap: Dict[str, int]) -> Dict[str, Any]:
-    client_j = colmap.get("client", colmap.get("product", -1))
+    # Клиентская и товарная колонки строго раздельные — fallback запрещён.
+    client_j = colmap.get("client", -1)
     prod_j = colmap.get("product", -1)
+    if client_j == -1:
+        LOG.warning("parse_sales_grouped: колонка клиента (Контрагент) не найдена в colmap=%s", colmap)
+        return {"clients": [], "total_revenue": 0.0}
     qty_j = colmap.get("qty", -1)
     price_j = colmap.get("price", -1)
     sale_j = colmap.get("sale", -1)
