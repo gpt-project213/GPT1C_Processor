@@ -589,16 +589,19 @@ try:
         check("TRIGGER T3: run_once с пустой очередью не создаёт флаг", False, str(e))
 
     # T4: _write_collector_trigger не падает если LOGS_DIR не существует
+    # _log мокируется на no-op чтобы не загрязнять production-лог ожидаемым ERROR
+    _orig_log = _pipeline._log
+    _pipeline._log = lambda *args, **kwargs: None
     try:
         _nonexistent = Path(_trigger_tmpdir) / "nonexistent" / "trigger.flag"
         _pipeline._COLLECTOR_TRIGGER_PATH = _nonexistent
-        # Должен поймать OSError внутри и не поднимать исключение
         _pipeline._write_collector_trigger(1)
         check("TRIGGER T4: _write_collector_trigger не падает при ошибке записи",
-              not _nonexistent.exists() or True)  # либо записал (mkdir) либо проглотил ошибку
+              not _nonexistent.exists() or True)
     except Exception as e:
         check("TRIGGER T4: _write_collector_trigger не падает при ошибке записи", False, str(e))
     finally:
+        _pipeline._log = _orig_log
         _pipeline._COLLECTOR_TRIGGER_PATH = _trigger_flag
 
 finally:
