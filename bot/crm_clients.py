@@ -4,10 +4,10 @@
 bot/crm_clients.py
 Универсальная база клиентов Минбаракат (CRM).
 
-Версия: 1.0.2 (2026-04-18)
+Версия: 1.0.3 (2026-04-19)
 
 Источники данных:
-  - reports/json/debt_ext_*.json   → должники по менеджерам
+  - reports/json/debt_ext_*.json   → клиенты по менеджерам (дебиторка)
   - reports/json/sales_*.json      → покупатели по менеджерам
 
 Функции:
@@ -518,24 +518,20 @@ def set_client_alias(client_name: str, alias: str) -> bool:
 
 def load_contacts_compat() -> Dict[str, Any]:
     """
-    Возвращает словарь контактов в формате, совместимом с debtors_contacts.json:
+    Возвращает словарь контактов из CRM (clients.json) в формате,
+    совместимом с collector:
       {client_name: {"whatsapp": ..., "telegram_id": ..., "manager": ..., ...}}
 
-    Коллектор использует этот формат через match_client().
-    Сначала приоритет у clients.json, как fallback — debtors_contacts.json.
+    Единственный источник — config/clients.json (заполняется менеджерами через бот).
     """
-    from collector.debt_monitor import load_contacts as _load_legacy_contacts
-    legacy = _load_legacy_contacts()
-
     data = load_clients()
     clients_db = data.get("clients", {})
 
-    # Начинаем с legacy (debtors_contacts.json), перекрываем данными CRM
-    merged: Dict[str, Any] = dict(legacy)
+    result: Dict[str, Any] = {}
     for name, info in clients_db.items():
         if not isinstance(info, dict):
             continue
-        merged[name] = {
+        result[name] = {
             "whatsapp": info.get("whatsapp", ""),
             "telegram_id": info.get("telegram_id", ""),
             "manager": info.get("manager", ""),
@@ -543,7 +539,7 @@ def load_contacts_compat() -> Dict[str, Any]:
             "do_not_call": info.get("do_not_call", False),
         }
 
-    return merged
+    return result
 
 
 # ─────────────────────────────────────────────
