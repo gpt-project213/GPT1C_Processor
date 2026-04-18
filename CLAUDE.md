@@ -67,9 +67,10 @@ python -X utf8 tests/test_collector.py
 ## Data Flow
 
 ```
-Email (IMAP) → reports/queue/ → run_pipeline_all_mp.py routes by filename:
+Email (IMAP) → reports/queue/ → pipeline_task() [bot/send_reports.py] routes by filename:
   DEBT    → debt_auto_report.py  → reports/html/ + reports/json/debt_ext_*.json
-  SALES   → sales_report.py      → reports/html/ + reports/json/sales_*.json
+  SALES   → sales_report.py      → reports/html/
+            sales_parser.py      → reports/json/sales_*.json   (BOTH called by pipeline_task)
   GROSS   → gross_report.py      → reports/html/ + reports/json/gross_*.json
   INVENT  → inventory.py         → reports/html/ + reports/json/inventory_*.json
   EXPENSE → expenses_report.py   → reports/html/ + reports/json/expenses_*.json
@@ -77,8 +78,12 @@ Email (IMAP) → reports/queue/ → run_pipeline_all_mp.py routes by filename:
 reports/json/ → analytics layer → reports/analytics/
 reports/html/ → ai_analyzer.py  → reports/ai/
 
+NOTE: run_pipeline_all_mp.py — ручной инструмент/CLI, не используется ботом.
+  При ручном запуске SALES: sales_parser.py НЕ вызывается (JSON не создаётся).
+  Это нормально — ручной запуск нужен только для HTML-отчётов вне бота.
+
 bot/send_reports.py (APScheduler):
-  every 10 min : run_pipeline_all_mp.py
+  every 10 min : pipeline_task() — imap_fetch + обработка очереди
   09:00        : collector --send (AI debt contacts)
   09:00        : inventory summary → admin
   10:00        : collector --check-promises
