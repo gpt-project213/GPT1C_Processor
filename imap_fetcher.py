@@ -52,7 +52,7 @@ from dotenv import load_dotenv, dotenv_values
 # Импорт для XML-очистки битых файлов 1С
 import utils_excel
 
-__version__ = "v4.4.4"
+__version__ = "v4.4.5"
 
 # ─────────────────────────────────────────────────────────────────────
 # Пути/каталоги
@@ -277,9 +277,12 @@ def _expunge_mailbox(M: imaplib.IMAP4, mailbox: str) -> None:
         logger.info("TRASH skip %s: cannot SELECT", mailbox)
 
 def _save_bytes(path: Path, data: bytes) -> None:
+    import tempfile
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "wb") as f:
-        f.write(data)
+    with tempfile.NamedTemporaryFile("wb", dir=path.parent, delete=False, suffix=".tmp") as tmp:
+        tmp.write(data)
+        tmp_path = tmp.name
+    os.replace(tmp_path, path)
 
 def _ensure_clean_copy(src: Path) -> Optional[Path]:
     """
