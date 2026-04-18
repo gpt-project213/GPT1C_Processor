@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-collector/manager_dialog.py · v1.0.1 · 2026-04-13
+collector/manager_dialog.py · v1.0.2 · 2026-04-19
 Движок диалогов менеджеров с AI Коллектором.
 
 Telegram-взаимодействие через httpx (без python-telegram-bot).
@@ -337,55 +337,43 @@ def _get_admin_ids() -> List[int]:
 
 
 def _save_contact(client_name: str, contact: Dict[str, Any]) -> None:
-    """Сохраняет обновлённый контакт в debtors_contacts.json."""
-    contacts_path = _ROOT / "config" / "debtors_contacts.json"
-    legacy_contacts_path = _ROOT / "collector" / "debtors_contacts.json"
-    normalized = dict(contact)
-    primary_phone = (normalized.get("whatsapp") or normalized.get("phone") or "").strip()
-    if primary_phone:
-        normalized["whatsapp"] = primary_phone
-        normalized.setdefault("phone", primary_phone)
-        normalized["_needs_phone"] = False
-    data: Dict[str, Any] = {}
-    comment = None
+    """Сохраняет обновлённый контакт в CRM (config/clients.json)."""
     try:
-        for source_path in (legacy_contacts_path, contacts_path):
-            if not source_path.exists():
-                continue
-            with open(source_path, encoding="utf-8") as f:
-                source_data = json.load(f)
-            if not isinstance(source_data, dict):
-                continue
-            if comment is None and "_comment" in source_data:
-                comment = source_data.get("_comment")
-            for key, value in source_data.items():
-                if key == "_comment":
-                    continue
-                data[key] = value
-    except (OSError, json.JSONDecodeError):
-        data = {}
+        from bot.crm_clients import load_clients, save_clients, set_client_details
+    except ImportError as e:
+        logger.error("CRM недоступна, контакт не сохранён: %s", e)
+        return
 
-    data[client_name] = normalized
-    if comment is not None:
-        data["_comment"] = comment
+    primary_phone = (contact.get("whatsapp") or contact.get("phone") or "").strip()
+    display_name = (contact.get("display_name") or "").strip()
 
-    import tempfile
-    contacts_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_fd, tmp_path = tempfile.mkstemp(
-        dir=str(contacts_path.parent),
-        suffix=".tmp",
-        prefix="debtors_contacts_",
+    data = load_clients()
+    clients_db = data.get("clients", {})
+
+    if client_name not in clients_db:
+        # Клиент отсутствует в CRM — добавляем базовую запись
+        clients_db[client_name] = {
+            "manager": contact.get("manager", ""),
+            "whatsapp": primary_phone,
+            "telegram_id": contact.get("telegram_id", ""),
+            "language": contact.get("language", "ru"),
+            "do_not_call": contact.get("do_not_call", False),
+            "sources": ["collector"],
+            "first_seen": datetime.now(tz=TZ).date().isoformat(),
+            "last_seen": datetime.now(tz=TZ).date().isoformat(),
+        }
+        if display_name:
+            clients_db[client_name]["display_name"] = display_name
+        data["clients"] = clients_db
+        save_clients(data)
+        logger.info("CRM: добавлен новый клиент через диалог — %s", client_name)
+        return
+
+    set_client_details(
+        client_name,
+        display_name=display_name,
+        phone=primary_phone,
     )
-    try:
-        with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        os.replace(tmp_path, str(contacts_path))
-    except (OSError, TypeError, ValueError) as e:
-        logger.error("Ошибка сохранения контакта: %s", e)
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
 
 
 # ─── WhatsApp + Notification ──────────────────────────────────────────────────
