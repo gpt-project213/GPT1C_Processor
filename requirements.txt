@@ -17,3 +17,4 @@ xlrd==2.0.1
 httpx==0.25.2
 APScheduler==3.11.0
 numpy>=1.26.0
+portalocker>=2.8.2

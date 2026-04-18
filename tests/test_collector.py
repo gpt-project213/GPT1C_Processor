@@ -558,6 +558,14 @@ finally:
     cdb.STATE_PATH = _orig_path
     shutil.rmtree(_tmpdir, ignore_errors=True)
 
+# ─── _state_lock: межпроцессная блокировка ───────────────────────────────────
+check("collections_db._state_lock существует (portalocker guard)",
+      hasattr(cdb, '_state_lock') and callable(cdb._state_lock))
+if hasattr(cdb, '_state_lock'):
+    _lck = cdb._state_lock()
+    check("_state_lock() возвращает context manager",
+          hasattr(_lck, '__enter__') and hasattr(_lck, '__exit__'))
+
 
 # ═══════════════════════════════════════════════════════════════
 # 7. communications — WhatsApp отключён по умолчанию

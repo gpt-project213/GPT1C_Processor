@@ -4,20 +4,23 @@
 collections/collections_db.py
 Хранилище состояния коллектора — история контактов, обещания, статусы.
 
-Версия: 1.0.1 (2026-04-12)
+Версия: 1.0.2 (2026-04-19)
 
 Файл хранилища: logs/collector_state.json
 Запись атомарная через tempfile (защита от частичной записи).
+Межпроцессная блокировка через portalocker (защита от гонки бот↔subprocess).
 """
 
 import json
 import logging
 import os
+from contextlib import contextmanager
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Generator, List, Optional
 
+import portalocker
 from dotenv import load_dotenv
 from zoneinfo import ZoneInfo
 
@@ -30,6 +33,24 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 STATE_PATH = ROOT_DIR / "logs" / "collector_state.json"
 
 logger = logging.getLogger(__name__)
+
+
+@contextmanager
+def _state_lock(timeout: float = 10.0) -> Generator:
+    """Межпроцессная блокировка для безопасного read-modify-write collector_state.json.
+
+    Использует отдельный .lock-файл рядом с STATE_PATH, чтобы не конфликтовать
+    с атомарной записью через tempfile. Блокировка эксклюзивная (LOCK_EX).
+    При таймауте — WARNING в лог, исключение пробрасывается вверх.
+    """
+    lock_path = STATE_PATH.with_suffix(".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with portalocker.Lock(str(lock_path), timeout=timeout) as lf:
+            yield lf
+    except portalocker.LockException as e:
+        logger.warning("_state_lock: таймаут %.1fs — другой процесс держит блокировку: %s", timeout, e)
+        raise
 
 
 def _today() -> str:
@@ -99,41 +120,42 @@ def update_after_contact(
     response: Optional[str] = None,
 ) -> None:
     """Обновляет запись после отправки сообщения клиенту."""
-    state = load_state()
-    record = state.get(name, _empty_record())
+    with _state_lock():
+        state = load_state()
+        record = state.get(name, _empty_record())
 
-    today = _today()
-    record["last_contact_date"] = today
-    record["last_contact_channel"] = channel
-    record["last_level"] = level
-    record["last_message_text"] = message
-    if response is not None:
-        record["response_received"] = True
-        record["last_response_text"] = response
+        today = _today()
+        record["last_contact_date"] = today
+        record["last_contact_channel"] = channel
+        record["last_level"] = level
+        record["last_message_text"] = message
+        if response is not None:
+            record["response_received"] = True
+            record["last_response_text"] = response
 
-    # Добавляем в историю (только статусы, без суммы/имени в явном виде)
-    record["history"].append({
-        "date": today,
-        "channel": channel,
-        "level": level,
-        "sent": True,
-        "response": response is not None,
-    })
+        record["history"].append({
+            "date": today,
+            "channel": channel,
+            "level": level,
+            "sent": True,
+            "response": response is not None,
+        })
 
-    state[name] = record
-    save_state(state)
+        state[name] = record
+        save_state(state)
     logger.info("Обновлено состояние для %s (level=%d, ch=%s)", name, level, channel)
 
 
 def save_promise(name: str, promise_date: str, amount: Optional[float]) -> None:
     """Сохраняет обещание оплаты."""
-    state = load_state()
-    record = state.get(name, _empty_record())
-    record["promise_date"] = promise_date
-    record["promise_amount"] = amount
-    record["promise_kept"] = None  # сбрасываем — новое обещание
-    state[name] = record
-    save_state(state)
+    with _state_lock():
+        state = load_state()
+        record = state.get(name, _empty_record())
+        record["promise_date"] = promise_date
+        record["promise_amount"] = amount
+        record["promise_kept"] = None
+        state[name] = record
+        save_state(state)
     logger.info("Обещание сохранено: дата=%s", promise_date)
 
 
@@ -166,39 +188,43 @@ def get_pending_promises() -> List[Dict[str, Any]]:
 
 def mark_promise_broken(name: str) -> None:
     """Помечает обещание как нарушенное."""
-    state = load_state()
-    if name in state:
-        state[name]["promise_kept"] = False
-        save_state(state)
-        logger.info("Обещание нарушено: %s", name)
+    with _state_lock():
+        state = load_state()
+        if name in state:
+            state[name]["promise_kept"] = False
+            save_state(state)
+    logger.info("Обещание нарушено: %s", name)
 
 
 def mark_escalated(name: str) -> None:
     """Помечает клиента как эскалированного директору."""
-    state = load_state()
-    record = state.get(name, _empty_record())
-    record["escalated_to_admin"] = True
-    state[name] = record
-    save_state(state)
+    with _state_lock():
+        state = load_state()
+        record = state.get(name, _empty_record())
+        record["escalated_to_admin"] = True
+        state[name] = record
+        save_state(state)
 
 
 def save_openclaw_session(name: str, session_id: str) -> None:
     """Сохраняет OpenClaw session_id для клиента."""
-    state = load_state()
-    record = state.get(name, _empty_record())
-    record["openclaw_session_id"] = session_id
-    state[name] = record
-    save_state(state)
+    with _state_lock():
+        state = load_state()
+        record = state.get(name, _empty_record())
+        record["openclaw_session_id"] = session_id
+        state[name] = record
+        save_state(state)
 
 
 def save_call_result(name: str, call_result: str, transcript: Optional[str]) -> None:
     """Сохраняет результат голосового звонка."""
-    state = load_state()
-    record = state.get(name, _empty_record())
-    record["call_result"] = call_result
-    record["call_transcript"] = transcript
-    state[name] = record
-    save_state(state)
+    with _state_lock():
+        state = load_state()
+        record = state.get(name, _empty_record())
+        record["call_result"] = call_result
+        record["call_transcript"] = transcript
+        state[name] = record
+        save_state(state)
 
 
 # Ключ для хранения даты уведомления менеджера об отсутствии контакта
@@ -210,12 +236,13 @@ _PHONE_PENDING_PREFIX = "__phone_pending__"
 
 def set_phone_pending(manager_chat_id: int, client_name: str) -> None:
     """Сохраняет ожидание ввода телефона от менеджера для указанного клиента."""
-    state = load_state()
-    state[_PHONE_PENDING_PREFIX + str(manager_chat_id)] = {
-        "client": client_name,
-        "date": _today(),
-    }
-    save_state(state)
+    with _state_lock():
+        state = load_state()
+        state[_PHONE_PENDING_PREFIX + str(manager_chat_id)] = {
+            "client": client_name,
+            "date": _today(),
+        }
+        save_state(state)
 
 
 def get_phone_pending(manager_chat_id: int) -> Optional[str]:
@@ -229,11 +256,12 @@ def get_phone_pending(manager_chat_id: int) -> Optional[str]:
 
 def clear_phone_pending(manager_chat_id: int) -> None:
     """Сбрасывает ожидание ввода телефона для менеджера."""
-    state = load_state()
-    key = _PHONE_PENDING_PREFIX + str(manager_chat_id)
-    if key in state:
-        del state[key]
-        save_state(state)
+    with _state_lock():
+        state = load_state()
+        key = _PHONE_PENDING_PREFIX + str(manager_chat_id)
+        if key in state:
+            del state[key]
+            save_state(state)
 
 
 _NAME_PENDING_PREFIX = "__name_pending__"
@@ -241,12 +269,13 @@ _NAME_PENDING_PREFIX = "__name_pending__"
 
 def set_name_pending(manager_chat_id: int, client_name: str) -> None:
     """Сохраняет ожидание ввода исправленного имени от менеджера."""
-    state = load_state()
-    state[_NAME_PENDING_PREFIX + str(manager_chat_id)] = {
-        "client": client_name,
-        "date": _today(),
-    }
-    save_state(state)
+    with _state_lock():
+        state = load_state()
+        state[_NAME_PENDING_PREFIX + str(manager_chat_id)] = {
+            "client": client_name,
+            "date": _today(),
+        }
+        save_state(state)
 
 
 def get_name_pending(manager_chat_id: int) -> Optional[str]:
@@ -260,11 +289,12 @@ def get_name_pending(manager_chat_id: int) -> Optional[str]:
 
 def clear_name_pending(manager_chat_id: int) -> None:
     """Сбрасывает ожидание ввода исправленного имени для менеджера."""
-    state = load_state()
-    key = _NAME_PENDING_PREFIX + str(manager_chat_id)
-    if key in state:
-        del state[key]
-        save_state(state)
+    with _state_lock():
+        state = load_state()
+        key = _NAME_PENDING_PREFIX + str(manager_chat_id)
+        if key in state:
+            del state[key]
+            save_state(state)
 
 
 def already_notified_manager_today(client_name: str) -> bool:
@@ -276,9 +306,10 @@ def already_notified_manager_today(client_name: str) -> bool:
 
 def mark_manager_notified(client_name: str) -> None:
     """Фиксирует что менеджеру отправлен запрос на регистрацию клиента."""
-    state = load_state()
-    state[_MGR_NOTIFY_PREFIX + client_name] = {"date": _today()}
-    save_state(state)
+    with _state_lock():
+        state = load_state()
+        state[_MGR_NOTIFY_PREFIX + client_name] = {"date": _today()}
+        save_state(state)
 
 
 # ─── Счётчик дней с момента обнаружения долга ────────────────────────────────
@@ -297,9 +328,11 @@ def get_debt_days_since_first_seen(client_name: str) -> int:
     today_str = _today()
 
     if key not in state:
-        # Первый раз видим этого должника — фиксируем дату
-        state[key] = {"first_seen": today_str}
-        save_state(state)
+        with _state_lock():
+            state = load_state()
+            if key not in state:  # double-check после блокировки
+                state[key] = {"first_seen": today_str}
+                save_state(state)
         return 0
 
     first_seen = state[key].get("first_seen", today_str)
@@ -313,11 +346,12 @@ def get_debt_days_since_first_seen(client_name: str) -> int:
 
 def reset_debt_first_seen(client_name: str) -> None:
     """Сбрасывает счётчик долга (вызывать когда debt стал 0)."""
-    state = load_state()
-    key = _DEBT_DATE_PREFIX + client_name
-    if key in state:
-        del state[key]
-        save_state(state)
+    with _state_lock():
+        state = load_state()
+        key = _DEBT_DATE_PREFIX + client_name
+        if key in state:
+            del state[key]
+            save_state(state)
 
 
 def fix_first_seen_inflation(inflation_date: str = "2026-03-19") -> Dict[str, int]:
@@ -392,7 +426,8 @@ def fix_first_seen_inflation(inflation_date: str = "2026-03-19") -> Dict[str, in
             skipped += 1
             logger.info("fix_first_seen: %s не найден в debt JSON — сброшен", client_name)
 
-    save_state(state)
+    with _state_lock():
+        save_state(state)
     logger.info(
         "fix_first_seen_inflation завершён: fixed=%d, reset=%d, skipped=%d",
         fixed, reset, skipped,
