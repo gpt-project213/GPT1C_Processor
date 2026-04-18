@@ -180,7 +180,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.53/14.04.2026"
+__VERSION__ = "v9.4.54/19.04.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
@@ -827,6 +827,20 @@ def _save_weekly_clients(clients: list) -> None:
         json.dump(payload, tmp, ensure_ascii=False, indent=2)
         tmp_path = tmp.name
     os.replace(tmp_path, path)
+
+# Токены для weekly-кнопок: token(8 hex) → client_name.
+# Живут только в памяти процесса — при рестарте кнопки становятся неактивными,
+# что безопасно (пользователь увидит ответ "запрос устарел").
+_weekly_tokens: Dict[str, str] = {}
+
+def _weekly_token_add(client_name: str) -> str:
+    import uuid
+    token = uuid.uuid4().hex[:8]
+    _weekly_tokens[token] = client_name
+    return token
+
+def _weekly_token_get(token: str) -> str:
+    return _weekly_tokens.get(token, "")
 
 # v9.4.6: Нормализация chat_id к int (критично для сравнений!)
 if isinstance(MANAGERS_MAP, dict):
@@ -3796,9 +3810,10 @@ async def _suggest_weekly_clients(context, chat_id: int, categorized: dict, week
     ]
     for c in candidates[:5]:  # не более 5 предложений за раз
         client_name = c['client']
+        token = _weekly_token_add(client_name)
         kb = InlineKeyboardMarkup([[
-            InlineKeyboardButton("✅ Да, исключить", callback_data=f"weekly_suggest|{client_name}"),
-            InlineKeyboardButton("❌ Нет",           callback_data=f"weekly_reject|{client_name}"),
+            InlineKeyboardButton("✅ Да, исключить", callback_data=f"weekly_suggest|{token}"),
+            InlineKeyboardButton("❌ Нет",           callback_data=f"weekly_reject|{token}"),
         ]])
         try:
             await context.bot.send_message(
@@ -6120,14 +6135,18 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # weekly_confirm|<client_name>  — Вадим подтвердил
     # weekly_deny|<client_name>     — Вадим отклонил
     if data.startswith("weekly_suggest|"):
-        client_name = data.split("|", 1)[1]
+        token = data.split("|", 1)[1]
+        client_name = _weekly_token_get(token)
+        if not client_name:
+            await q.answer("Запрос устарел — перезапустите бот")
+            return
         admin_chat_id = ADMIN_CHAT_ID
         if not admin_chat_id:
             await q.answer("Ошибка: admin chat_id не настроен")
             return
         kb = InlineKeyboardMarkup([[
-            InlineKeyboardButton("✅ Подтвердить", callback_data=f"weekly_confirm|{client_name}"),
-            InlineKeyboardButton("❌ Отклонить",   callback_data=f"weekly_deny|{client_name}"),
+            InlineKeyboardButton("✅ Подтвердить", callback_data=f"weekly_confirm|{token}"),
+            InlineKeyboardButton("❌ Отклонить",   callback_data=f"weekly_deny|{token}"),
         ]])
         try:
             await context.bot.send_message(
@@ -6152,7 +6171,8 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if data.startswith("weekly_reject|"):
-        client_name = data.split("|", 1)[1]
+        token = data.split("|", 1)[1]
+        client_name = _weekly_token_get(token) or token
         await q.answer("Понятно, клиент остаётся в общем списке")
         try:
             await q.message.edit_text(f"❌ {client_name} — оставлен в общем списке.", parse_mode="HTML")
@@ -6164,7 +6184,11 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if user_role != "admin":
             await q.answer("Только администратор может подтверждать")
             return
-        client_name = data.split("|", 1)[1]
+        token = data.split("|", 1)[1]
+        client_name = _weekly_token_get(token)
+        if not client_name:
+            await q.answer("Запрос устарел — перезапустите бот")
+            return
         try:
             clients = _load_weekly_clients()
             if client_name not in clients:
@@ -6186,7 +6210,11 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if user_role != "admin":
             await q.answer("Только администратор может отклонять")
             return
-        client_name = data.split("|", 1)[1]
+        token = data.split("|", 1)[1]
+        client_name = _weekly_token_get(token)
+        if not client_name:
+            await q.answer("Запрос устарел — перезапустите бот")
+            return
         await q.answer("Отклонено")
         try:
             await q.message.edit_text(
