@@ -4,7 +4,7 @@
 collector/whatsapp_poller.py
 Green API polling — получает входящие сообщения WhatsApp каждые 30 секунд.
 
-Версия: 1.1.1 (2026-04-13)
+Версия: 1.1.2 (2026-04-19)
 
 Endpoints (используется instance-specific URL, напр. https://7107.api.greenapi.com):
   GET  https://{ID[:4]}.api.greenapi.com/waInstance{ID}/receiveNotification/{TOKEN}
@@ -36,9 +36,10 @@ GREENAPI_ID    = os.getenv("GREENAPI_ID", "")
 GREENAPI_TOKEN = os.getenv("GREENAPI_TOKEN", "")
 ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY", "")
 ASSEMBLYAI_POLL_SECONDS = int(os.getenv("ASSEMBLYAI_POLL_SECONDS", "18"))
-# Russian (ru) не поддерживается universal-3-pro отдельно —
-# оба провайдера нужны для 99 языков включая ru и kk.
-_ASSEMBLYAI_SPEECH_MODELS = ["universal-3-pro", "universal-2"]
+# AssemblyAI v2 API: speech_model — одиночная строка (не список).
+# "best" автоматически выбирает лучшую модель для языка при language_detection=True
+# (включая ru и kk).
+_ASSEMBLYAI_SPEECH_MODEL = "best"
 SAVE_WA_AUDIO = os.getenv("SAVE_WA_AUDIO", "1").lower() in ("1", "true", "yes")
 TEST_MODE      = os.getenv("TEST_MODE", "0") == "1"
 TEST_WA_PHONE  = os.getenv("TEST_WA_PHONE", "")
@@ -159,7 +160,7 @@ async def _transcribe_with_assemblyai_file(tmp_path: str) -> str:
                 headers=headers,
                 json={
                     "audio_url": upload_url,
-                    "speech_models": _ASSEMBLYAI_SPEECH_MODELS,
+                    "speech_model": _ASSEMBLYAI_SPEECH_MODEL,
                     "language_detection": True,
                 },
             )
