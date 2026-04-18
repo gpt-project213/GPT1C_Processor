@@ -121,6 +121,9 @@ def test_placeholder_phone_is_blocked() -> None:
 
 
 def test_scheduler_cannot_trigger_unsafe_live_send() -> None:
+    # Phase 3: WHATSAPP_ENABLED=1 → scheduler вызывает --preview (approval-flow),
+    # НЕ --send/--send-approved. Это безопасно: --preview только создаёт батч.
+    # WHATSAPP_ENABLED=0 → --dry-run (проверяется отдельно ниже).
     code = (
         "import sys, os, asyncio; "
         "sys.path.insert(0, 'bot'); "
@@ -130,6 +133,33 @@ def test_scheduler_cannot_trigger_unsafe_live_send() -> None:
         "sr.run_script_async=ns['fake_run']; sr.log_event=lambda *args, **kwargs: None; "
         "wc.is_holiday_today=lambda: False; "
         "os.environ['WHATSAPP_ENABLED']='1'; os.environ['LIVE_SEND_ALLOWED']='1'; "
+        "asyncio.run(sr.debt_collector_daily(None)); "
+        "assert calls and calls[0][1]=='--preview', calls"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-X", "utf8", "-c", code],
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        print(completed.stdout)
+        print(completed.stderr)
+    check("scheduler cannot trigger unsafe live send", completed.returncode == 0)
+
+
+def test_scheduler_uses_dry_run_when_whatsapp_disabled() -> None:
+    # WHATSAPP_ENABLED=0 → scheduler обязан использовать --dry-run, не --preview
+    code = (
+        "import sys, os, asyncio; "
+        "sys.path.insert(0, 'bot'); "
+        "import bot.send_reports as sr; import bot.workday_checker as wc; "
+        "calls=[]; ns={'calls': calls}; "
+        "exec(\"async def fake_run(*args, **kwargs):\\n    calls.append(args)\\n    return (0, '', '')\", ns); "
+        "sr.run_script_async=ns['fake_run']; sr.log_event=lambda *args, **kwargs: None; "
+        "wc.is_holiday_today=lambda: False; "
+        "os.environ['WHATSAPP_ENABLED']='0'; "
         "asyncio.run(sr.debt_collector_daily(None)); "
         "assert calls and calls[0][1]=='--dry-run', calls"
     )
@@ -143,7 +173,7 @@ def test_scheduler_cannot_trigger_unsafe_live_send() -> None:
     if completed.returncode != 0:
         print(completed.stdout)
         print(completed.stderr)
-    check("scheduler cannot trigger unsafe live send", completed.returncode == 0)
+    check("scheduler uses --dry-run when whatsapp disabled", completed.returncode == 0)
 
 
 def test_legacy_send_cli_is_disabled() -> None:
@@ -162,6 +192,7 @@ def main() -> None:
     test_unique_batch_ids_do_not_collide()
     test_placeholder_phone_is_blocked()
     test_scheduler_cannot_trigger_unsafe_live_send()
+    test_scheduler_uses_dry_run_when_whatsapp_disabled()
     test_legacy_send_cli_is_disabled()
     print("PHASE2 SAFE SEND TESTS PASSED")
 
