@@ -24,12 +24,14 @@ from pathlib import Path
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from openai import OpenAI
+from openai import APIConnectionError, APITimeoutError, RateLimitError
 from dotenv import load_dotenv
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 logger = logging.getLogger(__name__)
 
 # Версия
-VERSION = "v9.4.19"
+VERSION = "v9.4.20"
 
 # Поддерживаемые типы отчётов
 REPORT_TYPES = ("DEBT", "SALES", "GROSS", "INVENTORY", "EXPENSES")
@@ -283,9 +285,15 @@ def analyze(path: str, chat_id: str, send_mode: bool = False, report_type: str =
     logger.info("Температура: %s, Max tokens: %d", AI_TEMPERATURE, AI_MAX_TOKENS)
     logger.info("Генерация анализа...")
     start_time = time.time()
-    
-    try:
-        response = client.chat.completions.create(
+
+    @retry(
+        retry=retry_if_exception_type((APIConnectionError, APITimeoutError, RateLimitError)),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=2, min=2, max=30),
+        reraise=True,
+    )
+    def _call_api():
+        return client.chat.completions.create(
             model=model,
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -293,19 +301,21 @@ def analyze(path: str, chat_id: str, send_mode: bool = False, report_type: str =
             ],
             temperature=AI_TEMPERATURE,
             max_tokens=AI_MAX_TOKENS,
-            timeout=120,  # 2 мин явно — не ждём дефолтных 10 мин SDK
+            timeout=120,
         )
-        
+
+    try:
+        response = _call_api()
         answer = response.choices[0].message.content
         elapsed = time.time() - start_time
-        
+
         logger.info("Анализ готов! (%.1f сек)", elapsed)
         if hasattr(response, 'usage'):
             logger.info("Токены: %d (prompt: %d, completion: %d)",
                         response.usage.total_tokens,
                         response.usage.prompt_tokens,
                         response.usage.completion_tokens)
-        
+
     except Exception as e:
         raise RuntimeError(f"Ошибка API: {e}") from e
     
