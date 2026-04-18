@@ -4,7 +4,7 @@
 bot/crm_clients.py
 Универсальная база клиентов Минбаракат (CRM).
 
-Версия: 1.0.1 (2026-03-27)
+Версия: 1.0.2 (2026-04-18)
 
 Источники данных:
   - reports/json/debt_ext_*.json   → должники по менеджерам
@@ -50,6 +50,12 @@ logger = logging.getLogger(__name__)
 PHONE_IN_NAME_RE = re.compile(
     r"(?<!\d)(?:\+?7|8)[\s\-\(\)]*\d{3}[\s\-\(\)]*\d{3}[\s\-]*\d{2}[\s\-]*\d{2}(?!\d)"
 )
+
+# Фильтр товарных и мусорных записей из sales JSON:
+# - имя заканчивается на (DDDDDD) ЦЕНА — код партии + цена из прайса (в т.ч. с запятой: 1322,40)
+# - метаданные 1С-отчёта: "Отборы:", "Дополнительные поля:", "Сортировка:" и т.п.
+_PRODUCT_NAME_RE = re.compile(r"\(\d{4,7}\)\s*[\d\s,]+\s*$")
+_METADATA_KEYWORDS = ("Дополнительные поля:", "Отборы:", "Сортировка:", "Группировка:")
 
 
 # ─────────────────────────────────────────────
@@ -251,8 +257,12 @@ def _load_latest_sales_clients() -> List[Tuple[str, str]]:
             if not isinstance(c, dict):
                 continue
             name = (c.get("client") or c.get("name") or "").strip()
-            if name:
-                result.append((name, manager))
+            if not name:
+                continue
+            if _PRODUCT_NAME_RE.search(name) or any(kw in name for kw in _METADATA_KEYWORDS):
+                logger.debug("crm: пропускаем нежелательную строку из sales JSON: %s", name[:60])
+                continue
+            result.append((name, manager))
 
     return result
 
