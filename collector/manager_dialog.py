@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-collector/manager_dialog.py · v1.0.2 · 2026-04-19
+collector/manager_dialog.py · v1.0.3 · 2026-04-19
 Движок диалогов менеджеров с AI Коллектором.
 
 Telegram-взаимодействие через httpx (без python-telegram-bot).
@@ -464,20 +464,6 @@ async def _on_confirm(dialog: Dict[str, Any], mid: int) -> None:
         )
 
 
-async def _on_update(dialog: Dict[str, Any], mid: int) -> None:
-    """Менеджер хочет обновить данные."""
-    from collector.dialog_store import update_dialog, STATE_AWAITING_DATA
-    update_dialog(mid, state=STATE_AWAITING_DATA)
-    await _send_msg(
-        mid,
-        "✏️ <b>Обновление данных</b>\n\n"
-        "Отправьте обновлённые данные контакта текстом.\n"
-        "Например: телефон +77011234567, контакт Иванов Иван\n\n"
-        "<i>Если не отправите данные, бот будет напоминать каждые 30 минут. "
-        "Статистика игнора видна руководителю.</i>",
-        _inline([[("❓ Не понимаю, что ответить", f"col_help_{mid}")]]),
-    )
-
 
 async def _on_reject_request(dialog: Dict[str, Any], mid: int) -> None:
     """Менеджер хочет отказаться от отправки."""
@@ -702,35 +688,6 @@ async def _on_admin_deny_rejection(dialog: Dict[str, Any], mid: int) -> None:
             f"Дедлайн: {deadline_fmt}",
         )
 
-
-# ─── Vadim control reminder ──────────────────────────────────────────────────
-
-async def _send_control_reminder(dialog: Dict[str, Any]) -> None:
-    """Отправляет напоминание администратору (Вадиму) по клиенту на контроле."""
-    mid    = dialog["manager_chat_id"]
-    client = dialog["client_name"]
-    mgr    = dialog["manager_name"]
-    days   = dialog["days"]
-    amount = dialog["amount"]
-    reason = dialog.get("rejection_reason") or "(не указана)"
-
-    text = (
-        f"🕐 <b>На контроле — нет результата</b>\n\n"
-        f"👤 Менеджер: {mgr}\n"
-        f"🏢 Клиент: {client}\n"
-        f"📅 Просрочка: теперь {days} дн. | {_fmt_amount(amount)} тг\n\n"
-        f"Вчера принята причина:\n"
-        f"\"{reason}\"\n\n"
-        f"Оплата не поступила. Ваше решение?"
-    )
-    markup = _inline([
-        [("📤 Уведомить клиента сейчас",    f"col_adm_send_{mid}")],
-        [("💬 Вызвать менеджера на отчёт",   f"col_adm_call_{mid}")],
-        [("⏳ Продлить контроль +1 день",    f"col_adm_extend_{mid}")],
-    ])
-    admin_ids = _get_admin_ids()
-    for admin_id in admin_ids:
-        await _send_msg(admin_id, text, markup)
 
 
 async def _on_admin_send(dialog: Dict[str, Any], mid: int) -> None:
@@ -982,7 +939,6 @@ async def handle_callback(data: str, chat_id: int, message_id: int) -> bool:
     # Полный список callback паттернов
     callback_map = [
         ("col_confirm_",   "confirm"),
-        ("col_update_",    "update"),
         ("col_reject_",    "reject"),
         ("col_data_ok_",   "data_ok"),
         ("col_data_edit_", "data_edit"),
@@ -1021,8 +977,6 @@ async def handle_callback(data: str, chat_id: int, message_id: int) -> bool:
 
     if action == "confirm":
         await _on_confirm(dialog, mid)
-    elif action == "update":
-        await _on_update(dialog, mid)
     elif action == "reject":
         await _on_reject_request(dialog, mid)
     elif action == "data_ok":
