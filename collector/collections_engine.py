@@ -90,7 +90,7 @@ from collector.collections_db import (
     save_promise,
     update_after_contact,
 )
-from collector.collection_agent import analyze_response, generate_message
+from collector.collection_agent import generate_message
 from collector.communications import (
     is_allowed_time,
     notify_admin,
@@ -99,7 +99,6 @@ from collector.communications import (
     send_telegram,
 )
 from collector.voice_calls import (
-    get_call_result,
     initiate_call,
     is_call_allowed_time,
 )
