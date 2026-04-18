@@ -29,7 +29,7 @@ from dotenv import load_dotenv
 logger = logging.getLogger(__name__)
 
 # Версия
-VERSION = "v9.4.18"
+VERSION = "v9.4.19"
 
 # Поддерживаемые типы отчётов
 REPORT_TYPES = ("DEBT", "SALES", "GROSS", "INVENTORY", "EXPENSES")
@@ -292,7 +292,8 @@ def analyze(path: str, chat_id: str, send_mode: bool = False, report_type: str =
                 {"role": "user", "content": user_content}
             ],
             temperature=AI_TEMPERATURE,
-            max_tokens=AI_MAX_TOKENS
+            max_tokens=AI_MAX_TOKENS,
+            timeout=120,  # 2 мин явно — не ждём дефолтных 10 мин SDK
         )
         
         answer = response.choices[0].message.content
