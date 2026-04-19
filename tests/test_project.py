@@ -609,6 +609,102 @@ finally:
     _shutil.rmtree(_trigger_tmpdir, ignore_errors=True)
 
 # ═══════════════════════════════════════════════════════════════
+# 14. opportunity_loss — форматирование и пустые данные
+# ═══════════════════════════════════════════════════════════════
+section("14. opportunity_loss — _fmt_money, _fmt_pct, format_message, format_admin")
+
+try:
+    from opportunity_loss import (
+        _fmt_money as _opl_fmt_money,
+        _fmt_pct as _opl_fmt_pct,
+        format_opportunity_loss_message,
+        format_opportunity_loss_admin,
+    )
+    _OPLOSS_OK = True
+except ImportError as _e:
+    _OPLOSS_OK = False
+    check("opportunity_loss: импорт", False, str(_e))
+
+if _OPLOSS_OK:
+    check("_fmt_money(1_500_000)", _opl_fmt_money(1_500_000.0) == "1 500 000 \u20b8")
+    check("_fmt_money(0)",         _opl_fmt_money(0.0)         == "0 \u20b8")
+    check("_fmt_pct(15.0)",        _opl_fmt_pct(15.0)          == "15.0%")
+    check("_fmt_pct(0.5)",         _opl_fmt_pct(0.5)           == "0.5%")
+
+    _s = {
+        "manager": "Тест",
+        "margin_pct": 15.0,
+        "margin_source": "gross.html",
+        "report_date": "01.04.2026 - 15.04.2026",
+        "zones": {
+            "red":    [{"client": "ТОО Красный", "debt": 500_000.0,
+                        "days": 20, "real_loss": 7_500.0, "turns": 1.0}],
+            "yellow": [],
+        },
+        "total_clients": 1,
+        "total_loss": 7_500.0,
+        "total_real": 7_500.0,
+        "red_real":   7_500.0,
+        "yellow_real": 0.0,
+    }
+    _msg = format_opportunity_loss_message(_s)
+    check("format_message: имя менеджера",   "Тест"        in _msg)
+    check("format_message: клиент в зоне",   "ТОО Красный" in _msg)
+    check("format_message: Упущено",         "Упущено"     in _msg)
+    check("format_message: маржа 15.0%",     "15.0%"       in _msg)
+
+    check("format_admin([]): нет данных",
+          "нет данных" in format_opportunity_loss_admin([]).lower())
+
+    _d1 = {
+        "manager": "Алена", "margin_pct": 15.0, "report_date": "01.04.2026",
+        "zones": {"red": [{"client": "Клиент А", "debt": 500_000.0,
+                           "days": 20, "real_loss": 7_500.0}], "yellow": []},
+        "total_real": 7_500.0, "red_real": 7_500.0, "yellow_real": 0.0,
+    }
+    _d2 = {
+        "manager": "Оксана", "margin_pct": 12.0, "report_date": "01.04.2026",
+        "zones": {"red": [], "yellow": [{"client": "Клиент Б", "debt": 200_000.0,
+                                          "days": 10, "real_loss": 1_200.0}]},
+        "total_real": 1_200.0, "red_real": 0.0, "yellow_real": 1_200.0,
+    }
+    _adm = format_opportunity_loss_admin([_d1, _d2])
+    check("format_admin: содержит СВОДКА",                      "СВОДКА"  in _adm)
+    check("format_admin: оба менеджера",
+          "Алена" in _adm and "Оксана" in _adm)
+    check("format_admin: Алена первее Оксаны (сортировка desc)",
+          _adm.index("Алена") < _adm.index("Оксана"))
+    check("format_admin: итоговая сумма 8 700",                 "8 700"   in _adm)
+
+# ═══════════════════════════════════════════════════════════════
+# 15. silence_alerts — format_amount, _silence_clients_flat
+# ═══════════════════════════════════════════════════════════════
+section("15. silence_alerts — format_amount, _silence_clients_flat")
+
+check("format_amount(3_708_816.58)",
+      SilenceAlert.format_amount(3_708_816.58) == "3 708 816,58")
+check("format_amount(0.0)",
+      SilenceAlert.format_amount(0.0) == "0,00")
+check("format_amount(1_000_000.0)",
+      SilenceAlert.format_amount(1_000_000.0) == "1 000 000,00")
+
+from send_reports import _silence_clients_flat as _scf
+
+_cat = {
+    "critical":        [{"client": "A"}],
+    "alarm":           [{"client": "B"}, {"client": "C"}],
+    "silence":         [],
+    "overdue":         [{"client": "D"}],
+    "partial_payment": [],
+    "on_stop":         [{"client": "E"}],
+}
+_flat = _scf(_cat)
+check("_silence_clients_flat: 5 клиентов", len(_flat) == 5)
+check("_silence_clients_flat: critical первый", _flat[0]["client"] == "A")
+check("_silence_clients_flat: on_stop последний", _flat[-1]["client"] == "E")
+check("_silence_clients_flat: пустой dict → []", _scf({}) == [])
+
+# ═══════════════════════════════════════════════════════════════
 # ИТОГ
 # ═══════════════════════════════════════════════════════════════
 print(f"\n{'═'*60}")
