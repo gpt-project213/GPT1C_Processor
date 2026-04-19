@@ -6713,6 +6713,7 @@ async def weekly_analytics_job(context):
     scripts = [
         "sales_profitability_report.py",
         "net_profit_report.py",
+        "dead_stock_report.py",
         "inventory_turnover_report.py",
         "rfm_clients_report.py",
         "revenue_concentration_report.py",

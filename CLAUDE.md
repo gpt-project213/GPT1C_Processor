@@ -222,7 +222,8 @@ Russian-language prompts for AI analysis in root-level `.txt` files:
 | `tests/test_project.py` | 101 | imports, helpers, send_tg, gender_emoji, silence_alerts, notify state, config, user_tracker, opportunity_loss |
 | `tests/test_collector.py` | 256 | collector imports, classify, contacts, daily_summary, WhatsApp, manager dialog, violations |
 | `tests/test_audit_reports_20260414.py` | 8 | concentration, rfm, gross pct, debt header, sales parser, turnover, pareto, html template |
-| `tests/test_parsers.py` | 61 | debt/sales/gross/inventory parsers, data leak ACL |
+| `tests/test_parsers.py` | 64 | debt/sales/gross/inventory parsers, sales period_end, data leak ACL |
+| `tests/test_dead_stock.py` | 6 | dead stock by last sale date |
 | `tests/test_log_monitor.py` | 8 | log monitor parse, alert thresholds |
 
 Run: `python -X utf8 tests/test_project.py && python -X utf8 tests/test_collector.py`

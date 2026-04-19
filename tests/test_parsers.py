@@ -95,7 +95,8 @@ if not f:
 else:
     print(f"  Файл: {f.name}")
     try:
-        from sales_parser import parse_file
+        from datetime import date
+        from sales_parser import parse_file, _parse_period_end
         with tempfile.TemporaryDirectory() as td:
             json_path = parse_file(f, out_dir=Path(td))
             check("sales_parser — возвращает Path или None",
@@ -107,6 +108,17 @@ else:
                     for k in ["manager", "period", "clients", "total_revenue"]:
                         check(f"sales_parser — ключ '{k}'", k in data,
                               f"keys={list(data.keys())}")
+                    check("test_period_end_present", "period_end" in data,
+                          f"keys={list(data.keys())}")
+                    try:
+                        date.fromisoformat(data.get("period_end"))
+                        period_end_is_iso = True
+                    except (TypeError, ValueError):
+                        period_end_is_iso = False
+                    check("test_period_end_iso_format", period_end_is_iso,
+                          f"period_end={data.get('period_end')!r}")
+                    check("test_period_end_bad_string",
+                          _parse_period_end("bad period") is None)
                     clients = data.get("clients", [])
                     check("sales_parser — clients не пустые", len(clients) > 0)
                     if clients:

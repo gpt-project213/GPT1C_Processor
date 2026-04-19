@@ -67,7 +67,7 @@ import re
 import logging
 import argparse
 from pathlib import Path
-from datetime import datetime
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 from typing import Dict, List, Any, Optional
 
@@ -94,7 +94,7 @@ logging.basicConfig(
 )
 LOG = logging.getLogger("sales_parser")
 
-__VERSION__ = "1.0.6"
+__VERSION__ = "1.0.7"
 
 NBSP = "\u202f"
 
@@ -261,6 +261,42 @@ def extract_period(df: pd.DataFrame, data_start: int) -> str:
         if m:
             return re.split(r"[|;]", m.group(1).strip())[0].strip()
     return "Не указан"
+
+def _parse_period_end(period_str: str) -> str | None:
+    """'DD.MM.YYYY - DD.MM.YYYY' -> 'YYYY-MM-DD', otherwise None."""
+    month_names = {
+        "января": 1,
+        "февраля": 2,
+        "марта": 3,
+        "апреля": 4,
+        "мая": 5,
+        "июня": 6,
+        "июля": 7,
+        "августа": 8,
+        "сентября": 9,
+        "октября": 10,
+        "ноября": 11,
+        "декабря": 12,
+    }
+    try:
+        right = period_str.strip().split(" - ")[-1].strip()
+    except (AttributeError, IndexError):
+        return None
+    try:
+        return datetime.strptime(right, "%d.%m.%Y").date().isoformat()
+    except ValueError:
+        pass
+    m = re.search(r"(\d{1,2})\s+([а-яё]+)\s+(\d{4})", right.lower())
+    if not m:
+        return None
+    month = month_names.get(m.group(2).replace("ё", "е"))
+    if not month:
+        return None
+    try:
+        return date(int(m.group(3)), month, int(m.group(1))).isoformat()
+    except ValueError:
+        return None
+
 
 def extract_manager(df: pd.DataFrame, data_start: int, xlsx_path: Optional[Path] = None) -> Optional[str]:
     for i in range(min(20, data_start)):
@@ -469,6 +505,7 @@ def parse_file(xlsx_path: str | Path, out_dir: Optional[Path] = None) -> Optiona
             "source_file": path.name,
             "report_type": "CLIENT_GROUPED",
             "period": period,
+            "period_end": _parse_period_end(period),
             "manager": manager or "Не определён",
             "total_revenue": result["total_revenue"],
             "client_count": len(result["clients"]),
