@@ -352,7 +352,7 @@ Run: `python -X utf8 tests/test_project.py && python -X utf8 tests/test_collecto
 | FEATURE | Feature request | Retry для AI API вызовов |
 | FEATURE | Feature request | Тесты для `silence_alerts`, `opportunity_loss` |
 | DOCS | Документация | 7 расхождений CLAUDE.md ↔ код |
-| Issue-4 | Не реализовано | Условная отгрузка (4 кнопки для админа в debt_stop_control) |
+| Issue-4 | ~~Не реализовано~~ **РЕАЛИЗОВАНО** | Условная отгрузка — 4 кнопки admin в `escalate_unanswered()` + 4 кнопки при debt=0 в `monitor_exceptions()`. Все обработчики реализованы. |
 
 ### Session 2026-03-10 (pipeline audit)
 | ID | File | Fix |
@@ -380,9 +380,10 @@ When working in this repository:
 Rules:
 - Do not broadly rescan the repository. Use `repo_map.json` as the primary file map.
 - Prefer targeted file reads over full-project scans.
-- Before making edits: identify exact files affected, explain root cause, apply minimal patch, validate syntax (`python -m py_compile`), bump version.
+- Before making edits: read session/context and recent commits first, identify exact files affected, explain root cause, apply minimal patch, validate syntax (`python -m py_compile`), bump version.
 - Do not refactor unrelated files.
 - Never introduce architectural changes unless explicitly requested.
+- Do not treat old audit findings as current until verified against current HEAD, code, tests, or commit history.
 
 ---
 
@@ -396,12 +397,36 @@ Rules:
 - Always explain the root cause before editing.
 
 Order of work:
-1. Explain root cause
+0. Read session/context files and recent commits relevant to the issue
+1. Explain root cause and prove the bug is current
 2. Identify exact files affected
 3. Apply minimal patch
 4. Validate syntax (`python -m py_compile <file>`)
-5. Bump `__VERSION__` +0.0.1
-6. Summarize changes
+5. Bump `__VERSION__` +0.0.1 for modified runtime files
+6. Run relevant tests
+7. Summarize changes with evidence
+
+Required evidence:
+- "Fixed/closed" requires a commit hash, code location, test result, or direct data check.
+- "Still open" requires a reproduction: code line, failing test, byte/format check, log evidence, or data count.
+- Final notes must separate code fixes from operational acceptance work.
+
+Test matrix:
+```powershell
+# Baseline after runtime changes
+python -m py_compile <changed .py files>
+python -X utf8 tests/test_project.py
+$env:WHATSAPP_ENABLED='0'; $env:LIVE_SEND_ALLOWED='0'; python -X utf8 tests/test_collector.py
+
+# Collector / WhatsApp / approval / scheduler changes
+$env:WHATSAPP_ENABLED='0'; $env:LIVE_SEND_ALLOWED='0'; python -X utf8 tests/test_phase2_safe_send.py
+
+# Reports / parsers / analytics changes
+python -X utf8 tests/test_parsers.py
+python -X utf8 tests/test_audit_reports_20260414.py
+```
+
+For docs-only changes, tests are not mandatory, but the final answer must state that product code was not changed.
 
 ### 2. Pipeline Safety Rules
 
