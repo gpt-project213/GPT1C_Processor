@@ -152,6 +152,7 @@ python -X utf8 tests/test_audit_reports_20260414.py
 | DEAD imports/callbacks collector | Закрыто коммитами `28b73d8`, `be1f7a8` |
 | `collector_state.json` race | Частично закрыто коммитом `25bee91`: `portalocker` lock для `collector_state.json` |
 | Товары/metadata 1С попадали в CRM | Закрыто связкой `a3331a8` + `ea2e567`: CRM читает `sales JSON clients[]`, а `sales_parser.py` строго разделяет client/product колонки без fallback |
+| Автомониторинг логов | Реализовано: `bot/log_monitor.py` + scheduler job `log_monitor` каждые 2 часа |
 
 ### Проверенные коммиты, влияющие на статус
 | Коммит | Дата | Что учитывать |
@@ -208,6 +209,26 @@ python -X utf8 tests/test_audit_reports_20260414.py
 - фактическая проверка 2026-04-19: `config/clients.json` — 475 клиентов, 0 product/metadata hits; последние 20 `sales_*.json` — 0 product/metadata hits в `clients[]`.
 
 Нюанс: отдельного текстового `_PRODUCT_NAME_RE` в текущем `crm_clients.py` больше нет. Защита держится на корректном `sales_parser.py`; если вручную подложить битый sales JSON, где товар уже записан как `clients[].client`, CRM его может принять, кроме metadata строк.
+
+### Автомониторинг логов
+
+Бот сам проверяет новые строки в `logs/*.log` каждые 2 часа:
+
+- scheduler job: `log_monitor` в `bot/send_reports.py`;
+- реализация: `bot/log_monitor.py`;
+- state: `logs/log_monitor_state.json`;
+- краткий журнал: `logs/log_monitor_summary.log`;
+- при новых `ERROR`/`CRITICAL`/`Traceback`/`PermissionError` отправляет Telegram-уведомление admin;
+- первый запуск baselines текущие концы логов, чтобы не слать старые ошибки;
+- `[TEST]` строки игнорируются;
+- summary-файл самого монитора не сканируется, чтобы не повторять свои же alerts.
+
+Для следующей диагностики сначала читать:
+
+```powershell
+Get-Content logs\log_monitor_state.json -Raw
+Get-Content logs\log_monitor_summary.log -Tail 50
+```
 
 ### 🟡 P3 — Технический долг / устойчивость
 | # | Файл/контур | Проблема |
@@ -307,6 +328,7 @@ set LIVE_SEND_ALLOWED=0
 python -X utf8 tests/test_collector.py
 python -X utf8 tests/test_phase2_safe_send.py
 python -X utf8 tests/test_audit_reports_20260414.py
+python -X utf8 tests/test_log_monitor.py
 
 # Синтаксис-проверка (обязательно после каждого изменения)
 python -m py_compile <файл>

@@ -180,7 +180,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.54/19.04.2026"
+__VERSION__ = "v9.4.55/19.04.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
@@ -201,6 +201,8 @@ def kb_persistent() -> ReplyKeyboardMarkup:
     ], resize_keyboard=True)
 from telegram.error import BadRequest, RetryAfter, TimedOut, NetworkError
 from silence_alerts import SilenceAlert
+from bot.log_monitor import format_alert as _format_log_monitor_alert
+from bot.log_monitor import run_log_monitor as _run_log_monitor
 # v2.0: Мобильная адаптивность и аналитика
 try:
     from user_tracker import track_user, track_action, get_stats, format_stats_message
@@ -1629,6 +1631,36 @@ async def cleanup_old_files(context: ContextTypes.DEFAULT_TYPE):
     
     except Exception as e:
         log_event("cleanup_error", error=str(e))
+
+
+async def log_monitor_task(context: ContextTypes.DEFAULT_TYPE):
+    """Every 2 hours: scan new log lines and alert admin on fresh errors."""
+    state_path = LOGS_DIR / "log_monitor_state.json"
+    summary_path = LOGS_DIR / "log_monitor_summary.log"
+    try:
+        result = _run_log_monitor(LOGS_DIR, state_path, summary_path)
+        if result.get("errors_found", 0) > 0:
+            logger.warning(
+                "log_monitor: found %s new issue(s) across %s log files",
+                result.get("errors_found", 0),
+                result.get("files_checked", 0),
+            )
+            if ADMIN_CHAT_ID:
+                await context.bot.send_message(
+                    chat_id=ADMIN_CHAT_ID,
+                    text=_format_log_monitor_alert(result),
+                    parse_mode=None,
+                )
+        else:
+            logger.info(
+                "log_monitor: OK checked=%s initialized=%s",
+                result.get("files_checked", 0),
+                result.get("initialized", False),
+            )
+    except Exception as e:
+        logger.error("log_monitor_task error: %s", e)
+
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # v9.4.7: АВТОГЕНЕРАЦИЯ ИИ-АНАЛИЗА
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -7556,6 +7588,14 @@ def main():
             name="cleanup_old_files"
         )
         logger.info("🧹 Настроена автоочистка файлов: логи 2д, AI 7д, HTML 30д, JSON 7д, Excel 14д | Запуск в 03:00")
+
+        job_queue.run_repeating(
+            log_monitor_task,
+            interval=2 * 60 * 60,
+            first=10 * 60,
+            name="log_monitor",
+        )
+        logger.info("🩺 Настроен мониторинг логов: каждые 2 часа")
 
         # Проверка рабочего дня в 10:00 (если нет xlsx — спросить админа)
         job_queue.run_daily(

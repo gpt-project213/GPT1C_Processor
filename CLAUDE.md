@@ -424,9 +424,19 @@ $env:WHATSAPP_ENABLED='0'; $env:LIVE_SEND_ALLOWED='0'; python -X utf8 tests/test
 # Reports / parsers / analytics changes
 python -X utf8 tests/test_parsers.py
 python -X utf8 tests/test_audit_reports_20260414.py
+
+# Log monitor changes
+python -X utf8 tests/test_log_monitor.py
 ```
 
 For docs-only changes, tests are not mandatory, but the final answer must state that product code was not changed.
+
+Log monitoring:
+- Bot job `log_monitor` runs every 2 hours.
+- Implementation: `bot/log_monitor.py`.
+- State: `logs/log_monitor_state.json`.
+- Summary: `logs/log_monitor_summary.log`.
+- Check these two files first when asked about unattended bot health.
 
 ### 2. Pipeline Safety Rules
 

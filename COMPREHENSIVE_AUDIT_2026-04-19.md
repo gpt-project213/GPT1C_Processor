@@ -309,6 +309,26 @@ Legacy `--send` не использовать.
 
 Автоматически чистить данные нельзя без отдельного разрешения.
 
+### 6. Автомониторинг логов
+
+Добавлен встроенный мониторинг логов для удобной последующей диагностики:
+
+- модуль: `bot/log_monitor.py`;
+- scheduler job: `log_monitor` каждые 2 часа;
+- state: `logs/log_monitor_state.json`;
+- summary: `logs/log_monitor_summary.log`;
+- Telegram alert отправляется admin только при новых проблемах;
+- первый запуск делает baseline текущих логов и не рассылает старые ошибки;
+- `[TEST]` строки игнорируются;
+- собственный summary-файл не сканируется.
+
+Проверка:
+
+```text
+python -X utf8 tests/test_log_monitor.py
+8/8 OK
+```
+
 ## Конфигурация и зависимости
 
 Основные зависимости актуально включают:
@@ -400,6 +420,7 @@ python -X utf8 tests/test_audit_reports_20260414.py
 python -m py_compile <изменённые .py файлы>
 python -X utf8 tests/test_project.py
 $env:WHATSAPP_ENABLED='0'; $env:LIVE_SEND_ALLOWED='0'; python -X utf8 tests/test_collector.py
+python -X utf8 tests/test_log_monitor.py
 ```
 
 Collector / WhatsApp / approval / scheduler:
