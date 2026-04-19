@@ -415,6 +415,7 @@ def save_html(data: Dict[str, Any], slug: str) -> Path:
             padding: 10px;
             border-bottom: 1px solid #d0d9e8;
             text-align: left;
+            overflow-wrap: anywhere;
         }}
         th {{
             background: #eef2f8;
@@ -434,6 +435,7 @@ def save_html(data: Dict[str, Any], slug: str) -> Path:
         @media (max-width: 768px) {{
             body {{ padding: 10px; }}
             .container {{ padding: 14px; }}
+            table {{ min-width: 0; table-layout: auto; }}
             th, td {{ font-size: 12px; padding: 8px; }}
         }}
     </style>

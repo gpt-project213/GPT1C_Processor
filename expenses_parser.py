@@ -588,6 +588,7 @@ class UnifiedExpensesParser:
             padding: 10px 10px;
             border-bottom: 1px solid #d0d9e8;
             font-size: 13px;
+            overflow-wrap: anywhere;
         }}
         th {{
             background: #eef2f8;
@@ -609,6 +610,7 @@ class UnifiedExpensesParser:
         }}
         @media (max-width: 768px) {{
             body {{ padding: 10px; }}
+            table {{ min-width: 0; table-layout: auto; }}
             th, td {{ font-size: 12px; padding: 8px; }}
         }}
     </style>

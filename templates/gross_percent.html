@@ -16,10 +16,10 @@ h1{color:var(--ink);font-size:21px;margin:0 0 8px}
 small{color:var(--muted);line-height:1.6}
 .key{font-weight:600}
 .section{font-weight:700;color:var(--brand);margin:18px 0 5px;font-size:13px;text-transform:uppercase;letter-spacing:.3px}
-.table-wrap{overflow:auto;border:1px solid var(--border);border-radius:8px;background:#fff;margin:10px 0}
+.table-wrap{overflow:auto;border:1px solid var(--border);border-radius:8px;background:#fff;margin:10px 0;-webkit-overflow-scrolling:touch}
 table{width:100%;border-collapse:collapse;min-width:580px}
 thead th{background:var(--th-bg);text-align:left;padding:9px 11px;border-bottom:2px solid var(--border);font-weight:600}
-tbody td{padding:9px 11px;border-bottom:1px solid #eaeff6;vertical-align:top}
+tbody td{padding:9px 11px;border-bottom:1px solid #eaeff6;vertical-align:top;overflow-wrap:anywhere}
 tr:hover td{background:#f5f8fc}
 .pct{font-weight:700}.pct.ok{color:var(--good)}.pct.bad{color:var(--bad)}
 .tech{margin-top:16px;color:var(--muted);font-size:12px}
@@ -29,7 +29,7 @@ a,button{touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.04)}
 @media(max-width:768px){
   body{padding:8px}.wrap{padding:12px 14px 18px}
   h1{font-size:17px}
-  table{min-width:auto!important;table-layout:auto}
+  table{min-width:0!important;table-layout:fixed}
   thead th,tbody td{padding:6px 7px;font-size:12px}
   .section{font-size:12px}
 }

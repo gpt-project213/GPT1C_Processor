@@ -12,11 +12,17 @@ set PYTHON=%~dp0.venv\Scripts\python.exe
 :: Скрипт и лог
 set SCRIPT=bot\send_reports.py
 set LOG=logs\watchdog.log
+set STOP_FILE=logs\bot.stop
 set RESTART_COUNT=0
 
 echo [Watchdog] Старт %DATE% %TIME% >> %LOG%
 
 :LOOP
+if exist "%STOP_FILE%" (
+    echo [%DATE% %TIME%] Stop file found: %STOP_FILE%. Watchdog stopped. >> %LOG%
+    exit /b 0
+)
+
 set /A RESTART_COUNT+=1
 
 echo. >> %LOG%

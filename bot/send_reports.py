@@ -278,6 +278,7 @@ REJECTED_CASH_DIR = REJECTED_DIR / "cash"  # 🆕 v9.4.13.3
 NOTIFY_STATE_PATH = LOGS_DIR / "notify_state.json"
 SALES_NOTIFY_DECADE_PATH = LOGS_DIR / "sales_notify_decade.json"  # v9.4.25: подекадные уведомления
 PID_FILE = LOGS_DIR / "bot.pid"
+STOP_FILE = LOGS_DIR / "bot.stop"
 
 
 # ── Защита от нескольких экземпляров (pid-файл) ───────────────────────────────
@@ -4861,6 +4862,43 @@ async def cmd_health(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await _send_auto(context, update.effective_chat.id, text)
 
+async def _exit_after_reply(delay_sec: float = 1.0) -> None:
+    await asyncio.sleep(delay_sec)
+    _clear_pid()
+    os._exit(0)
+
+async def cmd_restart(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    if chat_id != ADMIN_CHAT_ID:
+        await _send_auto(context, chat_id, "⛔ Доступ запрещён.")
+        return
+    try:
+        if STOP_FILE.exists():
+            STOP_FILE.unlink()
+    except OSError as e:
+        logger.warning("restart: cannot remove stop file: %s", e)
+    log_event("bot_restart_requested", chat_id=chat_id)
+    await _send_auto(context, chat_id, "🔄 Перезапускаю бота. Watchdog поднимет новый процесс через несколько секунд.")
+    asyncio.create_task(_exit_after_reply())
+
+async def cmd_shutdown(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    if chat_id != ADMIN_CHAT_ID:
+        await _send_auto(context, chat_id, "⛔ Доступ запрещён.")
+        return
+    try:
+        STOP_FILE.write_text(
+            f"Stopped by Telegram /shutdown at {datetime.now(TZ).isoformat()} chat_id={chat_id}\n",
+            encoding="utf-8",
+        )
+    except OSError as e:
+        logger.error("shutdown: cannot write stop file: %s", e)
+        await _send_auto(context, chat_id, f"❌ Не удалось создать стоп-файл: {e}")
+        return
+    log_event("bot_shutdown_requested", chat_id=chat_id, stop_file=str(STOP_FILE))
+    await _send_auto(context, chat_id, "⏹️ Останавливаю бота. Watchdog увидит стоп-файл и не будет перезапускать.")
+    asyncio.create_task(_exit_after_reply())
+
 async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """v2.0: Статистика использования бота"""
     chat_id = update.effective_chat.id
@@ -7470,6 +7508,8 @@ def main():
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_persistent_menu))
     application.add_handler(MessageHandler(filters.VOICE, handle_voice_message_tg))
     application.add_handler(CommandHandler("health", cmd_health))
+    application.add_handler(CommandHandler("restart", cmd_restart))
+    application.add_handler(CommandHandler("shutdown", cmd_shutdown))
     application.add_handler(CommandHandler("stats", cmd_stats))
     application.add_handler(CommandHandler("analytics", cmd_analytics))  # 🆕 v9.4.9  # v2.0
     application.add_handler(CommandHandler("phone", cmd_phone))  # CRM: внести телефон клиента

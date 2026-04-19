@@ -27,17 +27,17 @@ h5{color:var(--ink);font-size:12px;margin:8px 0 4px}
 .tab{padding:7px 14px;background:#fff;border:1px solid var(--border);border-bottom:none;border-radius:5px 5px 0 0;cursor:pointer;font-weight:500;font-size:13px;touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.04)}
 .tab:hover{background:var(--th-bg)}.tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
 .panel{display:none}.panel.active{display:block}
-.table-container{overflow:auto;margin:12px 0;border:1px solid var(--border);border-radius:8px;background:#fff}
+.table-container{overflow:auto;margin:12px 0;border:1px solid var(--border);border-radius:8px;background:#fff;-webkit-overflow-scrolling:touch}
 table{width:100%;border-collapse:collapse;min-width:600px}
 th{background:var(--th-bg);font-weight:600;text-align:left;padding:9px 11px;border-bottom:2px solid var(--border);position:sticky;top:0}
-td{padding:9px 11px;border-bottom:1px solid #eaeff6;vertical-align:top}
+td{padding:9px 11px;border-bottom:1px solid #eaeff6;vertical-align:top;overflow-wrap:anywhere}
 tr:hover td{background:#f5f8fc}
 .num{text-align:right!important;white-space:nowrap;font-variant-numeric:tabular-nums;font-family:ui-monospace,monospace}
 a{color:var(--accent);text-decoration:none;touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.04);display:inline-block;padding:2px 0}
 a:hover{text-decoration:underline}
 .summary-card{background:#fff;border-radius:8px;padding:14px;border:1px solid var(--border);margin:8px 0}
 .tech-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;margin:10px 0}
-.tech-item{background:var(--th-bg);border-radius:6px;padding:9px 12px;border:1px solid var(--border)}
+.tech-item{background:var(--th-bg);border-radius:6px;padding:9px 12px;border:1px solid var(--border);overflow-wrap:anywhere}
 .tech-key{font-weight:600;color:var(--muted);font-size:12px;margin-bottom:2px}
 .footer{margin-top:20px;padding-top:12px;border-top:1px solid var(--border);text-align:center;color:var(--muted);font-size:12px}
 .footer strong{color:var(--brand)}
@@ -49,10 +49,25 @@ a:hover{text-decoration:underline}
   .tab{padding:5px 9px;font-size:12px}
   th,td{padding:6px 7px;font-size:12px}
   .tech-grid{grid-template-columns:1fr}
+  .movement-stats{grid-template-columns:repeat(2,1fr)!important}
 }
 @media(max-width:480px){
-  .stats-grid{grid-template-columns:repeat(2,1fr)}
+  .stats-grid{grid-template-columns:1fr}
+  .header-info .stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .movement-stats{grid-template-columns:1fr!important}
   th,td{padding:5px 6px;font-size:12px}
+}
+@media(max-width:640px){
+  .table-container{overflow:visible;border:0;background:transparent}
+  .report-table{min-width:0;border-collapse:separate;border-spacing:0 8px}
+  .report-table thead{display:none}
+  .report-table tbody,.report-table tr,.report-table td{display:block;width:100%}
+  .report-table tr{background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 1px 3px rgba(26,58,92,.06);overflow:hidden}
+  .report-table td{display:grid;grid-template-columns:minmax(105px,38%) minmax(0,1fr);gap:8px;align-items:start;border-bottom:1px solid #eaeff6;text-align:left!important;white-space:normal}
+  .report-table td:last-child{border-bottom:0}
+  .report-table td::before{content:attr(data-label);color:var(--muted);font-weight:700;font-family:Arial,sans-serif;font-size:11px;text-transform:uppercase}
+  .report-table .num{font-family:ui-monospace,monospace;text-align:left!important}
+  .report-table tr:hover td{background:transparent}
 }
 </style>
 </head>
@@ -96,7 +111,7 @@ a:hover{text-decoration:underline}
   <div class="panel active" id="t_top">
     <h2>🚨 ТОП-15 должников</h2>
     <div class="table-container">
-      <table>
+      <table class="report-table">
         <thead>
           <tr>
             <th>Клиент</th>
@@ -107,10 +122,10 @@ a:hover{text-decoration:underline}
         <tbody>
           {% for r in top_debtors %}
           <tr id="client-{{ r.client_slug }}">
-            <td><a href="#client-{{ r.client_slug }}" data-panel="t_all">{{ r.client }}</a></td>
-            <td class="num">{{ r.debt|money }}</td>
+            <td data-label="&#1050;&#1083;&#1080;&#1077;&#1085;&#1090;"><a href="#client-{{ r.client_slug }}" data-panel="t_all">{{ r.client }}</a></td>
+            <td class="num" data-label="&#1044;&#1086;&#1083;&#1075;, &#8376;">{{ r.debt|money }}</td>
             {% if report_type == 'simple' %}
-              <td class="num">{{ (r.pct|round(1)) if r.pct is not none else "—" }}</td>
+              <td class="num" data-label="&#1044;&#1086;&#1083;&#1103;, %">{{ (r.pct|round(1)) if r.pct is not none else "—" }}</td>
             {% endif %}
           </tr>
           {% endfor %}
@@ -124,14 +139,14 @@ a:hover{text-decoration:underline}
   <div class="panel" id="t_silent">
     <h2>🔇 Молчуны (долг > 20 000 ₸)</h2>
     <div class="table-container">
-      <table>
+      <table class="report-table">
         <thead><tr><th>Клиент</th><th class="num">Долг, ₸</th><th class="num">Дней</th></tr></thead>
         <tbody>
           {% for r in silent_rows %}
           <tr id="client-{{ r.client_slug }}">
-            <td><a href="#client-{{ r.client_slug }}" data-panel="t_all">{{ r.client }}</a></td>
-            <td class="num">{{ r.debt|money }}</td>
-            <td class="num">{{ r.days }}</td>
+            <td data-label="&#1050;&#1083;&#1080;&#1077;&#1085;&#1090;"><a href="#client-{{ r.client_slug }}" data-panel="t_all">{{ r.client }}</a></td>
+            <td class="num" data-label="&#1044;&#1086;&#1083;&#1075;, &#8376;">{{ r.debt|money }}</td>
+            <td class="num" data-label="&#1044;&#1085;&#1077;&#1081;">{{ r.days }}</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -145,14 +160,14 @@ a:hover{text-decoration:underline}
   <div class="panel" id="t_closed">
     <h2>✅ Закрывшие долг</h2>
     <div class="table-container">
-      <table>
+      <table class="report-table">
         <thead><tr><th>Клиент</th><th class="num">Отгрузка, ₸</th><th class="num">Оплата, ₸</th></tr></thead>
         <tbody>
           {% for r in closed_rows %}
           <tr id="client-{{ r.client_slug }}">
-            <td><a href="#client-{{ r.client_slug }}" data-panel="t_all">{{ r.client }}</a></td>
-            <td class="num">{{ r.ship|money }}</td>
-            <td class="num">{{ r.pay|money }}</td>
+            <td data-label="&#1050;&#1083;&#1080;&#1077;&#1085;&#1090;"><a href="#client-{{ r.client_slug }}" data-panel="t_all">{{ r.client }}</a></td>
+            <td class="num" data-label="&#1054;&#1090;&#1075;&#1088;&#1091;&#1079;&#1082;&#1072;, &#8376;">{{ r.ship|money }}</td>
+            <td class="num" data-label="&#1054;&#1087;&#1083;&#1072;&#1090;&#1072;, &#8376;">{{ r.pay|money }}</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -166,13 +181,13 @@ a:hover{text-decoration:underline}
   <div class="panel" id="t_over">
     <h2>💸 Переплата</h2>
     <div class="table-container">
-      <table>
+      <table class="report-table">
         <thead><tr><th>Клиент</th><th class="num">Переплата, ₸</th></tr></thead>
         <tbody>
           {% for r in overpay_rows %}
           <tr id="client-{{ r.client_slug }}">
-            <td><a href="#client-{{ r.client_slug }}" data-panel="t_all">{{ r.client }}</a></td>
-            <td class="num positive">-{{ (r.overpay * -1)|money }}</td>
+            <td data-label="&#1050;&#1083;&#1080;&#1077;&#1085;&#1090;"><a href="#client-{{ r.client_slug }}" data-panel="t_all">{{ r.client }}</a></td>
+            <td class="num positive" data-label="&#1055;&#1077;&#1088;&#1077;&#1087;&#1083;&#1072;&#1090;&#1072;, &#8376;">-{{ (r.overpay * -1)|money }}</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -185,7 +200,7 @@ a:hover{text-decoration:underline}
   <div class="panel" id="t_all">
     <h2>📋 Все клиенты</h2>
     <div class="table-container">
-      <table>
+      <table class="report-table">
         <thead>
           <tr>
             <th>Клиент</th>
@@ -204,20 +219,20 @@ a:hover{text-decoration:underline}
         <tbody>
           {% for r in all_rows %}
           <tr id="client-{{ r.client_slug }}">
-            <td>{{ r.client }}</td>
-            <td class="num {% if r.debt is not none and r.debt < 0 %}positive{% elif r.debt is not none and r.debt > 0 %}negative{% endif %}">
+            <td data-label="&#1050;&#1083;&#1080;&#1077;&#1085;&#1090;">{{ r.client }}</td>
+            <td class="num {% if r.debt is not none and r.debt < 0 %}positive{% elif r.debt is not none and r.debt > 0 %}negative{% endif %}" data-label="&#1044;&#1086;&#1083;&#1075;, &#8376;">
               {% if r.debt is not none and r.debt > 0 %}{{ r.debt|money }}
               {% elif r.debt is not none and r.debt < 0 %}-{{ (r.debt * -1)|money }}
               {% else %}0,00{% endif %}
             </td>
             {% if report_type == 'simple' %}
-              <td class="num">{{ (r.pct|round(1)) if r.pct is not none else "—" }}</td>
+              <td class="num" data-label="&#1044;&#1086;&#1083;&#1103;, %">{{ (r.pct|round(1)) if r.pct is not none else "—" }}</td>
             {% else %}
-              <td class="num">{{ r.opening|money }}</td>
-              <td class="num">{{ r.debit|money }}</td>
-              <td class="num">{{ r.credit|money }}</td>
-              <td class="num">{{ r.movements }}</td>
-              <td class="num">{{ r.days_silence if r.days_silence is not none else "—" }}</td>
+              <td class="num" data-label="&#1053;&#1072;&#1095;. &#1086;&#1089;&#1090;&#1072;&#1090;&#1086;&#1082;">{{ r.opening|money }}</td>
+              <td class="num" data-label="&#1054;&#1090;&#1075;&#1088;&#1091;&#1079;&#1082;&#1072;">{{ r.debit|money }}</td>
+              <td class="num" data-label="&#1054;&#1087;&#1083;&#1072;&#1090;&#1072;">{{ r.credit|money }}</td>
+              <td class="num" data-label="&#1054;&#1087;&#1077;&#1088;&#1072;&#1094;&#1080;&#1081;">{{ r.movements }}</td>
+              <td class="num" data-label="&#1044;&#1085;&#1080; &#1084;&#1086;&#1083;&#1095;&#1072;&#1085;&#1080;&#1103;">{{ r.days_silence if r.days_silence is not none else "—" }}</td>
             {% endif %}
           </tr>
           {% endfor %}
@@ -235,7 +250,7 @@ a:hover{text-decoration:underline}
       {% for client in clients %}
       <div class="summary-card" id="mov-{{ client.client_slug }}">
         <h4>{{ client.client }}</h4>
-        <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);gap:8px">
+        <div class="stats-grid movement-stats" style="grid-template-columns:repeat(4,1fr);gap:8px">
           <div class="stat-card"><div class="stat-label">Нач. остаток</div><div class="stat-value">{{ client.opening|money }} ₸</div></div>
           <div class="stat-card"><div class="stat-label">Отгрузка</div><div class="stat-value">{{ client.sum_debit|money }} ₸</div></div>
           <div class="stat-card"><div class="stat-label">Оплата</div><div class="stat-value">{{ client.sum_credit|money }} ₸</div></div>
@@ -250,14 +265,14 @@ a:hover{text-decoration:underline}
         {% if client.movements %}
         <h5>Движения:</h5>
         <div class="table-container">
-          <table>
+          <table class="report-table">
             <thead><tr><th>Дата</th><th class="num">Отгрузка, ₸</th><th class="num">Оплата, ₸</th></tr></thead>
             <tbody>
             {% for movement in client.movements|sort(attribute='date') %}
               <tr>
-                <td>{{ movement.date.strftime('%d.%m.%Y') if movement.date else '—' }}</td>
-                <td class="num {% if movement.debit > 0 %}negative{% endif %}">{% if movement.debit > 0 %}{{ movement.debit|money }}{% endif %}</td>
-                <td class="num {% if movement.credit > 0 %}positive{% endif %}">{% if movement.credit > 0 %}{{ movement.credit|money }}{% endif %}</td>
+                <td data-label="&#1044;&#1072;&#1090;&#1072;">{{ movement.date.strftime('%d.%m.%Y') if movement.date else '—' }}</td>
+                <td class="num {% if movement.debit > 0 %}negative{% endif %}" data-label="&#1054;&#1090;&#1075;&#1088;&#1091;&#1079;&#1082;&#1072;, &#8376;">{% if movement.debit > 0 %}{{ movement.debit|money }}{% endif %}</td>
+                <td class="num {% if movement.credit > 0 %}positive{% endif %}" data-label="&#1054;&#1087;&#1083;&#1072;&#1090;&#1072;, &#8376;">{% if movement.credit > 0 %}{{ movement.credit|money }}{% endif %}</td>
               </tr>
             {% endfor %}
             </tbody>

@@ -15,11 +15,11 @@ body{font-family:Arial,sans-serif;background:var(--bg);margin:0;padding:15px;col
 h1{color:var(--ink);font-size:21px;margin:0 0 8px}
 small{color:var(--muted);line-height:1.6}
 .key{font-weight:600}
-.table-wrap{overflow:auto;border:1px solid var(--border);border-radius:8px;background:#fff;margin:10px 0}
+.table-wrap{overflow:auto;border:1px solid var(--border);border-radius:8px;background:#fff;margin:10px 0;-webkit-overflow-scrolling:touch}
 table{width:100%;border-collapse:collapse;table-layout:fixed;min-width:600px}
 colgroup col:nth-child(1){width:55%}
 colgroup col:nth-child(2),colgroup col:nth-child(3),colgroup col:nth-child(4){width:15%}
-th,td{padding:8px 10px;border-bottom:1px solid var(--border)}
+th,td{padding:8px 10px;border-bottom:1px solid var(--border);overflow-wrap:anywhere}
 th{background:var(--th-bg);text-align:center;font-weight:600;border-bottom:2px solid var(--border)}
 tr:not(.client-head):hover td{background:#f5f8fc}
 .client-head td{background:#dce8f5;font-weight:700;border-bottom:1px solid var(--border);font-size:14px;color:var(--brand)}
@@ -36,7 +36,7 @@ a,button{touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.04)}
 @media(max-width:768px){
   body{padding:8px}.wrap{padding:12px 14px 18px}
   h1{font-size:17px}
-  table{min-width:auto!important;table-layout:auto}
+  table{min-width:0!important;table-layout:auto}
   colgroup col:nth-child(1),colgroup col:nth-child(2),colgroup col:nth-child(3),colgroup col:nth-child(4){width:auto}
   th,td{padding:5px 6px;font-size:12px}
   .client-head td{padding:7px 6px;font-size:13px}
