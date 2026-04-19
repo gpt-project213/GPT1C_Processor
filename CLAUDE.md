@@ -391,6 +391,22 @@ Rules:
 
 ---
 
+## Current Project Workflow (2026-04-19)
+
+Use this as the active workflow overlay for Python/1C work in this repository.
+
+- Start with `git status --short`; treat unrelated dirty files as user work.
+- Use `rg` / `rg --files` for discovery, then read only the exact files needed.
+- Keep production errors visible. Do not lower logging/error severity just to make tests quieter.
+- Avoid import-time log file opens in modules imported by tests or the bot. Prefer `config.setup_logging()` / delayed handlers.
+- For Windows `PermissionError` during tests, distinguish sandbox/log/temp-file locks from code failures; rerun important verification outside the sandbox if needed.
+- For routing bugs, separate pipeline classification (`run_pipeline_all_mp.py`) from bot output classification (`bot/send_reports.py`).
+- Do not mechanically refactor broad `except Exception`; defer and triage boundary handlers separately from parser/core logic.
+- For report changes, respect current JSON contracts. `sales_parser.py` writes `period_end`; last-sale analytics should read that field and skip older JSON without it with a warning.
+- After substantial work, autosave context: commit SHA/push status, changed files, tests run, unresolved warnings, dirty files left alone, and next action. Use `SESSION_CONTEXT.md` for project handoff or `C:\Users\user\.codex\memories\gpt1c-python-audit-context.md` for Codex persistent memory.
+
+---
+
 ## Operational Rules for Claude Code
 
 ### 1. Editing Safety Rules
