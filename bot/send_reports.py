@@ -275,6 +275,7 @@ PROCESSED_DIR = REPORTS_DIR / "excel" / "processed"
 CLEAN_DIR = REPORTS_DIR / "excel" / "clean"
 REJECTED_DIR = REPORTS_DIR / "rejected"  # 🆕 v9.4.13.3
 REJECTED_CASH_DIR = REJECTED_DIR / "cash"  # 🆕 v9.4.13.3
+REJECTED_UNKNOWN_DIR = REJECTED_DIR / "unknown"  # неизвестный тип отчёта (взаиморасчёты и т.п.)
 NOTIFY_STATE_PATH = LOGS_DIR / "notify_state.json"
 SALES_NOTIFY_DECADE_PATH = LOGS_DIR / "sales_notify_decade.json"  # v9.4.25: подекадные уведомления
 PID_FILE = LOGS_DIR / "bot.pid"
@@ -326,7 +327,7 @@ def _check_single_instance() -> None:
     _write_pid()
     import atexit
     atexit.register(_clear_pid)
-for d in [REPORTS_DIR, HTML_DIR, JSON_DIR, AI_DIR, ANALYTICS_DIR, CONFIG_DIR, LOGS_DIR, ARCHIVE_DIR, QUEUE_DIR, PROCESSED_DIR, CLEAN_DIR, REJECTED_DIR, REJECTED_CASH_DIR]:
+for d in [REPORTS_DIR, HTML_DIR, JSON_DIR, AI_DIR, ANALYTICS_DIR, CONFIG_DIR, LOGS_DIR, ARCHIVE_DIR, QUEUE_DIR, PROCESSED_DIR, CLEAN_DIR, REJECTED_DIR, REJECTED_CASH_DIR, REJECTED_UNKNOWN_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 BOT_TOKEN = os.getenv("TG_BOT_TOKEN") or os.getenv("BOT_TOKEN") or ""
 ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "0"))
@@ -742,6 +743,7 @@ EMOJI_LOG_MAP = {
     # v9.4.7.5: Новые события для batch-логирования и проверок
     "cash_file_rejected": "🗑️💰",  # Отдельный cash-файл перенесён в rejected/cash
     "cash_files_moved_to_rejected": "🗑️📦",  # Batch-перенос cash-отчётов в rejected/cash (v9.4.13.3)
+    "unknown_file_rejected": "🗑️❓",  # Неизвестный тип (взаиморасчёты и др.) → rejected/unknown
     "ai_auto_skipped_old_file": "🤖⏰❌",  # файл старше 24 часов
     "ai_auto_skipped_same_date": "🤖📅❌",  # файл с той же датой уже обработан
     # v9.4.7.5: Автоочистка старых файлов
@@ -3638,6 +3640,14 @@ async def pipeline_task(context: ContextTypes.DEFAULT_TYPE):
                         script_rc = -1
                         script_executed = True
                         log_event("expenses_report_error", file=file_path.name, error=str(e), level="ERROR")
+                elif "взаиморасч" in fname_lower:
+                    # Взаиморасчёты — нет обработчика; перемещаем в rejected/unknown
+                    timestamp = datetime.now(TZ).strftime('%Y%m%d_%H%M%S')
+                    rejected_path = REJECTED_UNKNOWN_DIR / f"{timestamp}_{file_path.name}"
+                    shutil.move(file_path, rejected_path)
+                    log_event("unknown_file_rejected", original=file_path.name,
+                              moved_to=rejected_path.name, reason="взаиморасчёты")
+                    continue
                 else:
                     script_rc, _, _ = await run_script_async("debt_auto_report.py", str(file_path))
                     script_executed = True

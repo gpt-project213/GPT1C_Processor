@@ -1,4 +1,4 @@
-# run_pipeline_all_mp.py · v1.5.4 · Asia/Almaty · 2026-04-13
+# run_pipeline_all_mp.py · v1.5.5 · Asia/Almaty · 2026-04-19
 # Оркестратор всех типов отчётов: DEBT / SALES / GROSS / INVENTORY / EXPENSE
 # Fix P-002: datetime.now() → datetime.now(ZoneInfo(...)) в _move_to_processed (naive datetime)
 # Fix P-001: исправлен импорт expenses_parser — реальное имя функции вместо build_report
@@ -113,7 +113,8 @@ RE_SALES_NAME = re.compile(r"(sales|продаж|выруч|реализац)", 
 RE_GROSS_NAME = re.compile(r"(gross|валов|маржа|рентаб|прибыл)", re.I)
 # Расширено: «Ведомость по товарам на складах», «остатки всем», «склад»
 RE_INV_NAME = re.compile(r"(остат|склад|товарам?\s+на\s+складах|ведомост[ьи]\s+по\s+товарам|inventory|stock|резерв|остатки\s+всем)", re.I)
-RE_DEBT_NAME = re.compile(r"(debt|дебит|взаиморасч|контрагент|дебитор)", re.I)
+RE_DEBT_NAME = re.compile(r"(debt|дебит|контрагент|дебитор)", re.I)
+RE_VZAIMO_NAME = re.compile(r"взаиморасч", re.I)  # взаиморасчёты — нет обработчика, skip
 RE_EXPENSE_NAME = re.compile(r"(затрат|расход|expense|costs?)", re.I)  # Fix #PIPE-1
 
 # ─────────────────────────────────────────────────────────────────────
@@ -201,6 +202,8 @@ def _peek_excel_text(path: Path, max_rows: int = 50) -> str:
 
 def _classify_by_name(name: str) -> Optional[str]:
     n = name.lower()
+    if RE_VZAIMO_NAME.search(n):  # взаиморасчёты — не дебиторка, нет обработчика
+        return "SKIP"
     if RE_INV_NAME.search(n):
         return "INVENTORY"
     if RE_EXPENSE_NAME.search(n):  # Fix #PIPE-1: проверяем до SALES/GROSS (затраты ≠ продажи)
@@ -226,7 +229,9 @@ def _classify_by_content(path: Path) -> Optional[str]:
         "ведомость по денежным средствам", "по денежным средствам", "касс", "банк", "выписка", "платеж", "платёж"
     )):
         return "SKIP"
-    if any(k in low for k in ("дебитор", "debt", "accounts receivable", "кредитор", "задолж", "взаиморасч", "контрагент")):
+    if any(k in low for k in ("взаиморасч",)):  # взаиморасчёты — нет обработчика
+        return "SKIP"
+    if any(k in low for k in ("дебитор", "debt", "accounts receivable", "кредитор", "задолж", "контрагент")):
         return "DEBT"
     if any(k in low for k in ("остат", "склад", "товарам на складах", "ведомость по товарам", "резерв", "на складе")):
         return "INVENTORY"
