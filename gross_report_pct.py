@@ -12,10 +12,11 @@ import os
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Tuple, Optional
-import logging, re
+import re
 import pandas as pd
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from zoneinfo import ZoneInfo
+from config import setup_logging
 from utils_excel import ensure_clean_xlsx
 import html as html_stdlib
 
@@ -28,12 +29,7 @@ LOG_DIR = ROOT / "logs"
 for d in (OUT_DIR, TPL_DIR, LOG_DIR):
     d.mkdir(parents=True, exist_ok=True)
 
-LOG = logging.getLogger("gross_pct")
-if not LOG.handlers:
-    LOG.setLevel(logging.INFO)
-    fmt = logging.Formatter("%(asctime)s, %(levelname)s %(message)s")
-    fh = logging.FileHandler(LOG_DIR / "gross_report_pct.log", encoding="utf-8", mode="a"); fh.setFormatter(fmt); LOG.addHandler(fh)
-    sh = logging.StreamHandler(); sh.setFormatter(fmt); LOG.addHandler(sh)
+LOG = setup_logging("gross_report_pct")
 
 ENV = Environment(loader=FileSystemLoader(str(TPL_DIR)), autoescape=select_autoescape(["html","xml"]))
 _TPL = None

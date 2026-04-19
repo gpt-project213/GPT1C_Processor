@@ -127,5 +127,7 @@ def test_telegram_admin_control_commands_are_registered() -> None:
     assert 'CommandHandler("restart", cmd_restart)' in send_reports
     assert 'CommandHandler("shutdown", cmd_shutdown)' in send_reports
     assert "if chat_id != ADMIN_CHAT_ID:" in send_reports
+    assert "if STOP_FILE.exists():" in send_reports
+    assert "Bot startup cancelled" in send_reports
     assert "STOP_FILE=logs\\bot.stop" in watchdog
     assert 'if exist "%STOP_FILE%"' in watchdog

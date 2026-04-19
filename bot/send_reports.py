@@ -7482,6 +7482,9 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
 
 
 def main():
+    if STOP_FILE.exists():
+        logger.info("Stop file found: %s. Bot startup cancelled.", STOP_FILE)
+        sys.exit(0)
     _check_single_instance()  # завершаем если уже запущен другой экземпляр
     if not BOT_TOKEN:
         logger.critical("TG_BOT_TOKEN не найден в .env! Запуск невозможен.")

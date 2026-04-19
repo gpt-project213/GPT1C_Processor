@@ -12,8 +12,9 @@ from datetime import datetime
 from typing import Dict, List, Tuple, Optional
 import os
 import html as _html
-import logging, re
+import re
 from zoneinfo import ZoneInfo
+from config import setup_logging
 from utils_excel import ensure_clean_xlsx
 
 import pandas as pd
@@ -27,12 +28,7 @@ LOG_DIR = ROOT / "logs"
 for d in (OUT_DIR, TPL_DIR, LOG_DIR):
     d.mkdir(parents=True, exist_ok=True)
 
-LOG = logging.getLogger("gross_full")
-if not LOG.handlers:
-    LOG.setLevel(logging.INFO)
-    fmt = logging.Formatter("%(asctime)s, %(levelname)s %(message)s")
-    fh = logging.FileHandler(LOG_DIR / "gross_report.log", encoding="utf-8", mode="a"); fh.setFormatter(fmt); LOG.addHandler(fh)
-    sh = logging.StreamHandler(); sh.setFormatter(fmt); LOG.addHandler(sh)
+LOG = setup_logging("gross_report")
 
 ENV = Environment(loader=FileSystemLoader(str(TPL_DIR)), autoescape=select_autoescape(["html","xml"]))
 _TPL = None
