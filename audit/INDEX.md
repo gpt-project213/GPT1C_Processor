@@ -102,7 +102,7 @@
 | ~~OP-4~~ | ~~`collector/collections_engine.py`~~ | ~~Нет проверки `manager_name` перед WA-отправкой~~ | ✅ ИСПРАВЛЕН 2026-04-11 |
 | ARCH-1 | `tools/txt_to_html.py` + `bot/send_reports.py` | `txt_to_html` в двух местах с разными интерфейсами | ARCH |
 | ARCH-3 | `expenses_parser.py` | Inline HTML в парсере | ARCH |
-| BSR-01 | `bot/send_reports.py:388` | `logging.Formatter.formatTime` monkey-patch — глобальный | LOW |
+| ~~BSR-01~~ | ~~`bot/send_reports.py:388`~~ | ~~`logging.Formatter.formatTime` monkey-patch — глобальный~~ | ✅ ИСПРАВЛЕН 2026-04-13 (коммит `f1eca89`, `_TzFormatter` subclass) |
 
 **Исправление BUG-CRM-1** (3 строки в `crm_phone_reminder_task`):
 ```python

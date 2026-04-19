@@ -215,12 +215,15 @@ Russian-language prompts for AI analysis in root-level `.txt` files:
 
 ---
 
-## Test Suite (current: 2026-03-20)
+## Test Suite (current: 2026-04-19)
 
 | File | Tests | Coverage |
 |------|-------|----------|
-| `tests/test_project.py` | 62 | imports, helpers, send_tg, gender_emoji, silence_alerts, notify state, config, user_tracker |
-| `tests/test_collector.py` | 106 | collector imports, classify, contacts, daily_summary, WhatsApp, manager dialog, violations |
+| `tests/test_project.py` | 101 | imports, helpers, send_tg, gender_emoji, silence_alerts, notify state, config, user_tracker, opportunity_loss |
+| `tests/test_collector.py` | 256 | collector imports, classify, contacts, daily_summary, WhatsApp, manager dialog, violations |
+| `tests/test_audit_reports_20260414.py` | 8 | concentration, rfm, gross pct, debt header, sales parser, turnover, pareto, html template |
+| `tests/test_parsers.py` | 61 | debt/sales/gross/inventory parsers, data leak ACL |
+| `tests/test_log_monitor.py` | 8 | log monitor parse, alert thresholds |
 
 Run: `python -X utf8 tests/test_project.py && python -X utf8 tests/test_collector.py`
 
@@ -238,7 +241,7 @@ Run: `python -X utf8 tests/test_project.py && python -X utf8 tests/test_collecto
 | ARCH-3 | `expenses_parser.py` | Inline HTML в парсере — изолированный модуль, работает корректно |
 
 ### OPEN — LOW
-- ~~`bot/send_reports.py:388` — `logging.Formatter.formatTime` monkey-patch глобальный (BSR-01)~~ → FIXED 2026-04-13 (replaced with `_TzFormatter` subclass)
+*(нет открытых LOW-приоритетных issues)*
 
 ### FIXED — 2026-03-20 (C:/sync session)
 | ID | Fix |
