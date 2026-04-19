@@ -9,6 +9,7 @@ from __future__ import annotations
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 import pandas as pd
 
@@ -56,9 +57,12 @@ class TestDebtFindHeaderNoSilentFallback(unittest.TestCase):
                 ["1", "2"],
             ]
         )
-        with self.assertRaises(ValueError) as ctx:
-            find_header(raw)
+        test_log = Mock()
+        with patch("debt_auto_report.log", test_log):
+            with self.assertRaises(ValueError) as ctx:
+                find_header(raw)
         self.assertIn("заголовка", str(ctx.exception).lower())
+        test_log.error.assert_called_once()
 
 
 class TestSalesParserDataEndAligned(unittest.TestCase):
