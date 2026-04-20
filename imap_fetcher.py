@@ -2,7 +2,7 @@
 # coding: utf-8
 """
 imap_fetcher.py
-Version: v4.4.4 (2026-03-10, Asia/Almaty) - ИСПРАВЛЕН ВЫЗОВ utils_excel
+Version: v4.4.5 (2026-04-20, Asia/Almaty) - F-002: skip no-manager-in-name logged as INFO
 
 Назначение:
 - Разовый цикл IMAP: скачать вложения .xlsx/.xls из белого списка отправителей,
@@ -534,7 +534,7 @@ def run_once(since: Optional[str] = None, debug: int = 1) -> None:
                     # ★ ИСПРАВЛЕНО: фильтр по имени менеджера в названии файла с исключением для сводных отчетов
                     if (cfg.get("require_manager_in_name") and cfg.get("manager_names")):
                         if not _filename_has_manager(fname, cfg["manager_names"]):
-                            logger.debug("SKIP no-manager-in-name: %s", fname)
+                            logger.info("SKIP no-manager-in-name: %s", fname)
                             try:
                                 M.store(num, "+FLAGS", "\\Seen")
                             except (imaplib.IMAP4.error, OSError):
