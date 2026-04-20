@@ -1,4 +1,4 @@
-# run_pipeline_all_mp.py · v1.5.5 · Asia/Almaty · 2026-04-19
+# run_pipeline_all_mp.py · v1.5.6 · Asia/Almaty · 2026-04-20
 # Оркестратор всех типов отчётов: DEBT / SALES / GROSS / INVENTORY / EXPENSE
 # Fix P-002: datetime.now() → datetime.now(ZoneInfo(...)) в _move_to_processed (naive datetime)
 # Fix P-001: исправлен импорт expenses_parser — реальное имя функции вместо build_report
@@ -291,7 +291,7 @@ def process_debt_file(work: Path) -> List[Path]:
         if outs:
             _log(f"[DEBT] ok {work.name}: {', '.join(p.name for p in outs)}")
     except Exception as e:
-        _log(f"[DEBT] fail {work.name}: {e}", err=False)
+        _log(f"[DEBT] fail {work.name}: {e}", err=True)
     finally:
         _cleanup_active(a)
     return outs
@@ -313,7 +313,7 @@ def process_sales_file(work: Path) -> List[Path]:
             outs.extend(new)
             _log(f"[SALES] ok {work.name}: {', '.join(p.name for p in new)}")
     except Exception as e:
-        _log(f"[SALES] fail {work.name}: {e}", err=False)
+        _log(f"[SALES] fail {work.name}: {e}", err=True)
     finally:
         _cleanup_active(a)
     return outs
@@ -341,7 +341,7 @@ def process_gross_file(work: Path) -> List[Path]:
         else:
             _log(f"[GROSS] skip (no outputs): {work.name}")
     except Exception as e:
-        _log(f"[GROSS] fail {work.name}: {e}", err=False)
+        _log(f"[GROSS] fail {work.name}: {e}", err=True)
     finally:
         _cleanup_active(a)
     return outs
@@ -365,7 +365,7 @@ def process_inventory_file(work: Path) -> List[Path]:
         else:
             _log(f"[INVENTORY] skip (no outputs): {work.name}")
     except Exception as e:
-        _log(f"[INVENTORY] fail {work.name}: {e}", err=False)
+        _log(f"[INVENTORY] fail {work.name}: {e}", err=True)
     finally:
         _cleanup_active(a)
     return outs
@@ -389,7 +389,7 @@ def process_expenses_file(work: Path) -> List[Path]:  # Fix #PIPE-1
         else:
             _log(f"[EXPENSE] skip (no outputs): {work.name}")
     except Exception as e:
-        _log(f"[EXPENSE] fail {work.name}: {e}", err=False)
+        _log(f"[EXPENSE] fail {work.name}: {e}", err=True)
     finally:
         _cleanup_active(a)
     return outs
