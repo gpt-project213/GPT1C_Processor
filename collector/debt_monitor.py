@@ -4,7 +4,7 @@
 collections/debt_monitor.py
 Анализ дебиторки, классификация должников по уровням давления.
 
-Версия: 1.0.6 (2026-04-13)
+Версия: 1.0.7 (2026-04-20)
 
 Уровни:
   0–9 дней   → level 0 (пропустить)
@@ -372,9 +372,9 @@ def compute_residual_debt_profile(
             unapplied_payment += remaining
 
     debt_amount = _safe_float(
-        client_data.get("amount")
+        client_data.get("debt")
+        or client_data.get("amount")
         or client_data.get("closing")
-        or client_data.get("debt")
         or client_data.get("balance")
         or 0
     )
@@ -498,7 +498,7 @@ def classify_debtors(debt_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         days = int(debt_age_profile.get("residual_debt_age_days", get_overdue_days(client)) or 0)
         payment_silence_days = int(debt_age_profile.get("payment_silence_days", get_overdue_days(client)) or 0)
         amount = 0.0
-        for field in ("amount", "closing", "debt", "balance", "сумма", "остаток"):
+        for field in ("debt", "amount", "closing", "balance", "сумма", "остаток"):
             val = client.get(field)
             if val is not None:
                 v = _safe_float(val)
