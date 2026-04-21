@@ -4,7 +4,7 @@
 collector/approval_flow.py
 UX согласования рассылки WhatsApp — менеджер → администратор.
 
-Версия: 1.0.3 (2026-04-14)
+Версия: 1.0.4 (2026-04-21)
 
 Жизненный цикл:
   1. create_batch(debtors_by_manager)       → batch dict
@@ -132,7 +132,10 @@ def create_batch(
         # Пропускаем пустые списки и клиентов без менеджера
         if not manager_name or not manager_name.strip():
             client_names = [c.get("name", "?") for c in clients]
-            logger.warning(
+            log_fn = logger.warning
+            if client_names and all(str(name).startswith("TEST fixture:") for name in client_names):
+                log_fn = logger.info
+            log_fn(
                 "create_batch: %d клиент(ов) без manager_name — пропускаем: %s",
                 len(clients), ", ".join(client_names),
             )

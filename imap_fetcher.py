@@ -2,7 +2,7 @@
 # coding: utf-8
 """
 imap_fetcher.py
-Version: v4.4.5 (2026-04-20, Asia/Almaty) - F-002: skip no-manager-in-name logged as INFO
+Version: v4.4.6 (2026-04-21, Asia/Almaty) - mark balance/cashflow attachments as by-design ignore
 
 Назначение:
 - Разовый цикл IMAP: скачать вложения .xlsx/.xls из белого списка отправителей,
@@ -52,7 +52,7 @@ from dotenv import load_dotenv, dotenv_values
 # Импорт для XML-очистки битых файлов 1С
 import utils_excel
 
-__version__ = "v4.4.5"
+__version__ = "v4.4.6"
 
 # ─────────────────────────────────────────────────────────────────────
 # Пути/каталоги
@@ -407,6 +407,19 @@ def _filename_has_manager(name: str, managers: List[str]) -> bool:
             return True
     return False
 
+
+def _intentional_ignore_reason(name: str) -> str:
+    """
+    Возвращает причину intentional ignore для вложений,
+    которые по бизнес-правилу не должны попадать в pipeline.
+    """
+    base = (name or "").lower()
+    if "баланс" in base:
+        return "balance-report"
+    if "ведомость денежных средств" in base:
+        return "cashflow-statement"
+    return ""
+
 def _imap_connect(cfg: Dict, max_retries: int = 5, login_timeout: int = 15) -> imaplib.IMAP4:
     """
     Подключаемся с ретраями и LOGIN. Возвращаем IMAP4/IMAP4_SSL.
@@ -532,6 +545,15 @@ def run_once(since: Optional[str] = None, debug: int = 1) -> None:
                         continue
 
                     # ★ ИСПРАВЛЕНО: фильтр по имени менеджера в названии файла с исключением для сводных отчетов
+                    ignore_reason = _intentional_ignore_reason(fname)
+                    if ignore_reason:
+                        logger.info("IGNORE by-design non-pipeline attachment (%s): %s", ignore_reason, fname)
+                        try:
+                            M.store(num, "+FLAGS", "\\Seen")
+                        except (imaplib.IMAP4.error, OSError):
+                            pass
+                        continue
+
                     if (cfg.get("require_manager_in_name") and cfg.get("manager_names")):
                         if not _filename_has_manager(fname, cfg["manager_names"]):
                             logger.info("SKIP no-manager-in-name: %s", fname)

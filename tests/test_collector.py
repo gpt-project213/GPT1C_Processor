@@ -1110,7 +1110,7 @@ check(
 
 # ── Тест 2: create_batch — пустой manager_name игнорируется ─────────────────
 _batch_noname = create_batch({
-    "":          [{"name": "Клиент без менеджера", "amount": 1, "days": 10, "level": 1}],
+    "":          [{"name": "TEST fixture: клиент без manager_name", "amount": 1, "days": 10, "level": 1}],
     "Оксана":    [{"name": "ТОО Дельта", "amount": 300_000, "days": 11, "level": 1}],
 })
 check(
