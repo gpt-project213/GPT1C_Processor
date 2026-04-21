@@ -180,7 +180,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.55/19.04.2026"
+__VERSION__ = "v9.4.56/20.04.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
@@ -370,7 +370,14 @@ def html_to_path(txt_path: Path) -> Path:
     return txt_path.with_suffix('.html')
 
 def txt_to_html(txt_path: Path, html_path: Path):
-    """Конвертирует txt в html с правильной кодировкой для мобильных устройств"""
+    """Конвертирует txt в html с правильной кодировкой для мобильных устройств.
+
+    ARCH-1 (CLAUDE.md): это локальная реализация для бота. Отдельная
+    реализация есть в tools/txt_to_html.py — у неё другой интерфейс
+    (CLI-утилита для ручной конвертации). Унифицировать НЕЛЬЗЯ
+    без переработки всех call sites — это сломает telegram-доставку
+    AI-отчётов. См. CLAUDE.md → Known Open Issues → ARCH-1.
+    """
     try:
         content = txt_path.read_text(encoding='utf-8')
         html_content = f"""<!DOCTYPE html>
