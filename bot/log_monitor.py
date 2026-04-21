@@ -21,7 +21,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
-__VERSION__ = "v1.0.0/19.04.2026"
+__VERSION__ = "v1.0.1/20.04.2026"
 
 DEFAULT_PATTERNS = (
     re.compile(r"\bERROR\b", re.IGNORECASE),
@@ -210,6 +210,11 @@ def format_alert(result: Dict[str, Any]) -> str:
         lines.append(f"• {item.get('file', '?')}: {item.get('line', '')[:350]}")
     if len(findings) > 10:
         lines.append(f"… ещё {len(findings) - 10}")
+    # v1.0.1 (F-004): подсказка для типовых Telegram-ошибок доставки
+    _joined_lines = " ".join(str(item.get("line", "")) for item in findings)
+    if "Chat not found" in _joined_lines:
+        lines.append("")
+        lines.append("⚠ Chat not found: проверьте chat_id в config/managers.json.")
     lines.append("")
     lines.append("Сводка: logs/log_monitor_summary.log")
     lines.append("State: logs/log_monitor_state.json")
