@@ -180,25 +180,22 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.56/20.04.2026"
+__VERSION__ = "v9.4.57/21.04.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
 from typing import Dict, List, Optional, Any, Tuple
 from dotenv import load_dotenv
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile, ReplyKeyboardMarkup, KeyboardButton
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile, ReplyKeyboardRemove
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
 # ──────────────────────────────────────────────────────────────────
-# Persistent Menu (v9.4.12)
-def kb_persistent() -> ReplyKeyboardMarkup:
-    """Постоянное меню внизу (всегда видимое)"""
-    return ReplyKeyboardMarkup([
-        [KeyboardButton("📊 Дебиторка"), KeyboardButton("🛒 Продажи")],
-        [KeyboardButton("💰 Валовая"), KeyboardButton("💸 Затраты")],
-        [KeyboardButton("📦 Остатки"), KeyboardButton("📈 Аналитика")],
-        [KeyboardButton("🗄️ Архив")]
-    ], resize_keyboard=True)
+# Legacy reply-keyboard cleanup (v9.4.57)
+# kb_persistent() (v9.4.12) удалена — функция никогда не вызывалась
+# (мёртвый код). У части пользователей в клиенте Telegram остался
+# "призрак" ещё более старого reply-меню с ярлыками
+# "Статус / Отчёты / Последний debt/sales/gross / Архив / Меню".
+# Автоочистка реализована в handle_persistent_menu().
 from telegram.error import BadRequest, RetryAfter, TimedOut, NetworkError
 from silence_alerts import SilenceAlert
 from bot.log_monitor import format_alert as _format_log_monitor_alert
@@ -7240,11 +7237,30 @@ async def handle_voice_message_tg(update: Update, context: ContextTypes.DEFAULT_
 
 
 async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик команд от постоянного меню (v9.4.12)"""
+    """Обработчик текстовых сообщений (v9.4.12, cleanup v9.4.57)."""
     text = update.message.text
     chat_id = update.effective_chat.id
 
     if not await _acl_gate(chat_id, context):
+        return
+
+    # v9.4.57 (legacy reply-menu cleanup): снять "призрак" старой
+    # reply-клавиатуры. Срабатывает при нажатии пользователем на любую
+    # из устаревших кнопок — бот отправляет ReplyKeyboardRemove и
+    # клавиатура исчезает у пользователя без необходимости /start.
+    _LEGACY_REPLY_LABELS = {
+        "Статус", "Отчёты", "Отчеты",
+        "Последний debt", "Последний sales", "Последний gross",
+        "Архив", "Меню",
+    }
+    if text and text.strip() in _LEGACY_REPLY_LABELS:
+        try:
+            await update.message.reply_text(
+                "Меню обновлено. Откройте основное меню: /start",
+                reply_markup=ReplyKeyboardRemove(),
+            )
+        except Exception as e:
+            logger.warning("legacy reply-menu cleanup failed: %s", e)
         return
 
     # CRM: уточняющий диалог по шагам (clarify_name → clarify_phone → clarify_address)
@@ -7449,54 +7465,12 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
     except Exception as e:
         logger.error("collector text handler error: %s", e)
 
-    user_role = get_user_role(chat_id)
-    
-    if text == "📊 Дебиторка":
-        kb = kb_debt_menu(user_role)
-        msg = "📊 *Дебиторка*" + "\n\n" + "Выберите тип отчёта:"
-        await update.message.reply_text(msg, reply_markup=kb, parse_mode="Markdown")
-    
-    elif text == "🛒 Продажи":
-        if user_role == "manager":
-            my_name = get_my_manager_name(chat_id)
-            if my_name:
-                scopes = user_scopes(chat_id)
-                await handle_report_request("SALES_SIMPLE", my_name, chat_id, context, user_role, scopes)
-            else:
-                await update.message.reply_text("⛔ Менеджер не найден")
-        else:
-            kb = kb_sales_menu(user_role)
-            msg = "🛒 *Продажи*" + "\n\n" + "Выберите тип отчёта:"
-            await update.message.reply_text(msg, reply_markup=kb, parse_mode="Markdown")
-    
-    elif text == "💰 Валовая":
-        kb = kb_gross_menu(user_role)
-        msg = "💰 *Валовая*" + "\n\n" + "Выберите тип отчёта:"
-        await update.message.reply_text(msg, reply_markup=kb, parse_mode="Markdown")
-    
-    elif text == "💸 Затраты":
-        if user_role in ("admin", "subadmin"):
-            await cmd_expenses(update, context)
-        else:
-            await update.message.reply_text("⛔ Доступ запрещён")
-    
-    elif text == "📦 Остатки":
-        scopes = user_scopes(chat_id)
-        await handle_report_request("INVENTORY_SIMPLE", "Сводный отчёт", chat_id, context, user_role, scopes)
-    
-    elif text == "📈 Аналитика":
-        if user_role in ("admin", "subadmin"):
-            await cmd_analytics(update, context)
-        else:
-            await update.message.reply_text("⛔ Доступ запрещён")
-    
-    elif text == "🗄️ Архив":
-        scopes = user_scopes(chat_id)
-        await update.message.reply_text(
-            "🗄️ **Архив отчётов**\n\nВыберите менеджера:",
-            reply_markup=kb_archive_managers(scopes),
-            parse_mode="Markdown"
-        )
+    # v9.4.57: elif-блок для мёртвых ярлыков kb_persistent()
+    # (📊 Дебиторка / 🛒 Продажи / 💰 Валовая / 💸 Затраты / 📦 Остатки /
+    # 📈 Аналитика / 🗄️ Архив) удалён. Функция kb_persistent() была
+    # определена в v9.4.12, но никогда не подключалась как reply_markup,
+    # поэтому эти ярлыки не мог прислать ни один пользователь. Основное
+    # меню работает через inline-клавиатуру /start → callback_data.
 
 
 def main():
