@@ -39,3 +39,7 @@ tools/sync_project_to_github.runtime.log.txt
 .cursor/
 .codex
 config/clients.json
+
+# local backup files from audit sessions
+*.bak.*
+
