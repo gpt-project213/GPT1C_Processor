@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-send_tg.py · v2.4 (2025-09-05, Asia/Almaty)
+send_tg.py · v2.4.1 (2026-04-22, Asia/Almaty)
 
 Назначение:
 - Низкоуровневая отправка в Telegram: длинный текст (с разбиением) и файлы
@@ -33,10 +33,10 @@ except Exception:
     pass
 
 import requests
+from requests import Response
 
 TG_BOT_TOKEN = os.getenv("TG_BOT_TOKEN", "").strip()
 ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID", "").strip()
-API = f"https://api.telegram.org/bot{TG_BOT_TOKEN}"
 
 def _assert_ready():
     if not TG_BOT_TOKEN:
@@ -60,6 +60,39 @@ AI_TG_SPLIT   = _bool_env("AI_TG_SPLIT", True)
 AI_TG_CHUNK   = _int_env("AI_TG_CHUNK", 3500)
 AI_TG_SLEEPMS = _int_env("AI_TG_SLEEP_MS", 400)
 AI_TG_PRE     = _bool_env("AI_TG_PRE", False)
+
+def _api_base() -> str:
+    return f"https://api.telegram.org/bot{TG_BOT_TOKEN}"
+
+def _post_tg(method: str, *, data=None, files=None, timeout: int = 60, retries: int = 3) -> Response:
+    url = f"{_api_base()}/{method}"
+    last_exc: Optional[Exception] = None
+
+    for attempt in range(1, retries + 1):
+        try:
+            r = requests.post(url, data=data, files=files, timeout=timeout)
+            if r.status_code == 429 and attempt < retries:
+                retry_after = 1
+                try:
+                    retry_after = int((r.json().get("parameters") or {}).get("retry_after") or 1)
+                except (ValueError, TypeError, AttributeError):
+                    retry_after = 1
+                time.sleep(max(1, retry_after))
+                continue
+            if 500 <= r.status_code < 600 and attempt < retries:
+                time.sleep(attempt)
+                continue
+            r.raise_for_status()
+            return r
+        except (requests.Timeout, requests.ConnectionError) as e:
+            last_exc = e
+            if attempt >= retries:
+                raise
+            time.sleep(attempt)
+
+    if last_exc:
+        raise last_exc
+    raise RuntimeError(f"Telegram request failed after retries: {method}")
 
 # ──────────────────────────────────────────────────────────────────
 # Вспомогательное: аккуратное разбиение текста
@@ -102,6 +135,11 @@ def send_long_text(text: str, chat_id: Optional[str] = None, parse_html: bool = 
     """
     _assert_ready()
     chat = chat_id or ADMIN_CHAT_ID
+    if parse_html and not AI_TG_PRE and len(text) > AI_TG_CHUNK:
+        raise ValueError(
+            "send_long_text: long HTML text cannot be safely split; "
+            "use AI_TG_PRE=1 or parse_html=False"
+        )
     chunks = _chunk_text(text, AI_TG_CHUNK) if (AI_TG_SPLIT or len(text) > AI_TG_CHUNK) else [text]
 
     for idx, part in enumerate(chunks, 1):
@@ -119,8 +157,7 @@ def send_long_text(text: str, chat_id: Optional[str] = None, parse_html: bool = 
         else:
             data["text"] = part
 
-        r = requests.post(f"{API}/sendMessage", data=data, timeout=90)
-        r.raise_for_status()
+        _post_tg("sendMessage", data=data, timeout=90)
 
         if idx < len(chunks):
             time.sleep(max(0, AI_TG_SLEEPMS) / 1000.0)
@@ -139,8 +176,7 @@ def send_text(text: str, chat_id: Optional[str] = None, parse_html: bool = True)
     }
     if parse_html:
         data["parse_mode"] = "HTML"
-    r = requests.post(f"{API}/sendMessage", data=data, timeout=60)
-    r.raise_for_status()
+    _post_tg("sendMessage", data=data, timeout=60)
     return True
 
 def send_file(file_path: str | Path, chat_id: Optional[str] = None, caption: Optional[str] = None, with_menu: bool = False) -> bool:
@@ -155,15 +191,15 @@ def send_file(file_path: str | Path, chat_id: Optional[str] = None, caption: Opt
 
     data = {
         "chat_id": chat_id or ADMIN_CHAT_ID,
-        "caption": caption or "",
-        "parse_mode": "HTML"
     }
+    if caption:
+        data["caption"] = caption
+        data["parse_mode"] = "HTML"
     if with_menu:
         data["reply_markup"] = json.dumps(_build_menu(), ensure_ascii=False)
 
     with p.open("rb") as f:
-        r = requests.post(f"{API}/sendDocument", data=data, files={"document": f}, timeout=180)
-        r.raise_for_status()
+        _post_tg("sendDocument", data=data, files={"document": f}, timeout=180)
     logging.getLogger(__name__).info("TG: file OK → %s", p)
     return True
 

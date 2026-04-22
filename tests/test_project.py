@@ -121,6 +121,8 @@ captured_data = {}
 def fake_post(url, data=None, **kwargs):
     captured_data.update(data or {})
     class FakeResp:
+        status_code = 200
+        def json(self): return {"ok": True}
         def raise_for_status(self): pass
     return FakeResp()
 
@@ -141,6 +143,31 @@ with mock.patch.object(send_tg.requests, "post", side_effect=fake_post):
     send_tg.send_text("тест с HTML", parse_html=True)
 check("send_text(parse_html=True) — parse_mode='HTML' в data",
       captured_data.get("parse_mode") == "HTML")
+
+captured_data.clear()
+send_tg.TG_BOT_TOKEN  = "token_one"
+check("_api_base() использует актуальный TG_BOT_TOKEN",
+      send_tg._api_base().endswith("/bottoken_one"))
+
+with mock.patch.object(send_tg.requests, "post", side_effect=fake_post):
+    send_tg.send_file(__file__, caption=None)
+check("send_file(caption=None) — parse_mode НЕ в data",
+      "parse_mode" not in captured_data and "caption" not in captured_data,
+      f"keys={list(captured_data.keys())}")
+
+orig_pre = send_tg.AI_TG_PRE
+orig_chunk = send_tg.AI_TG_CHUNK
+send_tg.AI_TG_PRE = False
+send_tg.AI_TG_CHUNK = 10
+try:
+    try:
+        send_tg.send_long_text("<b>12345678901</b>", parse_html=True)
+        check("send_long_text(long HTML) — безопасный отказ без split сырого HTML", False, "ValueError not raised")
+    except ValueError:
+        check("send_long_text(long HTML) — безопасный отказ без split сырого HTML", True)
+finally:
+    send_tg.AI_TG_PRE = orig_pre
+    send_tg.AI_TG_CHUNK = orig_chunk
 
 send_tg.TG_BOT_TOKEN  = orig_token
 send_tg.ADMIN_CHAT_ID = orig_chat
