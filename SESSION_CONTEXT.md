@@ -750,3 +750,69 @@ Do not mix the audit-path anomaly into the sales or collector commits without se
 1. make a small docs-only commit with:
    - `audit/AUDIT_20260421.md`
 2. keep `SESSION_CONTEXT.md` local unless the user wants it committed too
+
+## Handoff Update - 2026-04-22 16:45 +05:00
+
+### Phase 4 quick scan closed
+
+- Completed quick scan of remaining modules and repository artifacts after Phase 3.
+- Main actionable finding was not a runtime bug but tracked secret exposure in `logs_public/`.
+- Added:
+  - `audit/AUDIT_PHASE4_QUICKSCAN_20260422.md`
+
+### Tracked log secret exposure fixed
+
+- Historical tracked logs in `logs_public/` contained full Telegram bot token URLs.
+- Sanitized only the secret-bearing fragments in place:
+  - `https://api.telegram.org/bot<real-token>/...`
+  - became `https://api.telegram.org/bot<TG_TOKEN>/...`
+- No log files were deleted.
+- Operational content of the logs was preserved.
+
+Affected files:
+- `logs_public/send_reports_20260212.log`
+- `logs_public/send_reports_20260216.log`
+- `logs_public/send_reports_20260217.log`
+- `logs_public/send_reports_20260218.log`
+- `logs_public/send_reports_20260219.log`
+- `logs_public/send_reports_20260220.log`
+- `logs_public/send_reports_20260222.log`
+- `logs_public/send_reports_20260223.log`
+- `logs_public/send_reports_20260225.log`
+- `logs_public/send_reports_20260226.log`
+
+Verification:
+- `rg -n "api\.telegram\.org/bot[0-9]{5,}:[A-Za-z0-9_-]+/|bot[0-9]{5,}:[A-Za-z0-9_-]+" logs_public`
+  - no matches after redaction
+
+### repo_map refreshed
+
+- `repo_map.json` was stale:
+  - old branch: `master`
+  - old timestamp: `2026-03-10 23:40:59`
+- Regenerated to current branch:
+  - `fix/log-noise-by-design-markers`
+
+### Current dirty files
+
+- modified:
+  - `logs_public/send_reports_20260212.log`
+  - `logs_public/send_reports_20260216.log`
+  - `logs_public/send_reports_20260217.log`
+  - `logs_public/send_reports_20260218.log`
+  - `logs_public/send_reports_20260219.log`
+  - `logs_public/send_reports_20260220.log`
+  - `logs_public/send_reports_20260222.log`
+  - `logs_public/send_reports_20260223.log`
+  - `logs_public/send_reports_20260225.log`
+  - `logs_public/send_reports_20260226.log`
+  - `repo_map.json`
+  - `SESSION_CONTEXT.md`
+- added:
+  - `audit/AUDIT_PHASE4_QUICKSCAN_20260422.md`
+
+### Recommended next step
+
+1. commit the Phase 4 artifact cleanup separately from runtime code
+2. push
+3. optionally continue with deeper review of `bot/send_reports.py` only if a new concrete issue appears
