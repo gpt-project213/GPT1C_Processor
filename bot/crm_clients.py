@@ -4,7 +4,7 @@
 bot/crm_clients.py
 Универсальная база клиентов Минбаракат (CRM).
 
-Версия: 1.0.3 (2026-04-19)
+Версия: 1.0.4 (2026-04-22)
 
 Источники данных:
   - reports/json/debt_ext_*.json   → клиенты по менеджерам (дебиторка)
@@ -173,11 +173,55 @@ def _parse_manager_from_filename(filename: str) -> str:
     return ""
 
 
+def _latest_debt_json_for_manager(manager: str) -> Optional[Path]:
+    detailed = list(JSON_DIR.glob(f"debt_ext_*Детальный Дебиторы {manager}*.json"))
+    if detailed:
+        return max(detailed, key=_safe_mtime)
+
+    fallback = list(JSON_DIR.glob(f"debt_ext_*{manager}*.json"))
+    if fallback:
+        return max(fallback, key=_safe_mtime)
+    return None
+
+
 def _load_latest_debt_clients() -> List[Tuple[str, str]]:
     """
     Читает последние debt_ext_*.json по каждому менеджеру.
     Возвращает список (client_name, manager).
     """
+    result: List[Tuple[str, str]] = []
+    for manager_name in ("Алена", "Ергали", "Магира", "Оксана"):
+        latest = _latest_debt_json_for_manager(manager_name)
+        if latest is None:
+            continue
+        try:
+            with open(latest, encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError) as e:
+            logger.error("debt JSON read error %s: %s", latest.name, e)
+            continue
+
+        manager = (data.get("manager") or manager_name) if isinstance(data, dict) else manager_name
+        if not manager or manager in ("?", "-", "вЂ”", "ABSENT"):
+            continue
+
+        clients: List[Dict[str, Any]] = []
+        if isinstance(data, dict):
+            for key in ("clients", "rows", "data"):
+                if key in data and isinstance(data[key], list):
+                    clients = data[key]
+                    break
+
+        for c in clients:
+            if not isinstance(c, dict):
+                continue
+            name = (c.get("name") or c.get("client") or "").strip()
+            if name:
+                result.append((name, manager))
+
+    if result:
+        return result
+
     candidates = list(JSON_DIR.glob("debt_ext_*.json"))
     if not candidates:
         return []

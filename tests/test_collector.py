@@ -2089,6 +2089,66 @@ finally:
 # ═══════════════════════════════════════════════════════════════
 # 20. Shipment control — collector/shipment_control.py
 # ═══════════════════════════════════════════════════════════════
+_orig_dstop_json_dir = _dstop.JSON_DIR
+_orig_dstop_config_dir = _dstop.CONFIG_DIR
+try:
+    _dstop.JSON_DIR = Path(_dstop_tmpdir) / "json"
+    _dstop.CONFIG_DIR = Path(_dstop_tmpdir) / "config"
+    _dstop.JSON_DIR.mkdir(parents=True, exist_ok=True)
+    _dstop.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+
+    (_dstop.CONFIG_DIR / "managers.json").write_text(
+        json.dumps({"Алена": 188939016}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (_dstop.CONFIG_DIR / "clients.json").write_text(
+        json.dumps({"clients": {}}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (_dstop.CONFIG_DIR / "weekly_clients.json").write_text(
+        json.dumps({"clients": []}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    (_dstop.JSON_DIR / "debt_ext_Ведомость_по_взаиморасчетам_с_контрагентами_Алена (336).json").write_text(
+        json.dumps({
+            "clients": [{
+                "client": "А Фурманова Евгений (склад № 20)",
+                "days_silence": 7,
+                "debt": 285535.02,
+            }]
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (_dstop.JSON_DIR / "debt_ext_Детальный Дебиторы Алена (143).json").write_text(
+        json.dumps({
+            "clients": [{
+                "client": "А Фурманова Евгений (склад № 20)",
+                "days_silence": 2,
+                "debt": 36588.52,
+            }]
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    os.utime(_dstop.JSON_DIR / "debt_ext_Ведомость_по_взаиморасчетам_с_контрагентами_Алена (336).json", (1, 1))
+    os.utime(_dstop.JSON_DIR / "debt_ext_Детальный Дебиторы Алена (143).json", (2, 2))
+
+    _picked = _dstop._get_latest_debt_file("Алена")
+    check("DSTOP FILE T1: _get_latest_debt_file выбирает свежий detailed debt, а не старую ведомость с большим номером",
+          _picked is not None and "Детальный Дебиторы Алена (143)" in _picked.name,
+          str(_picked))
+
+    _dstop.save_registry({})
+    _dstop.save_state({"date": _today, "candidates": {}, "next_id": 1, "saida_sent": False})
+    _rebuilt = _dstop._build_candidates()
+    _cand_values = list(_rebuilt.get("candidates", {}).values())
+    check("DSTOP FILE T2: _build_candidates не поднимает клиента из свежего файла, если он уже не проходит пороги",
+          len(_cand_values) == 0,
+          str(_cand_values))
+finally:
+    _dstop.JSON_DIR = _orig_dstop_json_dir
+    _dstop.CONFIG_DIR = _orig_dstop_config_dir
+
 section("20. Shipment control (условная отгрузка)")
 
 import tempfile as _tmpmod

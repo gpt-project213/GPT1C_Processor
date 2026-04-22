@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-debt_stop_control.py · v1.0.4 (2026-04-13)
+debt_stop_control.py · v1.0.5 (2026-04-22)
 
 Контроль стоп-листа отгрузки — уведомление Саиды-бухгалтера.
 
@@ -210,16 +210,26 @@ def _get_admin_chat_id() -> int:
 # ══════════════════════════════════════════════════════════════════════
 
 def _get_latest_debt_file(manager: str) -> Optional[Path]:
-    """Найти последний debt_ext файл для данного менеджера (по номеру в скобках)."""
-    files = list(JSON_DIR.glob(f"debt_ext_*_{manager}*"))
+    """
+    Найти актуальный debt_ext файл для менеджера.
+
+    В проекте сосуществуют два семейства manager-specific debt JSON:
+    - свежие `debt_ext_Детальный Дебиторы <manager> (...)`
+    - старые `debt_ext_Ведомость_по_взаиморасчетам_с_контрагентами_<manager> (...)`
+
+    Номера в скобках несравнимы между этими семействами, поэтому выбор по
+    `(... )` может отдавать более старую ведомость вместо свежего detailed debt.
+    Для стоп-листа источником истины должен быть самый свежий файл по времени,
+    с приоритетом для линии `Детальный Дебиторы`, если она существует.
+    """
+    detailed = list(JSON_DIR.glob(f"debt_ext_*Детальный Дебиторы {manager}*"))
+    if detailed:
+        return max(detailed, key=lambda p: p.stat().st_mtime)
+
+    files = list(JSON_DIR.glob(f"debt_ext_*{manager}*"))
     if not files:
         return None
-
-    def _seq(p: Path) -> int:
-        m = re.search(r"\((\d+)\)", p.stem)
-        return int(m.group(1)) if m else 0
-
-    return max(files, key=_seq)
+    return max(files, key=lambda p: p.stat().st_mtime)
 
 
 def _get_client_current_state(client_name: str) -> Optional[Dict[str, Any]]:

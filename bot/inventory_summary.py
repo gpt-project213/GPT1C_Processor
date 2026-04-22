@@ -1,8 +1,10 @@
 """
 Модуль для генерации кратких сводок по остаткам
 
-Версия: 1.5
-Дата: 2026-04-13
+Версия: 1.6
+Дата: 2026-04-22
+Изменения v1.6:
+  - Выбор inventory JSON теперь предпочитает дневные файлы по дате периода, а не более новые range/cost-артефакты
 Изменения v1.4:
   - Fix #INV-2: parse_inventory_json() читает новый JSON-формат inventory.py
     (total_qty / categories[].item_list[].qty вместо total_quantity / items[].quantity)
@@ -34,6 +36,47 @@ class InventorySummary:
     """Краткие сводки по остаткам"""
     
     LOW_STOCK_THRESHOLD = 50.0
+
+    @staticmethod
+    def _parse_period_end_from_json(path: Path) -> datetime:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            period_str = str(data.get("period") or "").strip()
+            if period_str:
+                range_m = re.search(
+                    r'(\d{1,2})[./](\d{1,2})[./](\d{4})\s*[-–—]\s*(\d{1,2})[./](\d{1,2})[./](\d{4})',
+                    period_str
+                )
+                if range_m:
+                    return datetime(int(range_m.group(6)), int(range_m.group(5)), int(range_m.group(4)))
+                date_m = re.search(r'(\d{1,2})[./](\d{1,2})[./](\d{4})', period_str)
+                if date_m:
+                    return datetime(int(date_m.group(3)), int(date_m.group(2)), int(date_m.group(1)))
+                ru_m = re.search(r'(\d{1,2})\s+([Р°-СЏС‘]+)\s+(\d{4})', period_str.lower())
+                if ru_m:
+                    month = _MONTHS_RU.get(ru_m.group(2))
+                    if month:
+                        return datetime(int(ru_m.group(3)), month, int(ru_m.group(1)))
+        except Exception as e:
+            logger.debug(f"_parse_period_end_from_json({path.name}): {e}")
+        try:
+            return datetime.fromtimestamp(path.stat().st_mtime)
+        except (FileNotFoundError, OSError):
+            return datetime.min
+
+    @staticmethod
+    def _is_inventory_day_json(path: Path) -> bool:
+        if path.name.lower().startswith("inventory_cost_"):
+            return False
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            period_str = str(data.get("period") or "").strip()
+            return not bool(re.search(
+                r'\d{1,2}[./]\d{1,2}[./]\d{2,4}\s*[-–—]\s*\d{1,2}[./]\d{1,2}[./]\d{2,4}',
+                period_str
+            ))
+        except Exception:
+            return True
     
     @staticmethod
     def parse_quantity(qty_str: str) -> float:
@@ -190,10 +233,12 @@ class InventorySummary:
     
     def get_latest_inventory_json(self, json_dir: Path) -> Optional[Path]:
         """v1.4: Находит свежий JSON остатков по mtime."""
-        files = list(json_dir.glob("inventory_*.json"))
+        files = [p for p in json_dir.glob("inventory_*.json") if self._is_inventory_day_json(p)]
+        if not files:
+            files = list(json_dir.glob("inventory_*.json"))
         if not files:
             return None
-        latest = max(files, key=lambda p: p.stat().st_mtime)
+        latest = max(files, key=lambda p: (self._parse_period_end_from_json(p), p.stat().st_mtime))
         logger.info(f"📄 Найден JSON остатков: {latest.name}")
         return latest
 

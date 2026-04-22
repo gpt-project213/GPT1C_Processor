@@ -1,3 +1,4 @@
+# v. 9.4.38 / 2026-04-22 - fix: bot selectors prefer fresh detailed debt files over stale ledgers
 # v. 9.4.37 / 2026-04-22 - fix: approval-batch silence escalates to admin hourly; stale manager previews are closed server-side
 # v. 9.4.35 / 2026-04-13 - feat: event-driven collector trigger после обработки debt_ext файлов
 # v. 9.4.34 / 2026-03-16 - Fix: p.stat().st_mtime в _extract_date обёрнут в try/except (audit fix)
@@ -183,7 +184,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.57/21.04.2026"
+__VERSION__ = "v9.4.58/22.04.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
@@ -4697,6 +4698,21 @@ def find_recent_json_for_manager(manager: str, hours: int = 48, report_type: str
     """
     if not JSON_DIR.exists():
         return None
+    cutoff_time = time.time() - (hours * 3600)
+    if report_type == "DEBT":
+        detailed = [
+            p for p in JSON_DIR.glob(f"debt_ext_*Детальный Дебиторы {manager}*.json")
+            if p.stat().st_mtime >= cutoff_time
+        ]
+        if detailed:
+            return max(detailed, key=lambda p: p.stat().st_mtime)
+        fallback = [
+            p for p in JSON_DIR.glob(f"debt_ext_*{manager}*.json")
+            if p.stat().st_mtime >= cutoff_time
+        ]
+        if fallback:
+            return max(fallback, key=lambda p: p.stat().st_mtime)
+        return None
     # Префиксы файлов по типу отчёта
     TYPE_PREFIXES = {
         "DEBT":      ("debt_ext_", "debt_"),
@@ -4706,7 +4722,6 @@ def find_recent_json_for_manager(manager: str, hours: int = 48, report_type: str
         "EXPENSES":  ("expenses_",),
     }
     allowed_prefixes = TYPE_PREFIXES.get(report_type, ())
-    cutoff_time = time.time() - (hours * 3600)
     candidates = []
     for json_file in JSON_DIR.glob("*.json"):
         try:
@@ -4727,6 +4742,57 @@ def find_recent_json_for_manager(manager: str, hours: int = 48, report_type: str
     if candidates:
         return max(candidates, key=lambda p: p.stat().st_mtime)
     return None
+
+
+def _load_fresh_debt_totals_by_manager(json_dir: Path) -> tuple[dict, str]:
+    """
+    Для рейтинга менеджеров используем только актуальные manager-specific detailed debt JSON.
+    Старые "Ведомость ..." не должны подменять свежие долги.
+    """
+    debt_by_mgr: dict = {}
+    debt_date = ""
+    best_debt_date = None
+    manager_candidates: dict = {}
+
+    for path in json_dir.glob("debt_ext_*.json"):
+        if "детальный дебиторы" not in path.name.lower():
+            continue
+        try:
+            with open(path, encoding="utf-8") as fh:
+                data = json.load(fh)
+        except Exception:
+            continue
+        mgr = (data.get("manager") or "").strip()
+        if not mgr or mgr in ("Не определён", "Неизвестно", "?", "-", "—") or len(mgr) < 2:
+            continue
+        prev = manager_candidates.get(mgr)
+        if prev is None or path.stat().st_mtime > prev.stat().st_mtime:
+            manager_candidates[mgr] = path
+
+    for mgr, path in manager_candidates.items():
+        try:
+            with open(path, encoding="utf-8") as fh:
+                data = json.load(fh)
+        except Exception:
+            continue
+        agg_close = float((data.get("aggregates") or {}).get("close", 0) or 0)
+        if agg_close <= 0:
+            continue
+        debt_by_mgr[mgr] = agg_close
+        pmax = (data.get("period_max") or "").strip()
+        dm2 = re.findall(r'(\d{1,2})[./](\d{1,2})[./](\d{4})', pmax)
+        if dm2:
+            dd, mm, yyyy = dm2[-1]
+            try:
+                from datetime import date as _date2
+                pd = _date2(int(yyyy), int(mm), int(dd))
+                if best_debt_date is None or pd > best_debt_date:
+                    best_debt_date = pd
+                    debt_date = pmax
+            except Exception:
+                pass
+
+    return debt_by_mgr, debt_date
 
 def find_newest_ai_file_for_manager(manager: str, after_time: float, report_type: str = "") -> Optional[Path]:
     """
@@ -6619,9 +6685,13 @@ def _build_manager_ranking(json_dir: Path, analytics_dir: Path) -> Optional[str]
     # ── 2. Дебиторка по менеджерам ────────────────────────────────────────────
     debt_by_mgr: dict = {}   # name → closing debt
     debt_date = ""
+    debt_by_mgr, debt_date = _load_fresh_debt_totals_by_manager(json_dir)
     try:
-        dfiles = sorted(json_dir.glob("debt_ext_*.json"),
-                        key=lambda p: p.stat().st_mtime, reverse=True)
+        if debt_by_mgr:
+            dfiles = []
+        else:
+            dfiles = sorted(json_dir.glob("debt_ext_*.json"),
+                            key=lambda p: p.stat().st_mtime, reverse=True)
         # Находим свежий period_max
         best_d = None
         best_dstr = ""
