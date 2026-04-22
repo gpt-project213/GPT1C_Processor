@@ -891,3 +891,56 @@ Verification run:
 
 1. if operators still see old debt-stop rows, rebuild the current daily stop snapshot instead of trusting the old `reports/debt_stop_state.json`
 2. monitor the next live cycle and verify that stop-control, bot debt lookups, CRM, and inventory summary all use fresh sources only
+
+## Handoff Update - 2026-04-22 19:35 +05:00
+
+### Manual rebuild of current debt-stop snapshot completed
+
+- User asked for an exact one-line PowerShell command to force rebuild `reports/debt_stop_state.json` without waiting for scheduler.
+- Safe path used:
+  - bot stopped first
+  - backup of the previous state file created
+  - `bot.debt_stop_control.save_state(...)` reset only the daily snapshot
+  - `bot.debt_stop_control._build_candidates()` rebuilt candidates from current fresh `debt_ext_*.json`
+- No Telegram sends were triggered by this rebuild.
+- `debt_stop_registry.json` was not modified.
+
+Observed rebuild result:
+- `REBUILT candidates=13`
+- candidates after rebuild:
+  - `А ТД Асем (холодильник № 4)` | `Алена` | `959446.4` | `9`
+  - `А ТД Евразия Мунарбек` | `Алена` | `309024.37` | `13`
+  - `А ТД Сарыарка 1 ряд 12 место Жулдызбек` | `Алена` | `247031.6` | `11`
+  - `А ТД Сарыарка 2 ряд 1 место Ляззат` | `Алена` | `112100.6` | `9`
+  - `А Ресторан Tangirs ТОО GrandRest  Ак мешет 1` | `Алена` | `87155.5` | `8`
+  - `М Ресторан Шама ИП Тян ул Мустафина 12` | `Магира` | `181297.6` | `21`
+  - `Е Еркебулан` | `Ергали` | `767268.67` | `21`
+  - `Е ТОО ГудФуд № 1 ул Досмухамедулы 48(Аида)` | `Ергали` | `527927.35` | `9`
+  - `Е ИП Шахин` | `Ергали` | `340000.0` | `21`
+  - `Е ТД Саянур Леонид` | `Ергали` | `239409.6` | `21`
+  - `Е  ИП Алтын орда Косши` | `Ергали` | `199999.75` | `15`
+  - `Е ТОО Социальная Столовая ул ул Бейбитшилик 9` | `Ергали` | `117556.65` | `14`
+  - `Е ИП Трое Кайрат` | `Ергали` | `58425.0` | `18`
+
+### Important confirmation
+
+- `А Фурманова Евгений (склад № 20)` is not present in the rebuilt candidate list.
+- This confirms:
+  - stale daily snapshot was replaced
+  - old debt `285535.02` is no longer driving the current stop-control list
+  - fixed fresh-source selectors + manual rebuild together resolved the live symptom the user reported
+
+### Current operational status
+
+- Code fix already committed and pushed:
+  - `b5fb564` `fix(bot): prefer fresh report sources over stale snapshots`
+- Context handoff commit already pushed before this update:
+  - `aa805c7` `docs(context): save current project handoff`
+- After the manual rebuild, the next safe operational step is simply to restart:
+  - `python bot/send_reports.py`
+
+### Recommended next step
+
+1. start the bot again on the fixed code
+2. monitor the next live stop-control / manager / admin cycle
+3. if another client is suspected, compare fresh Excel primary source vs current `debt_stop_state.json` first, not archived state
