@@ -1,4 +1,4 @@
-# v. 9.4.36 / 2026-04-22 - fix: approval-batch silence escalates to admin hourly; stale manager previews are closed server-side
+# v. 9.4.37 / 2026-04-22 - fix: approval-batch silence escalates to admin hourly; stale manager previews are closed server-side
 # v. 9.4.35 / 2026-04-13 - feat: event-driven collector trigger после обработки debt_ext файлов
 # v. 9.4.34 / 2026-03-16 - Fix: p.stat().st_mtime в _extract_date обёрнут в try/except (audit fix)
 # v. 9.4.33 / 2026-03-10 - Fix: bare except: → except (ValueError, OverflowError) в _parse_period_date (Bug S5)
@@ -23,6 +23,8 @@
 # - ИЗМЕНЕНО: пороги зон в opportunity_loss.py: ⚡7-15д / 🔴15-30д / ☠️30+д
 # v. 9.4.26 / 27.02.2026 - Упущенная прибыль (opportunity_loss) + alert чистой прибыли
 # ИЗМЕНЕНИЯ v9.4.26:
+# - ИСПРАВЛЕНО: уведомление по молчунам/просрочке снова только один раз в день
+#   в 14:00; вечерний дубль 21:00 удалён из расписания и из стартовой сводки.
 # - ДОБАВЛЕНО: opportunity_loss.py — расчёт упущенной прибыли по молчащим должникам
 #   Формула: долг × маржа%; зоны: ⚡15-60д / 🔴60-120д / ☠️120+д
 #   Джобы: 14:05 и 21:05 (через 5 мин после silence_alerts)
@@ -6453,7 +6455,7 @@ async def post_init(app: Application):
                 f"· 18:00 — база клиентов (CRM)\n"
                 f"· 17:00 — коллектор\n"
                 f"· 20:00 — валовая\n"
-                f"· 21:00 — продажи + молчание\n"
+                f"· 21:00 — продажи\n"
                 f"· 22:00 — аналитика\n"
                 f"· 23:00 — сводка дня\n"
             )
@@ -7530,13 +7532,6 @@ def main():
         )
         logger.info("⏰ Настроен ежедневный джоб: проверка дней молчания в 14:00")
         
-        job_queue.run_daily(
-            check_and_send_silence_alerts,
-            time=dt_time(21, 0, tzinfo=TZ),
-            name="silence_alerts_21h"
-        )
-        logger.info("⏰ Настроен ежедневный джоб: проверка дней молчания в 21:00")
-
         # v9.4.32: Упущенная прибыль — еженедельно в пятницу 14:05 (было: ежедневно 14:05 и 21:05)
         if _OPPORTUNITY_LOSS_AVAILABLE:
             job_queue.run_daily(
