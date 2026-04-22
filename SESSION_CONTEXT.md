@@ -3,6 +3,214 @@
 > **ВНИМАНИЕ:** Этот файл содержит исторические сессии (2026-04-09, 2026-04-13, 2026-04-14).
 > Многие "OPEN" пункты уже закрыты коммитами. **Актуальный статус → `gpt1c.md`.**
 
+---
+
+## HANDOFF 2026-04-22 16:40 Asia/Almaty
+
+### Что зафиксировано в репозитории после предыдущих handoff
+
+- `65d2164` — `docs(audit): map audit corpus and fix path anomaly`
+  - добавлена карта содержимого `audit/AUDIT_CONTENT_MAP_20260422.md`
+  - исправлена git-анomaly по старому пути `аудит/` без потери содержимого
+- `8171b4a` — `docs(audit): clarify 2026-04-21 draft status`
+  - `audit/AUDIT_20260421.md` помечен как незавершённый audit draft, а не финальный вердикт
+- `863ad80` — `chore(project): remove obsolete pdf traces`
+  - удалён пустой каталог `reports/pdf`
+  - удалён `pdfkit` из `requirements.txt`
+  - убраны оставшиеся project-side PDF-следы вне `audit/`
+
+### Что проверено
+
+- `python -m py_compile config.py` — OK
+- поиск по проекту вне `audit/`, `.venv`, `__pycache__` на:
+  - `pdf`
+  - `PDF`
+  - `pdfkit`
+  - `reports/pdf`
+  - `*.pdf`
+  дал `0` совпадений
+
+### Что читать новому ИИ в первую очередь
+
+Чтобы быстро и без фантазий восстановить реальную картину проекта, достаточно прочитать с начала до конца:
+
+1. `AGENTS.md`
+2. `CLAUDE.md`
+3. `gpt1c.md`
+4. `SESSION_CONTEXT.md`
+5. `audit/AUDIT_CONTENT_MAP_20260422.md`
+6. `audit/AUDIT_COLLECTOR_20260422.md`
+
+А затем посмотреть ключевые коммиты этой ветки:
+
+- `67f8e0f` — log-noise cleanup
+- `3695405` — collector state hardening
+- `6f7c6bf` — stale admin requests + voice STT repair
+- `da5486d` — voice STT + guard empty AI analysis
+- `48017d0` — silence alerts once daily
+- `ea74457` — grouped 1C sales + manager top3
+- `65d2164` — audit map + path anomaly fix
+- `8171b4a` — audit draft clarification
+- `863ad80` — PDF traces removed
+
+### Текущее состояние дерева
+
+- после этого handoff в рабочем дереве не должно оставаться незакоммиченного `SESSION_CONTEXT.md`
+- если появятся новые локальные правки, сначала смотреть `git status --short`, затем читать этот файл сверху вниз
+
+---
+
+## HANDOFF 2026-04-22 11:22 Asia/Almaty
+
+### Что доделано после предыдущего handoff
+
+- В `collector/approval_flow.py` и `collector/collections_engine.py` добавлена защита от конфликта старого и нового approval-запроса:
+  - новый актуальный preview-запрос вытесняет предыдущий активный;
+  - старый запрос получает статус `superseded`;
+  - старые manager-preview сообщения закрываются, кнопки снимаются;
+  - старые manager-callback больше не принимаются сервером.
+- В `collector/approval_flow.py` добавлена эскалация при молчании менеджеров:
+  - через `1` час молчания запрос автоматически переводится на решение администратора;
+  - молчавшие менеджеры получают `timeout`;
+  - администратору отправляется итоговая сводка без ожидания всех ответов.
+- В `bot/send_reports.py` hourly `collector_reminder_task()` теперь дополнительно запускает проверку эскалации молчавших approval-запросов.
+- Для менеджеров тексты сделаны без техтерминов:
+  - `Запрос устарел`
+  - `Исходный список уже закрыт`
+  - `Сформирован новый список`
+
+### Проверки
+
+- `python -m py_compile collector/approval_flow.py` — OK
+- `python -m py_compile collector/collections_engine.py` — OK
+- `python -m py_compile bot/send_reports.py` — OK
+- `$env:WHATSAPP_ENABLED='0'; $env:LIVE_SEND_ALLOWED='0'; python -X utf8 tests\test_collector.py` — `266/266`
+- `python -X utf8 tests\test_phase2_safe_send.py` — PASS
+
+### Что изменилось в тестах
+
+- Добавлены регрессии:
+  - `APPROVAL T3d` — `superseded` не считается активным
+  - `APPROVAL T10e` — после 1 часа молчания запрос переходит в `pending_admin`
+  - `APPROVAL T10f` — молчавшие менеджеры получают `timeout`, админу уходит сводка
+  - `APPROVAL T10g` — активный запрос можно закрыть как `superseded`
+  - `APPROVAL T10h` — manager-callback по уже закрытому запросу блокируется
+
+### Разбор LOG MONITOR по ошибке `--send disabled`
+
+- Уведомление `collector_20260422.log: ERROR --send disabled for Phase 2 controlled live` не указывает на боевой scheduler.
+- По самому `logs/collector_20260422.log` перед этой строкой идут тестовые записи:
+  - `send-approved: batch=20260412-120000-ab12 ...`
+  - `[TEST] legacy manager_dialog live send blocked ...`
+- Вывод: это след тестового прогона в рабочем лог-файле коллектора, а не продовая попытка scheduler вызвать `--send`.
+- Отдельный операционный хвост:
+  - был закрыт в этой же итерации:
+    - добавлен `COLLECTOR_TEST_MODE=1`
+    - `collector/collections_engine.py` в тестовом режиме больше не пишет в боевой `collector_YYYYMMDD.log`
+    - `tests/test_collector.py` и `tests/test_phase2_safe_send.py` выставляют этот флаг до импорта модуля
+  - проверено фактом: после повторного тестового прогона в `06:23` хвост `logs/collector_20260422.log` не изменился
+
+### Актуальные файлы этой итерации
+
+- `collector/approval_flow.py`
+- `collector/collections_engine.py`
+- `bot/send_reports.py`
+- `tests/test_collector.py`
+- `tests/test_phase2_safe_send.py`
+- `audit/AUDIT_COLLECTOR_20260422.md`
+
+### Не смешивать с collector-коммитом
+
+- `bot/sales_summary.py`
+- `sales_parser.py`
+- `tests/test_parsers.py`
+- `SESSION_CONTEXT.md`
+- `audit/AUDIT_20260421.md`
+
+### Следующий безопасный шаг
+
+1. Сделать изолированный collector-коммит без sales/parser-правок.
+2. Затем пуш.
+
+## HANDOFF 2026-04-22 10:58 Asia/Almaty
+
+### Что сделано в этой сессии
+
+- Проведён целевой аудит коллектора по цепочке:
+  - `scheduler -> preview -> manager approvals -> admin approve -> send-approved -> batch state`
+- Подтверждены и исправлены 2 state-багa в `collector/approval_flow.py`:
+  1. `load_latest_batch()` больше не считает финальными "активными" батчи со статусами:
+     - `sent`
+     - `partially_sent`
+     - `send_failed`
+     - `send_empty`
+  2. `expire_old_batches()` теперь:
+     - ставит `expired_at`
+     - переводит молчавших менеджеров из `pending` / `manual_editing` в `timeout`
+
+### Что уже было в рабочем дереве и дополнительно верифицировано
+
+- раннее уведомление администратору о создании approval-батча
+- ручной выбор клиентов администратором перед отправкой
+- кнопка `Отправить сейчас` после admin approve
+- safe-send path отправляет только `approved_clients`
+
+### Тесты и проверки
+
+- `python -m py_compile collector\\approval_flow.py` — OK
+- `python -m py_compile collector/collections_engine.py` — OK
+- `$env:WHATSAPP_ENABLED='0'; $env:LIVE_SEND_ALLOWED='0'; python -X utf8 tests\\test_collector.py` — `261/261`
+- `python -X utf8 tests\\test_phase2_safe_send.py` — PASS
+
+Примечание по окружению:
+- первый запуск `tests/test_phase2_safe_send.py` в песочнице упал на `PermissionError` по `logs/collector_20260422.log`
+- повторный запуск вне песочницы прошёл успешно; это был lock лог-файла, не поломка бизнес-логики
+
+### Новые/обновлённые файлы этой сессии
+
+- `collector/approval_flow.py`
+- `tests/test_collector.py`
+- `audit/AUDIT_COLLECTOR_20260422.md`
+
+### Состояние аудита
+
+- старый файл `audit/AUDIT_20260421.md` остаётся как черновик/рабочий draft, не перезаписывался
+- новый актуальный файл по этой сессии:
+  - `audit/AUDIT_COLLECTOR_20260422.md`
+
+### Состояние git на момент handoff
+
+- Ветка: `fix/log-noise-by-design-markers`
+- `HEAD`: `67f8e0f`
+- Коммит по коллектору ЕЩЁ НЕ создан
+
+Причина остановки:
+- попытка выполнить `git add ... && git commit ...` через PowerShell сорвалась не по git-логике, а из-за синтаксиса:
+  - `&&` не поддержан как разделитель в данной версии PowerShell
+
+### Что готово к коммиту
+
+Логически готово коммитить только эти файлы:
+- `collector/approval_flow.py`
+- `collector/collections_engine.py`
+- `tests/test_collector.py`
+- `audit/AUDIT_COLLECTOR_20260422.md`
+
+Не брать в этот коммит:
+- `bot/sales_summary.py`
+- `sales_parser.py`
+- `tests/test_parsers.py`
+- `SESSION_CONTEXT.md`
+- `audit/AUDIT_20260421.md`
+
+### Следующий безопасный шаг
+
+Выполнить по отдельности, без `&&`:
+
+1. `git add collector/approval_flow.py collector/collections_engine.py tests/test_collector.py audit/AUDIT_COLLECTOR_20260422.md`
+2. `git commit -m "fix(collector): harden approval batch states and save audit"`
+3. `git push`
+
 Дата последней фиксации: 2026-04-14
 Проект: `GPT1C_Processor_analitica`
 
@@ -318,3 +526,227 @@
 3. очистка test-like записей из runtime-state;
 4. финальная приёмка по боевым сценариям;
 5. только затем закрытие ТЗ.
+
+---
+
+## Session Handoff - 2026-04-22 08:53 +05:00
+
+### What was done
+
+- Checked unattended health logs on `2026-04-21`.
+- Confirmed `balance Excel` attachments are by-design non-pipeline inputs and should be ignored.
+- Confirmed repeated `create_batch ... without manager_name` log line came from a test fixture, not a production client.
+- Implemented explicit log markers to prevent both cases from being misread as bugs:
+  - `imap_fetcher.py`:
+    - version `v4.4.5 -> v4.4.6`
+    - added explicit `IGNORE by-design non-pipeline attachment (...)` for:
+      - files containing `баланс`
+      - files containing `ведомость денежных средств`
+  - `collector/approval_flow.py`:
+    - version `1.0.3 -> 1.0.4`
+    - test fixtures without `manager_name` now log at `INFO`
+    - real data without `manager_name` still logs at `WARNING`
+  - `tests/test_collector.py`:
+    - renamed fixture to `TEST fixture: клиент без manager_name`
+
+### Commit / branch
+
+- Branch created: `fix/log-noise-by-design-markers`
+- Commit created: `67f8e0f fix(logs): mark by-design IMAP ignores and collector test-noise explicitly`
+
+### Verification completed
+
+- `python -m py_compile imap_fetcher.py collector\approval_flow.py` -> OK
+- `python -X utf8 tests\test_project.py` -> `101/101`
+- `WHATSAPP_ENABLED=0 LIVE_SEND_ALLOWED=0 python -X utf8 tests\test_collector.py` -> `256/256`
+- Additional local check requested by user:
+  - `python -m py_compile bot\sales_summary.py` -> OK
+
+### Important working tree state left untouched
+
+At the time of context save, working tree is NOT clean. These files were intentionally left alone:
+
+- modified:
+  - `bot/sales_summary.py`
+  - `collector/approval_flow.py`
+  - `collector/collections_engine.py`
+- untracked:
+  - `audit/AUDIT_20260421.md`
+
+Notes:
+
+- `audit/AUDIT_20260421.md` is Claude's unfinished audit draft from `2026-04-21`; user explicitly asked to leave it untouched for later continuation.
+- Do not delete, stage, or commit that audit draft unless user explicitly asks.
+- Current modified state of `bot/sales_summary.py` and `collector/collections_engine.py` was not touched in this handoff turn.
+
+### Most recent user intent
+
+- Keep the unfinished audit draft intact.
+- Save context for later continuation.
+
+### Recommended next step
+
+Before any new edits:
+
+1. run `git status --short`;
+2. inspect whether `collector/approval_flow.py` local modification is only the committed `67f8e0f` patch or additional user edits on top;
+3. keep `audit/AUDIT_20260421.md` out of commits until Claude's audit continuation resumes.
+## Session Handoff - 2026-04-22 11:45 +05:00
+
+### What was done
+
+- Confirmed live collector path already worked in production on batch `20260422-105927-4ab7`:
+  - preview -> manager replies -> admin summary -> admin approve -> send-approved -> WhatsApp
+  - final state became `sent`
+- Investigated why one incoming voice message was not recognized:
+  - root cause was not client silence and not manager flow
+  - AssemblyAI returned `400` because request still sent deprecated field `speech_model`
+- Applied follow-up collector hardening:
+  - `collector/whatsapp_poller.py`
+    - version `1.1.2 -> 1.1.3`
+    - removed deprecated `speech_model` from AssemblyAI transcript request
+  - `collector/approval_flow.py`
+    - version `1.0.8 -> 1.0.9`
+    - old admin messages now close when a newer актуальный список replaces the current one
+    - admin callbacks on stale/finalized requests are blocked
+    - in manual admin selection, a client disappears from the list immediately after `Отправлять` / `Не отправлять`
+  - `collector/collections_engine.py`
+    - when a new preview supersedes an active one, closes not only manager previews but also old admin messages
+  - `tests/test_collector.py`
+    - added regressions for disappearing admin list item and stale admin callback blocking
+  - `audit/AUDIT_COLLECTOR_20260422.md`
+    - added findings for stale admin messages and AssemblyAI voice STT failure
+
+### Verification completed
+
+- `python -m py_compile collector/approval_flow.py` -> OK
+- `python -m py_compile collector/collections_engine.py` -> OK
+- `python -m py_compile collector/whatsapp_poller.py` -> OK
+- `WHATSAPP_ENABLED=0 LIVE_SEND_ALLOWED=0 python -X utf8 tests\test_collector.py` -> `269/269`
+
+### Important working tree state left untouched
+
+The working tree is still intentionally dirty outside this collector follow-up:
+
+- modified:
+  - `bot/sales_summary.py`
+  - `sales_parser.py`
+  - `tests/test_parsers.py`
+- untracked:
+  - `audit/AUDIT_20260421.md`
+
+Do not mix these sales/parser files or the old draft audit into the collector follow-up commit.
+
+### Most recent user intent
+
+- Old hanging messages must never stay actionable after a newer актуальный список appears.
+- Manager/admin UI must stay in plain Russian without technical batch jargon.
+- After collector stabilization, continue live monitoring rather than broad refactoring.
+
+### Recommended next step
+
+1. create a narrow collector follow-up commit with:
+   - `collector/approval_flow.py`
+   - `collector/collections_engine.py`
+   - `collector/whatsapp_poller.py`
+   - `tests/test_collector.py`
+   - `audit/AUDIT_COLLECTOR_20260422.md`
+2. push it to `origin/fix/log-noise-by-design-markers`
+3. continue monitoring the next real collector cycle:
+   - old messages close
+   - stale callbacks do not revive old requests
+   - next incoming voice message transcribes without the deprecated-parameter failure
+
+## Handoff Update - 2026-04-22 15:15 +05:00
+
+### Sales tail completed
+
+- Separate sales/parser tail finished and pushed:
+  - commit `ea74457` — `fix(sales): handle grouped 1c clients and manager top3`
+- Files included in this commit:
+  - `bot/sales_summary.py`
+  - `sales_parser.py`
+  - `tests/test_parsers.py`
+
+### What was fixed
+
+- `bot/sales_summary.py`
+  - manager Top-3 clients now supports both JSON contracts:
+    - new pipeline format `{client,total}`
+    - legacy format `{name,amount}`
+  - pseudo-client buckets such as `Без клиента` are excluded from Top-3
+- `sales_parser.py`
+  - fixed grouped 1C sales where `Контрагент` and `Номенклатура` share one column
+  - client aggregate rows with sale amount now start a new `current_client`
+  - orphan product rows no longer create artificial bucket `Без клиента`; they are logged and skipped
+- `tests/test_parsers.py`
+  - added regression on real file `Продажи Магира (302).xlsx`
+  - asserts:
+    - `client_count > 40`
+    - no `Без клиента` bucket
+    - `total_revenue > 10_000_000`
+
+### Verification completed
+
+- `python -m py_compile bot/sales_summary.py` -> OK
+- `python -m py_compile sales_parser.py` -> OK
+- `python -X utf8 tests/test_parsers.py` -> `69/69`
+- Evidence from test run:
+  - `Продажи Магира (302)` parsed with `client_count=54`
+  - `total_revenue=10624154.86`
+
+### Working tree intentionally left dirty
+
+- modified:
+  - `SESSION_CONTEXT.md`
+- deleted/untracked anomaly left untouched:
+  - old Russian-named files under `audit/` appear as both `D` and `??`
+- untracked:
+  - `audit/AUDIT_20260421.md`
+
+Do not mix the audit-path anomaly into the sales or collector commits without separate inspection.
+
+## Handoff Update - 2026-04-22 16:05 +05:00
+
+### Audit folder triage completed
+
+- Fully reviewed the current `audit/` corpus by content, not by filename only.
+- Added:
+  - `audit/AUDIT_CONTENT_MAP_20260422.md`
+    - factual map of audit document roles and why they matter
+- Confirmed that `audit/` is not a trash folder:
+  - it contains architecture targets
+  - incident reports
+  - collector launch/readiness protocols
+  - historical runtime evidence
+  - director-facing shortlist explanations
+  - Codex/Claude handoff context
+
+### Audit path anomaly fixed without content loss
+
+- The old git anomaly was real:
+  - two Russian audit files were tracked under legacy path `аудит/`
+  - actual files on disk lived under `audit/`
+- Verified by blob hashes that content was identical.
+- Fixed as a pure git path correction:
+  - commit `65d2164` — `docs(audit): map audit corpus and fix path anomaly`
+  - git recorded both files as `rename (100%)`, not delete/recreate
+
+### AUDIT_20260421 clarified
+
+- `audit/AUDIT_20260421.md` was reviewed.
+- It is useful, but it is an unfinished audit draft, not a final full-project verdict.
+- Added an explicit status note at the top of the file so future sessions do not misread it as a fully current completed audit.
+
+### Current remaining dirty files
+
+- modified:
+  - `SESSION_CONTEXT.md`
+- untracked no longer:
+  - `audit/AUDIT_20260421.md` is now a tracked working file if the user decides to commit this clarification
+
+### Recommended next step
+
+1. make a small docs-only commit with:
+   - `audit/AUDIT_20260421.md`
+2. keep `SESSION_CONTEXT.md` local unless the user wants it committed too
