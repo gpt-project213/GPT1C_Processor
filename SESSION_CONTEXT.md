@@ -816,3 +816,78 @@ Verification:
 1. commit the Phase 4 artifact cleanup separately from runtime code
 2. push
 3. optionally continue with deeper review of `bot/send_reports.py` only if a new concrete issue appears
+
+## Handoff Update - 2026-04-22 19:20 +05:00
+
+### Freshness fix for stale report selection
+
+- Trigger: user reported that `А Фурманова Евгений (склад № 20)` was shown in stop-control with debt `285 535 ₸`, while the fresh Excel source already reflected payment and a much smaller остаток.
+- Root cause confirmed against primary sources:
+  - stale source previously selected:
+    - `reports/excel/processed/20260418170613_Ведомость_по_взаиморасчетам_с_контрагентами_Алена (336).xlsx`
+    - contained debt `285535.02`
+  - fresh source that should win:
+    - `reports/excel/processed/20260422155716_Детальный Дебиторы Алена (143).xlsx`
+    - contained debt `36588.52`
+- The bug was not in Excel and not in the client row. It was in selectors that still allowed older report families (`Ведомость ...`) to outrank fresh current ones.
+
+### Runtime fixes applied
+
+- `bot/debt_stop_control.py`
+  - `_get_latest_debt_file()` no longer chooses by bracket number.
+  - Now prefers fresh `Детальный Дебиторы <manager>` by `mtime`, then falls back to any manager-specific debt JSON.
+- `bot/crm_clients.py`
+  - `_load_latest_debt_clients()` now prefers the same fresh manager-specific detailed debt family instead of older grouped debt files.
+- `bot/inventory_summary.py`
+  - `get_latest_inventory_json()` now prefers daily inventory JSON by parsed report period.
+  - Prevents newer `inventory_cost_*` or range JSON from masking the actual current day inventory snapshot.
+- `bot/send_reports.py`
+  - `find_recent_json_for_manager(..., report_type="DEBT")` now prefers fresh detailed debt JSON.
+  - `_build_manager_ranking()` now builds debt totals from the latest detailed debt per manager instead of older ledger family files.
+  - `__VERSION__` bumped to `v9.4.58/22.04.2026`.
+
+### Evidence and tests
+
+- New focused regression script:
+  - `tests/test_report_freshness.py`
+  - proves:
+    - `FRESH T1` stop-control picks fresh detailed debt
+    - `FRESH T2` CRM picks fresh manager debt JSON
+    - `FRESH T3` inventory summary picks day JSON, not range/cost artifact
+    - `FRESH T4` bot debt selector picks fresh detailed debt
+- Existing collector regression additions:
+  - `tests/test_collector.py`
+  - `DSTOP FILE T1`
+  - `DSTOP FILE T2`
+
+Verification run:
+- `python -X utf8 tests/test_report_freshness.py`
+  - `4/4` passed
+- `python -X utf8 tests/test_project.py`
+  - `105/105` passed
+- `python -X utf8 tests/test_collector.py`
+  - long-running suite showed no failures in freshness/collector sections before sandbox timeout; earlier full baseline before this step was green
+- `python -m py_compile bot/debt_stop_control.py`
+- `python -m py_compile bot/crm_clients.py`
+- `python -m py_compile bot/inventory_summary.py`
+- `python -m py_compile bot/send_reports.py`
+  - all four hit Windows `__pycache__` `PermissionError`, not syntax errors
+
+### Git
+
+- runtime fix commit:
+  - `b5fb564` `fix(bot): prefer fresh report sources over stale snapshots`
+- pushed to:
+  - `origin/fix/log-noise-by-design-markers`
+
+### Current status
+
+- working tree should be clean after pushing this freshness fix and the next optional context commit
+- no old Excel files were deleted
+- logic now ignores stale families when fresher source-of-truth files exist
+- if current `reports/debt_stop_state.json` was built before this fix, it may still contain stale snapshot data until rebuilt by the bot/jobs
+
+### Recommended next step
+
+1. if operators still see old debt-stop rows, rebuild the current daily stop snapshot instead of trusting the old `reports/debt_stop_state.json`
+2. monitor the next live cycle and verify that stop-control, bot debt lookups, CRM, and inventory summary all use fresh sources only
