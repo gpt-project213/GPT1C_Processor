@@ -4,7 +4,20 @@
 collections/collections_engine.py
 Главный оркестратор AI-Коллектора долгов.
 
-Версия: 1.4.0 (2026-04-12)
+Версия: 1.4.3 (2026-04-22)
+
+v1.4.3 (2026-04-22): тестовый режим `COLLECTOR_TEST_MODE=1` больше не пишет в
+  боевой `logs/collector_YYYYMMDD.log`; это убирает ложные тревоги log_monitor
+  от тестов коллектора.
+
+v1.4.2 (2026-04-22): новый preview-батч вытесняет предыдущий активный как
+  неактуальный: старые manager-preview закрываются, а новый батч помечает, какой
+  именно батч он заменил.
+
+v1.4.1 (2026-04-22): в run_approval_preview после send_manager_previews
+  вызывается send_admin_preview_notice — админ получает уведомление о
+  создании батча сразу, не дожидаясь ответов менеджеров (фикс кейса,
+  когда менеджеры игнорируют превью и админ никогда ничего не получает).
 
 CLI:
   python -m collector.collections_engine --dry-run
@@ -53,16 +66,17 @@ load_dotenv(dotenv_path=_ROOT / ".env", encoding="utf-8-sig", override=False)
 TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 LOGS_DIR = _ROOT / "logs"
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
+_TEST_MODE = os.getenv("COLLECTOR_TEST_MODE", "0").lower() in ("1", "true", "yes")
 
 # Настройка логирования
 _log_file = LOGS_DIR / f"collector_{datetime.now(tz=TZ).strftime('%Y%m%d')}.log"
+_handlers = [logging.StreamHandler(sys.stdout)]
+if not _TEST_MODE:
+    _handlers.insert(0, logging.FileHandler(_log_file, encoding="utf-8"))
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s, %(levelname)s %(message)s",
-    handlers=[
-        logging.FileHandler(_log_file, encoding="utf-8"),
-        logging.StreamHandler(sys.stdout),
-    ],
+    handlers=_handlers,
 )
 logger = logging.getLogger(__name__)
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -1057,7 +1071,15 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
     ВАЖНО: WhatsApp не отправляется. Это только UX согласования.
     Реальная отправка — отдельный шаг после admin approve + WHATSAPP_ENABLED=1.
     """
-    from collector.approval_flow import create_batch, save_batch, send_manager_previews
+    from collector.approval_flow import (
+        create_batch,
+        close_manager_previews,
+        load_latest_batch,
+        save_batch,
+        send_manager_previews,
+        send_admin_preview_notice,
+        supersede_batch,
+    )
 
     debt_data = load_latest_debt_json()
     if not debt_data:
@@ -1189,9 +1211,26 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
         len(debtors_by_manager), total,
     )
 
+    active_batch = load_latest_batch()
     batch = create_batch(debtors_by_manager)
+    if active_batch:
+        batch["replaced_batch_id"] = active_batch.get("batch_id")
+        supersede_batch(active_batch, superseded_by=batch["batch_id"])
+        await close_manager_previews(
+            active_batch,
+            "⚠️ Этот запрос закрыт как неактуальный.\n\n"
+            "Сформирован новый батч по свежей дебиторке. Ждите новый запрос.",
+        )
     save_batch(batch)
     await send_manager_previews(batch)
+
+    # v1.4.1: уведомляем админа о создании батча СРАЗУ, не дожидаясь
+    # ответов менеджеров. Полноценная сводка с кнопками утверждения
+    # придёт позже из send_admin_summary, когда все менеджеры нажмут кнопки.
+    try:
+        await send_admin_preview_notice(batch)
+    except Exception as e:
+        logger.error("send_admin_preview_notice failed: %s", e)
 
     logger.info("run_approval_preview: батч %s создан и отправлен менеджерам", batch["batch_id"])
     return batch["batch_id"]

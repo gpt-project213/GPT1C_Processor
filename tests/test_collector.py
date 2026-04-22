@@ -8,6 +8,7 @@ tests/test_collector.py — тесты модулей AI Debt Collector
 import sys
 import os
 import json
+import asyncio
 import tempfile
 import shutil
 from datetime import date
@@ -16,6 +17,7 @@ from unittest.mock import patch, MagicMock, AsyncMock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+os.environ["COLLECTOR_TEST_MODE"] = "1"
 
 PASS = "✅"
 FAIL = "❌"
@@ -1077,8 +1079,13 @@ try:
         get_pending_managers,
         _all_managers_responded,
         _build_decisions,
+        _build_admin_decisions,
+        _save_admin_decisions,
         _get_manager_by_idx,
         expire_old_batches,
+        handle_manager_callback,
+        promote_silent_batches_to_admin,
+        supersede_batch,
     )
     check("APPROVAL: импорт approval_flow.py успешен", True)
 except Exception as e:
@@ -1141,6 +1148,18 @@ try:
     check(
         "APPROVAL T3b: load_latest_batch возвращает pending батч",
         load_latest_batch() is not None,
+    )
+    _batch1["status"] = "sent"
+    save_batch(_batch1)
+    check(
+        "APPROVAL T3c: load_latest_batch не возвращает финальный sent батч",
+        load_latest_batch() is None,
+    )
+    _batch1["status"] = "superseded"
+    save_batch(_batch1)
+    check(
+        "APPROVAL T3d: load_latest_batch не возвращает superseded батч",
+        load_latest_batch() is None,
     )
 finally:
     _af_mod._BATCHES_PATH = _orig_path
@@ -1272,6 +1291,22 @@ try:
         and _after_second8.get("send_summary", {}).get("approved_total") == 3,
         str(_after_second8.get("send_summary")),
     )
+    _batch8_admin = load_batch(_batch8["batch_id"])
+    _admin_decisions8 = _build_admin_decisions(_batch8_admin)
+    _first_admin_key8 = sorted(_admin_decisions8.keys())[0]
+    _admin_decisions8[_first_admin_key8] = "skip"
+    _save_admin_decisions(_batch8_admin, _admin_decisions8)
+    save_batch(_batch8_admin)
+    _after_admin8 = load_batch(_batch8["batch_id"])
+    check(
+        "APPROVAL T8f: admin manual decisions сохраняются отдельно от manager approve",
+        len(_after_admin8.get("admin_keep_keys", [])) == 2
+        and len(_after_admin8.get("admin_skip_keys", [])) == 1,
+        str({
+            "admin_keep_keys": _after_admin8.get("admin_keep_keys"),
+            "admin_skip_keys": _after_admin8.get("admin_skip_keys"),
+        }),
+    )
 finally:
     _af_mod._BATCHES_PATH = _orig_path
     _shutil_t3.rmtree(_tmp_dir8, ignore_errors=True)
@@ -1308,7 +1343,101 @@ finally:
     _shutil_t3.rmtree(_tmp_dir10, ignore_errors=True)
 
 # ── Тест 11: run_approval_preview в коде ─────────────────────────────────────
+_batch10c = create_batch({"Алена": _batch1_clients, "Оксана": _batch7_data["Оксана"]})
+_batch10c["expires_at"] = "2000-01-01T00:00:00+05:00"
+_batch10c["managers"]["Алена"]["status"] = "pending"
+_batch10c["managers"]["Оксана"]["status"] = "manual_editing"
+_tmp_dir10c = _tempfile.mkdtemp()
+_af_mod._BATCHES_PATH = Path(_tmp_dir10c) / "wa_approval_batches.json"
+try:
+    save_batch(_batch10c)
+    _expired10c = expire_old_batches()
+    _after10c = load_batch(_batch10c["batch_id"])
+    check(
+        "APPROVAL T10c: expire_old_batches помечает батч как expired",
+        _expired10c == 1 and _after10c is not None and _after10c.get("status") == "expired",
+        str(_after10c.get("status") if _after10c else None),
+    )
+    check(
+        "APPROVAL T10d: молчавшие менеджеры переводятся в timeout",
+        _after10c is not None
+        and _after10c["managers"]["Алена"].get("status") == "timeout"
+        and _after10c["managers"]["Оксана"].get("status") == "timeout"
+        and bool(_after10c.get("expired_at")),
+        str(_after10c["managers"] if _after10c else None),
+    )
+finally:
+    _af_mod._BATCHES_PATH = _orig_path
+    _shutil_t3.rmtree(_tmp_dir10c, ignore_errors=True)
+
+_batch10e = create_batch({"Алена": _batch1_clients, "Оксана": _batch7_data["Оксана"]})
+_batch10e["created_at"] = "2000-01-01T00:00:00+05:00"
+_tmp_dir10e = _tempfile.mkdtemp()
+_af_mod._BATCHES_PATH = Path(_tmp_dir10e) / "wa_approval_batches.json"
+try:
+    save_batch(_batch10e)
+    with patch("collector.approval_flow.send_admin_summary", new=AsyncMock()) as _send_admin_mock:
+        _promoted10e = asyncio.run(promote_silent_batches_to_admin())
+    _after10e = load_batch(_batch10e["batch_id"])
+    check(
+        "APPROVAL T10e: после часа молчания батч переводится в pending_admin",
+        _promoted10e == 1 and _after10e is not None and _after10e.get("status") == "pending_admin",
+        str(_after10e.get("status") if _after10e else None),
+    )
+    check(
+        "APPROVAL T10f: молчавшие менеджеры получают timeout и админу уходит сводка",
+        _after10e is not None
+        and _after10e["managers"]["Алена"].get("status") == "timeout"
+        and _after10e["managers"]["Оксана"].get("status") == "timeout"
+        and bool(_after10e.get("escalated_to_admin_at"))
+        and _send_admin_mock.await_count == 1,
+        str(_after10e["managers"] if _after10e else None),
+    )
+finally:
+    _af_mod._BATCHES_PATH = _orig_path
+    _shutil_t3.rmtree(_tmp_dir10e, ignore_errors=True)
+
+_batch10g = create_batch({"Алена": _batch1_clients})
+_tmp_dir10g = _tempfile.mkdtemp()
+_af_mod._BATCHES_PATH = Path(_tmp_dir10g) / "wa_approval_batches.json"
+try:
+    save_batch(_batch10g)
+    supersede_batch(_batch10g, superseded_by="new-batch-1234")
+    _after10g = load_batch(_batch10g["batch_id"])
+    check(
+        "APPROVAL T10g: активный батч можно закрыть как superseded",
+        _after10g is not None
+        and _after10g.get("status") == "superseded"
+        and _after10g.get("superseded_by") == "new-batch-1234",
+        str(_after10g),
+    )
+finally:
+    _af_mod._BATCHES_PATH = _orig_path
+    _shutil_t3.rmtree(_tmp_dir10g, ignore_errors=True)
+
+_batch10h = create_batch({"Алена": _batch1_clients})
+_batch10h["status"] = "pending_admin"
+_tmp_dir10h = _tempfile.mkdtemp()
+_af_mod._BATCHES_PATH = Path(_tmp_dir10h) / "wa_approval_batches.json"
+try:
+    save_batch(_batch10h)
+    with patch("collector.approval_flow._tg_edit", new=AsyncMock()) as _edit10h:
+        _handled10h = asyncio.run(handle_manager_callback("wa_appr_mgr_ok|" + _batch10h["batch_id"] + "|0", 1, 2))
+    _after10h = load_batch(_batch10h["batch_id"])
+    check(
+        "APPROVAL T10h: manager-callback по pending_admin батчу блокируется",
+        _handled10h is True
+        and _after10h is not None
+        and _after10h["managers"]["Алена"].get("status") == "pending"
+        and _edit10h.await_count == 1,
+        str(_after10h["managers"]["Алена"] if _after10h else None),
+    )
+finally:
+    _af_mod._BATCHES_PATH = _orig_path
+    _shutil_t3.rmtree(_tmp_dir10h, ignore_errors=True)
+
 _engine_src_v2 = (Path(__file__).parent.parent / "collector" / "collections_engine.py").read_text(encoding="utf-8")
+_approval_src_v2 = (Path(__file__).parent.parent / "collector" / "approval_flow.py").read_text(encoding="utf-8")
 check(
     "APPROVAL T11: run_approval_preview присутствует в collections_engine.py",
     "run_approval_preview" in _engine_src_v2,
@@ -1316,6 +1445,10 @@ check(
 check(
     "APPROVAL T11b: --preview флаг добавлен в CLI",
     '"--preview"' in _engine_src_v2 or "'--preview'" in _engine_src_v2,
+)
+check(
+    "APPROVAL T11c: Telegram send-now callback присутствует в approval_flow.py",
+    "wa_appr_adm_send" in _approval_src_v2,
 )
 
 # ── Тест 12: wa_appr_ callback зарегистрирован в send_reports.py ─────────────

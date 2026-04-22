@@ -4,7 +4,26 @@
 collector/approval_flow.py
 UX согласования рассылки WhatsApp — менеджер → администратор.
 
-Версия: 1.0.4 (2026-04-21)
+Версия: 1.0.8 (2026-04-22)
+
+v1.0.8 (2026-04-22): новый актуальный батч вытесняет предыдущий активный как
+  superseded; manager-callback по закрытому батчу больше не принимается. Если
+  менеджеры молчат 1 час, батч автоматически переводится на решение
+  администратора без тихого зависания.
+
+v1.0.7 (2026-04-22): финальные send-статусы больше не считаются "активным"
+  батчем в load_latest_batch; при expire_old_batches молчавшие менеджеры
+  помечаются как timeout, чтобы причина зависания была явно сохранена в state.
+
+v1.0.6 (2026-04-22): администратор может вручную редактировать состав батча
+  по клиентам перед финальным подтверждением отправки. Добавлен экран
+  "Отправлять / Не отправлять" на базе существующей логики ручного выбора.
+
+v1.0.5 (2026-04-22): добавлена send_admin_preview_notice — информационное
+  уведомление администратору сразу при создании батча (без кнопок
+  утверждения). Полноценная сводка с кнопками приходит позже из
+  send_admin_summary после ответов менеджеров. Фикс для кейса, когда
+  менеджеры игнорируют превью и админ никогда не получает сводку.
 
 Жизненный цикл:
   1. create_batch(debtors_by_manager)       → batch dict
@@ -50,6 +69,7 @@ ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID", "")
 
 # Срок жизни батча — до конца рабочего дня (18:00)
 BATCH_EXPIRE_HOURS = int(os.getenv("WA_APPROVAL_EXPIRE_HOURS", "9"))
+MANAGER_SILENCE_TIMEOUT_HOURS = int(os.getenv("WA_MANAGER_SILENCE_HOURS", "1"))
 
 logger = logging.getLogger(__name__)
 
@@ -101,10 +121,20 @@ def load_latest_batch() -> Optional[Dict[str, Any]]:
     batches = _load_batches()
     if not batches:
         return None
+    final_statuses = {
+        "admin_approved",
+        "cancelled",
+        "expired",
+        "sent",
+        "partially_sent",
+        "send_failed",
+        "send_empty",
+        "superseded",
+    }
     # Сортируем по created_at desc, берём первый не-финальный
     for bid in sorted(batches.keys(), reverse=True):
         b = batches[bid]
-        if b.get("status") not in ("admin_approved", "cancelled", "expired"):
+        if b.get("status") not in final_statuses:
             return b
     return None
 
@@ -211,9 +241,17 @@ def create_batch(
 
 _MSG_TYPE_LABELS = {
     "strict_reminder":      "Строгое напоминание",
-    "payment_plan_control": "Контроль графика",
+    "payment_plan_control": "Проверка обещанной оплаты",
     "soft_reminder":        "Мягкое напоминание",
-    "stoplist_reminder":    "Стоп-лист",
+    "stoplist_reminder":    "Напоминание по стоп-листу",
+}
+
+_LEVEL_LABELS = {
+    1: "мягкое напоминание",
+    2: "повторное напоминание",
+    3: "жесткое напоминание",
+    4: "жесткое напоминание + звонок",
+    5: "эскалация руководителю",
 }
 
 _PLACEHOLDER_PHONE_KEYS: set[str] = set()
@@ -221,6 +259,18 @@ _PLACEHOLDER_PHONE_KEYS: set[str] = set()
 
 def _fmt_amount(n: float) -> str:
     return f"{n:,.0f}".replace(",", " ")
+
+
+def _parse_batch_dt(value: Any) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=TZ)
+    return dt
 
 
 def _normalize_phone_key(phone: str) -> str:
@@ -512,6 +562,47 @@ async def send_manager_previews(
     save_batch(batch)
 
 
+async def close_manager_previews(batch: Dict[str, Any], reason_text: str) -> None:
+    """Закрывает старые manager-preview сообщения: снимает кнопки и помечает как устаревшие."""
+    empty_markup = {"inline_keyboard": []}
+    for manager_name, mgr_state in (batch.get("managers") or {}).items():
+        chat_id = mgr_state.get("chat_id")
+        message_id = mgr_state.get("preview_message_id")
+        if not chat_id or not message_id:
+            continue
+        try:
+            await _tg_edit(int(chat_id), int(message_id), reason_text, empty_markup)
+        except Exception as e:
+            logger.error(
+                "[%s] не удалось закрыть preview менеджера %s: %s",
+                batch.get("batch_id", "?"), manager_name, e,
+            )
+
+
+def supersede_batch(
+    batch: Dict[str, Any],
+    *,
+    superseded_by: str,
+    reason: str = "replaced_by_new_data",
+) -> Dict[str, Any]:
+    """Закрывает активный батч как неактуальный перед созданием нового."""
+    now_iso = datetime.now(tz=TZ).isoformat()
+    batch["status"] = "superseded"
+    batch["superseded_at"] = now_iso
+    batch["superseded_by"] = superseded_by
+    batch["superseded_reason"] = reason
+    if batch.get("admin_status") == "pending":
+        batch["admin_status"] = "cancelled"
+    save_batch(batch)
+    logger.info(
+        "[%s] батч помечен как superseded -> %s (%s)",
+        batch.get("batch_id", "?"),
+        superseded_by,
+        reason,
+    )
+    return batch
+
+
 # ─── Manager callback handling ────────────────────────────────────────────────
 
 def _get_manager_by_idx(batch: Dict[str, Any], idx: int) -> Tuple[Optional[str], Optional[Dict]]:
@@ -532,6 +623,110 @@ def _build_decisions(mgr_state: Dict[str, Any]) -> Dict[str, str]:
     for name in mgr_state.get("postponed_names", []):
         d[name] = "later"
     return d
+
+
+def _admin_client_key(manager_name: str, client_name: str) -> str:
+    return f"{manager_name}|{client_name}"
+
+
+def _iter_admin_clients(batch: Dict[str, Any]) -> List[Dict[str, Any]]:
+    flat: List[Dict[str, Any]] = []
+    for manager_name, mgr_state in batch.get("managers", {}).items():
+        for client in mgr_state.get("clients", []):
+            item = {**client, "manager": manager_name}
+            item["_admin_key"] = _admin_client_key(manager_name, client["name"])
+            flat.append(item)
+    return flat
+
+
+def _build_admin_decisions(batch: Dict[str, Any]) -> Dict[str, str]:
+    """Строит выбор администратора по клиентам.
+
+    Если админ ещё не начинал ручной выбор, по умолчанию берём решения
+    менеджеров: approved -> keep, всё остальное -> skip.
+    """
+    if "admin_keep_keys" in batch or "admin_skip_keys" in batch:
+        keep_keys = set(batch.get("admin_keep_keys") or [])
+        skip_keys = set(batch.get("admin_skip_keys") or [])
+        decisions: Dict[str, str] = {}
+        for item in _iter_admin_clients(batch):
+            key = item["_admin_key"]
+            decisions[key] = "keep" if key in keep_keys else "skip"
+        return decisions
+
+    decisions = {}
+    for manager_name, mgr_state in batch.get("managers", {}).items():
+        approved = set(mgr_state.get("approved_names", []))
+        for client in mgr_state.get("clients", []):
+            key = _admin_client_key(manager_name, client["name"])
+            decisions[key] = "keep" if client["name"] in approved else "skip"
+    return decisions
+
+
+def _save_admin_decisions(batch: Dict[str, Any], decisions: Dict[str, str]) -> None:
+    keep_keys = sorted(key for key, value in decisions.items() if value == "keep")
+    skip_keys = sorted(key for key, value in decisions.items() if value == "skip")
+    batch["admin_keep_keys"] = keep_keys
+    batch["admin_skip_keys"] = skip_keys
+    batch["admin_reviewed_at"] = datetime.now(tz=TZ).isoformat()
+
+
+def _admin_client_list_keyboard(
+    batch_id: str,
+    flat_clients: List[Dict[str, Any]],
+    decisions: Dict[str, str],
+) -> Dict[str, Any]:
+    rows = []
+    for idx, client in enumerate(flat_clients):
+        key = client["_admin_key"]
+        status = decisions.get(key, "skip")
+        status_icon = {"keep": "✅", "skip": "❌"}.get(status, "❌")
+        label = f"{status_icon} {client['manager']}: {client['name']}"
+        short_label = label[:34] + "…" if len(label) > 34 else label
+        rows.append([(short_label, f"wa_appr_adm_info|{batch_id}|{idx}")])
+        rows.append([
+            ("✅ Отправлять", f"wa_appr_adm_cli_keep|{batch_id}|{idx}"),
+            ("❌ Не отправлять", f"wa_appr_adm_cli_skip|{batch_id}|{idx}"),
+        ])
+    rows.append([("✅ Готово — сохранить выбор", f"wa_appr_adm_done|{batch_id}")])
+    rows.append([("↩️ Назад к сводке", f"wa_appr_adm_back|{batch_id}")])
+    return _inline_kb(rows)
+
+
+def _format_admin_manual_header(batch: Dict[str, Any], decisions: Dict[str, str]) -> str:
+    flat_clients = _iter_admin_clients(batch)
+    keep_count = sum(1 for item in flat_clients if decisions.get(item["_admin_key"]) == "keep")
+    skip_count = len(flat_clients) - keep_count
+    return (
+        "✏️ <b>Список клиентов перед отправкой</b>\n\n"
+        "Для каждого клиента выберите:\n"
+        "  ✅ Отправлять\n"
+        "  ❌ Не отправлять\n\n"
+        f"Выбрано к отправке: <b>{keep_count}</b>\n"
+        f"Исключено: <b>{skip_count}</b>\n"
+        f"Батч: <code>{batch['batch_id']}</code>"
+    )
+
+
+def _format_admin_client_info(client: Dict[str, Any]) -> str:
+    amount = _fmt_amount(float(client.get("amount", 0) or 0))
+    debit = _fmt_amount(float(client.get("debit", 0) or 0))
+    credit = _fmt_amount(float(client.get("credit", 0) or 0))
+    level = int(client.get("level", 0) or 0)
+    level_label = _LEVEL_LABELS.get(level, f"уровень {level}")
+    msg_type = _MSG_TYPE_LABELS.get(client.get("msg_type", ""), client.get("msg_type", "—"))
+    phone = client.get("phone") or "—"
+    return (
+        f"ℹ️ <b>{client['name']}</b>\n"
+        f"Менеджер: <b>{client['manager']}</b>\n"
+        f"Долг: {amount} тг\n"
+        f"{_debt_age_text(client)}\n"
+        f"Отгрузки: {debit} тг\n"
+        f"Оплаты: {credit} тг\n"
+        f"Какое напоминание планируется: {msg_type}\n"
+        f"Тон сообщения: {level_label}\n"
+        f"Телефон: <code>{phone}</code>"
+    )
 
 
 def _all_managers_responded(batch: Dict[str, Any]) -> bool:
@@ -570,7 +765,20 @@ async def handle_manager_callback(
     batch = load_batch(batch_id)
     if not batch:
         logger.warning("handle_manager_callback: батч %s не найден", batch_id)
-        await _tg_edit(chat_id, message_id, "⚠️ Запрос устарел. Батч не найден.")
+        await _tg_edit(chat_id, message_id, "⚠️ Запрос устарел. Исходный список уже закрыт.")
+        return True
+    if batch.get("status") != "pending_managers":
+        logger.info(
+            "handle_manager_callback: батч %s закрыт для менеджера (status=%s)",
+            batch_id,
+            batch.get("status"),
+        )
+        await _tg_edit(
+            chat_id,
+            message_id,
+            "⚠️ Этот запрос уже неактуален.\n\n"
+            "Решение по нему уже передано администратору или сформирован новый список.",
+        )
         return True
 
     manager_name, mgr_state = _get_manager_by_idx(batch, mgr_idx)
@@ -752,6 +960,11 @@ def _format_admin_summary_text(batch: Dict[str, Any]) -> str:
         "📋 <b>Согласование рассылки WhatsApp — итог менеджеров</b>\n",
         f"Батч: {batch['batch_id']}\n",
     ]
+    if batch.get("escalated_to_admin_at"):
+        lines += [
+            "⚠️ <b>Часть менеджеров не ответила вовремя.</b>",
+            "Батч передан вам на ручное решение без ожидания всех ответов.\n",
+        ]
 
     total_ok = 0
     total_no = 0
@@ -803,11 +1016,16 @@ def _format_admin_summary_text(batch: Dict[str, Any]) -> str:
         total_no    += len(rejected)
         total_later += len(postponed)
 
+    admin_decisions = _build_admin_decisions(batch)
+    admin_selected = sum(1 for v in admin_decisions.values() if v == "keep")
+
     lines += [
         "",
         f"<b>Итого к отправке: {total_ok}</b> | убрано: {total_no} | отложено: {total_later}",
+        f"<b>Сейчас выбрано вами к отправке:</b> {admin_selected}",
         "",
-        "Нажмите <b>«Утвердить»</b>, чтобы разрешить отправку одобренных клиентов.",
+        "Если нужно, откройте список клиентов и вручную решите, кому отправлять, а кому нет.",
+        "Нажмите <b>«Утвердить отправку»</b>, чтобы разрешить отправку выбранных клиентов.",
         "<i>Сообщения уйдут только после вашего подтверждения.</i>",
     ]
     return "\n".join(lines)
@@ -881,11 +1099,41 @@ def _format_admin_detail_text(batch: Dict[str, Any]) -> str:
 
 def _admin_keyboard(batch_id: str) -> Dict[str, Any]:
     return _inline_kb([
-        [("✅ Разрешить тестовую отправку",    f"wa_appr_adm_ok|{batch_id}")],
-        [("👀 Показать список подробнее",      f"wa_appr_adm_view|{batch_id}")],
+        [("✏️ Выбрать клиентов вручную",       f"wa_appr_adm_view|{batch_id}")],
+        [("✅ Утвердить отправку",             f"wa_appr_adm_ok|{batch_id}")],
         [("❌ Отменить",                       f"wa_appr_adm_no|{batch_id}")],
         [("⏸ Отложить",                       f"wa_appr_adm_later|{batch_id}")],
     ])
+
+
+def _admin_send_now_keyboard(batch_id: str) -> Dict[str, Any]:
+    return _inline_kb([
+        [("📤 Отправить сейчас", f"wa_appr_adm_send|{batch_id}")],
+        [("✏️ Изменить список клиентов", f"wa_appr_adm_view|{batch_id}")],
+    ])
+
+
+def _format_send_results_text(batch_id: str, results: List[Dict[str, Any]]) -> str:
+    sent = sum(1 for r in results if r.get("status") == "sent")
+    failed = sum(1 for r in results if r.get("status") == "failed")
+    skipped = len(results) - sent - failed
+    lines = [
+        "📤 <b>Отправка завершена</b>",
+        "",
+        f"Батч: <code>{batch_id}</code>",
+        f"Отправлено: <b>{sent}</b>",
+        f"Ошибок: <b>{failed}</b>",
+        f"Пропущено: <b>{skipped}</b>",
+    ]
+    failed_rows = [r for r in results if r.get("status") != "sent"]
+    if failed_rows:
+        lines.append("")
+        lines.append("<b>Не отправилось / требует проверки:</b>")
+        for row in failed_rows[:10]:
+            name = row.get("name") or "—"
+            reason = row.get("reason") or row.get("status") or "неизвестно"
+            lines.append(f"  • {name} — {reason}")
+    return "\n".join(lines)
 
 
 async def send_admin_summary(batch: Dict[str, Any], bot=None) -> None:
@@ -907,6 +1155,62 @@ async def send_admin_summary(batch: Dict[str, Any], bot=None) -> None:
         logger.info("[%s] Сводка отправлена администратору (msg_id=%d)", batch["batch_id"], msg_id)
     else:
         logger.error("[%s] Не удалось отправить сводку администратору", batch["batch_id"])
+
+
+async def send_admin_preview_notice(batch: Dict[str, Any], bot=None) -> None:
+    """Уведомляет администратора о создании нового батча ДО ответов менеджеров.
+
+    Информационное сообщение без inline-кнопок утверждения.
+    Полноценная сводка с кнопками _admin_keyboard придёт отдельно из
+    send_admin_summary, когда все менеджеры ответят. Это гарантирует,
+    что админ видит батч даже если менеджеры игнорируют превью.
+    """
+    try:
+        admin_id = int(ADMIN_CHAT_ID)
+    except (ValueError, TypeError):
+        logger.error("send_admin_preview_notice: ADMIN_CHAT_ID не задан или некорректен")
+        return
+
+    managers = batch.get("managers") or {}
+    total_clients = sum(len(m.get("clients") or []) for m in managers.values())
+
+    lines = [
+        "📬 <b>Создан новый батч согласования WhatsApp</b>",
+        "",
+        f"Батч: <code>{batch.get('batch_id','—')}</code>",
+        f"Клиентов всего: <b>{total_clients}</b>",
+        f"Менеджеров: <b>{len(managers)}</b>",
+        "",
+        "<b>Ожидается ответ от менеджеров:</b>",
+    ]
+    for mgr_name, mgr_state in managers.items():
+        cnt = len(mgr_state.get("clients") or [])
+        lines.append(f"  • {mgr_name} — {cnt} клиент(ов)")
+    if batch.get("replaced_batch_id"):
+        lines += [
+            "",
+            f"⚠️ Предыдущий активный батч <code>{batch['replaced_batch_id']}</code> закрыт как неактуальный.",
+        ]
+    lines += [
+        "",
+        "<i>Когда все менеджеры нажмут кнопки — пришлю итоговую сводку с кнопками утверждения.</i>",
+        f"<i>Батч активен до: {batch.get('expires_at','—')}</i>",
+    ]
+    text = "\n".join(lines)
+
+    msg_id = await _tg_send(admin_id, text)
+    if msg_id:
+        batch["admin_preview_msg_id"] = msg_id
+        save_batch(batch)
+        logger.info(
+            "[%s] Превью-уведомление админу отправлено (msg_id=%d)",
+            batch.get("batch_id", "?"), msg_id,
+        )
+    else:
+        logger.error(
+            "[%s] Не удалось отправить превью-уведомление админу",
+            batch.get("batch_id", "?"),
+        )
 
 
 # ─── Admin callback handling ──────────────────────────────────────────────────
@@ -937,18 +1241,18 @@ async def handle_admin_callback(
 
     if action == "wa_appr_adm_ok":
         # Финальное утверждение
+        admin_decisions = _build_admin_decisions(batch)
         approved_clients = []
-        for mgr_name, mgr_state in batch["managers"].items():
-            approved_names = set(mgr_state.get("approved_names", []))
-            for c in mgr_state["clients"]:
-                if c["name"] in approved_names:
-                    if c.get("invalid_phone"):
-                        logger.warning(
-                            "[%s] admin approve skipped invalid_phone client: %s (%s)",
-                            batch_id, c.get("name"), c.get("phone_issue"),
-                        )
-                        continue
-                    approved_clients.append({**c, "manager": mgr_name})
+        for client in _iter_admin_clients(batch):
+            if admin_decisions.get(client["_admin_key"]) != "keep":
+                continue
+            if client.get("invalid_phone"):
+                logger.warning(
+                    "[%s] admin approve skipped invalid_phone client: %s (%s)",
+                    batch_id, client.get("name"), client.get("phone_issue"),
+                )
+                continue
+            approved_clients.append({k: v for k, v in client.items() if k != "_admin_key"})
 
         batch["status"]            = "admin_approved"
         batch["admin_status"]      = "approved"
@@ -958,18 +1262,91 @@ async def handle_admin_callback(
 
         text = (
             f"✅ <b>Отправка утверждена!</b>\n\n"
-            f"Одобрено клиентов: <b>{len(approved_clients)}</b>\n\n"
+            f"К отправке выбрано клиентов: <b>{len(approved_clients)}</b>\n\n"
             + "\n".join(f"  • {c['name']} ({c.get('manager', '—')})" for c in approved_clients)
             + "\n\n"
-            f"<b>Следующий шаг:</b> запустить отправку:\n"
+            f"<b>Следующий шаг:</b> можно отправить прямо отсюда кнопкой ниже\n"
+            f"или вручную командой:\n"
             f"<code>python -m collector.collections_engine --send-approved --batch-id {batch_id}</code>\n\n"
             f"<i>Предварительно убедитесь, что WHATSAPP_ENABLED=1 и LIVE_SEND_ALLOWED=1 выставлены в .env</i>"
         )
-        await _tg_edit(chat_id, message_id, text)
+        await _tg_edit(chat_id, message_id, text, _admin_send_now_keyboard(batch_id))
         logger.info(
             "[%s] Администратор УТВЕРДИЛ отправку: %d клиентов",
             batch_id, len(approved_clients),
         )
+
+    elif action == "wa_appr_adm_send":
+        if batch.get("admin_status") != "approved":
+            await _tg_edit(
+                chat_id,
+                message_id,
+                "⚠️ Отправка недоступна: батч ещё не утверждён администратором.",
+                _admin_keyboard(batch_id),
+            )
+            return True
+
+        if batch.get("status") in ("sent", "partially_sent"):
+            send_results = batch.get("send_results") or []
+            await _tg_edit(chat_id, message_id, _format_send_results_text(batch_id, send_results))
+            return True
+
+        from collector.collections_engine import send_approved_batch
+
+        results = await send_approved_batch(batch_id)
+        batch = load_batch(batch_id) or batch
+        send_results = batch.get("send_results") or results
+        await _tg_edit(chat_id, message_id, _format_send_results_text(batch_id, send_results))
+        logger.info("[%s] Администратор запустил отправку из Telegram: %d результатов", batch_id, len(send_results))
+
+    elif action == "wa_appr_adm_view":
+        decisions = _build_admin_decisions(batch)
+        flat_clients = _iter_admin_clients(batch)
+        _save_admin_decisions(batch, decisions)
+        save_batch(batch)
+        text = _format_admin_manual_header(batch, decisions)
+        markup = _admin_client_list_keyboard(batch_id, flat_clients, decisions)
+        await _tg_edit(chat_id, message_id, text, markup)
+
+    elif action in ("wa_appr_adm_cli_keep", "wa_appr_adm_cli_skip", "wa_appr_adm_info"):
+        if len(parts) < 3:
+            return True
+        cli_idx = int(parts[2])
+        flat_clients = _iter_admin_clients(batch)
+        if cli_idx >= len(flat_clients):
+            return True
+
+        client = flat_clients[cli_idx]
+        if action == "wa_appr_adm_info":
+            await _tg_send(chat_id, _format_admin_client_info(client))
+            return True
+
+        decisions = _build_admin_decisions(batch)
+        decisions[client["_admin_key"]] = "keep" if action == "wa_appr_adm_cli_keep" else "skip"
+        _save_admin_decisions(batch, decisions)
+        save_batch(batch)
+
+        text = _format_admin_manual_header(batch, decisions)
+        markup = _admin_client_list_keyboard(batch_id, flat_clients, decisions)
+        await _tg_edit(chat_id, message_id, text, markup)
+
+    elif action == "wa_appr_adm_done":
+        decisions = _build_admin_decisions(batch)
+        _save_admin_decisions(batch, decisions)
+        save_batch(batch)
+        text = (
+            "✅ <b>Выбор администратора сохранён.</b>\n\n"
+            f"К отправке выбрано: <b>{sum(1 for v in decisions.values() if v == 'keep')}</b>\n"
+            f"Не отправлять: <b>{sum(1 for v in decisions.values() if v == 'skip')}</b>\n\n"
+            "Можно утвердить отправку или вернуться к списку и изменить выбор."
+        )
+        markup = _admin_keyboard(batch_id)
+        await _tg_edit(chat_id, message_id, text, markup)
+
+    elif action == "wa_appr_adm_back":
+        text = _format_admin_summary_text(batch)
+        markup = _admin_keyboard(batch_id)
+        await _tg_edit(chat_id, message_id, text, markup)
 
     elif action == "wa_appr_adm_no":
         batch["status"]       = "cancelled"
@@ -995,12 +1372,6 @@ async def handle_admin_callback(
         )
         await _tg_edit(chat_id, message_id, text)
         logger.info("[%s] Администратор отложил решение", batch_id)
-
-    elif action == "wa_appr_adm_view":
-        # Подробный список всех клиентов: телефон + статус согласования менеджера
-        text   = _format_admin_detail_text(batch)
-        markup = _admin_keyboard(batch_id)
-        await _tg_edit(chat_id, message_id, text, markup)
 
     else:
         return False
@@ -1122,7 +1493,16 @@ def expire_old_batches() -> int:
     now = datetime.now(tz=TZ)
     count = 0
     for bid, batch in batches.items():
-        if batch.get("status") in ("admin_approved", "cancelled", "expired"):
+        if batch.get("status") in (
+            "admin_approved",
+            "cancelled",
+            "expired",
+            "sent",
+            "partially_sent",
+            "send_failed",
+            "send_empty",
+            "superseded",
+        ):
             continue
         try:
             expires = datetime.fromisoformat(batch["expires_at"])
@@ -1130,6 +1510,10 @@ def expire_old_batches() -> int:
                 expires = expires.replace(tzinfo=TZ)
             if now > expires:
                 batch["status"] = "expired"
+                batch["expired_at"] = now.isoformat()
+                for mgr_state in (batch.get("managers") or {}).values():
+                    if mgr_state.get("status") in ("pending", "manual_editing"):
+                        mgr_state["status"] = "timeout"
                 count += 1
                 logger.info("Батч %s помечен как expired", bid)
         except (KeyError, ValueError):
@@ -1137,3 +1521,45 @@ def expire_old_batches() -> int:
     if count:
         _save_batches(batches)
     return count
+
+
+async def promote_silent_batches_to_admin(bot=None) -> int:
+    """Через час молчания менеджеров переводит батч на этап решения администратора."""
+    batches = _load_batches()
+    now = datetime.now(tz=TZ)
+    changed_ids: List[str] = []
+    for bid, batch in batches.items():
+        if batch.get("status") != "pending_managers":
+            continue
+        if batch.get("admin_status") not in (None, "pending"):
+            continue
+        created_at = _parse_batch_dt(batch.get("created_at"))
+        if not created_at:
+            continue
+        if now <= created_at + timedelta(hours=MANAGER_SILENCE_TIMEOUT_HOURS):
+            continue
+
+        pending_found = False
+        for mgr_state in (batch.get("managers") or {}).values():
+            if mgr_state.get("status") in ("pending", "manual_editing"):
+                mgr_state["status"] = "timeout"
+                pending_found = True
+        if not pending_found:
+            continue
+
+        batch["status"] = "pending_admin"
+        batch["escalated_to_admin_at"] = now.isoformat()
+        batch["escalation_reason"] = "manager_silence_timeout"
+        changed_ids.append(bid)
+        logger.info("[%s] батч эскалирован админу после %d ч молчания", bid, MANAGER_SILENCE_TIMEOUT_HOURS)
+
+    if not changed_ids:
+        return 0
+
+    _save_batches(batches)
+
+    for bid in changed_ids:
+        batch = load_batch(bid)
+        if batch:
+            await send_admin_summary(batch, bot)
+    return len(changed_ids)

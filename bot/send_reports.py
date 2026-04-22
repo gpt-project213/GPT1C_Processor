@@ -1,3 +1,4 @@
+# v. 9.4.36 / 2026-04-22 - fix: approval-batch silence escalates to admin hourly; stale manager previews are closed server-side
 # v. 9.4.35 / 2026-04-13 - feat: event-driven collector trigger после обработки debt_ext файлов
 # v. 9.4.34 / 2026-03-16 - Fix: p.stat().st_mtime в _extract_date обёрнут в try/except (audit fix)
 # v. 9.4.33 / 2026-03-10 - Fix: bare except: → except (ValueError, OverflowError) в _parse_period_date (Bug S5)
@@ -7205,6 +7206,13 @@ async def collector_reminder_task(context: ContextTypes.DEFAULT_TYPE):
         await _collector_reminders()
     except Exception as e:
         logger.error("collector_reminder_task error: %s", e)
+    try:
+        from collector.approval_flow import promote_silent_batches_to_admin
+        promoted = await promote_silent_batches_to_admin()
+        if promoted:
+            logger.info("collector_reminder_task: %d approval-батч(ей) передано администратору по таймауту", promoted)
+    except Exception as e:
+        logger.error("collector approval escalation error: %s", e)
 
 
 
