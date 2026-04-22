@@ -5,6 +5,91 @@
 
 ---
 
+## HANDOFF 2026-04-22 19:30 Asia/Almaty (audit session continuation)
+
+### Что сделано после handoff 16:40
+
+**Phase 3 — глубокий аудит + точечные фиксы (5 файлов, все закоммичены):**
+
+| Файл | Версия | Fix |
+|------|--------|-----|
+| `imap_fetcher.py` | v4.4.6 → v4.4.7 | F-IMAP-001 (WARNING при пустом whitelist), F-IMAP-002 (`Path(fname).name` + reject "." ".." "" — path-traversal guard), F-IMAP-003 (try/except `M.shutdown()` в except-ветке `_imap_connect`), F-IMAP-004 (комментарий-охрана `load_dotenv()` перед TZ — защита BUG-H3 adc61bc) |
+| `send_tg.py` | v2.4.1 → v2.4.2 | F-TG-001 (`send_file` читает bytes в память перед `_post_tg` — при retry на 5xx/timeout file-handle иначе прочитан, вторая попытка отправила бы 0 байт), F-TG-002 (`print("TG: file OK")` в CLI `--file` ветке для симметрии с `--text`) |
+| `config.py` | v3.6.4 → v3.6.5 | F-CFG-001 (`_read_yaml` ловит `(yaml.YAMLError, OSError, UnicodeDecodeError)` вместо широкого `Exception`) |
+| `bot/inventory_summary.py` | v1.6 → v1.7 | S2 (regex `[Р°-СЏС‘]+` — CP1251-в-UTF-8 mojibake → корректный `[а-яё]+`), S3 (docstring синхронизирован с v1.7 стратегией) |
+| `bot/crm_clients.py` | v1.0.4 → v1.0.5 | S1 (хардкод `("Алена","Ергали","Магира","Оксана")` → `_load_known_managers()` из `config/managers.json` с fallback; соблюдение single-source-of-truth по CLAUDE.md) |
+
+**Phase 4 — быстрый скан остальных модулей (все чисты, правок не требовалось):**
+
+- `utils_common.py` v1.1.0 — pure функции, чист
+- `utils_excel.py` v2.3.4 — 3 широких except в utility-guard паттернах (REFACTOR-класс, не-баги)
+- `bot/silence_alerts.py` v1.7 — защитные широкие except в parser-entry функциях (приемлемо)
+- `bot/opportunity_loss.py` v1.5.2 — чист, fix #OPLOSS-1 на месте
+- `bot/user_tracker.py` v1.0.2 — чист, BUG-H4 (threading.Lock) + BUG-L7 (narrow except) уже закрыты
+- `bot/log_monitor.py` v1.0.1 — чист, атомарная запись tmp+replace
+
+**Аудит freshness-фикса b5fb564 (работа другого ИИ):**
+- Подтверждён живой проверкой: оба JSON-семейства (`debt_ext_Ведомость_…` и `debt_ext_Детальный_Дебиторы_…`) коэкзистируют в `reports/json/`, приоритет отдаётся «Детальный» через glob-фильтр + mtime
+- Логи `logs/collector_20260422.log` показывают работу фильтра свежести: `"Пропускаем устаревший debt JSON"`
+
+### Коммиты этого блока
+
+- `b8a0d2f` — `fix: аудит 22.04.2026 - narrow except, retry-safe send, CRM source of truth`
+  - `config.py`, `send_tg.py`, `bot/inventory_summary.py`, `bot/crm_clients.py`
+  - (`imap_fetcher.py` был закоммичен ранее в этой же сессии — до контекстного разрыва)
+- `2969640` — `docs: session context 22.04.2026` (handoff 16:40)
+
+### Что проверено
+
+- `python -m py_compile config.py` — OK
+- `python -m py_compile imap_fetcher.py` — OK
+- `send_tg.py`, `bot/inventory_summary.py`, `bot/crm_clients.py` — синтаксис подтверждён через `ast.parse(open(...).read())`, т.к. Windows держал lock на `__pycache__/*.pyc` от работающего бота (не синтаксическая ошибка)
+- `tests/test_project.py` — **105/105**
+- `tests/test_report_freshness.py` — **4/4** (регрессия b5fb564 зафиксирована тестом)
+- `tests/test_collector.py` — прогон прерван по таймауту времени выполнения, НО: падений/traceback нет, дошедшие секции зелёные
+
+### Что осталось untracked
+
+- `debt_stop_state.json` — runtime-артефакт, обновляется ботом автоматически, в коммиты не включается
+
+### В работе (передано в Codex)
+
+Codex пишет регрессионные тесты по ТЗ от 2026-04-22 (см. чат Claude):
+
+- `tests/test_silence_alerts.py` — 8 кейсов, главный — T6 freshness-regression (`_get_all_debt_reports` + `get_latest_debt_report` не даёт «Ведомости» побеждать «Детальный»)
+- `tests/test_opportunity_loss.py` — 6 кейсов, главный — T1 OPLOSS-1 regression (`_find_latest_gross_html` не подсовывает чужой gross)
+
+Назначение: закрыть тест-дыру в модулях, затронутых b5fb564, до следующей регрессии.
+
+### Открытые OPEN-пункты (не критично, не-баги)
+
+- REFACTOR ~30+ широких `except Exception` в utility-guard паттернах — требуют бизнес-решений по каждому случаю
+- ARCH-1: `txt_to_html` в двух местах (`tools/txt_to_html.py` + `bot/send_reports.py`) — унификация рискованная, ломает call sites
+- ARCH-3: inline HTML в `expenses_parser.py` — изолировано, работает корректно
+
+### Что читать новому ИИ в первую очередь
+
+1. `CLAUDE.md` (project overview + rules + fixed bugs history)
+2. Этот handoff (19:30)
+3. Handoff 16:40 ниже
+4. `gpt1c.md` (актуальный статус)
+5. Последние коммиты через `git log --oneline -20`
+
+### Открытые задачи по TaskList (закрытые, для контекста)
+
+```
+#1 [completed] Аудит freshness-фикса b5fb564
+#2 [completed] Phase 3 subtask: send_tg.py audit
+#3 [completed] S2: inventory_summary regex mojibake
+#4 [completed] S1: crm_clients hardcoded managers
+#5 [completed] Phase 3: config.py audit + fixes
+#6 [completed] Phase 4: quick scan + report
+```
+
+Все 6 задач этой сессии закрыты.
+
+---
+
 ## HANDOFF 2026-04-22 16:40 Asia/Almaty
 
 ### Что зафиксировано в репозитории после предыдущих handoff
@@ -944,3 +1029,57 @@ Observed rebuild result:
 1. start the bot again on the fixed code
 2. monitor the next live stop-control / manager / admin cycle
 3. if another client is suspected, compare fresh Excel primary source vs current `debt_stop_state.json` first, not archived state
+
+## Handoff Update - 2026-04-22 20:55 +05:00
+
+### Added regression tests for silence alerts and opportunity loss
+
+- New tests added without runtime-code changes:
+  - `tests/test_silence_alerts.py`
+  - `tests/test_opportunity_loss.py`
+- Scope covered:
+  - `silence_alerts`
+    - `parse_debt_amount`
+    - `parse_report_date`
+    - `categorize_by_silence`
+    - weekly-client skip logic
+    - `MIN_DEBT_AMOUNT`
+    - imitation detection
+    - freshness regression for `_get_all_debt_reports()` / `get_latest_debt_report()`
+    - `_period_sort_key`
+  - `opportunity_loss`
+    - `_find_latest_gross_html()` foreign-file regression
+    - `_get_manager_margin()` fallback to `DEFAULT_MARGIN_PCT`
+    - `calculate_opportunity_loss()` zone counts, debt filter, turns formula
+
+### Validation
+
+- `python -X utf8 tests/test_silence_alerts.py`
+  - `23/23` passed
+- `python -X utf8 tests/test_opportunity_loss.py`
+  - `10/10` passed
+- `python -X utf8 tests/test_project.py`
+  - did **not** fail on the new tests
+  - still stops at the old known environment issue:
+    - import-time `logging.FileHandler` lock on `logs/send_reports_20260422.log` inside `bot/send_reports.py`
+    - traceback location: `tests/test_project.py` during `import send_reports`
+- syntax of both new test files confirmed via `ast.parse(...)`
+  - direct `py_compile` hit Windows `tests/__pycache__` lock, not syntax problems
+
+### Git
+
+- test commit:
+  - `6d6ce48` `test: add regression coverage for silence alerts and opportunity loss`
+- pushed to:
+  - `origin/fix/log-noise-by-design-markers`
+
+### Working tree status
+
+- runtime artifact remains untracked:
+  - `debt_stop_state.json`
+- no production Python files were changed in this test task
+
+### Recommended next step
+
+1. keep these two new regression suites as the narrow guardrail for future freshness / alert-path edits
+2. treat the remaining `test_project.py` failure as the separate old `send_reports.py` log-lock problem, not as a regression from this task
