@@ -105,7 +105,6 @@ python -X utf8 tests/test_audit_reports_20260414.py
 - Не хардкодить пути — использовать `config.py`: `HTML_DIR`, `JSON_DIR`, `LOGS_DIR` и т.д.
 - Не использовать `timezone(timedelta(hours=5))` или `ZoneInfo("Asia/Almaty")` без env
 - Не использовать `logging.basicConfig()` на уровне модуля (использовать `setup_logging()`)
-- Не добавлять PDF вывод
 - Не использовать `--send` напрямую (отключён) — только `--send-approved`
 - Не упоминать Армана (уволен)
 
@@ -235,7 +234,6 @@ Get-Content logs\log_monitor_summary.log -Tail 50
 |---|------|---------|
 | 4 | `bot/send_reports.py` | Монолит ~7700 строк: scheduler, callbacks, ACL, reports, collector; менять только точечно |
 | 5 | `config/clients.json` | Данные контактов требуют отдельной сверки после перехода на CRM-only source |
-| 6 | `pdfkit` / docs | PDF-зависимость есть в requirements, активный PDF-контур не найден; не добавлять PDF |
 
 ### 🟢 OPEN — Аудит отчётов 14.04 (не баги, открытые вопросы)
 | # | Модуль | Описание |

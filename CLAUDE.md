@@ -163,7 +163,6 @@ collector/
 - **Timezone**: always `ZoneInfo(os.getenv("TZ", "Asia/Almaty"))` — never `timezone(timedelta(hours=5))` and never hardcoded `ZoneInfo("Asia/Almaty")`. Load `.env` before reading TZ.
 - **Manager list**: `config/managers.json` is the single source of truth. Never hardcode manager names.
 - **Debt key**: always `debt`, never `closing` — invariant, source of past analytics bugs.
-- **No PDF**: no PDF output in this project, do not add.
 - **Арман**: уволен, нигде не упоминать.
 - **Version bump**: +0.0.1 to any modified file's `__VERSION__`. Run `python -m py_compile <file>` after each change.
 

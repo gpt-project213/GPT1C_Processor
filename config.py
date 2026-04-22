@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-config.py · v3.6.2 · 2026-04-13
+config.py · v3.6.3 · 2026-04-22
 
 Совместимость с вашим кодом:
 • utils_excel.py → EXCEL_CLEAN_DIR, QUEUE_DIR, setup_logging
@@ -203,7 +203,7 @@ def load_pattern_config() -> Dict[str, Any]:
     cfg.setdefault("regex", {})
     return cfg
 
-# ── AI / PDF (если нужны) ─────────────────────────────────────
+# ── AI ────────────────────────────────────────────────────────
 AI_PROVIDER: str       = os.getenv("AI_PROVIDER", "deepseek")
 AI_MODEL: str          = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 DEEPSEEK_API_KEY: str  = os.getenv("DEEPSEEK_API_KEY", "") or ""
