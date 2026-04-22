@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-config.py · v3.6.3 · 2026-04-22
+config.py · v3.6.4 · 2026-04-22
 
 Совместимость с вашим кодом:
 • utils_excel.py → EXCEL_CLEAN_DIR, QUEUE_DIR, setup_logging
@@ -56,6 +56,10 @@ PATTERN_YAML: Path      = CONFIG_DIR / "pattern_config.yaml"     # опцион�
 
 
 def ensure_dirs() -> None:
+    """
+    Создаёт базовый набор директорий config-layer.
+    Полное runtime-дерево проекта может дополняться профильными модулями.
+    """
     for p in (REPORTS_DIR, HTML_DIR, JSON_DIR, EXCEL_CLEAN_DIR, QUEUE_DIR, LOGS_DIR, CACHE_DIR, CONFIG_DIR):
         p.mkdir(parents=True, exist_ok=True)
 
@@ -93,7 +97,7 @@ def setup_logging(module_name: str, level: int = logging.INFO) -> Logger:
     """
     logger = logging.getLogger(module_name)
     logger.setLevel(level)
-    if logger.handlers:
+    if getattr(logger, "_gpt1c_configured", False):
         return logger
 
     ts = datetime.now(TZ).strftime("%Y%m%d_%H%M%S")
@@ -107,6 +111,7 @@ def setup_logging(module_name: str, level: int = logging.INFO) -> Logger:
 
     logger.addHandler(fh); logger.addHandler(sh)
     logger.propagate = False
+    setattr(logger, "_gpt1c_configured", True)
     return logger
 
 # ── YAML (опционально) ────────────────────────────────────────
@@ -121,7 +126,8 @@ def _read_yaml(p: Path) -> Dict[str, Any]:
     try:
         data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
         return data if isinstance(data, dict) else {}
-    except Exception:
+    except Exception as e:
+        logging.getLogger("config").warning("yaml read error: %s (%s)", p, e)
         return {}
 
 # ── Менеджеры и синонимы ──────────────────────────────────────
@@ -136,13 +142,19 @@ def _load_managers_json() -> Dict[str, Optional[int]]:
         import logging as _log
         _log.getLogger("config").error("managers.json read error: %s", e)
         return {}
+    if not isinstance(raw, dict):
+        import logging as _log
+        _log.getLogger("config").error(
+            "managers.json invalid root type: expected dict, got %s",
+            type(raw).__name__,
+        )
+        return {}
     result: Dict[str, Optional[int]] = {}
-    if isinstance(raw, dict):
-        for name, val in raw.items():
-            try:
-                result[str(name)] = int(val)
-            except (TypeError, ValueError):
-                result[str(name)] = None
+    for name, val in raw.items():
+        try:
+            result[str(name)] = int(val)
+        except (TypeError, ValueError):
+            result[str(name)] = None
     return result
 
 def _load_yaml_overrides() -> Dict[str, Any]:
