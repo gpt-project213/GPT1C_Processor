@@ -1,9 +1,14 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-sales_parser.py · v1.0.8 (2026-04-18)
+sales_parser.py · v1.0.8 (2026-04-22)
 ────────────────────────────────────────────────────────────────────
 Парсер отчётов "Продажи" из 1С в JSON формат.
+
+ИСПРАВЛЕНИЯ v1.0.8:
+- Продажи 1С со смещённой таблицей: "Контрагент" и "Номенклатура" могут
+  находиться в одной колонке B. Строки клиентов с суммой, но без даты партии
+  теперь задают current_client, а не пропускаются как промежуточные итоги.
 
 ИСПРАВЛЕНИЯ v1.0.7:
 - find_data_end: 2 подряд пустые строки (как sales_report.find_data_end), единый конец таблицы для JSON/HTML.
@@ -94,7 +99,7 @@ logging.basicConfig(
 )
 LOG = logging.getLogger("sales_parser")
 
-__VERSION__ = "1.0.7"
+__VERSION__ = "1.0.8"
 
 NBSP = "\u202f"
 
@@ -401,8 +406,9 @@ def parse_sales_grouped(df: pd.DataFrame, colmap: Dict[str, int]) -> Dict[str, A
     clients: List[Dict[str, Any]] = []
     current_client: Optional[Dict[str, Any]] = None
     total_revenue = 0.0
+    same_group_col = client_j != -1 and client_j == prod_j
 
-    for _, r in df.iterrows():
+    for data_row_idx, (_, r) in enumerate(df.iterrows(), start=1):
         row = r.tolist()
 
         # Пропустить итоговые строки
@@ -412,6 +418,29 @@ def parse_sales_grouped(df: pd.DataFrame, colmap: Dict[str, int]) -> Dict[str, A
 
         # Пропустить служебные строки
         if name.lower() in ("номенклатура", "контрагент"):
+            continue
+
+        qty = to_float(row[qty_j]) if qty_j != -1 and qty_j < len(row) else float("nan")
+        price = to_float(row[price_j]) if price_j != -1 and price_j < len(row) else float("nan")
+        sale = to_float(row[sale_j]) if sale_j != -1 and sale_j < len(row) else float("nan")
+
+        # В некоторых продажных отчётах 1С "Контрагент" и "Номенклатура"
+        # находятся в одной колонке. Тогда строка клиента выглядит как
+        # агрегированная строка с qty/price/sale, а товар отличаем по дате
+        # партии в названии: "(DDMMYY)".
+        if (
+            same_group_col
+            and name
+            and not math.isnan(sale)
+            and abs(sale) > 0.0001
+            and not _PRODUCT_DATE_RE.search(name)
+        ):
+            current_client = {
+                "client": clean(row[client_j]),
+                "total": 0.0,
+                "products": []
+            }
+            clients.append(current_client)
             continue
 
         # Проверить заголовок клиента
@@ -428,10 +457,6 @@ def parse_sales_grouped(df: pd.DataFrame, colmap: Dict[str, int]) -> Dict[str, A
         # Строка товара
         if not name:
             continue
-
-        qty = to_float(row[qty_j]) if qty_j != -1 and qty_j < len(row) else float("nan")
-        price = to_float(row[price_j]) if price_j != -1 and price_j < len(row) else float("nan")
-        sale = to_float(row[sale_j]) if sale_j != -1 and sale_j < len(row) else float("nan")
 
         if math.isnan(sale) or sale == 0:
             continue
@@ -453,8 +478,12 @@ def parse_sales_grouped(df: pd.DataFrame, colmap: Dict[str, int]) -> Dict[str, A
         }
 
         if current_client is None:
-            current_client = {"client": "Без клиента", "total": 0.0, "products": []}
-            clients.append(current_client)
+            LOG.warning(
+                "parse_sales_grouped: строка продажи без распознанного клиента пропущена "
+                "(data_row=%s, product=%r, sale=%.2f)",
+                data_row_idx, name, sale,
+            )
+            continue
 
         current_client["products"].append(product)
         current_client["total"] = round(current_client["total"] + sale, 2)
