@@ -4,7 +4,12 @@
 collector/approval_flow.py
 UX согласования рассылки WhatsApp — менеджер → администратор.
 
-Версия: 1.0.8 (2026-04-22)
+Версия: 1.0.9 (2026-04-22)
+
+v1.0.9 (2026-04-22): старые сообщения администратора тоже закрываются при
+  появлении нового актуального списка, callback по устаревшему запросу
+  блокируется. В ручном списке администратора уже обработанный клиент сразу
+  исчезает из экрана, чтобы не путаться при выборе.
 
 v1.0.8 (2026-04-22): новый актуальный батч вытесняет предыдущий активный как
   superseded; manager-callback по закрытому батчу больше не принимается. Если
@@ -579,6 +584,30 @@ async def close_manager_previews(batch: Dict[str, Any], reason_text: str) -> Non
             )
 
 
+async def close_admin_messages(batch: Dict[str, Any], reason_text: str) -> None:
+    """Закрывает старые админские сообщения, чтобы по ним нельзя было нажать повторно."""
+    empty_markup = {"inline_keyboard": []}
+    targets = [
+        (batch.get("admin_chat_id"), batch.get("admin_message_id"), "admin_message_id"),
+        (batch.get("admin_chat_id"), batch.get("admin_preview_msg_id"), "admin_preview_msg_id"),
+    ]
+    seen: set[tuple[int, int]] = set()
+    for chat_id, message_id, field_name in targets:
+        if not chat_id or not message_id:
+            continue
+        key = (int(chat_id), int(message_id))
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            await _tg_edit(int(chat_id), int(message_id), reason_text, empty_markup)
+        except Exception as e:
+            logger.error(
+                "[%s] не удалось закрыть админское сообщение %s: %s",
+                batch.get("batch_id", "?"), field_name, e,
+            )
+
+
 def supersede_batch(
     batch: Dict[str, Any],
     *,
@@ -671,14 +700,23 @@ def _save_admin_decisions(batch: Dict[str, Any], decisions: Dict[str, str]) -> N
     batch["admin_reviewed_at"] = datetime.now(tz=TZ).isoformat()
 
 
+def _get_admin_reviewed_keys(batch: Dict[str, Any]) -> set[str]:
+    reviewed = batch.get("admin_reviewed_keys") or []
+    return {str(key) for key in reviewed}
+
+
 def _admin_client_list_keyboard(
     batch_id: str,
     flat_clients: List[Dict[str, Any]],
     decisions: Dict[str, str],
+    reviewed_keys: Optional[set[str]] = None,
 ) -> Dict[str, Any]:
+    reviewed_keys = reviewed_keys or set()
     rows = []
     for idx, client in enumerate(flat_clients):
         key = client["_admin_key"]
+        if key in reviewed_keys:
+            continue
         status = decisions.get(key, "skip")
         status_icon = {"keep": "✅", "skip": "❌"}.get(status, "❌")
         label = f"{status_icon} {client['manager']}: {client['name']}"
@@ -697,6 +735,8 @@ def _format_admin_manual_header(batch: Dict[str, Any], decisions: Dict[str, str]
     flat_clients = _iter_admin_clients(batch)
     keep_count = sum(1 for item in flat_clients if decisions.get(item["_admin_key"]) == "keep")
     skip_count = len(flat_clients) - keep_count
+    reviewed_count = len(_get_admin_reviewed_keys(batch))
+    remaining_count = max(len(flat_clients) - reviewed_count, 0)
     return (
         "✏️ <b>Список клиентов перед отправкой</b>\n\n"
         "Для каждого клиента выберите:\n"
@@ -704,6 +744,7 @@ def _format_admin_manual_header(batch: Dict[str, Any], decisions: Dict[str, str]
         "  ❌ Не отправлять\n\n"
         f"Выбрано к отправке: <b>{keep_count}</b>\n"
         f"Исключено: <b>{skip_count}</b>\n"
+        f"Осталось разобрать: <b>{remaining_count}</b>\n"
         f"Батч: <code>{batch['batch_id']}</code>"
     )
 
@@ -1238,6 +1279,14 @@ async def handle_admin_callback(
         return True
 
     now_iso = datetime.now(tz=TZ).isoformat()
+    if batch.get("status") in ("superseded", "expired", "cancelled", "sent", "partially_sent", "send_failed", "send_empty"):
+        await _tg_edit(
+            chat_id,
+            message_id,
+            "⚠️ Этот запрос уже закрыт и больше неактуален.\n\n"
+            "Если нужен новый список, работайте только с последним сообщением.",
+        )
+        return True
 
     if action == "wa_appr_adm_ok":
         # Финальное утверждение
@@ -1305,7 +1354,7 @@ async def handle_admin_callback(
         _save_admin_decisions(batch, decisions)
         save_batch(batch)
         text = _format_admin_manual_header(batch, decisions)
-        markup = _admin_client_list_keyboard(batch_id, flat_clients, decisions)
+        markup = _admin_client_list_keyboard(batch_id, flat_clients, decisions, _get_admin_reviewed_keys(batch))
         await _tg_edit(chat_id, message_id, text, markup)
 
     elif action in ("wa_appr_adm_cli_keep", "wa_appr_adm_cli_skip", "wa_appr_adm_info"):
@@ -1323,11 +1372,14 @@ async def handle_admin_callback(
 
         decisions = _build_admin_decisions(batch)
         decisions[client["_admin_key"]] = "keep" if action == "wa_appr_adm_cli_keep" else "skip"
+        reviewed_keys = _get_admin_reviewed_keys(batch)
+        reviewed_keys.add(client["_admin_key"])
         _save_admin_decisions(batch, decisions)
+        batch["admin_reviewed_keys"] = sorted(reviewed_keys)
         save_batch(batch)
 
         text = _format_admin_manual_header(batch, decisions)
-        markup = _admin_client_list_keyboard(batch_id, flat_clients, decisions)
+        markup = _admin_client_list_keyboard(batch_id, flat_clients, decisions, reviewed_keys)
         await _tg_edit(chat_id, message_id, text, markup)
 
     elif action == "wa_appr_adm_done":

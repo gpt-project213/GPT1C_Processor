@@ -1081,9 +1081,11 @@ try:
         _build_decisions,
         _build_admin_decisions,
         _save_admin_decisions,
+        _admin_client_list_keyboard,
         _get_manager_by_idx,
         expire_old_batches,
         handle_manager_callback,
+        handle_admin_callback,
         promote_silent_batches_to_admin,
         supersede_batch,
     )
@@ -1436,6 +1438,58 @@ finally:
     _af_mod._BATCHES_PATH = _orig_path
     _shutil_t3.rmtree(_tmp_dir10h, ignore_errors=True)
 
+_batch10i = create_batch({"Алена": _batch1_clients})
+_batch10i["status"] = "pending_admin"
+_batch10i["admin_status"] = "pending"
+_tmp_dir10i = _tempfile.mkdtemp()
+_af_mod._BATCHES_PATH = Path(_tmp_dir10i) / "wa_approval_batches.json"
+try:
+    save_batch(_batch10i)
+    _flat10i = _af_mod._iter_admin_clients(_batch10i)
+    _decisions10i = _build_admin_decisions(_batch10i)
+    _first_key10i = _flat10i[0]["_admin_key"]
+    _decisions10i[_first_key10i] = "skip"
+    _save_admin_decisions(_batch10i, _decisions10i)
+    _batch10i["admin_reviewed_keys"] = [_first_key10i]
+    save_batch(_batch10i)
+    _markup10i = _admin_client_list_keyboard(
+        _batch10i["batch_id"],
+        _flat10i,
+        _decisions10i,
+        {_first_key10i},
+    )
+    _markup10i_text = json.dumps(_markup10i, ensure_ascii=False)
+    check(
+        "APPROVAL T10i: обработанный админом клиент исчезает из ручного списка",
+        _flat10i[0]["name"] not in _markup10i_text and _flat10i[1]["name"] in _markup10i_text,
+        _markup10i_text,
+    )
+finally:
+    _af_mod._BATCHES_PATH = _orig_path
+    _shutil_t3.rmtree(_tmp_dir10i, ignore_errors=True)
+
+_batch10j = create_batch({"Алена": _batch1_clients})
+_batch10j["status"] = "superseded"
+_batch10j["superseded_by"] = "new-batch-9999"
+_tmp_dir10j = _tempfile.mkdtemp()
+_af_mod._BATCHES_PATH = Path(_tmp_dir10j) / "wa_approval_batches.json"
+try:
+    save_batch(_batch10j)
+    with patch("collector.approval_flow._tg_edit", new=AsyncMock()) as _edit10j:
+        _handled10j = asyncio.run(handle_admin_callback("wa_appr_adm_view|" + _batch10j["batch_id"], 1, 2))
+    _after10j = load_batch(_batch10j["batch_id"])
+    check(
+        "APPROVAL T10j: admin-callback по superseded запросу блокируется",
+        _handled10j is True
+        and _after10j is not None
+        and _after10j.get("status") == "superseded"
+        and _edit10j.await_count == 1,
+        str(_after10j),
+    )
+finally:
+    _af_mod._BATCHES_PATH = _orig_path
+    _shutil_t3.rmtree(_tmp_dir10j, ignore_errors=True)
+
 _engine_src_v2 = (Path(__file__).parent.parent / "collector" / "collections_engine.py").read_text(encoding="utf-8")
 _approval_src_v2 = (Path(__file__).parent.parent / "collector" / "approval_flow.py").read_text(encoding="utf-8")
 check(
@@ -1449,6 +1503,10 @@ check(
 check(
     "APPROVAL T11c: Telegram send-now callback присутствует в approval_flow.py",
     "wa_appr_adm_send" in _approval_src_v2,
+)
+check(
+    "APPROVAL T11d: новый запрос закрывает и старые админские сообщения",
+    "close_admin_messages(" in _engine_src_v2,
 )
 
 # ── Тест 12: wa_appr_ callback зарегистрирован в send_reports.py ─────────────

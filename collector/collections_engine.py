@@ -1078,6 +1078,7 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
         save_batch,
         send_manager_previews,
         send_admin_preview_notice,
+        close_admin_messages,
         supersede_batch,
     )
 
@@ -1220,6 +1221,11 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
             active_batch,
             "⚠️ Этот запрос закрыт как неактуальный.\n\n"
             "Сформирован новый батч по свежей дебиторке. Ждите новый запрос.",
+        )
+        await close_admin_messages(
+            active_batch,
+            "⚠️ Этот список закрыт как неактуальный.\n\n"
+            "По свежей дебиторке уже сформирован новый актуальный запрос.",
         )
     save_batch(batch)
     await send_manager_previews(batch)
