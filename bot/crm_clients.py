@@ -4,7 +4,11 @@
 bot/crm_clients.py
 Универсальная база клиентов Минбаракат (CRM).
 
-Версия: 1.0.4 (2026-04-22)
+Версия: 1.0.5 (2026-04-22)
+Изменения v1.0.5:
+  - Fix S1: список менеджеров читается из config/managers.json (single source of truth).
+    Раньше был хардкод ("Алена", "Ергали", "Магира", "Оксана"); fallback — тот же
+    хардкод, если файл отсутствует/пуст (защищает прод от сломанного конфига).
 
 Источники данных:
   - reports/json/debt_ext_*.json   → клиенты по менеджерам (дебиторка)
@@ -184,13 +188,33 @@ def _latest_debt_json_for_manager(manager: str) -> Optional[Path]:
     return None
 
 
+def _load_known_managers() -> Tuple[str, ...]:
+    """
+    Fix S1: читаем имена менеджеров из config/managers.json — единственный
+    источник правды по CLAUDE.md. Fallback — исторический хардкод, чтобы
+    прод не ломался при отсутствии конфига.
+    """
+    fallback = ("Алена", "Ергали", "Магира", "Оксана")
+    cfg_path = CONFIG_DIR / "managers.json"
+    try:
+        if cfg_path.exists():
+            data = json.loads(cfg_path.read_text(encoding="utf-8"))
+            if isinstance(data, dict) and data:
+                names = tuple(k.strip() for k in data.keys() if k and k.strip())
+                if names:
+                    return names
+    except (OSError, ValueError) as e:
+        logger.error("managers.json read error: %s — используем fallback", e)
+    return fallback
+
+
 def _load_latest_debt_clients() -> List[Tuple[str, str]]:
     """
     Читает последние debt_ext_*.json по каждому менеджеру.
     Возвращает список (client_name, manager).
     """
     result: List[Tuple[str, str]] = []
-    for manager_name in ("Алена", "Ергали", "Магира", "Оксана"):
+    for manager_name in _load_known_managers():
         latest = _latest_debt_json_for_manager(manager_name)
         if latest is None:
             continue

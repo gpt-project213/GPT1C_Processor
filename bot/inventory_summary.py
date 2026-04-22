@@ -1,8 +1,13 @@
 """
 Модуль для генерации кратких сводок по остаткам
 
-Версия: 1.6
+Версия: 1.7
 Дата: 2026-04-22
+Изменения v1.7:
+  - Fix S2: исправлена битая регулярка русских месяцев в _parse_period_end_from_json
+    (был mojibake `[Р°-СЏС‘]+` — UTF-8 байты, прочитанные как CP1251).
+    Правильный вариант уже использовался в _parse_period_date_from_html — синхронизирован.
+  - Fix S3: обновлён docstring get_latest_inventory_json под v1.6+ стратегию (period_end, mtime).
 Изменения v1.6:
   - Выбор inventory JSON теперь предпочитает дневные файлы по дате периода, а не более новые range/cost-артефакты
 Изменения v1.4:
@@ -52,7 +57,8 @@ class InventorySummary:
                 date_m = re.search(r'(\d{1,2})[./](\d{1,2})[./](\d{4})', period_str)
                 if date_m:
                     return datetime(int(date_m.group(3)), int(date_m.group(2)), int(date_m.group(1)))
-                ru_m = re.search(r'(\d{1,2})\s+([Р°-СЏС‘]+)\s+(\d{4})', period_str.lower())
+                # Fix S2: правильный класс кириллицы (было mojibake `[Р°-СЏС‘]+`)
+                ru_m = re.search(r'(\d{1,2})\s+([а-яё]+)\s+(\d{4})', period_str.lower())
                 if ru_m:
                     month = _MONTHS_RU.get(ru_m.group(2))
                     if month:
@@ -232,7 +238,12 @@ class InventorySummary:
         return f"{num:,.0f}".replace(',', ' ')
     
     def get_latest_inventory_json(self, json_dir: Path) -> Optional[Path]:
-        """v1.4: Находит свежий JSON остатков по mtime."""
+        """
+        v1.7: Находит актуальный дневной inventory JSON.
+        Приоритет: `_is_inventory_day_json` (без `inventory_cost_` и без range-периода).
+        Сортировка по (period_end из JSON, mtime). Fallback на любые inventory_* если
+        дневных нет.
+        """
         files = [p for p in json_dir.glob("inventory_*.json") if self._is_inventory_day_json(p)]
         if not files:
             files = list(json_dir.glob("inventory_*.json"))

@@ -1,11 +1,17 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-send_tg.py · v2.4.1 (2026-04-22, Asia/Almaty)
+send_tg.py · v2.4.2 (2026-04-22, Asia/Almaty)
 
 Назначение:
 - Низкоуровневая отправка в Telegram: длинный текст (с разбиением) и файлы
 - Поддержка inline-меню под документом: [Детальный] [Анализ ИИ] [Архив]
+
+Изменения v2.4.2:
+- Fix F-TG-001: send_file читает файл в bytes и передаёт в _post_tg как
+  tuple (name, bytes, mime). Без этого на 5xx/Timeout retry отправил бы 0 байт
+  (file-handle уже прочитан первой попыткой).
+- Fix F-TG-002: CLI ветка --file печатает "TG: file OK" для симметрии с --text.
 
 Окружение (.env):
 - TG_BOT_TOKEN, ADMIN_CHAT_ID
@@ -198,8 +204,15 @@ def send_file(file_path: str | Path, chat_id: Optional[str] = None, caption: Opt
     if with_menu:
         data["reply_markup"] = json.dumps(_build_menu(), ensure_ascii=False)
 
-    with p.open("rb") as f:
-        _post_tg("sendDocument", data=data, files={"document": f}, timeout=180)
+    # Fix F-TG-001: читаем файл в память — при retry в _post_tg file-handle
+    # иначе остался бы прочитанным, и вторая попытка отправила бы 0 байт.
+    file_bytes = p.read_bytes()
+    _post_tg(
+        "sendDocument",
+        data=data,
+        files={"document": (p.name, file_bytes, "application/octet-stream")},
+        timeout=180,
+    )
     logging.getLogger(__name__).info("TG: file OK → %s", p)
     return True
 
@@ -220,5 +233,6 @@ if __name__ == "__main__":
         print("TG: text OK")
     elif args.file:
         send_file(args.file, chat_id=args.chat_id, caption=args.caption, with_menu=args.with_menu)
+        print("TG: file OK")  # Fix F-TG-002: UX-сигнал после успешной отправки
     else:
         ap.print_help()

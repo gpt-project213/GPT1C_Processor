@@ -1,7 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-config.py · v3.6.4 · 2026-04-22
+config.py · v3.6.5 · 2026-04-22
+Изменения v3.6.5:
+- Fix F-CFG-001: _read_yaml ловит узкий набор исключений
+  (yaml.YAMLError, OSError, UnicodeDecodeError) вместо широкого Exception.
 
 Совместимость с вашим кодом:
 • utils_excel.py → EXCEL_CLEAN_DIR, QUEUE_DIR, setup_logging
@@ -126,7 +129,7 @@ def _read_yaml(p: Path) -> Dict[str, Any]:
     try:
         data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
         return data if isinstance(data, dict) else {}
-    except Exception as e:
+    except (yaml.YAMLError, OSError, UnicodeDecodeError) as e:
         logging.getLogger("config").warning("yaml read error: %s (%s)", p, e)
         return {}
 
