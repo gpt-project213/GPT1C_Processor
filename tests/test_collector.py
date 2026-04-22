@@ -1678,6 +1678,17 @@ check("PROMPTS T14b: _get_lang_inst('kz') непустая",
 
 # ─────────────────────────────────────────────────────────────────────────────
 
+# T15: analyze_response должен переживать None от AI без падения на .get
+with patch("collector.collection_agent._call_deepseek", return_value=None):
+    _none_ai = _ca_mod.analyze_response("Оплачу позже", manager_name="Ергали")
+check(
+    "PROMPTS T15: analyze_response переживает None от AI и уходит в fallback",
+    isinstance(_none_ai, dict)
+    and _none_ai.get("intent") == "unclear"
+    and _none_ai.get("requires_human") is True,
+    str(_none_ai),
+)
+
 # ═══════════════════════════════════════════════════════════════
 # 14. PHASE 4 — DECOUPLE SHIPMENT STOP FROM COLLECTION ELIGIBILITY
 # ═══════════════════════════════════════════════════════════════

@@ -4,7 +4,10 @@
 collections/collection_agent.py
 AI-диалоговый агент взыскания долгов через DeepSeek.
 
-Версия: 1.0.7 (2026-04-13)
+Версия: 1.0.8 (2026-04-22)
+
+v1.0.8 (2026-04-22): analyze_response() теперь безопасно переживает пустой
+  или `None`-ответ от AI и уходит в fallback вместо падения на `.get`.
 
 Функции:
   generate_message()  — генерирует текст сообщения должнику
@@ -408,6 +411,9 @@ def analyze_response(
     user_prompt = f"{history_block}Ответ клиента:\n{response_text}"
 
     raw = _call_deepseek(system_prompt, user_prompt, max_tokens=300)
+    if not isinstance(raw, str):
+        logger.warning("analyze_response: DeepSeek вернул %s вместо строки", type(raw).__name__)
+        raw = ""
     try:
         # Извлекаем JSON из ответа (DeepSeek может добавить markdown)
         start = raw.find("{")

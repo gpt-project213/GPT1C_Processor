@@ -4,7 +4,11 @@
 collector/whatsapp_poller.py
 Green API polling — получает входящие сообщения WhatsApp каждые 30 секунд.
 
-Версия: 1.1.3 (2026-04-22)
+Версия: 1.1.4 (2026-04-22)
+
+v1.1.4 (2026-04-22): AssemblyAI теперь требует `speech_models` как непустой
+  список. Контракт запроса обновлён, чтобы входящие голосовые снова
+  распознавались.
 
 v1.1.3 (2026-04-22): убран устаревший параметр `speech_model` из запроса
   AssemblyAI transcript; из-за него входящие голосовые сообщения падали с 400.
@@ -39,6 +43,7 @@ GREENAPI_ID    = os.getenv("GREENAPI_ID", "")
 GREENAPI_TOKEN = os.getenv("GREENAPI_TOKEN", "")
 ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY", "")
 ASSEMBLYAI_POLL_SECONDS = int(os.getenv("ASSEMBLYAI_POLL_SECONDS", "18"))
+ASSEMBLYAI_SPEECH_MODELS = ["universal-2"]
 SAVE_WA_AUDIO = os.getenv("SAVE_WA_AUDIO", "1").lower() in ("1", "true", "yes")
 TEST_MODE      = os.getenv("TEST_MODE", "0") == "1"
 TEST_WA_PHONE  = os.getenv("TEST_WA_PHONE", "")
@@ -159,6 +164,7 @@ async def _transcribe_with_assemblyai_file(tmp_path: str) -> str:
                 headers=headers,
                 json={
                     "audio_url": upload_url,
+                    "speech_models": ASSEMBLYAI_SPEECH_MODELS,
                     "language_detection": True,
                 },
             )
