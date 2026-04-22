@@ -608,6 +608,45 @@ finally:
     _pipeline._COLLECTOR_TRIGGER_PATH = _orig_trigger_path
     _shutil.rmtree(_trigger_tmpdir, ignore_errors=True)
 
+_pipeline_retry_tmpdir = tempfile.mkdtemp()
+try:
+    import run_pipeline_all_mp as _pipeline_retry
+
+    _orig_log = _pipeline_retry._log
+    _orig_json_event = _pipeline_retry._json_event
+    _orig_processed_dir = _pipeline_retry.PROCESSED_DIR
+    _orig_build_report_debt = _pipeline_retry.build_report_debt
+
+    _pipeline_retry._log = lambda *args, **kwargs: None
+    _pipeline_retry._json_event = lambda *args, **kwargs: None
+    _pipeline_retry.PROCESSED_DIR = Path(_pipeline_retry_tmpdir) / "processed"
+    _pipeline_retry.PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+    _pipeline_retry.build_report_debt = None
+
+    try:
+        debt_src = Path(_pipeline_retry_tmpdir) / "Дебиторка_test.xlsx"
+        debt_src.write_text("stub", encoding="utf-8")
+
+        routed_to, outs = _pipeline_retry._process_one(debt_src)
+        queue_restored = debt_src.exists()
+        no_work_left = not debt_src.with_name(debt_src.name + ".work").exists()
+        processed_empty = not any(_pipeline_retry.PROCESSED_DIR.iterdir())
+
+        check(
+            "TRIGGER T5: DEBT с пустым outs не уходит в processed, а возвращается в очередь",
+            routed_to == "DEBT" and outs == [] and queue_restored and no_work_left and processed_empty,
+            f"routed_to={routed_to!r}, outs={outs!r}, exists={queue_restored}, no_work_left={no_work_left}, processed_empty={processed_empty}",
+        )
+    except Exception as e:
+        check("TRIGGER T5: DEBT с пустым outs не уходит в processed, а возвращается в очередь", False, str(e))
+    finally:
+        _pipeline_retry._log = _orig_log
+        _pipeline_retry._json_event = _orig_json_event
+        _pipeline_retry.PROCESSED_DIR = _orig_processed_dir
+        _pipeline_retry.build_report_debt = _orig_build_report_debt
+finally:
+    _shutil.rmtree(_pipeline_retry_tmpdir, ignore_errors=True)
+
 # ═══════════════════════════════════════════════════════════════
 # 14. opportunity_loss — форматирование и пустые данные
 # ═══════════════════════════════════════════════════════════════
