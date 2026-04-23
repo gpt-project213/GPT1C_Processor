@@ -4,7 +4,13 @@
 collector/whatsapp_poller.py
 Green API polling — получает входящие сообщения WhatsApp каждые 30 секунд.
 
-Версия: 1.1.4 (2026-04-22)
+Версия: 1.1.5 (2026-04-23)
+
+v1.1.5 (2026-04-23): номер WhatsApp теперь выделен только под бота,
+  поэтому старый privacy-гейт "только активный диалог" стал опциональным
+  через WA_REQUIRE_ACTIVE_DIALOG=1. По умолчанию входящие аудио доходят до
+  транскрипции; неизвестные номера всё равно безопасно игнорируются в
+  client_dialog.handle_incoming().
 
 v1.1.4 (2026-04-22): AssemblyAI теперь требует `speech_models` как непустой
   список. Контракт запроса обновлён, чтобы входящие голосовые снова
@@ -47,6 +53,7 @@ ASSEMBLYAI_SPEECH_MODELS = ["universal-2"]
 SAVE_WA_AUDIO = os.getenv("SAVE_WA_AUDIO", "1").lower() in ("1", "true", "yes")
 TEST_MODE      = os.getenv("TEST_MODE", "0") == "1"
 TEST_WA_PHONE  = os.getenv("TEST_WA_PHONE", "")
+WA_REQUIRE_ACTIVE_DIALOG = os.getenv("WA_REQUIRE_ACTIVE_DIALOG", "0").lower() in ("1", "true", "yes")
 
 # Каждый инстанс имеет свой поддомен: первые 4 цифры ID → 7107.api.greenapi.com
 # Может быть переопределён через GREENAPI_URL в .env
@@ -85,6 +92,17 @@ def _has_active_collector_dialog(phone: str) -> bool:
     except Exception:
         pass
     return False
+
+
+def _should_process_incoming(phone: str) -> bool:
+    """Гейт входящих WhatsApp-сообщений.
+
+    Старый режим для личного номера Саиды включается через
+    WA_REQUIRE_ACTIVE_DIALOG=1. Для выделенного бот-номера по умолчанию
+    пропускаем входящие дальше: неизвестные номера безопасно отсекает
+    client_dialog.handle_incoming().
+    """
+    return True if not WA_REQUIRE_ACTIVE_DIALOG else _has_active_collector_dialog(phone)
 
 
 async def _download_audio_to_temp(audio_url: str, archive_label: str = "") -> tuple[Optional[str], str]:
@@ -301,12 +319,11 @@ async def poll_once() -> None:
                     await _delete_notification(receipt_id)
                     return
 
-            # Саида использует личный номер для Green API — все её входящие сообщения
-            # (личные контакты, должники пишущие ей напрямую) проходят через бота.
-            # Пропускаем всё, у чего нет активного диалога коллектора — бот мог отправить
-            # сообщение только тем, кому сам написал первым. Это защищает личную переписку
-            # Саиды от перехвата и не тратит квоту Whisper на чужие аудио.
-            if not _has_active_collector_dialog(phone):
+            # Для личного номера старый privacy-гейт можно вернуть через
+            # WA_REQUIRE_ACTIVE_DIALOG=1. Для выделенного бот-номера входящие
+            # пропускаются до handle_incoming(), где неизвестные номера
+            # безопасно игнорируются без ответа клиенту.
+            if not _should_process_incoming(phone):
                 logger.info("Нет активного диалога коллектора для номера — пропуск")
                 return
 

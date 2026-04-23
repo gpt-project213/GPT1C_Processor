@@ -2011,6 +2011,12 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as _td_wa:
           _wa_poller._has_active_collector_dialog("+77753306745") is True)
     check("WA STT T2: должник без активного диалога не проходит гейт",
           _wa_poller._has_active_collector_dialog("+77750000000") is False)
+    with patch.object(_wa_poller, "WA_REQUIRE_ACTIVE_DIALOG", False):
+        check("WA STT T2b: выделенный бот-номер пропускает входящие без active-dialog гейта",
+              _wa_poller._should_process_incoming("+77750000000") is True)
+    with patch.object(_wa_poller, "WA_REQUIRE_ACTIVE_DIALOG", True):
+        check("WA STT T2c: legacy privacy-гейт можно вернуть через WA_REQUIRE_ACTIVE_DIALOG=1",
+              _wa_poller._should_process_incoming("+77750000000") is False)
     _wa_poller._CLIENT_DIALOGS_PATH = _orig_dialogs_path
 
 with patch.object(_wa_poller, "ASSEMBLYAI_API_KEY", "aai-key"), \
