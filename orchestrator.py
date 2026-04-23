@@ -1,4 +1,4 @@
-# orchestrator.py · v1.0.16 · 2026-04-23 (Asia/Almaty)
+# orchestrator.py · v1.0.17 · 2026-04-23 (Asia/Almaty)
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-VERSION = "1.0.16"
+VERSION = "1.0.17"
 TZ = ZoneInfo("Asia/Almaty")
 CODEX_RETRY_MINUTES = 30
 CLAUDE_RETRY_MINUTES = 60
@@ -66,6 +66,11 @@ def should_require_claude_review(task: dict) -> bool:
     if task_class == "complex":
         return True
     return review_policy == "require_claude"
+
+
+def normalize_target_system(value: object) -> str:
+    target_system = str(value or "main_bot").strip().lower()
+    return target_system if target_system == "main_bot" else "main_bot"
 
 
 def load_json(path: Path) -> dict:
@@ -161,6 +166,7 @@ def validate_task(task: dict) -> list[str]:
         "task_id",
         "title",
         "project_root",
+        "target_system",
         "status",
         "stage",
         "goal",
@@ -178,6 +184,7 @@ def validate_task(task: dict) -> list[str]:
     title = str(task.get("title", "")).strip()
     status = str(task.get("status", "")).strip()
     stage = str(task.get("stage", "")).strip()
+    target_system = normalize_target_system(task.get("target_system"))
     task_class = normalize_task_class(task.get("task_class"))
     review_policy = normalize_review_policy(task.get("review_policy"))
 
@@ -189,6 +196,8 @@ def validate_task(task: dict) -> list[str]:
         errors.append(f"Недопустимое значение status: {status}")
     if stage not in {"analysis", "execution", "review", "done"}:
         errors.append(f"Недопустимое значение stage: {stage}")
+    if target_system != "main_bot":
+        errors.append(f"Недопустимое значение target_system: {target_system}")
     if task_class == "complex" and review_policy != "require_claude":
         errors.append("Для task_class=complex review_policy должен быть require_claude")
 
@@ -210,6 +219,7 @@ def validate_task(task: dict) -> list[str]:
             elif not isinstance(inputs[key], list):
                 errors.append(f"inputs.{key} должно быть списком")
 
+    task["target_system"] = target_system
     task["task_class"] = task_class
     task["review_policy"] = review_policy
 
@@ -352,6 +362,9 @@ def build_codex_prompt(task: dict) -> str:
 РАЗРЕШЕНО ТРОГАТЬ ТОЛЬКО:
 {allowed_files}
 
+ЦЕЛЕВАЯ СИСТЕМА:
+- target_system: {normalize_target_system(task.get("target_system"))}
+
 КЛАСС ЗАДАЧИ:
 - task_class: {normalize_task_class(task.get("task_class"))}
 - review_policy: {normalize_review_policy(task.get("review_policy"))}
@@ -406,6 +419,9 @@ def build_claude_prompt(task: dict) -> str:
 - {codex_output_file}
 - {stdout_file}
 - {stderr_file}
+
+ЦЕЛЕВАЯ СИСТЕМА:
+- target_system: {normalize_target_system(task.get("target_system"))}
 
 КЛАСС ЗАДАЧИ:
 - task_class: {normalize_task_class(task.get("task_class"))}
@@ -777,6 +793,7 @@ def start_next_task() -> int:
             return 0
 
         task = tasks.pop(0)
+        task["target_system"] = normalize_target_system(task.get("target_system"))
         task["status"] = "running"
         task["stage"] = "analysis"
         task["task_class"] = normalize_task_class(task.get("task_class"))
