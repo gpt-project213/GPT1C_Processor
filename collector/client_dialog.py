@@ -4,7 +4,10 @@
 collector/client_dialog.py
 Управление диалогами с должниками через WhatsApp.
 
-Версия: 1.0.7 (2026-04-13)
+Версия: 1.0.8 (2026-04-23)
+
+v1.0.8 (2026-04-23): мягкая обработка ответов клиентов: soft_positive /
+  promise_schedule / paid_claim, без ложной фиксации обещаний и без повторной ссылки на 1С.
 
 Хранилище: logs/collector_client_dialogs.json
 Ключ: номер телефона (цифры, без +, без @c.us)
@@ -200,6 +203,27 @@ def _fmt_amount(amount: float) -> str:
     return f"{amount:,.0f}".replace(",", " ")
 
 
+def _fmt_date_display(raw: Optional[str]) -> str:
+    """Форматирует ISO-дату для клиентского сообщения."""
+    if not raw:
+        return ""
+    try:
+        from datetime import date as _date
+        return _date.fromisoformat(str(raw)).strftime("%d.%m.%Y")
+    except (TypeError, ValueError):
+        return str(raw)
+
+
+def _payment_schedule_label(raw: Any) -> str:
+    """Человекочитаемая формулировка графика оплаты."""
+    value = str(raw or "").strip().lower()
+    if value in {"daily", "every_day", "ежедневно", "каждый день"}:
+        return "ежедневными частичными платежами"
+    if value in {"partial", "parts", "частями", "частично"}:
+        return "частями"
+    return str(raw or "частичными платежами")
+
+
 def _build_escalation_text(
     dialog: Dict[str, Any],
     reason: str,
@@ -234,11 +258,16 @@ def _build_escalation_text(
     # Обещание если есть
     promise_date = dialog.get("promise_date")
     promise_line = f"\n📅 Обещание оплаты: {promise_date}" if promise_date else ""
+    schedule = dialog.get("payment_schedule")
+    schedule_line = f"\n🧾 График: {_payment_schedule_label(schedule)}" if schedule else ""
 
     # Описание намерения
     intent_map = {
         "promise":              "обещал оплатить",
         "promise_without_date": "готов платить, но не назвал дату",
+        "promise_schedule":     "предложил график частичных платежей",
+        "paid_claim":           "сообщил, что уже оплатил",
+        "soft_positive":        "готов платить, но без точной суммы/графика",
         "refusal":              "отказывается платить",
         "delay_request":        "просит отсрочку",
         "question":             "задаёт вопрос о товарах/доставке",
@@ -252,7 +281,7 @@ def _build_escalation_text(
 
     return (
         f"📋 <b>{name}</b> — требуется участие {manager_name}\n\n"
-        f"💰 {_fmt_amount(amount)} тг | {days} дн. просрочки{promise_line}\n"
+        f"💰 {_fmt_amount(amount)} тг | {days} дн. просрочки{promise_line}{schedule_line}\n"
         f"📌 {intent_desc}\n\n"
         f"💬 Переписка:\n{exchanges_block}\n\n"
         f"⚠️ {summary}"
@@ -410,11 +439,9 @@ async def handle_incoming(phone: str, text: str) -> None:
     language = detect_language(text)
 
     if _mentions_recent_unposted_payment(text):
-        report_date = _report_date_context(dialog)
         reply = (
-            f"Поняли. Задолженность указана по данным отчёта на {report_date}. "
-            "Если оплата уже прошла после этой даты или ещё не разнесена в 1С, "
-            "напишите, пожалуйста, точную дату и сумму оплаты. Мы передадим информацию менеджеру."
+            "Спасибо. Если оплата уже прошла, пришлите, пожалуйста, чек или дату и сумму платежа. "
+            f"Передадим информацию менеджеру {manager_name}."
         )
         dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
         _set_client_dialog(phone_clean, dialog)
@@ -445,6 +472,8 @@ async def handle_incoming(phone: str, text: str) -> None:
     requires_human = analysis.get("requires_human", False)
     suggested_reply = analysis.get("suggested_reply", "")
     promise_date = analysis.get("promise_date")
+    promise_amount = analysis.get("promise_amount")
+    payment_schedule = analysis.get("payment_schedule") or analysis.get("schedule")
 
     logger.info(
         "[%s] intent=%s requires_human=%s exchange_count=%d",
@@ -482,29 +511,94 @@ async def handle_incoming(phone: str, text: str) -> None:
         )
         return
 
-    if intent == "promise":
-        # Сохраняем дату обещания в диалог
+    if intent == "paid_claim":
+        reply = suggested_reply if suggested_reply else (
+            "Спасибо. Если оплата уже прошла, пришлите, пожалуйста, чек или дату и сумму платежа. "
+            f"Передадим информацию менеджеру {manager_name}."
+        )
+        dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
+        _set_client_dialog(phone_clean, dialog)
+        await _reply_to_client(phone_clean, reply)
+        return
+
+    if intent == "promise_schedule":
+        schedule_code = str(payment_schedule or "partial")
+        schedule_text = _payment_schedule_label(schedule_code)
+        dialog["payment_schedule"] = schedule_code
         if promise_date:
             dialog["promise_date"] = promise_date
-        date_str = f" до {promise_date}" if promise_date else ""
-        # Форматируем дату для клиента: YYYY-MM-DD → ДД.ММ.ГГГГ
-        date_display = ""
-        if promise_date:
-            try:
-                from datetime import date as _date
-                parsed = _date.fromisoformat(promise_date)
-                date_display = f" до {parsed.strftime('%d.%m.%Y')}"
-            except ValueError:
-                date_display = date_str
-        reply = (
-            f"Принято, фиксируем оплату{date_display}. "
-            f"Как оплатите — пришлите чек, пожалуйста."
+        if promise_amount:
+            dialog["promise_amount"] = promise_amount
+        first_payment = f" Первый платёж ждём до {_fmt_date_display(promise_date)}." if promise_date else ""
+        reply = suggested_reply if suggested_reply else (
+            f"Принято: оплата будет {schedule_text}.{first_payment} "
+            "Как оплатите — пришлите, пожалуйста, чек."
         )
         dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
         dialog["state"] = "escalated"
         _set_client_dialog(phone_clean, dialog)
         await _reply_to_client(phone_clean, reply)
+        summary = f"Клиент предложил график оплаты: {schedule_text}"
+        if promise_date:
+            summary += f", первый платёж до {promise_date}"
+        if promise_amount:
+            summary += f", сумма {promise_amount}"
+        await escalate_to_manager(dialog, "promise_schedule", summary, phone_clean)
+        return
+
+    if intent == "soft_positive":
+        if exchange_count >= 2:
+            reply = (
+                "Понял вас. Тогда ждём ближайшую оплату. "
+                "Как оплатите — пришлите, пожалуйста, чек."
+            )
+            dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
+            dialog["state"] = "escalated"
+            _set_client_dialog(phone_clean, dialog)
+            await _reply_to_client(phone_clean, reply)
+            await escalate_to_manager(
+                dialog, "soft_positive",
+                "Клиент готов платить, но точную сумму или график не назвал", phone_clean,
+            )
+            return
+        reply = suggested_reply if suggested_reply else (
+            "Спасибо, понял. Когда планируете первый платёж и примерно какая сумма?"
+        )
+        dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
+        _set_client_dialog(phone_clean, dialog)
+        await _reply_to_client(phone_clean, reply)
+        return
+
+    if intent == "promise":
+        # Сохраняем дату обещания в диалог
+        if promise_date:
+            dialog["promise_date"] = promise_date
+        if promise_amount:
+            dialog["promise_amount"] = promise_amount
+        date_str = f" до {promise_date}" if promise_date else ""
+        date_display = _fmt_date_display(promise_date)
+        if promise_amount:
+            reply = (
+                f"Спасибо, договорённость зафиксировал: оплата до {date_display} "
+                f"на сумму {_fmt_amount(float(promise_amount))} тг. "
+                "Как оплатите — пришлите чек, пожалуйста."
+            )
+        elif promise_date:
+            reply = (
+                f"Спасибо, понял. Тогда ждём оплату до {date_display}. "
+                "Как оплатите — пришлите, пожалуйста, чек."
+            )
+        else:
+            reply = (
+                "Спасибо, понял. Как оплатите — пришлите, пожалуйста, чек."
+            )
+        dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
+        dialog["state"] = "escalated"
+        _set_client_dialog(phone_clean, dialog)
+        await _reply_to_client(phone_clean, reply)
         summary = f"Клиент обещал оплатить{date_str}"
+        if promise_amount:
+            summary += f" на сумму {promise_amount}"
         await escalate_to_manager(dialog, "promise", summary, phone_clean)
         return
 
@@ -576,8 +670,7 @@ async def handle_incoming(phone: str, text: str) -> None:
     if intent == "promise_without_date":
         # Клиент подтверждает готовность, но без даты — просим уточнить
         reply = suggested_reply if suggested_reply else (
-            "Хорошо, понял вас! Уточните, пожалуйста, точную дату оплаты — "
-            "например, 20.04.2026."
+            "Спасибо, понял. Когда планируете первый платёж?"
         )
         dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
         _set_client_dialog(phone_clean, dialog)

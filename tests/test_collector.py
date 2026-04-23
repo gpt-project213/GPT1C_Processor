@@ -829,14 +829,114 @@ try:
         ))
     d_qr = cd_mod._get_client_dialog("77011234572")
     qr_bot_replies = [ex["text"] for ex in d_qr.get("exchanges", []) if ex["role"] == "bot"]
-    check("recent payment: бот уточняет дату отчёта и сумму оплаты",
-          any("данным отчёта на 2026-04-11" in t.lower()
-              and "точную дату и сумму" in t.lower()
+    check("recent payment: бот просит чек или дату и сумму оплаты",
+          any("чек" in t.lower()
+              and "дату и сумму" in t.lower()
+              and "1С" not in t
               for t in qr_bot_replies),
           str(qr_bot_replies))
     check("recent payment: диалог остаётся active, не эскалируется сразу",
           d_qr.get("state") == "active",
           str(d_qr.get("state")))
+
+    # ─── UX: promise с датой, но без суммы — без ложного "фиксируем" ───────────
+    asyncio.run(cd_mod.start_client_dialog(
+        phone="77011234573",
+        client_name="Кайрбек",
+        manager_name="Ергали",
+        manager_chat_id=123,
+        level=2,
+        days=12,
+        amount=25150.0,
+        message_text="Напоминание по задолженности.",
+    ))
+    with patch("collector.collection_agent._call_deepseek") as mock_prom_no_amount:
+        mock_prom_no_amount.return_value = '{"intent":"promise","promise_date":"2026-04-22","promise_amount":null,"requires_human":false,"suggested_reply":""}'
+        with patch("collector.client_dialog._reply_to_client") as mock_prom_reply:
+            mock_prom_reply.return_value = None
+            with patch("collector.client_dialog.escalate_to_manager"):
+                asyncio.run(cd_mod.handle_incoming("77011234573", "Сегодня будет, сумма пока не знаю"))
+    d_prom_no_amount = cd_mod._get_client_dialog("77011234573")
+    prom_replies = [ex["text"] for ex in d_prom_no_amount.get("exchanges", []) if ex["role"] == "bot"]
+    last_prom_reply = prom_replies[-1] if prom_replies else ""
+    check("UX promise date-only: state=escalated", d_prom_no_amount.get("state") == "escalated")
+    check("UX promise date-only: нет ложной фиксации",
+          "фиксируем" not in last_prom_reply.lower(), last_prom_reply)
+    check("UX promise date-only: просит чек",
+          "чек" in last_prom_reply.lower(), last_prom_reply)
+
+    # ─── UX: schedule — ежедневные/частичные платежи сохраняются ──────────────
+    asyncio.run(cd_mod.start_client_dialog(
+        phone="77011234574",
+        client_name="Кайрбек",
+        manager_name="Ергали",
+        manager_chat_id=123,
+        level=2,
+        days=12,
+        amount=25150.0,
+        message_text="Напоминание по задолженности.",
+    ))
+    with patch("collector.collection_agent._call_deepseek") as mock_sched:
+        mock_sched.return_value = '{"intent":"promise_schedule","promise_date":"2026-04-22","promise_amount":null,"payment_schedule":"daily","requires_human":false,"suggested_reply":""}'
+        with patch("collector.client_dialog._reply_to_client") as mock_sched_reply:
+            mock_sched_reply.return_value = None
+            with patch("collector.client_dialog.escalate_to_manager"):
+                asyncio.run(cd_mod.handle_incoming("77011234574", "На ежедневной основе, по определённой сумме"))
+    d_sched = cd_mod._get_client_dialog("77011234574")
+    sched_replies = [ex["text"] for ex in d_sched.get("exchanges", []) if ex["role"] == "bot"]
+    check("UX schedule: payment_schedule сохранён", d_sched.get("payment_schedule") == "daily")
+    check("UX schedule: state=escalated", d_sched.get("state") == "escalated")
+    check("UX schedule: ответ про график платежей",
+          any(("daily" in t.lower() or "част" in t.lower() or "ежеднев" in t.lower()) for t in sched_replies),
+          str(sched_replies))
+
+    # ─── UX: paid_claim — не спорит ссылкой на 1С, просит чек ─────────────────
+    asyncio.run(cd_mod.start_client_dialog(
+        phone="77011234575",
+        client_name="Кайрбек",
+        manager_name="Ергали",
+        manager_chat_id=123,
+        level=2,
+        days=12,
+        amount=25150.0,
+        message_text="Напоминание по задолженности.",
+    ))
+    with patch("collector.collection_agent._call_deepseek") as mock_paid:
+        mock_paid.return_value = '{"intent":"paid_claim","promise_date":null,"promise_amount":null,"requires_human":false,"suggested_reply":""}'
+        with patch("collector.client_dialog._reply_to_client") as mock_paid_reply:
+            mock_paid_reply.return_value = None
+            asyncio.run(cd_mod.handle_incoming("77011234575", "Я уже оплатил"))
+    d_paid = cd_mod._get_client_dialog("77011234575")
+    paid_replies = [ex["text"] for ex in d_paid.get("exchanges", []) if ex["role"] == "bot"]
+    last_paid = paid_replies[-1] if paid_replies else ""
+    check("UX paid_claim: state остаётся active", d_paid.get("state") == "active")
+    check("UX paid_claim: нет повторной ссылки на 1С", "1С" not in last_paid, last_paid)
+    check("UX paid_claim: просит чек", "чек" in last_paid.lower(), last_paid)
+
+    # ─── UX: soft_positive — один мягкий вопрос, без фиксации ─────────────────
+    asyncio.run(cd_mod.start_client_dialog(
+        phone="77011234576",
+        client_name="Кайрбек",
+        manager_name="Ергали",
+        manager_chat_id=123,
+        level=2,
+        days=12,
+        amount=25150.0,
+        message_text="Напоминание по задолженности.",
+    ))
+    with patch("collector.collection_agent._call_deepseek") as mock_soft:
+        mock_soft.return_value = '{"intent":"soft_positive","promise_date":null,"promise_amount":null,"requires_human":false,"suggested_reply":""}'
+        with patch("collector.client_dialog._reply_to_client") as mock_soft_reply:
+            mock_soft_reply.return_value = None
+            asyncio.run(cd_mod.handle_incoming("77011234576", "Закрою в ближайшее время"))
+    d_soft = cd_mod._get_client_dialog("77011234576")
+    soft_replies = [ex["text"] for ex in d_soft.get("exchanges", []) if ex["role"] == "bot"]
+    last_soft = soft_replies[-1] if soft_replies else ""
+    check("UX soft_positive: state=active", d_soft.get("state") == "active")
+    check("UX soft_positive: мягкий вопрос про первый платёж",
+          "первый плат" in last_soft.lower(), last_soft)
+    check("UX soft_positive: нет ложной фиксации",
+          "фиксируем" not in last_soft.lower(), last_soft)
 
     # ─── off_topic эскалация: пустой bot reply НЕ сохраняется ──────────────────
     asyncio.run(cd_mod.start_client_dialog(
@@ -1563,9 +1663,13 @@ _prompts_text = json.dumps(_loaded_prompts, ensure_ascii=False)
 check("PROMPTS T6: 'торговой точке' отсутствует (заменено на 'задолженности')",
       "торговой точке" not in _prompts_text)
 
-# ── T7: нет "ответьте «менеджер»" — заменено на "напишите 1" ────────────────
-check("PROMPTS T7: 'ответьте «менеджер»' отсутствует (заменено на напишите 1)",
+# ── T7: нет старых механических команд клиенту ───────────────────────────────
+check("PROMPTS T7: 'ответьте «менеджер»' отсутствует",
       "ответьте «менеджер»" not in _prompts_text)
+check("PROMPTS T7b: 'напишите 1' отсутствует",
+      "напишите 1" not in _prompts_text)
+check("PROMPTS T7c: промпт использует Астану, а не Алматы",
+      "Астана" in _prompts_text and "Алматы" not in _prompts_text)
 
 # ── T8: нет ИИ/бот слов в fallback_templates (как отдельные слова) ───────────
 import re as _re
@@ -1604,10 +1708,10 @@ check("PROMPTS T9b: тон L5 без юридических угроз",
 _stop_tpl = _loaded_prompts.get("fallback_templates", {}).get("stoplist_reminder", "")
 check("PROMPTS T9c: stoplist_reminder без слова 'критическая'",
       "критичес" not in _stop_tpl.lower(), _stop_tpl)
-check("PROMPTS T9d: stoplist_reminder использует 'Остаток не закрыт уже'",
-      "Остаток не закрыт уже {days_text}" in _stop_tpl, _stop_tpl)
+check("PROMPTS T9d: stoplist_reminder указывает срок незакрытого остатка",
+      "не закрыт уже {days_text}" in _stop_tpl, _stop_tpl)
 check("PROMPTS T9d2: stoplist_reminder указывает дату отчёта рядом с остатком",
-      "остаток задолженности{report_date_part} составляет" in _stop_tpl, _stop_tpl)
+      "остаток задолженности{report_date_part} составляет" in _stop_tpl.lower(), _stop_tpl)
 check("PROMPTS T9e: stoplist_reminder не пишет 'передан руководству'",
       "руководств" not in _stop_tpl.lower(), _stop_tpl)
 check("PROMPTS T9f: тон L5 не содержит 'критическая'",
@@ -1645,7 +1749,7 @@ check("PROMPTS T12d: fallback template не содержит ИИ/бот как 
           r'(?<![а-яёА-ЯЁa-zA-Z])бот(?![а-яёА-ЯЁa-zA-Z])',
           r'(?<![а-яёА-ЯЁa-zA-Z])робот(?![а-яёА-ЯЁa-zA-Z])',
       ]))
-check("PROMPTS T12e: fallback содержит 'напишите 1'", "напишите 1" in _tpl)
+check("PROMPTS T12e: fallback НЕ содержит 'напишите 1'", "напишите 1" not in _tpl)
 _typed_stop_msg = _ca_mod.generate_message(
     client_name="Е Олжас",
     debt_amount=830781.58,
@@ -1660,7 +1764,7 @@ check("PROMPTS T12f: msg_type=stoplist_reminder использует шабло�
       "критичес" not in _typed_stop_msg.lower()
       and "руководств" not in _typed_stop_msg.lower()
       and "остаток задолженности на 11.04.2026 составляет 830 782 тг" in _typed_stop_msg.lower()
-      and "Остаток не закрыт уже 31 день" in _typed_stop_msg,
+      and "не закрыт уже 31 день" in _typed_stop_msg,
       _typed_stop_msg)
 
 # ── T13: _get_tone возвращает строку для каждого уровня ──────────────────────
