@@ -1,4 +1,4 @@
-# orchestrator.py · v1.0.9 · 2026-04-23 (Asia/Almaty)
+# orchestrator.py · v1.0.11 · 2026-04-23 (Asia/Almaty)
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-VERSION = "1.0.9"
+VERSION = "1.0.11"
 TZ = ZoneInfo("Asia/Almaty")
 CODEX_RETRY_MINUTES = 30
 CLAUDE_RETRY_MINUTES = 60
@@ -333,12 +333,13 @@ def build_codex_prompt(task: dict) -> str:
 РАЗРЕШЕНО ТРОГАТЬ ТОЛЬКО:
 {allowed_files}
 
-СЕЙЧАС НЕ МЕНЯЙ КОД И НЕ ВНОСИ ПАТЧИ.
-НУЖЕН ТОЛЬКО АНАЛИЗ ЗАДАЧИ И ПЛАН.
+ВЫПОЛНИ ЗАДАЧУ ПОЛНОСТЬЮ В РАМКАХ РАЗРЕШЁННЫХ ФАЙЛОВ.
+Если найдёшь подтверждённый баг в разрешённых файлах — внеси минимальный патч.
+Если багов нет — не меняй код и честно зафиксируй это в JSON.
 
 Верни только итоговый JSON без пояснений, markdown и вводных фраз.
 Ключи JSON:
-summary, risks, planned_files, suggested_checks, next_action.
+summary, findings, changed_files, risks, checks_run, next_action.
 
 Важно:
 - внутри JSON используй только ASCII-символы;
@@ -573,6 +574,15 @@ def parse_claude_review(stdout_text: str) -> dict:
             "raw": text,
         }
 
+    if isinstance(parsed.get("result"), str):
+        result_text = str(parsed["result"]).strip()
+        try:
+            inner = json.loads(result_text)
+        except json.JSONDecodeError:
+            inner = None
+        if isinstance(inner, dict):
+            parsed = inner
+
     verdict = str(parsed.get("verdict", "")).strip().lower()
     accepted = parsed.get("accepted") is True or verdict in {"accepted", "approve", "approved"}
     if verdict not in {"accepted", "revise", "rejected"}:
@@ -590,7 +600,8 @@ def run_claude_task(task: dict, agents: dict) -> dict:
     task_id = str(task["task_id"])
     stdout_path = LOG_DIR / f"{task_id}_claude_stdout.txt"
     stderr_path = LOG_DIR / f"{task_id}_claude_stderr.txt"
-    review_path = LOG_DIR.parent / ".ai_reviews" / f"{task_id}_claude_review.json"
+    review_output_file = str(task.get("claude_output_file") or "").strip()
+    review_path = resolve_path(review_output_file) if review_output_file else LOG_DIR.parent / ".ai_reviews" / f"{task_id}_claude_review.json"
 
     command = [agent["command"], *agent.get("args", [])]
 
