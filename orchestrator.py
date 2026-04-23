@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-VERSION = "1.0.12"
+VERSION = "1.0.14"
 TZ = ZoneInfo("Asia/Almaty")
 CODEX_RETRY_MINUTES = 30
 CLAUDE_RETRY_MINUTES = 60
@@ -429,6 +429,19 @@ def extract_rate_limit_hint(stderr_text: str) -> str | None:
     for line in reversed(lines):
         lowered = line.lower()
 
+        if line.startswith("{"):
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                payload = None
+            if isinstance(payload, dict) and payload.get("api_error_status") == 429:
+                result_text = str(payload.get("result") or "")
+                match = re.search(r"resets?\s+(.+?)(?:[.]\s*$|$)", result_text, flags=re.IGNORECASE)
+                if match:
+                    return match.group(1).strip()
+                if result_text:
+                    return result_text.strip()
+
         if not (
             lowered.startswith("error:")
             or "api_error_status" in lowered
@@ -451,6 +464,16 @@ def extract_rate_limit_hint(stderr_text: str) -> str | None:
                 return match.group(1).strip()
 
     return None
+
+
+def stdout_has_json_object(stdout_text: str) -> bool:
+    text = (stdout_text or "").strip()
+    if not text.startswith("{"):
+        return False
+    try:
+        return isinstance(json.loads(text), dict)
+    except json.JSONDecodeError:
+        return False
 
 
 def run_codex_task(task: dict, agents: dict) -> dict:
@@ -507,8 +530,9 @@ def run_codex_task(task: dict, agents: dict) -> dict:
     save_text(stderr_path, stderr_text)
 
     combined_text = f"{stderr_text}\n{stdout_text}"
-    rate_limited = detect_rate_limit(combined_text)
-    rate_limit_hint = extract_rate_limit_hint(combined_text)
+    stdout_json_ok = completed.returncode == 0 and stdout_has_json_object(stdout_text)
+    rate_limited = False if stdout_json_ok else detect_rate_limit(combined_text)
+    rate_limit_hint = None if stdout_json_ok else extract_rate_limit_hint(combined_text)
 
     error_text = None
     if rate_limited:
@@ -644,10 +668,10 @@ def run_claude_task(task: dict, agents: dict) -> dict:
     save_text(stderr_path, stderr_text)
 
     combined_text = f"{stderr_text}\n{stdout_text}"
-    rate_limited = detect_rate_limit(combined_text)
-    rate_limit_hint = extract_rate_limit_hint(combined_text)
-
-    review = parse_claude_review(stdout_text) if completed.returncode == 0 and not rate_limited else {}
+    review = parse_claude_review(stdout_text) if completed.returncode == 0 else {}
+    stdout_json_ok = bool(review)
+    rate_limited = False if stdout_json_ok else detect_rate_limit(combined_text)
+    rate_limit_hint = None if stdout_json_ok else extract_rate_limit_hint(combined_text)
     verdict = str(review.get("verdict", "failed"))
     accepted = review.get("accepted") is True
 
