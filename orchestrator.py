@@ -1,0 +1,643 @@
+# orchestrator.py · v1.0.5 · 2026-04-23 (Asia/Almaty)
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import shutil
+import subprocess
+from datetime import datetime
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
+VERSION = "1.0.5"
+TZ = ZoneInfo("Asia/Almaty")
+
+ROOT = Path(__file__).resolve().parent
+QUEUE_FILE = ROOT / "orchestrator_queue.json"
+STATE_FILE = ROOT / "orchestrator_state.json"
+AGENTS_FILE = ROOT / "orchestrator_agents.json"
+TASK_TEMPLATE_FILE = ROOT / "orchestrator_task_template.json"
+LOG_DIR = ROOT / ".ai_logs"
+
+
+def now_iso() -> str:
+    return datetime.now(TZ).isoformat(timespec="seconds")
+
+
+def load_json(path: Path) -> dict:
+    if not path.exists():
+        raise FileNotFoundError(f"Файл не найден: {path}")
+    with path.open("r", encoding="utf-8-sig") as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise ValueError(f"Ожидался JSON-объект: {path}")
+    return data
+
+
+def save_json(path: Path, data: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    with tmp_path.open("w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    tmp_path.replace(path)
+
+
+def save_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+def resolve_path(path_str: str) -> Path:
+    path = Path(path_str)
+    return path if path.is_absolute() else ROOT / path
+
+
+def set_state(
+    *,
+    running: bool,
+    current_stage: str | None,
+    current_agent: str | None,
+    last_error: str | None,
+) -> dict:
+    state = load_json(STATE_FILE)
+    state["running"] = running
+    state["current_stage"] = current_stage
+    state["current_agent"] = current_agent
+    state["last_error"] = last_error
+    state["last_update"] = now_iso()
+    save_json(STATE_FILE, state)
+    return state
+
+
+def validate_required_files() -> list[str]:
+    errors: list[str] = []
+    required = [
+        QUEUE_FILE,
+        STATE_FILE,
+        AGENTS_FILE,
+        TASK_TEMPLATE_FILE,
+    ]
+    for path in required:
+        if not path.exists():
+            errors.append(f"Отсутствует файл: {path.name}")
+    return errors
+
+
+def validate_agents_config(agents: dict) -> list[str]:
+    errors: list[str] = []
+
+    for agent_name in ("codex", "claude"):
+        if agent_name not in agents:
+            errors.append(f"Нет секции '{agent_name}' в orchestrator_agents.json")
+            continue
+
+        agent = agents[agent_name]
+        command = str(agent.get("command", "")).strip()
+        timeout_sec = agent.get("timeout_sec")
+        args = agent.get("args", [])
+
+        if not command:
+            errors.append(f"У агента '{agent_name}' не указан command")
+        elif shutil.which(command) is None and not Path(command).exists():
+            errors.append(f"Команда агента '{agent_name}' не найдена: {command}")
+
+        if not isinstance(timeout_sec, int) or timeout_sec <= 0:
+            errors.append(f"У агента '{agent_name}' некорректный timeout_sec")
+
+        if not isinstance(args, list):
+            errors.append(f"У агента '{agent_name}' поле args должно быть списком")
+
+    return errors
+
+
+def validate_task(task: dict) -> list[str]:
+    errors: list[str] = []
+
+    required_fields = [
+        "task_id",
+        "title",
+        "project_root",
+        "status",
+        "stage",
+        "goal",
+        "constraints",
+        "inputs",
+        "allowed_files",
+        "codex_output_file",
+        "claude_output_file",
+    ]
+    for field in required_fields:
+        if field not in task:
+            errors.append(f"В задаче отсутствует поле: {field}")
+
+    task_id = str(task.get("task_id", "")).strip()
+    title = str(task.get("title", "")).strip()
+    status = str(task.get("status", "")).strip()
+    stage = str(task.get("stage", "")).strip()
+
+    if not task_id:
+        errors.append("Поле task_id пустое")
+    if not title:
+        errors.append("Поле title пустое")
+    if status not in {"new", "queued", "running", "review", "done", "failed", "rate_limited"}:
+        errors.append(f"Недопустимое значение status: {status}")
+    if stage not in {"analysis", "execution", "review", "done"}:
+        errors.append(f"Недопустимое значение stage: {stage}")
+
+    constraints = task.get("constraints")
+    allowed_files = task.get("allowed_files")
+    inputs = task.get("inputs")
+
+    if not isinstance(constraints, list):
+        errors.append("Поле constraints должно быть списком")
+    if not isinstance(allowed_files, list):
+        errors.append("Поле allowed_files должно быть списком")
+    if not isinstance(inputs, dict):
+        errors.append("Поле inputs должно быть объектом")
+
+    if isinstance(inputs, dict):
+        for key in ("files", "logs", "notes"):
+            if key not in inputs:
+                errors.append(f"В inputs отсутствует поле: {key}")
+            elif not isinstance(inputs[key], list):
+                errors.append(f"inputs.{key} должно быть списком")
+
+    return errors
+
+
+def get_status() -> dict:
+    queue = load_json(QUEUE_FILE)
+    state = load_json(STATE_FILE)
+    agents = load_json(AGENTS_FILE)
+
+    errors = []
+    errors.extend(validate_required_files())
+    errors.extend(validate_agents_config(agents))
+
+    status = {
+        "version": VERSION,
+        "checked_at": now_iso(),
+        "project_root": str(ROOT),
+        "queue_tasks": len(queue.get("tasks", [])),
+        "history_tasks": len(queue.get("history", [])),
+        "active_task": queue.get("active_task"),
+        "running": state.get("running"),
+        "current_stage": state.get("current_stage"),
+        "current_agent": state.get("current_agent"),
+        "errors": errors,
+        "ready": len(errors) == 0,
+    }
+    return status
+
+
+def print_status() -> int:
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        set_state(
+            running=False,
+            current_stage="status_check",
+            current_agent=None,
+            last_error=None,
+        )
+        status = get_status()
+    except Exception as e:
+        set_state(
+            running=False,
+            current_stage="status_check",
+            current_agent=None,
+            last_error=str(e),
+        )
+        print(f"[ERROR] {e}")
+        return 1
+
+    print(json.dumps(status, ensure_ascii=False, indent=2))
+    return 0 if status["ready"] else 2
+
+
+def enqueue_task(task_path_str: str) -> int:
+    task_path = resolve_path(task_path_str)
+    if not task_path.exists():
+        print(f"[ERROR] Файл задачи не найден: {task_path}")
+        return 1
+
+    try:
+        queue = load_json(QUEUE_FILE)
+        task = load_json(task_path)
+        errors = validate_task(task)
+        if errors:
+            print(json.dumps({"ok": False, "errors": errors}, ensure_ascii=False, indent=2))
+            return 2
+
+        task["status"] = "queued"
+        task["updated_at"] = now_iso()
+        if not str(task.get("created_at", "")).strip():
+            task["created_at"] = now_iso()
+
+        task_id = str(task["task_id"]).strip()
+
+        existing_ids = {str(item.get("task_id", "")).strip() for item in queue.get("tasks", [])}
+        existing_ids.update({str(item.get("task_id", "")).strip() for item in queue.get("history", [])})
+        active_task = queue.get("active_task")
+        if isinstance(active_task, dict):
+            existing_ids.add(str(active_task.get("task_id", "")).strip())
+
+        if task_id in existing_ids:
+            print(json.dumps({
+                "ok": False,
+                "error": f"Задача с task_id '{task_id}' уже существует"
+            }, ensure_ascii=False, indent=2))
+            return 3
+
+        queue.setdefault("tasks", []).append(task)
+        save_json(QUEUE_FILE, queue)
+
+        set_state(
+            running=False,
+            current_stage="queued",
+            current_agent=None,
+            last_error=None,
+        )
+
+        print(json.dumps({
+            "ok": True,
+            "message": "Задача поставлена в очередь",
+            "task_id": task_id,
+            "queue_tasks": len(queue["tasks"]),
+        }, ensure_ascii=False, indent=2))
+        return 0
+
+    except Exception as e:
+        set_state(
+            running=False,
+            current_stage="enqueue",
+            current_agent=None,
+            last_error=str(e),
+        )
+        print(f"[ERROR] {e}")
+        return 1
+
+
+def build_codex_prompt(task: dict) -> str:
+    files = "\n".join(f"- {item}" for item in task.get("inputs", {}).get("files", [])) or "- нет"
+    logs = "\n".join(f"- {item}" for item in task.get("inputs", {}).get("logs", [])) or "- нет"
+    notes = "\n".join(f"- {item}" for item in task.get("inputs", {}).get("notes", [])) or "- нет"
+    allowed_files = "\n".join(f"- {item}" for item in task.get("allowed_files", [])) or "- нет"
+    constraints = "\n".join(f"- {item}" for item in task.get("constraints", [])) or "- нет"
+
+    return f"""Ты работаешь локально в проекте: {ROOT}
+
+ЗАДАЧА:
+{task.get("title", "")}
+
+ЦЕЛЬ:
+{task.get("goal", "")}
+
+ОГРАНИЧЕНИЯ:
+{constraints}
+
+ВХОДНЫЕ ФАЙЛЫ:
+{files}
+
+ЛОГИ:
+{logs}
+
+ПРИМЕЧАНИЯ:
+{notes}
+
+РАЗРЕШЕНО ТРОГАТЬ ТОЛЬКО:
+{allowed_files}
+
+СЕЙЧАС НЕ МЕНЯЙ КОД И НЕ ВНОСИ ПАТЧИ.
+НУЖЕН ТОЛЬКО АНАЛИЗ ЗАДАЧИ И ПЛАН.
+
+Верни только итоговый JSON без пояснений, markdown и вводных фраз.
+Ключи JSON:
+summary, risks, planned_files, suggested_checks, next_action.
+
+Важно:
+- внутри JSON используй только ASCII-символы;
+- весь русский текст кодируй escape-последовательностями \\uXXXX;
+- не добавляй никакой текст до или после JSON.
+"""
+
+
+def decode_output_bytes(data: bytes | None) -> str:
+    if not data:
+        return ""
+
+    candidates: list[tuple[int, str]] = []
+
+    for enc in ("utf-8", "utf-8-sig", "cp1251", "cp866"):
+        try:
+            text = data.decode(enc)
+            score = text.count("\ufffd")
+            candidates.append((score, text))
+        except UnicodeDecodeError:
+            continue
+
+    if candidates:
+        candidates.sort(key=lambda item: item[0])
+        return candidates[0][1]
+
+    return data.decode("utf-8", errors="replace")
+
+
+def detect_rate_limit(stderr_text: str) -> bool:
+    lines = [line.strip().lower() for line in (stderr_text or "").splitlines() if line.strip()]
+    strict_markers = [
+        "you've hit your usage limit",
+        "you've hit your limit",
+        '"api_error_status":429',
+        '"api_error_status": 429',
+        "api_error_status: 429",
+    ]
+
+    for line in lines:
+        is_error_line = line.startswith("error:") or "api_error_status" in line or "429" in line
+        if not is_error_line:
+            continue
+        if any(marker in line for marker in strict_markers):
+            return True
+
+    return False
+
+
+def extract_rate_limit_hint(stderr_text: str) -> str | None:
+    lines = [line.strip() for line in (stderr_text or "").splitlines() if line.strip()]
+
+    for line in reversed(lines):
+        lowered = line.lower()
+
+        if not (
+            lowered.startswith("error:")
+            or "api_error_status" in lowered
+            or "429" in lowered
+        ):
+            continue
+
+        if "you've hit your usage limit" in lowered or "you've hit your limit" in lowered:
+            match = re.search(r"try again at\s+(.+?)(?:[.]\s*$|$)", line, flags=re.IGNORECASE)
+            if match:
+                return match.group(1).strip()
+
+            match = re.search(r"resets?\s+(.+?)(?:[.]\s*$|$)", line, flags=re.IGNORECASE)
+            if match:
+                return match.group(1).strip()
+
+        if '"api_error_status":429' in lowered or '"api_error_status": 429' in lowered:
+            match = re.search(r"resets?\s+(.+?)(?:[.]\s*$|$)", line, flags=re.IGNORECASE)
+            if match:
+                return match.group(1).strip()
+
+    return None
+
+
+def run_codex_task(task: dict, agents: dict) -> dict:
+    agent = agents["codex"]
+    prompt = build_codex_prompt(task)
+
+    stdout_path = LOG_DIR / f'{task["task_id"]}_codex_stdout.txt'
+    stderr_path = LOG_DIR / f'{task["task_id"]}_codex_stderr.txt'
+    result_path = resolve_path(task["codex_output_file"])
+
+    command = [agent["command"], *agent.get("args", []), "-"]
+
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
+    env["NO_COLOR"] = "1"
+    env["FORCE_COLOR"] = "0"
+
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=str(ROOT),
+            input=prompt.encode("utf-8"),
+            capture_output=True,
+            timeout=int(agent["timeout_sec"]),
+            env=env,
+        )
+    except subprocess.TimeoutExpired as e:
+        stdout_text = decode_output_bytes(e.stdout if isinstance(e.stdout, bytes) else None)
+        stderr_text = decode_output_bytes(e.stderr if isinstance(e.stderr, bytes) else None)
+        save_text(stdout_path, stdout_text)
+        save_text(stderr_path, stderr_text)
+
+        result = {
+            "ok": False,
+            "agent": "codex",
+            "task_id": task["task_id"],
+            "returncode": None,
+            "rate_limited": False,
+            "rate_limit_hint": None,
+            "prompt_via_stdin": True,
+            "error": f"Таймаут выполнения Codex: {agent['timeout_sec']} сек",
+            "stdout_file": str(stdout_path.relative_to(ROOT)),
+            "stderr_file": str(stderr_path.relative_to(ROOT)),
+            "finished_at": now_iso(),
+        }
+        save_json(result_path, result)
+        return result
+
+    stdout_text = decode_output_bytes(completed.stdout)
+    stderr_text = decode_output_bytes(completed.stderr)
+
+    save_text(stdout_path, stdout_text)
+    save_text(stderr_path, stderr_text)
+
+    rate_limited = detect_rate_limit(stderr_text)
+    rate_limit_hint = extract_rate_limit_hint(stderr_text)
+
+    error_text = None
+    if rate_limited:
+        error_text = "Достигнут лимит Codex"
+        if rate_limit_hint:
+            error_text += f"; повторить после: {rate_limit_hint}"
+    elif completed.returncode != 0:
+        error_text = f"Codex завершился с кодом {completed.returncode}"
+
+    result = {
+        "ok": completed.returncode == 0 and not rate_limited,
+        "agent": "codex",
+        "task_id": task["task_id"],
+        "returncode": completed.returncode,
+        "rate_limited": rate_limited,
+        "rate_limit_hint": rate_limit_hint,
+        "prompt_via_stdin": True,
+        "error": error_text,
+        "command": command,
+        "stdout_file": str(stdout_path.relative_to(ROOT)),
+        "stderr_file": str(stderr_path.relative_to(ROOT)),
+        "finished_at": now_iso(),
+    }
+    save_json(result_path, result)
+    return result
+
+
+def start_next_task() -> int:
+    try:
+        queue = load_json(QUEUE_FILE)
+        agents = load_json(AGENTS_FILE)
+
+        errors = []
+        errors.extend(validate_required_files())
+        errors.extend(validate_agents_config(agents))
+        if errors:
+            print(json.dumps({"ok": False, "errors": errors}, ensure_ascii=False, indent=2))
+            return 2
+
+        if queue.get("active_task") is not None:
+            print(json.dumps({
+                "ok": False,
+                "error": "Есть активная задача. Сначала заверши или сбрось её."
+            }, ensure_ascii=False, indent=2))
+            return 3
+
+        tasks = queue.get("tasks", [])
+        if not tasks:
+            print(json.dumps({
+                "ok": True,
+                "message": "Очередь пуста"
+            }, ensure_ascii=False, indent=2))
+            return 0
+
+        task = tasks.pop(0)
+        task["status"] = "running"
+        task["stage"] = "analysis"
+        task["updated_at"] = now_iso()
+
+        queue["active_task"] = task
+        queue["tasks"] = tasks
+        save_json(QUEUE_FILE, queue)
+
+        set_state(
+            running=True,
+            current_stage="analysis",
+            current_agent="codex",
+            last_error=None,
+        )
+
+        result = run_codex_task(task, agents)
+
+        queue = load_json(QUEUE_FILE)
+        active_task = queue.get("active_task") or task
+        active_task["updated_at"] = now_iso()
+        active_task["codex_result"] = result
+
+        if result["ok"]:
+            active_task["status"] = "review"
+            active_task["stage"] = "review"
+            queue["active_task"] = active_task
+            save_json(QUEUE_FILE, queue)
+
+            set_state(
+                running=True,
+                current_stage="review",
+                current_agent=None,
+                last_error=None,
+            )
+
+            print(json.dumps({
+                "ok": True,
+                "message": "Codex отработал. Задача переведена на этап review.",
+                "task_id": active_task["task_id"],
+                "codex_output_file": active_task["codex_output_file"],
+                "stdout_file": result["stdout_file"],
+                "stderr_file": result["stderr_file"],
+            }, ensure_ascii=False, indent=2))
+            return 0
+
+        if result.get("rate_limited"):
+            active_task["status"] = "rate_limited"
+            active_task["stage"] = "analysis"
+            queue["active_task"] = active_task
+            save_json(QUEUE_FILE, queue)
+
+            set_state(
+                running=False,
+                current_stage="rate_limited",
+                current_agent="codex",
+                last_error=result.get("error"),
+            )
+
+            print(json.dumps({
+                "ok": False,
+                "message": "Codex упёрся в лимит. Задача не помечена как failed.",
+                "task_id": active_task["task_id"],
+                "status": active_task["status"],
+                "rate_limit_hint": result.get("rate_limit_hint"),
+                "codex_output_file": active_task["codex_output_file"],
+                "stdout_file": result["stdout_file"],
+                "stderr_file": result["stderr_file"],
+            }, ensure_ascii=False, indent=2))
+            return 5
+
+        active_task["status"] = "failed"
+        queue["active_task"] = active_task
+        save_json(QUEUE_FILE, queue)
+
+        set_state(
+            running=False,
+            current_stage="failed",
+            current_agent="codex",
+            last_error=result.get("error") or f"Codex завершился с кодом {result.get('returncode')}",
+        )
+
+        print(json.dumps({
+            "ok": False,
+            "message": "Codex завершился с ошибкой",
+            "task_id": active_task["task_id"],
+            "codex_output_file": active_task["codex_output_file"],
+            "stdout_file": result["stdout_file"],
+            "stderr_file": result["stderr_file"],
+            "returncode": result.get("returncode"),
+        }, ensure_ascii=False, indent=2))
+        return 4
+
+    except Exception as e:
+        set_state(
+            running=False,
+            current_stage="start",
+            current_agent="codex",
+            last_error=str(e),
+        )
+        print(f"[ERROR] {e}")
+        return 1
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Локальный оркестратор Codex + Claude")
+    subparsers = parser.add_subparsers(dest="command")
+
+    subparsers.add_parser("status", help="Показать статус оркестратора")
+
+    enqueue_parser = subparsers.add_parser("enqueue", help="Поставить задачу в очередь")
+    enqueue_parser.add_argument("task_file", help="Путь к JSON-файлу задачи")
+
+    subparsers.add_parser("start", help="Взять первую задачу из очереди и запустить Codex")
+
+    return parser
+
+
+def main() -> int:
+    parser = build_parser()
+    args = parser.parse_args()
+
+    if args.command in (None, "status"):
+        return print_status()
+
+    if args.command == "enqueue":
+        return enqueue_task(args.task_file)
+
+    if args.command == "start":
+        return start_next_task()
+
+    parser.print_help()
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

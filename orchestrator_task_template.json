@@ -1,0 +1,26 @@
+{
+  "task_id": "",
+  "title": "",
+  "project_root": ".",
+  "status": "new",
+  "stage": "analysis",
+  "created_at": "",
+  "updated_at": "",
+  "requested_by": "user",
+  "goal": "",
+  "constraints": [
+    "Работа только локально",
+    "Не ломать существующее",
+    "Минимальный патч",
+    "Сначала анализ, потом изменение, потом проверки, потом ревью"
+  ],
+  "inputs": {
+    "files": [],
+    "logs": [],
+    "notes": []
+  },
+  "allowed_files": [],
+  "codex_output_file": ".ai_logs/codex_result.json",
+  "claude_output_file": ".ai_reviews/claude_review.md",
+  "final_status": null
+}
