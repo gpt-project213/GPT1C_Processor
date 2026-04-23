@@ -179,6 +179,169 @@ finally:
     shutil.rmtree(_tmp, ignore_errors=True)
 
 
+section("4. net_profit_report — admin MTD не должен смешивать manager gross и чужие expenses")
+
+import net_profit_report as _np
+
+_tmp = Path(tempfile.mkdtemp())
+try:
+    json_dir = _tmp / "json"
+    analytics_dir = _tmp / "analytics"
+    analytics_day = analytics_dir / "net_profit_day"
+    analytics_mtd = analytics_dir / "net_profit_mtd"
+    cfg_dir = _tmp / "config"
+    json_dir.mkdir(parents=True, exist_ok=True)
+    analytics_day.mkdir(parents=True, exist_ok=True)
+    analytics_mtd.mkdir(parents=True, exist_ok=True)
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+
+    (cfg_dir / "managers.json").write_text(
+        json.dumps({"Алена": 1, "Ергали": 2}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    gross_day = json_dir / "gross_валовая_прибыль_426xlsx__clean_22042026.json"
+    gross_day.write_text(json.dumps({
+        "period": "22.04.2026",
+        "total_revenue": 5397739.91,
+        "gross_profit": 536502.55,
+        "margin_pct": 9.9,
+    }, ensure_ascii=False), encoding="utf-8")
+    exp_day = json_dir / "expenses_day_22042026.json"
+    exp_day.write_text(json.dumps({
+        "period": "22.04.2026",
+        "total_expenses": 95261.0,
+    }, ensure_ascii=False), encoding="utf-8")
+
+    manager_range = json_dir / "gross_20260421091731_валовая_прибыль_ергали_35_11042026_.json"
+    manager_range.write_text(json.dumps({
+        "period": "11.04.2026 - 20.04.2026",
+        "total_revenue": 6881173.38,
+        "gross_profit": 614737.71,
+        "margin_pct": 8.9,
+    }, ensure_ascii=False), encoding="utf-8")
+    summary_range = json_dir / "gross_валовая_прибыль_425xlsx__clean_01042026_21042026.json"
+    summary_range.write_text(json.dumps({
+        "period": "01.04.2026 - 21.04.2026",
+        "total_revenue": 83955984.58,
+        "gross_profit": 9402848.44,
+        "margin_pct": 11.2,
+    }, ensure_ascii=False), encoding="utf-8")
+    exp_range_old = json_dir / "expenses_Затраты_с_нарастающим_220_xlsx___clean_20260401.json"
+    exp_range_old.write_text(json.dumps({
+        "period": "01.04.2026 - 20.04.2026",
+        "total_expenses": 11000788.2,
+    }, ensure_ascii=False), encoding="utf-8")
+
+    os.utime(gross_day, (50, 50))
+    os.utime(exp_day, (50, 50))
+    os.utime(manager_range, (40, 40))
+    os.utime(summary_range, (30, 30))
+    os.utime(exp_range_old, (20, 20))
+
+    _orig_root = _np.ROOT
+    _orig_json = _np.JSON_DIR
+    _orig_analytics = _np.ANALYTICS_DIR
+    _orig_day = _np.ANALYTICS_DAY_DIR
+    _orig_mtd = _np.ANALYTICS_MTD_DIR
+    try:
+        _np.ROOT = _tmp
+        _np.JSON_DIR = json_dir
+        _np.ANALYTICS_DIR = analytics_dir
+        _np.ANALYTICS_DAY_DIR = analytics_day
+        _np.ANALYTICS_MTD_DIR = analytics_mtd
+        summary_gross = _np.load_summary_gross_jsons()
+        _np.generate_report()
+        mtd_files = list(analytics_mtd.glob("net_profit_mtd_*.html"))
+        day_files = list(analytics_day.glob("net_profit_day_*.html"))
+        check(
+            "FRESH T5: net_profit_report фильтрует manager gross из admin gross-источников",
+            len(summary_gross) == 2 and all("ергали" not in Path(item["__source_path__"]).name.lower() for item in summary_gross),
+            ", ".join(Path(item["__source_path__"]).name for item in summary_gross),
+        )
+        check(
+            "FRESH T6: net_profit_report не подмешивает manager gross в admin MTD",
+            len(mtd_files) == 0,
+            ", ".join(p.name for p in mtd_files) or "mtd skipped",
+        )
+        check(
+            "FRESH T7: net_profit_report сохраняет корректный day-report при точных day expenses",
+            len(day_files) == 1,
+            ", ".join(p.name for p in day_files),
+        )
+        stale_mtd = analytics_mtd / "net_profit_mtd_20260411.html"
+        stale_mtd.write_text("<html>stale</html>", encoding="utf-8")
+        check(
+            "FRESH T8: send_reports/net_profit gate не допускает stale MTD HTML без exact expenses",
+            _sr._net_profit_mtd_is_deliverable(stale_mtd) is False,
+            str(stale_mtd),
+        )
+    finally:
+        _np.ROOT = _orig_root
+        _np.JSON_DIR = _orig_json
+        _np.ANALYTICS_DIR = _orig_analytics
+        _np.ANALYTICS_DAY_DIR = _orig_day
+        _np.ANALYTICS_MTD_DIR = _orig_mtd
+finally:
+    shutil.rmtree(_tmp, ignore_errors=True)
+
+
+section("5. send_reports — stale simple debt блокируется, если detailed уже свежее")
+
+_tmp = Path(tempfile.mkdtemp())
+try:
+    html_dir = _tmp / "html"
+    ai_dir = _tmp / "ai"
+    html_dir.mkdir(parents=True, exist_ok=True)
+    ai_dir.mkdir(parents=True, exist_ok=True)
+
+    simple = html_dir / "Ведомость_по_взаиморасчетам_с_контрагентами_Алена (337)_debt.html"
+    simple.write_text(
+        "<html><title>Ведомость по взаиморасчетам с контрагентами Алена</title>"
+        "<body><div>Менеджер: Алена</div><div>Период: 18.04.2026</div></body></html>",
+        encoding="utf-8",
+    )
+    detailed = html_dir / "debt_ext_Детальный Дебиторы Алена (143).html"
+    detailed.write_text(
+        "<html><title>Детальный Дебиторы Алена</title>"
+        "<body><div>Менеджер: Алена</div><div>Период: 01.04.2026 - 22.04.2026</div></body></html>",
+        encoding="utf-8",
+    )
+    os.utime(simple, (10, 10))
+    os.utime(detailed, (20, 20))
+
+    _orig_html = _sr.HTML_DIR
+    _orig_ai = _sr.AI_DIR
+    _orig_cache = dict(_sr._index_cache)
+    _orig_ts = _sr._index_ts
+    try:
+        _sr.HTML_DIR = html_dir
+        _sr.AI_DIR = ai_dir
+        _sr._index_cache = {}
+        _sr._index_ts = 0.0
+        import asyncio
+        asyncio.run(_sr._build_index(force=True))
+        is_fresh = _sr._debt_simple_is_live_fresh(simple, "Алена")
+        picked_detailed = _sr.find_report("DEBT_EXTENDED", "Алена")
+        check(
+            "FRESH T9: send_reports помечает stale simple debt как неактуальный",
+            is_fresh is False,
+            str(is_fresh),
+        )
+        check(
+            "FRESH T10: send_reports сохраняет доступ к свежему detailed debt",
+            picked_detailed is not None and picked_detailed.name == detailed.name,
+            str(picked_detailed),
+        )
+    finally:
+        _sr.HTML_DIR = _orig_html
+        _sr.AI_DIR = _orig_ai
+        _sr._index_cache = _orig_cache
+        _sr._index_ts = _orig_ts
+finally:
+    shutil.rmtree(_tmp, ignore_errors=True)
+
+
 print("\n" + "=" * 60)
 passed = sum(1 for _, ok in results if ok)
 total = len(results)

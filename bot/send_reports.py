@@ -184,7 +184,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.58/22.04.2026"
+__VERSION__ = "v9.4.59/23.04.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
@@ -3164,6 +3164,33 @@ def _caption(section_rus: str, mgr: str, date_str: str) -> str:
     who = f"{gender_emoji(mgr)} {mgr}" if mgr and mgr != "Сводный отчёт" else "🏢 Сводный отчёт"
     return f"{emoji} {section_rus}\n{who}\n{date_str}"
 
+def _debt_simple_is_live_fresh(simple_path: Path, manager_name: str) -> bool:
+    if not simple_path or not simple_path.exists():
+        return False
+    detailed_path = find_report("DEBT_EXTENDED", manager_name)
+    if not detailed_path or not detailed_path.exists():
+        return True
+    simple_text = _read_full(simple_path)
+    detailed_text = _read_full(detailed_path)
+    simple_period = _parse_period_to_date(_extract_date(simple_text, simple_path.name, simple_path))
+    detailed_period = _parse_period_to_date(_extract_date(detailed_text, detailed_path.name, detailed_path))
+    min_dt = datetime.min.replace(tzinfo=TZ)
+    if simple_period == min_dt or detailed_period == min_dt:
+        return True
+    if detailed_period > simple_period:
+        log_event(
+            "stale_simple_debt_blocked",
+            manager=normalize_manager_name(manager_name),
+            simple_file=simple_path.name,
+            simple_period=simple_period.strftime("%Y-%m-%d"),
+            detailed_file=detailed_path.name,
+            detailed_period=detailed_period.strftime("%Y-%m-%d"),
+            level="WARNING",
+        )
+        return False
+    return True
+
+
 async def send_with_acl(section: str, intended_mgr: str,
                         chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     user_role = get_user_role(chat_id)
@@ -3188,6 +3215,13 @@ async def send_with_acl(section: str, intended_mgr: str,
     # v9.4.15 Bug #11: Для SALES fallback на Сводный отчёт —
     # sales_report.py генерирует один общий файл без имени менеджера в названии,
     # поэтому per-manager файлы в индексе отсутствуют. Сводный содержит всех клиентов.
+    if (
+        p and p.exists()
+        and section == "DEBT_SIMPLE"
+        and intended_mgr != "Сводный отчёт"
+        and not _debt_simple_is_live_fresh(p, intended_mgr)
+    ):
+        p = None
     sales_summary_fallback = False
     if (not p or not p.exists()) and section in ("SALES_SIMPLE", "SALES_EXTENDED") and intended_mgr != "Сводный отчёт":
         if user_role == "admin":
@@ -4214,6 +4248,43 @@ FORCE_REPORT_TYPES = {
     "ranking":    "📊 Рейтинг менеджеров",  # C9
 }
 
+def _net_profit_mtd_is_deliverable(candidate: Optional[Path]) -> bool:
+    if not candidate or not candidate.exists():
+        return False
+    try:
+        import net_profit_report as _np
+
+        all_gross = _np.load_summary_gross_jsons()
+        all_expenses = _np.load_all_jsons("expenses_*.json")
+        best_range = None
+        seen = set()
+        for gross in all_gross:
+            period = _np.extract_period_from_json(gross)
+            start, end = _np.extract_period_dates(period)
+            if start is None or start == end:
+                continue
+            key = (start, end)
+            if key in seen:
+                continue
+            seen.add(key)
+            best_range = (start, end, period)
+            break
+        if not best_range:
+            return False
+        start, _, period = best_range
+        if not _np.find_matching_expenses_strict(period, all_expenses):
+            log_event("stale_net_profit_mtd_blocked", file=candidate.name, reason="no_exact_expenses", level="WARNING")
+            return False
+        expected_name = f"net_profit_mtd_{start.strftime('%Y%m%d')}.html"
+        if candidate.name != expected_name:
+            log_event("stale_net_profit_mtd_blocked", file=candidate.name, expected=expected_name, level="WARNING")
+            return False
+        return True
+    except Exception as e:
+        log_event("net_profit_mtd_freshness_error", error=str(e), level="WARNING")
+        return False
+
+
 async def force_report_to_user(report_type: str, chat_id: int, context) -> str:
     """
     v9.4.27: Строит и отправляет отчёт конкретному пользователю по запросу.
@@ -4442,6 +4513,8 @@ async def force_report_to_user(report_type: str, chat_id: int, context) -> str:
                 files = sorted(search.glob("net_profit*.html"),
                                key=lambda p: p.stat().st_mtime, reverse=True)
                 if files:
+                    if subdir == "net_profit_mtd" and not _net_profit_mtd_is_deliverable(files[0]):
+                        continue
                     parsed = _parse_np_html(files[0])
                     if parsed:
                         parts.append(parsed)
@@ -7128,6 +7201,8 @@ async def handle_analytics(update: Update, context: ContextTypes.DEFAULT_TYPE, d
         key=lambda p: p.stat().st_mtime, reverse=True
     )
 
+    if report_type == "net_profit_mtd":
+        all_files = [p for p in all_files if _net_profit_mtd_is_deliverable(p)]
     if not all_files:
         await context.bot.send_message(chat_id, "❌ Отчёт не найден")
         return

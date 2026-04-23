@@ -56,7 +56,7 @@ LOGS.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOG = logging.getLogger("net_profit")
 
-__VERSION__ = "1.2.7"
+__VERSION__ = "1.2.8"
 NBSP = "\u202f"
 
 
@@ -115,6 +115,77 @@ def extract_period_from_json(data: Dict[str, Any]) -> str:
     if "metadata" in data and "period" in data["metadata"]:
         return str(data["metadata"]["period"])
     return "unknown"
+
+
+def _normalize_words(text: str) -> str:
+    return re.sub(r"[_\W]+", " ", text.lower().replace("ё", "е")).strip()
+
+
+def _load_manager_names() -> List[str]:
+    cfg = ROOT / "config" / "managers.json"
+    try:
+        raw = json.loads(cfg.read_text(encoding="utf-8")) or {}
+        if isinstance(raw, dict):
+            return [str(name) for name in raw.keys()]
+    except (OSError, json.JSONDecodeError) as e:
+        LOG.warning("Не удалось прочитать managers.json для фильтра gross: %s", e)
+    return []
+
+
+def _is_summary_gross_json(path: Path, manager_names: List[str]) -> bool:
+    words = _normalize_words(path.stem)
+    if "валовая прибыль" not in words:
+        return False
+    for manager in manager_names:
+        mgr_words = _normalize_words(manager)
+        if mgr_words and re.search(rf"(^|\s){re.escape(mgr_words)}($|\s)", words):
+            return False
+    return True
+
+
+def load_summary_gross_jsons() -> List[Dict[str, Any]]:
+    manager_names = _load_manager_names()
+    files = sorted(JSON_DIR.glob("gross_*.json"), key=_mtime, reverse=True)
+    summary_files = [path for path in files if _is_summary_gross_json(path, manager_names)]
+    if not summary_files:
+        LOG.error("Не найдено ни одного сводного gross_*.json для net profit")
+        return []
+    result = []
+    for path in summary_files:
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            data["__source_path__"] = str(path)
+            data["__mtime__"] = _mtime(path)
+            result.append(data)
+        except Exception as e:
+            LOG.warning(f"Ошибка чтения {path.name}: {e}")
+    return result
+
+
+def find_matching_expenses_strict(gross_period: str, all_expenses: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    gross_start, gross_end = extract_period_dates(gross_period)
+    if gross_start is None:
+        LOG.error("Не удалось распарсить период gross для strict-match: %s", gross_period)
+        return None
+    for exp in all_expenses:
+        exp_period = extract_period_from_json(exp)
+        exp_start, exp_end = extract_period_dates(exp_period)
+        is_exact = (exp_start == gross_start and exp_end == gross_end)
+        LOG.info(
+            "  strict %s | period='%s' | exact=%s",
+            Path(exp["__source_path__"]).name,
+            exp_period,
+            is_exact,
+        )
+        if is_exact:
+            return exp
+    LOG.error(
+        "Не найден exact expenses для gross периода %s–%s; mixed-source report запрещён",
+        gross_start,
+        gross_end,
+    )
+    return None
 
 
 def load_all_jsons(pattern: str) -> List[Dict[str, Any]]:
@@ -316,7 +387,7 @@ def generate_report():
     LOG.info("=" * 60)
     LOG.info(f"ГЕНЕРАЦИЯ ОТЧЁТОВ: Чистая прибыль v{__VERSION__}")
 
-    all_gross    = load_all_jsons("gross_*.json")
+    all_gross    = load_summary_gross_jsons()
     all_expenses = load_all_jsons("expenses_*.json")
 
     if not all_gross:
@@ -355,7 +426,7 @@ def generate_report():
     if best_day:
         start, end, g, gp = best_day
         LOG.info(f"\n── DAY период: '{gp}' ──")
-        exp = find_matching_expenses(gp, all_expenses)
+        exp = find_matching_expenses_strict(gp, all_expenses)
         if exp:
             save_report(g, exp, "day",
                         period_label=start.strftime("%d.%m.%Y"),
@@ -371,7 +442,7 @@ def generate_report():
     if best_range:
         start, end, g, gp = best_range
         LOG.info(f"\n── RANGE период: '{gp}' ──")
-        exp = find_matching_expenses(gp, all_expenses)
+        exp = find_matching_expenses_strict(gp, all_expenses)
         if exp:
             period_label = f"{start.strftime('%d.%m')}–{end.strftime('%d.%m.%Y')}"
             save_report(g, exp, "mtd",
