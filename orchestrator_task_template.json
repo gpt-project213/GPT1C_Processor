@@ -35,6 +35,11 @@
   "last_codex_error": null,
   "last_claude_error": null,
   "review_attempts": 0,
+  "review_round": 0,
+  "max_review_rounds": 1,
+  "revise_requested": false,
+  "required_changes": [],
+  "out_of_scope_requests": [],
   "codex_result": null,
   "claude_result": null,
   "final_status": null
