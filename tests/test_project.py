@@ -8,6 +8,7 @@ tests/test_project.py — комплексный тест проекта GPT1C_P
 import sys
 import os
 import json
+import ssl
 import tempfile
 import traceback
 from pathlib import Path
@@ -771,6 +772,55 @@ check("_silence_clients_flat: on_stop последний", _flat[-1]["client"] =
 check("_silence_clients_flat: пустой dict → []", _scf({}) == [])
 
 # ═══════════════════════════════════════════════════════════════
+# 16. send_reports — pinned Telegram TLS request
+section("16. send_reports — pinned Telegram TLS request")
+
+_captured_async_kwargs = {}
+
+class _DummyTimeout:
+    def __init__(self, timeout):
+        self.read = timeout.read
+        self.write = timeout.write
+        self.connect = timeout.connect
+        self.pool = timeout.pool
+
+class _DummyAsyncClient:
+    def __init__(self, **kwargs):
+        _captured_async_kwargs.clear()
+        _captured_async_kwargs.update(kwargs)
+        self.is_closed = False
+        self.timeout = _DummyTimeout(kwargs["timeout"])
+    async def aclose(self):
+        self.is_closed = True
+
+with mock.patch.object(_send_reports.httpx, "AsyncClient", side_effect=lambda **kwargs: _DummyAsyncClient(**kwargs)):
+    _req = _send_reports._PinnedTelegramRequest(
+        client_label="test",
+        connection_pool_size=3,
+        read_timeout=11.0,
+        write_timeout=12.0,
+        connect_timeout=13.0,
+        pool_timeout=14.0,
+    )
+
+check("_PinnedTelegramRequest — trust_env=False",
+      _captured_async_kwargs.get("trust_env") is False,
+      f"kwargs={_captured_async_kwargs}")
+check("_PinnedTelegramRequest — verify is SSLContext",
+      isinstance(_captured_async_kwargs.get("verify"), ssl.SSLContext),
+      f"type={type(_captured_async_kwargs.get('verify'))}")
+
+with mock.patch.object(_send_reports.httpx, "AsyncClient", side_effect=lambda **kwargs: _DummyAsyncClient(**kwargs)):
+    _main_req, _updates_req = _send_reports._build_telegram_requests()
+
+check("_build_telegram_requests — main request type",
+      isinstance(_main_req, _send_reports._PinnedTelegramRequest))
+check("_build_telegram_requests — updates request type",
+      isinstance(_updates_req, _send_reports._PinnedTelegramRequest))
+check("_build_telegram_requests — updates timeout > main timeout",
+      _updates_req.read_timeout > _main_req.read_timeout,
+      f"main={_main_req.read_timeout} updates={_updates_req.read_timeout}")
+
 # ИТОГ
 # ═══════════════════════════════════════════════════════════════
 print(f"\n{'═'*60}")

@@ -5,6 +5,45 @@
 
 ---
 
+## HANDOFF 2026-04-23 09:00 Asia/Almaty
+
+### Что исправлено
+
+- Telegram polling/runtime hardened без отключения TLS:
+  - `bot/send_reports.py` v`v9.4.59/23.04.2026` → `v9.4.60/23.04.2026`
+  - добавлен `_PinnedTelegramRequest(HTTPXRequest)`:
+    - явный `certifi.where()` как CA bundle
+    - `trust_env=False`
+    - отдельные request-объекты для bot API и `getUpdates`
+  - `Application.builder()` теперь использует:
+    - `.request(main_request)`
+    - `.get_updates_request(updates_request)`
+  - при TLS verify failure лог теперь явно пишет:
+    - `ca_bundle`
+    - `trust_env=False`
+
+### Что доказано
+
+- текущий открытый Telegram TLS-контур был не в данных, а в polling transport.
+- blind-fix вида `verify=False` не применялся.
+- теперь bot polling не зависит от скрытых proxy/SSL env и использует явный публичный CA bundle.
+
+### Проверки
+
+- `python -m py_compile bot/send_reports.py` — OK
+- `python -X utf8 tests/test_project.py` — `110/110`
+- в `tests/test_project.py` добавлены проверки:
+  - `_PinnedTelegramRequest` строит `httpx.AsyncClient` с `trust_env=False`
+  - `verify` — это `ssl.SSLContext`
+  - `getUpdates` request имеет более длинный `read_timeout`, чем обычный bot API request
+
+### Что осталось
+
+- чтобы фикс начал работать в бою, нужен перезапуск бота.
+- если после этого `CERTIFICATE_VERIFY_FAILED` повторится, это уже будет сильное доказательство внешней TLS/MITM/сети проблемы, а не скрытого env/request-контура внутри процесса.
+
+---
+
 ## HANDOFF 2026-04-23 08:45 Asia/Almaty
 
 ### Что исправлено

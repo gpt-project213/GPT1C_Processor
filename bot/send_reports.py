@@ -171,6 +171,7 @@ import sys
 import re
 import json
 import time
+import ssl
 import html as _html
 import asyncio
 import logging
@@ -184,14 +185,17 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.59/23.04.2026"
+__VERSION__ = "v9.4.60/23.04.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
 from typing import Dict, List, Optional, Any, Tuple
+import certifi
+import httpx
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile, ReplyKeyboardRemove
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+from telegram.request import HTTPXRequest
 
 # ──────────────────────────────────────────────────────────────────
 # Legacy reply-keyboard cleanup (v9.4.57)
@@ -7628,6 +7632,57 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
     # меню работает через inline-клавиатуру /start → callback_data.
 
 
+class _PinnedTelegramRequest(HTTPXRequest):
+    """
+    PTB/httpx transport с явным public CA bundle и trust_env=False.
+    Это не отключает TLS-проверку, а убирает скрытое влияние
+    proxy/SSL env и фиксирует верификацию на certifi.
+    """
+
+    def __init__(self, *, client_label: str, **kwargs):
+        self._client_label = client_label
+        self._ca_bundle = certifi.where()
+        super().__init__(**kwargs)
+
+    def _build_client(self) -> httpx.AsyncClient:
+        ssl_ctx = ssl.create_default_context(cafile=self._ca_bundle)
+        return httpx.AsyncClient(
+            verify=ssl_ctx,
+            trust_env=False,
+            **self._client_kwargs,
+        )
+
+
+def _build_telegram_requests() -> tuple[HTTPXRequest, HTTPXRequest]:
+    main_request = _PinnedTelegramRequest(
+        client_label="bot_api",
+        connection_pool_size=8,
+        read_timeout=20.0,
+        write_timeout=20.0,
+        connect_timeout=15.0,
+        pool_timeout=5.0,
+    )
+    updates_request = _PinnedTelegramRequest(
+        client_label="get_updates",
+        connection_pool_size=2,
+        read_timeout=35.0,
+        write_timeout=20.0,
+        connect_timeout=15.0,
+        pool_timeout=5.0,
+    )
+    return main_request, updates_request
+
+
+def _log_telegram_transport_settings() -> None:
+    logger.info(
+        "telegram_transport_tls: ca_bundle=%s trust_env=%s main_pool=%s updates_pool=%s",
+        certifi.where(),
+        False,
+        8,
+        2,
+    )
+
+
 def main():
     if STOP_FILE.exists():
         logger.info("Stop file found: %s. Bot startup cancelled.", STOP_FILE)
@@ -7639,14 +7694,30 @@ def main():
 
     # v9.4.6.2: Версия в логе
     log_event("bot_starting", version = __VERSION__)
+    main_request, updates_request = _build_telegram_requests()
+    _log_telegram_transport_settings()
     
     # v9.4.6.1: ПАТЧ - Правильная регистрация post_init через builder
-    application = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
+    application = (
+        Application.builder()
+        .token(BOT_TOKEN)
+        .request(main_request)
+        .get_updates_request(updates_request)
+        .post_init(post_init)
+        .build()
+    )
 
     # BUG FIX: глушим "No error handlers are registered" для сетевых ошибок Telegram
     async def _tg_error_handler(update: object, context) -> None:
         err = context.error
         if isinstance(err, NetworkError):
+            if "CERTIFICATE_VERIFY_FAILED" in str(err):
+                logger.error(
+                    "Telegram TLS verify failed: %s | ca_bundle=%s | trust_env=%s",
+                    err,
+                    certifi.where(),
+                    False,
+                )
             logger.warning("Telegram NetworkError (transient): %s", err)
         else:
             logger.error("Telegram error: %s", err, exc_info=err)
