@@ -22,5 +22,16 @@
   "allowed_files": [],
   "codex_output_file": ".ai_logs/codex_result.json",
   "claude_output_file": ".ai_reviews/claude_review.md",
+  "last_codex_attempt_at": null,
+  "last_claude_attempt_at": null,
+  "next_codex_retry_after": null,
+  "next_claude_retry_after": null,
+  "codex_rate_limited": false,
+  "claude_rate_limited": false,
+  "last_codex_error": null,
+  "last_claude_error": null,
+  "review_attempts": 0,
+  "codex_result": null,
+  "claude_result": null,
   "final_status": null
 }

@@ -1,4 +1,4 @@
-# orchestrator.py · v1.0.8 · 2026-04-23 (Asia/Almaty)
+# orchestrator.py · v1.0.9 · 2026-04-23 (Asia/Almaty)
 
 from __future__ import annotations
 
@@ -8,12 +8,14 @@ import os
 import re
 import shutil
 import subprocess
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-VERSION = "1.0.8"
+VERSION = "1.0.9"
 TZ = ZoneInfo("Asia/Almaty")
+CODEX_RETRY_MINUTES = 30
+CLAUDE_RETRY_MINUTES = 60
 
 ROOT = Path(__file__).resolve().parent
 QUEUE_FILE = ROOT / "orchestrator_queue.json"
@@ -25,6 +27,27 @@ LOG_DIR = ROOT / ".ai_logs"
 
 def now_iso() -> str:
     return datetime.now(TZ).isoformat(timespec="seconds")
+
+
+def parse_iso_dt(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip())
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=TZ)
+    return parsed.astimezone(TZ)
+
+
+def retry_after_iso(minutes: int) -> str:
+    return (datetime.now(TZ) + timedelta(minutes=minutes)).isoformat(timespec="seconds")
+
+
+def retry_is_due(value: object) -> bool:
+    retry_at = parse_iso_dt(value)
+    return retry_at is None or datetime.now(TZ) >= retry_at
 
 
 def load_json(path: Path) -> dict:
@@ -324,6 +347,42 @@ summary, risks, planned_files, suggested_checks, next_action.
 """
 
 
+def build_claude_prompt(task: dict) -> str:
+    codex_result = task.get("codex_result") if isinstance(task.get("codex_result"), dict) else {}
+    stdout_file = codex_result.get("stdout_file") or ""
+    stderr_file = codex_result.get("stderr_file") or ""
+    codex_output_file = task.get("codex_output_file") or ""
+
+    return f"""Ты работаешь локально в проекте: {ROOT}
+
+ТЕБЕ НУЖНО СДЕЛАТЬ REVIEW РЕЗУЛЬТАТА CODEX.
+
+ЗАДАЧА:
+{task.get("title", "")}
+
+ЦЕЛЬ:
+{task.get("goal", "")}
+
+ОГРАНИЧЕНИЯ:
+{chr(10).join(f"- {item}" for item in task.get("constraints", [])) or "- нет"}
+
+ФАЙЛЫ РЕЗУЛЬТАТА CODEX:
+- {codex_output_file}
+- {stdout_file}
+- {stderr_file}
+
+Верни только JSON без markdown и пояснений.
+Ключи JSON:
+accepted, verdict, summary, risks, required_changes, next_action.
+
+Правила:
+- accepted=true только если результат можно принять без доработок;
+- verdict используй один из: accepted, revise, rejected;
+- если данных недостаточно, accepted=false и verdict=revise;
+- не меняй файлы проекта.
+"""
+
+
 def decode_output_bytes(data: bytes | None) -> str:
     if not data:
         return ""
@@ -350,6 +409,10 @@ def detect_rate_limit(stderr_text: str) -> bool:
     strict_markers = [
         "you've hit your usage limit",
         "you've hit your limit",
+        "you have hit your usage limit",
+        "you have hit your limit",
+        "hit your usage limit",
+        "usage limit",
         '"api_error_status":429',
         '"api_error_status": 429',
         "api_error_status: 429",
@@ -448,8 +511,9 @@ def run_codex_task(task: dict, agents: dict) -> dict:
     save_text(stdout_path, stdout_text)
     save_text(stderr_path, stderr_text)
 
-    rate_limited = detect_rate_limit(stderr_text)
-    rate_limit_hint = extract_rate_limit_hint(stderr_text)
+    combined_text = f"{stderr_text}\n{stdout_text}"
+    rate_limited = detect_rate_limit(combined_text)
+    rate_limit_hint = extract_rate_limit_hint(combined_text)
 
     error_text = None
     if rate_limited:
@@ -474,6 +538,140 @@ def run_codex_task(task: dict, agents: dict) -> dict:
         "finished_at": now_iso(),
     }
     save_json(result_path, result)
+    return result
+
+
+def parse_claude_review(stdout_text: str) -> dict:
+    text = (stdout_text or "").strip()
+    parsed: object
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        match = re.search(r"\{.*\}", text, flags=re.DOTALL)
+        if not match:
+            return {
+                "accepted": False,
+                "verdict": "revise",
+                "summary": "Claude вернул не-JSON ответ",
+                "raw": text,
+            }
+        try:
+            parsed = json.loads(match.group(0))
+        except json.JSONDecodeError:
+            return {
+                "accepted": False,
+                "verdict": "revise",
+                "summary": "Claude JSON не удалось разобрать",
+                "raw": text,
+            }
+
+    if not isinstance(parsed, dict):
+        return {
+            "accepted": False,
+            "verdict": "revise",
+            "summary": "Claude вернул JSON не-объект",
+            "raw": text,
+        }
+
+    verdict = str(parsed.get("verdict", "")).strip().lower()
+    accepted = parsed.get("accepted") is True or verdict in {"accepted", "approve", "approved"}
+    if verdict not in {"accepted", "revise", "rejected"}:
+        verdict = "accepted" if accepted else "revise"
+
+    parsed["accepted"] = accepted
+    parsed["verdict"] = verdict
+    return parsed
+
+
+def run_claude_task(task: dict, agents: dict) -> dict:
+    agent = agents["claude"]
+    prompt = build_claude_prompt(task)
+
+    task_id = str(task["task_id"])
+    stdout_path = LOG_DIR / f"{task_id}_claude_stdout.txt"
+    stderr_path = LOG_DIR / f"{task_id}_claude_stderr.txt"
+    review_path = LOG_DIR.parent / ".ai_reviews" / f"{task_id}_claude_review.json"
+
+    command = [agent["command"], *agent.get("args", [])]
+
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
+    env["NO_COLOR"] = "1"
+    env["FORCE_COLOR"] = "0"
+
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=str(ROOT),
+            input=prompt.encode("utf-8"),
+            capture_output=True,
+            timeout=int(agent["timeout_sec"]),
+            env=env,
+        )
+    except subprocess.TimeoutExpired as e:
+        stdout_text = decode_output_bytes(e.stdout if isinstance(e.stdout, bytes) else None)
+        stderr_text = decode_output_bytes(e.stderr if isinstance(e.stderr, bytes) else None)
+        save_text(stdout_path, stdout_text)
+        save_text(stderr_path, stderr_text)
+
+        result = {
+            "ok": False,
+            "agent": "claude",
+            "task_id": task_id,
+            "returncode": None,
+            "rate_limited": False,
+            "rate_limit_hint": None,
+            "accepted": False,
+            "verdict": "failed",
+            "error": f"Таймаут выполнения Claude: {agent['timeout_sec']} сек",
+            "stdout_file": str(stdout_path.relative_to(ROOT)),
+            "stderr_file": str(stderr_path.relative_to(ROOT)),
+            "review_file": str(review_path.relative_to(ROOT)),
+            "finished_at": now_iso(),
+        }
+        save_json(review_path, result)
+        return result
+
+    stdout_text = decode_output_bytes(completed.stdout)
+    stderr_text = decode_output_bytes(completed.stderr)
+    save_text(stdout_path, stdout_text)
+    save_text(stderr_path, stderr_text)
+
+    combined_text = f"{stderr_text}\n{stdout_text}"
+    rate_limited = detect_rate_limit(combined_text)
+    rate_limit_hint = extract_rate_limit_hint(combined_text)
+
+    review = parse_claude_review(stdout_text) if completed.returncode == 0 and not rate_limited else {}
+    verdict = str(review.get("verdict", "failed"))
+    accepted = review.get("accepted") is True
+
+    error_text = None
+    if rate_limited:
+        error_text = "Достигнут лимит Claude"
+        if rate_limit_hint:
+            error_text += f"; повторить после: {rate_limit_hint}"
+    elif completed.returncode != 0:
+        error_text = f"Claude завершился с кодом {completed.returncode}"
+
+    result = {
+        "ok": completed.returncode == 0 and not rate_limited,
+        "agent": "claude",
+        "task_id": task_id,
+        "returncode": completed.returncode,
+        "rate_limited": rate_limited,
+        "rate_limit_hint": rate_limit_hint,
+        "accepted": accepted,
+        "verdict": verdict,
+        "error": error_text,
+        "command": command,
+        "stdout_file": str(stdout_path.relative_to(ROOT)),
+        "stderr_file": str(stderr_path.relative_to(ROOT)),
+        "review_file": str(review_path.relative_to(ROOT)),
+        "review": review,
+        "finished_at": now_iso(),
+    }
+    save_json(review_path, result)
     return result
 
 
@@ -507,6 +705,7 @@ def start_next_task() -> int:
         task = tasks.pop(0)
         task["status"] = "running"
         task["stage"] = "analysis"
+        task["last_codex_attempt_at"] = now_iso()
         task["updated_at"] = now_iso()
 
         queue["active_task"] = task
@@ -530,6 +729,9 @@ def start_next_task() -> int:
         if result["ok"]:
             active_task["status"] = "review"
             active_task["stage"] = "review"
+            active_task["codex_rate_limited"] = False
+            active_task["last_codex_error"] = None
+            active_task["next_codex_retry_after"] = None
             queue["active_task"] = active_task
             save_json(QUEUE_FILE, queue)
 
@@ -551,24 +753,30 @@ def start_next_task() -> int:
             return 0
 
         if result.get("rate_limited"):
-            active_task["status"] = "rate_limited"
+            active_task["status"] = "queued"
             active_task["stage"] = "analysis"
-            queue["active_task"] = active_task
+            active_task["codex_rate_limited"] = True
+            active_task["last_codex_error"] = result.get("error")
+            active_task["next_codex_retry_after"] = retry_after_iso(CODEX_RETRY_MINUTES)
+            active_task["updated_at"] = now_iso()
+            queue["active_task"] = None
+            queue["tasks"] = [active_task, *tasks]
             save_json(QUEUE_FILE, queue)
 
             set_state(
                 running=False,
-                current_stage="rate_limited",
-                current_agent="codex",
+                current_stage="codex_rate_limited",
+                current_agent=None,
                 last_error=result.get("error"),
             )
 
             print(json.dumps({
                 "ok": False,
-                "message": "Codex упёрся в лимит. Задача не помечена как failed.",
+                "message": "Codex упёрся в лимит. Задача возвращена в очередь.",
                 "task_id": active_task["task_id"],
                 "status": active_task["status"],
                 "rate_limit_hint": result.get("rate_limit_hint"),
+                "next_codex_retry_after": active_task["next_codex_retry_after"],
                 "codex_output_file": active_task["codex_output_file"],
                 "stdout_file": result["stdout_file"],
                 "stderr_file": result["stderr_file"],
@@ -609,6 +817,122 @@ def start_next_task() -> int:
         return 1
 
 
+def review_once() -> int:
+    try:
+        queue = load_json(QUEUE_FILE)
+        agents = load_json(AGENTS_FILE)
+
+        errors = []
+        errors.extend(validate_required_files())
+        errors.extend(validate_agents_config(agents))
+        if errors:
+            print(json.dumps({"ok": False, "errors": errors}, ensure_ascii=False, indent=2))
+            return 2
+
+        active_task = queue.get("active_task")
+        if not isinstance(active_task, dict):
+            print(json.dumps({
+                "ok": True,
+                "message": "review-once: активной задачи для review нет",
+            }, ensure_ascii=False, indent=2))
+            return 0
+
+        status = str(active_task.get("status", "")).strip()
+        stage = str(active_task.get("stage", "")).strip()
+        if status != "review" or stage != "review":
+            print(json.dumps({
+                "ok": True,
+                "message": "review-once: активная задача не в review",
+                "task_id": active_task.get("task_id"),
+                "status": status,
+                "stage": stage,
+            }, ensure_ascii=False, indent=2))
+            return 0
+
+        next_retry = active_task.get("next_claude_retry_after")
+        if active_task.get("claude_rate_limited") is True and not retry_is_due(next_retry):
+            set_state(
+                running=False,
+                current_stage="claude_cooldown",
+                current_agent=None,
+                last_error=active_task.get("last_claude_error"),
+            )
+            print(json.dumps({
+                "ok": True,
+                "message": "review-once: cooldown Claude ещё не прошёл",
+                "task_id": active_task.get("task_id"),
+                "next_claude_retry_after": next_retry,
+            }, ensure_ascii=False, indent=2))
+            return 0
+
+        active_task["last_claude_attempt_at"] = now_iso()
+        active_task["review_attempts"] = int(active_task.get("review_attempts") or 0) + 1
+        active_task["updated_at"] = now_iso()
+        queue["active_task"] = active_task
+        save_json(QUEUE_FILE, queue)
+
+        set_state(
+            running=True,
+            current_stage="review",
+            current_agent="claude",
+            last_error=None,
+        )
+
+        result = run_claude_task(active_task, agents)
+
+        queue = load_json(QUEUE_FILE)
+        active_task = queue.get("active_task") or active_task
+        active_task["claude_result"] = result
+        active_task["updated_at"] = now_iso()
+
+        if result.get("rate_limited"):
+            active_task["status"] = "review"
+            active_task["stage"] = "review"
+            active_task["claude_rate_limited"] = True
+            active_task["last_claude_error"] = result.get("error")
+            active_task["next_claude_retry_after"] = retry_after_iso(CLAUDE_RETRY_MINUTES)
+            queue["active_task"] = active_task
+            save_json(QUEUE_FILE, queue)
+
+            set_state(
+                running=False,
+                current_stage="claude_rate_limited",
+                current_agent=None,
+                last_error=result.get("error"),
+            )
+
+            print(json.dumps({
+                "ok": False,
+                "message": "Claude упёрся в лимит. Задача остаётся в review.",
+                "task_id": active_task.get("task_id"),
+                "next_claude_retry_after": active_task["next_claude_retry_after"],
+                "stdout_file": result.get("stdout_file"),
+                "stderr_file": result.get("stderr_file"),
+            }, ensure_ascii=False, indent=2))
+            return 5
+
+        active_task["claude_rate_limited"] = False
+        active_task["last_claude_error"] = result.get("error")
+        active_task["next_claude_retry_after"] = None
+        queue["active_task"] = active_task
+        save_json(QUEUE_FILE, queue)
+
+        if result.get("ok") and result.get("accepted") is True:
+            return complete_active_task("done", "Claude review accepted")
+
+        return complete_active_task("failed", "Claude review rejected or failed")
+
+    except Exception as e:
+        set_state(
+            running=False,
+            current_stage="review_once",
+            current_agent="claude",
+            last_error=str(e),
+        )
+        print(f"[ERROR] {e}")
+        return 1
+
+
 def worker_once() -> int:
     try:
         queue = load_json(QUEUE_FILE)
@@ -627,6 +951,9 @@ def worker_once() -> int:
             status = str(active_task.get("status", "")).strip()
             stage = str(active_task.get("stage", "")).strip()
             task_id = str(active_task.get("task_id", "")).strip()
+
+            if status == "review" and stage == "review":
+                return review_once()
 
             state = load_json(STATE_FILE)
             state["current_stage"] = stage or status or state.get("current_stage") or "idle"
@@ -658,7 +985,8 @@ def worker_once() -> int:
             }, ensure_ascii=False, indent=2))
             return 3
 
-        if not queue.get("tasks"):
+        tasks = queue.get("tasks", [])
+        if not tasks:
             set_state(
                 running=False,
                 current_stage="idle",
@@ -671,6 +999,24 @@ def worker_once() -> int:
                 "message": "worker-once: очередь пуста"
             }, ensure_ascii=False, indent=2))
             return 0
+
+        first_task = tasks[0]
+        if isinstance(first_task, dict):
+            next_retry = first_task.get("next_codex_retry_after")
+            if first_task.get("codex_rate_limited") is True and not retry_is_due(next_retry):
+                set_state(
+                    running=False,
+                    current_stage="codex_cooldown",
+                    current_agent=None,
+                    last_error=first_task.get("last_codex_error"),
+                )
+                print(json.dumps({
+                    "ok": True,
+                    "message": "worker-once: cooldown Codex ещё не прошёл",
+                    "task_id": first_task.get("task_id"),
+                    "next_codex_retry_after": next_retry,
+                }, ensure_ascii=False, indent=2))
+                return 0
 
         return start_next_task()
 
@@ -789,6 +1135,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("start", help="Взять первую задачу из очереди и запустить Codex")
     subparsers.add_parser("worker-once", help="Один безопасный цикл для Планировщика Windows")
+    subparsers.add_parser("review-once", help="Один безопасный запуск Claude review для active_task")
 
     complete_parser = subparsers.add_parser("complete", help="Перенести активную задачу в history")
     complete_parser.add_argument("--final-status", choices=("done", "failed"), default="done")
@@ -813,6 +1160,9 @@ def main() -> int:
 
     if args.command == "worker-once":
         return worker_once()
+
+    if args.command == "review-once":
+        return review_once()
 
     if args.command == "complete":
         return complete_active_task(args.final_status, args.note, args.force)
