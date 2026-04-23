@@ -5,6 +5,55 @@
 
 ---
 
+## HANDOFF 2026-04-23 08:45 Asia/Almaty
+
+### Что исправлено
+
+- `b3ce7ab` — `fix(data): enforce excel-truth for net profit and debt delivery`
+  - `net_profit_report.py` v`1.2.7` → v`1.2.8`
+    - admin `net_profit` теперь берёт только сводные `gross_*.json`
+    - manager gross больше не может подмешаться в admin MTD
+    - для MTD отключён mixed-source fallback на "ближайшие" expenses
+    - если exact expenses за тот же период нет, MTD не генерируется
+  - `bot/send_reports.py` v`v9.4.58/22.04.2026` → `v9.4.59/23.04.2026`
+    - live `DEBT_SIMPLE` блокируется, если для того же менеджера уже есть более свежий `DEBT_EXTENDED`
+    - `force|net_profit` и меню аналитики больше не отдают stale `net_profit_mtd`, если current summary gross не имеет exact expenses
+  - `tests/test_report_freshness.py`
+    - добавлены регрессии `FRESH T5..T10`
+
+### Что доказано
+
+- Ложный `net_profit_mtd_20260411.html` строился не из сводного gross Excel, а из manager gross + чужих expenses.
+- Простая дебиторка могла live-выдаваться за `18.04`, хотя detailed debt уже был свежий за `22.04`.
+- После фикса:
+  - manager gross отфильтровывается из admin gross-источников;
+  - stale simple debt не проходит live-route;
+  - stale MTD HTML не проходит `force|net_profit` и analytics-route.
+
+### Проверки
+
+- `python -m py_compile bot/send_reports.py` — OK
+- `python -X utf8 tests/test_report_freshness.py` — `10/10`
+- `python -X utf8 tests/test_project.py` — `105/105`
+- `python -c "import ast, pathlib; ast.parse(pathlib.Path('net_profit_report.py').read_text(encoding='utf-8'))"` — `net_profit_report.py AST OK`
+
+### Что осталось открытым
+
+- `NET-SSL-TELEGRAM-01` остаётся открытым как внешний TLS/runtime incident:
+  - burst `CERTIFICATE_VERIFY_FAILED / self-signed certificate in certificate chain`
+  - кодовый дефект пока не доказан
+  - `verify=False` не применялся и не должен применяться без отдельного технического доказательства
+
+### Что не трогать
+
+- untracked audit-черновики:
+  - `audit/AUDIT_TZ_20260422_DATA_DISTORTION.md`
+  - `audit/D_AUDIT_REPORT_20260422.md`
+  - `audit/E_PATCH_PLAN_20260422.md`
+  - `audit/run_20260422_data/`
+
+---
+
 ## HANDOFF 2026-04-22 19:30 Asia/Almaty (audit session continuation)
 
 ### Что сделано после handoff 16:40
