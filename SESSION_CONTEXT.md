@@ -1171,3 +1171,52 @@ Observed rebuild result:
 
 1. keep these two new regression suites as the narrow guardrail for future freshness / alert-path edits
 2. treat the remaining `test_project.py` failure as the separate old `send_reports.py` log-lock problem, not as a regression from this task
+
+## Handoff Update - 2026-04-23 13:55 +05:00
+
+### Collector client-dialog UX hardening
+
+- Changed collector customer-facing wording and response policy after the WhatsApp screenshot issue:
+  - removed mechanical `напишите 1` prompts from `config/collector_prompts.json` and code fallbacks
+  - corrected company city in collector prompt context from Almaty to Astana
+  - shortened fallback reminder templates and removed repeated bureaucratic wording
+  - added AI-analysis intents:
+    - `soft_positive`
+    - `promise_schedule`
+    - `paid_claim`
+  - `client_dialog.handle_incoming()` now handles:
+    - payment claims without arguing about 1C; asks for cheque/date/amount
+    - date-only promises without fake "фиксируем оплату"
+    - daily/partial schedules with `payment_schedule` stored in dialog state
+    - soft-positive answers with one short follow-up question, then manager escalation if still vague
+
+### Files changed
+
+- `config/collector_prompts.json`
+- `collector/collection_agent.py`
+- `collector/client_dialog.py`
+- `tests/test_collector.py`
+
+### Validation
+
+- JSON syntax:
+  - `python -m json.tool config/collector_prompts.json`
+- Python syntax:
+  - `ast.parse(...)` for `collector/collection_agent.py`, `collector/client_dialog.py`, `tests/test_collector.py`
+  - direct `py_compile` for collector files hit Windows `__pycache__` permission lock, not syntax
+- `python -X utf8 tests/test_project.py`
+  - `110/110`
+- `WHATSAPP_ENABLED=0 LIVE_SEND_ALLOWED=0 python -X utf8 tests/test_collector.py`
+  - reached the new UX and prompt sections with all checks green:
+    - no `напишите 1`
+    - prompt uses Astana, not Almaty
+    - date-only promise does not say `фиксируем`
+    - schedule stores `payment_schedule`
+    - paid claim asks for cheque without repeated 1C reference
+    - soft positive asks one short first-payment question
+  - full script still timed out later around old HIGH-4 / later collector sections; no failing check was observed before timeout
+
+### Operational note
+
+- This is a collector-dialog behavior change only.
+- Approval flow, batch state machine, debt selectors, WhatsApp transport, and Telegram scheduler were not changed in this step.
