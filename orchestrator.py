@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-VERSION = "1.0.14"
+VERSION = "1.0.15"
 TZ = ZoneInfo("Asia/Almaty")
 CODEX_RETRY_MINUTES = 30
 CLAUDE_RETRY_MINUTES = 60
@@ -810,7 +810,7 @@ def start_next_task() -> int:
                 "stdout_file": result["stdout_file"],
                 "stderr_file": result["stderr_file"],
             }, ensure_ascii=False, indent=2))
-            return 5
+            return 0
 
         active_task["status"] = "failed"
         queue["active_task"] = active_task
@@ -938,7 +938,7 @@ def review_once() -> int:
                 "stdout_file": result.get("stdout_file"),
                 "stderr_file": result.get("stderr_file"),
             }, ensure_ascii=False, indent=2))
-            return 5
+            return 0
 
         active_task["claude_rate_limited"] = False
         active_task["last_claude_error"] = result.get("error")
