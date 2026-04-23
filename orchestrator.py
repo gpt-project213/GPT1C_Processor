@@ -1,4 +1,4 @@
-# orchestrator.py · v1.0.5 · 2026-04-23 (Asia/Almaty)
+# orchestrator.py · v1.0.8 · 2026-04-23 (Asia/Almaty)
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-VERSION = "1.0.5"
+VERSION = "1.0.8"
 TZ = ZoneInfo("Asia/Almaty")
 
 ROOT = Path(__file__).resolve().parent
@@ -597,11 +597,181 @@ def start_next_task() -> int:
         }, ensure_ascii=False, indent=2))
         return 4
 
+
     except Exception as e:
         set_state(
             running=False,
             current_stage="start",
             current_agent="codex",
+            last_error=str(e),
+        )
+        print(f"[ERROR] {e}")
+        return 1
+
+
+def worker_once() -> int:
+    try:
+        queue = load_json(QUEUE_FILE)
+        agents = load_json(AGENTS_FILE)
+
+        errors = []
+        errors.extend(validate_required_files())
+        errors.extend(validate_agents_config(agents))
+        if errors:
+            print(json.dumps({"ok": False, "errors": errors}, ensure_ascii=False, indent=2))
+            return 2
+
+        active_task = queue.get("active_task")
+
+        if isinstance(active_task, dict):
+            status = str(active_task.get("status", "")).strip()
+            stage = str(active_task.get("stage", "")).strip()
+            task_id = str(active_task.get("task_id", "")).strip()
+
+            state = load_json(STATE_FILE)
+            state["current_stage"] = stage or status or state.get("current_stage") or "idle"
+            state["last_error"] = None
+            state["last_update"] = now_iso()
+            save_json(STATE_FILE, state)
+
+            print(json.dumps({
+                "ok": True,
+                "message": "worker-once: новая задача не запущена, активная задача уже существует",
+                "task_id": task_id,
+                "status": status,
+                "stage": stage,
+            }, ensure_ascii=False, indent=2))
+            return 0
+
+        if active_task is not None:
+            set_state(
+                running=False,
+                current_stage="blocked",
+                current_agent=None,
+                last_error="Некорректный active_task в orchestrator_queue.json",
+            )
+
+            print(json.dumps({
+                "ok": False,
+                "message": "worker-once: новая задача не запущена, active_task повреждён",
+                "active_task_type": type(active_task).__name__,
+            }, ensure_ascii=False, indent=2))
+            return 3
+
+        if not queue.get("tasks"):
+            set_state(
+                running=False,
+                current_stage="idle",
+                current_agent=None,
+                last_error=None,
+            )
+
+            print(json.dumps({
+                "ok": True,
+                "message": "worker-once: очередь пуста"
+            }, ensure_ascii=False, indent=2))
+            return 0
+
+        return start_next_task()
+
+    except Exception as e:
+        set_state(
+            running=False,
+            current_stage="worker_once",
+            current_agent=None,
+            last_error=str(e),
+        )
+        print(f"[ERROR] {e}")
+        return 1
+
+
+def complete_active_task(final_status: str, note: str | None = None, force: bool = False) -> int:
+    if final_status not in {"done", "failed"}:
+        print(json.dumps({
+            "ok": False,
+            "error": "final_status должен быть done или failed",
+        }, ensure_ascii=False, indent=2))
+        return 2
+
+    try:
+        queue = load_json(QUEUE_FILE)
+        active_task = queue.get("active_task")
+
+        if active_task is None:
+            set_state(
+                running=False,
+                current_stage="idle",
+                current_agent=None,
+                last_error=None,
+            )
+            print(json.dumps({
+                "ok": True,
+                "message": "Активной задачи нет",
+            }, ensure_ascii=False, indent=2))
+            return 0
+
+        if not isinstance(active_task, dict):
+            set_state(
+                running=False,
+                current_stage="blocked",
+                current_agent=None,
+                last_error="Некорректный active_task в orchestrator_queue.json",
+            )
+            print(json.dumps({
+                "ok": False,
+                "error": "active_task повреждён, автоматическое завершение запрещено",
+                "active_task_type": type(active_task).__name__,
+            }, ensure_ascii=False, indent=2))
+            return 3
+
+        status = str(active_task.get("status", "")).strip()
+        if status == "running" and not force:
+            print(json.dumps({
+                "ok": False,
+                "error": "Задача сейчас running. Для принудительного закрытия нужен --force.",
+                "task_id": active_task.get("task_id"),
+            }, ensure_ascii=False, indent=2))
+            return 4
+
+        finished_at = now_iso()
+        active_task["status"] = final_status
+        active_task["stage"] = "done"
+        active_task["final_status"] = final_status
+        active_task["completed_at"] = finished_at
+        active_task["updated_at"] = finished_at
+        if note:
+            active_task["completion_note"] = note
+
+        history = queue.get("history", [])
+        if not isinstance(history, list):
+            history = []
+        history.append(active_task)
+
+        queue["active_task"] = None
+        queue["history"] = history
+        save_json(QUEUE_FILE, queue)
+
+        set_state(
+            running=False,
+            current_stage="idle",
+            current_agent=None,
+            last_error=None,
+        )
+
+        print(json.dumps({
+            "ok": True,
+            "message": "Активная задача перенесена в history",
+            "task_id": active_task.get("task_id"),
+            "final_status": final_status,
+            "history_tasks": len(history),
+        }, ensure_ascii=False, indent=2))
+        return 0
+
+    except Exception as e:
+        set_state(
+            running=False,
+            current_stage="complete",
+            current_agent=None,
             last_error=str(e),
         )
         print(f"[ERROR] {e}")
@@ -618,6 +788,12 @@ def build_parser() -> argparse.ArgumentParser:
     enqueue_parser.add_argument("task_file", help="Путь к JSON-файлу задачи")
 
     subparsers.add_parser("start", help="Взять первую задачу из очереди и запустить Codex")
+    subparsers.add_parser("worker-once", help="Один безопасный цикл для Планировщика Windows")
+
+    complete_parser = subparsers.add_parser("complete", help="Перенести активную задачу в history")
+    complete_parser.add_argument("--final-status", choices=("done", "failed"), default="done")
+    complete_parser.add_argument("--note", default=None)
+    complete_parser.add_argument("--force", action="store_true")
 
     return parser
 
@@ -634,6 +810,12 @@ def main() -> int:
 
     if args.command == "start":
         return start_next_task()
+
+    if args.command == "worker-once":
+        return worker_once()
+
+    if args.command == "complete":
+        return complete_active_task(args.final_status, args.note, args.force)
 
     parser.print_help()
     return 1
