@@ -1,4 +1,4 @@
-# orchestrator.py · v1.0.11 · 2026-04-23 (Asia/Almaty)
+# orchestrator.py · v1.0.16 · 2026-04-23 (Asia/Almaty)
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-VERSION = "1.0.15"
+VERSION = "1.0.16"
 TZ = ZoneInfo("Asia/Almaty")
 CODEX_RETRY_MINUTES = 30
 CLAUDE_RETRY_MINUTES = 60
@@ -48,6 +48,24 @@ def retry_after_iso(minutes: int) -> str:
 def retry_is_due(value: object) -> bool:
     retry_at = parse_iso_dt(value)
     return retry_at is None or datetime.now(TZ) >= retry_at
+
+
+def normalize_task_class(value: object) -> str:
+    task_class = str(value or "complex").strip().lower()
+    return task_class if task_class in {"simple", "complex"} else "complex"
+
+
+def normalize_review_policy(value: object) -> str:
+    review_policy = str(value or "require_claude").strip().lower()
+    return review_policy if review_policy in {"auto", "require_claude"} else "require_claude"
+
+
+def should_require_claude_review(task: dict) -> bool:
+    task_class = normalize_task_class(task.get("task_class"))
+    review_policy = normalize_review_policy(task.get("review_policy"))
+    if task_class == "complex":
+        return True
+    return review_policy == "require_claude"
 
 
 def load_json(path: Path) -> dict:
@@ -160,6 +178,8 @@ def validate_task(task: dict) -> list[str]:
     title = str(task.get("title", "")).strip()
     status = str(task.get("status", "")).strip()
     stage = str(task.get("stage", "")).strip()
+    task_class = normalize_task_class(task.get("task_class"))
+    review_policy = normalize_review_policy(task.get("review_policy"))
 
     if not task_id:
         errors.append("Поле task_id пустое")
@@ -169,6 +189,8 @@ def validate_task(task: dict) -> list[str]:
         errors.append(f"Недопустимое значение status: {status}")
     if stage not in {"analysis", "execution", "review", "done"}:
         errors.append(f"Недопустимое значение stage: {stage}")
+    if task_class == "complex" and review_policy != "require_claude":
+        errors.append("Для task_class=complex review_policy должен быть require_claude")
 
     constraints = task.get("constraints")
     allowed_files = task.get("allowed_files")
@@ -187,6 +209,9 @@ def validate_task(task: dict) -> list[str]:
                 errors.append(f"В inputs отсутствует поле: {key}")
             elif not isinstance(inputs[key], list):
                 errors.append(f"inputs.{key} должно быть списком")
+
+    task["task_class"] = task_class
+    task["review_policy"] = review_policy
 
     return errors
 
@@ -327,6 +352,10 @@ def build_codex_prompt(task: dict) -> str:
 РАЗРЕШЕНО ТРОГАТЬ ТОЛЬКО:
 {allowed_files}
 
+КЛАСС ЗАДАЧИ:
+- task_class: {normalize_task_class(task.get("task_class"))}
+- review_policy: {normalize_review_policy(task.get("review_policy"))}
+
 ВЫПОЛНИ ЗАДАЧУ ПОЛНОСТЬЮ В РАМКАХ РАЗРЕШЁННЫХ ФАЙЛОВ.
 Если найдёшь подтверждённый баг в разрешённых файлах — внеси минимальный патч.
 Если багов нет — не меняй код и честно зафиксируй это в JSON.
@@ -340,6 +369,18 @@ summary, findings, changed_files, risks, checks_run, next_action.
 - весь русский текст кодируй escape-последовательностями \\uXXXX;
 - не добавляй никакой текст до или после JSON.
 """
+
+
+def complete_without_claude() -> int:
+    queue = load_json(QUEUE_FILE)
+    active_task = queue.get("active_task")
+    if not isinstance(active_task, dict):
+        raise RuntimeError("active_task потерян перед автозавершением")
+
+    active_task["updated_at"] = now_iso()
+    queue["active_task"] = active_task
+    save_json(QUEUE_FILE, queue)
+    return complete_active_task("done", "Codex completed; Claude review not required")
 
 
 def build_claude_prompt(task: dict) -> str:
@@ -365,6 +406,10 @@ def build_claude_prompt(task: dict) -> str:
 - {codex_output_file}
 - {stdout_file}
 - {stderr_file}
+
+КЛАСС ЗАДАЧИ:
+- task_class: {normalize_task_class(task.get("task_class"))}
+- review_policy: {normalize_review_policy(task.get("review_policy"))}
 
 Верни только JSON без markdown и пояснений.
 Ключи JSON:
@@ -734,6 +779,8 @@ def start_next_task() -> int:
         task = tasks.pop(0)
         task["status"] = "running"
         task["stage"] = "analysis"
+        task["task_class"] = normalize_task_class(task.get("task_class"))
+        task["review_policy"] = normalize_review_policy(task.get("review_policy"))
         task["last_codex_attempt_at"] = now_iso()
         task["updated_at"] = now_iso()
 
@@ -756,30 +803,47 @@ def start_next_task() -> int:
         active_task["codex_result"] = result
 
         if result["ok"]:
-            active_task["status"] = "review"
-            active_task["stage"] = "review"
             active_task["codex_rate_limited"] = False
             active_task["last_codex_error"] = None
             active_task["next_codex_retry_after"] = None
+            if should_require_claude_review(active_task):
+                active_task["status"] = "review"
+                active_task["stage"] = "review"
+                queue["active_task"] = active_task
+                save_json(QUEUE_FILE, queue)
+
+                set_state(
+                    running=True,
+                    current_stage="review",
+                    current_agent=None,
+                    last_error=None,
+                )
+
+                print(json.dumps({
+                    "ok": True,
+                    "message": "Codex отработал. Задача переведена на этап review.",
+                    "task_id": active_task["task_id"],
+                    "task_class": active_task["task_class"],
+                    "review_policy": active_task["review_policy"],
+                    "codex_output_file": active_task["codex_output_file"],
+                    "stdout_file": result["stdout_file"],
+                    "stderr_file": result["stderr_file"],
+                }, ensure_ascii=False, indent=2))
+                return 0
+
+            active_task["status"] = "done"
+            active_task["stage"] = "done"
             queue["active_task"] = active_task
             save_json(QUEUE_FILE, queue)
 
             set_state(
-                running=True,
-                current_stage="review",
+                running=False,
+                current_stage="auto_complete",
                 current_agent=None,
                 last_error=None,
             )
 
-            print(json.dumps({
-                "ok": True,
-                "message": "Codex отработал. Задача переведена на этап review.",
-                "task_id": active_task["task_id"],
-                "codex_output_file": active_task["codex_output_file"],
-                "stdout_file": result["stdout_file"],
-                "stderr_file": result["stderr_file"],
-            }, ensure_ascii=False, indent=2))
-            return 0
+            return complete_without_claude()
 
         if result.get("rate_limited"):
             active_task["status"] = "queued"
@@ -877,6 +941,15 @@ def review_once() -> int:
                 "stage": stage,
             }, ensure_ascii=False, indent=2))
             return 0
+
+        if not should_require_claude_review(active_task):
+            set_state(
+                running=False,
+                current_stage="auto_complete",
+                current_agent=None,
+                last_error=None,
+            )
+            return complete_without_claude()
 
         next_retry = active_task.get("next_claude_retry_after")
         if active_task.get("claude_rate_limited") is True and not retry_is_due(next_retry):
