@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-VERSION = "1.0.11"
+VERSION = "1.0.12"
 TZ = ZoneInfo("Asia/Almaty")
 CODEX_RETRY_MINUTES = 30
 CLAUDE_RETRY_MINUTES = 60
@@ -219,12 +219,6 @@ def get_status() -> dict:
 def print_status() -> int:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     try:
-        set_state(
-            running=False,
-            current_stage="status_check",
-            current_agent=None,
-            last_error=None,
-        )
         status = get_status()
     except Exception as e:
         set_state(
