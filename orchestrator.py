@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-VERSION = "1.0.19"
+VERSION = "1.0.20"
 TZ = ZoneInfo("Asia/Almaty")
 CODEX_RETRY_MINUTES = 30
 CLAUDE_RETRY_MINUTES = 60
@@ -23,7 +23,10 @@ STATE_FILE = ROOT / "orchestrator_state.json"
 AGENTS_FILE = ROOT / "orchestrator_agents.json"
 TASK_TEMPLATE_FILE = ROOT / "orchestrator_task_template.json"
 MAIN_BOT_HEALTH_TASK_FILE = ROOT / "task_003_main_bot_health_check.json"
+KNOWLEDGE_FILE = ROOT / "orchestrator_knowledge.json"
 LOG_DIR = ROOT / ".ai_logs"
+COLLECTOR_PREVIEW_HOUR = 17
+COLLECTOR_PREVIEW_GRACE_MINUTES = 30
 
 
 def now_iso() -> str:
@@ -106,6 +109,269 @@ def no_harm_rules() -> list[str]:
         "Не менять бизнес-логику без доказанного root cause.",
         "Если доказательств недостаточно — остановиться на локализации, а не выдумывать фикс.",
     ]
+
+
+def default_knowledge() -> dict:
+    return {
+        "version": "1.0",
+        "updated_at": now_iso(),
+        "target_system": "main_bot",
+        "shared_context_files": [
+            "AGENTS.md",
+            "SESSION_CONTEXT.md",
+            "orchestrator_knowledge.json",
+        ],
+        "policies": {
+            "restart_main_bot": "manual_by_admin_after_notification",
+            "post_fix_verification": "orchestrator_followup_health_check",
+            "failure_reporting": "orchestrator_short_telegram_alert_to_admin",
+            "complex_review": "claude_required_with_bounded_single_revise",
+            "collector_preview_control": "health_check_tracks_today_preview_and_escalates_if_missing_after_deadline",
+        },
+        "events": [],
+        "open_incidents": [],
+        "last_task": None,
+    }
+
+
+def load_knowledge() -> dict:
+    if not KNOWLEDGE_FILE.exists():
+        data = default_knowledge()
+        save_json(KNOWLEDGE_FILE, data)
+        return data
+
+    data = load_json(KNOWLEDGE_FILE)
+    base = default_knowledge()
+    if not isinstance(data.get("shared_context_files"), list):
+        data["shared_context_files"] = base["shared_context_files"]
+    if not isinstance(data.get("policies"), dict):
+        data["policies"] = base["policies"]
+    if not isinstance(data.get("events"), list):
+        data["events"] = []
+    if not isinstance(data.get("open_incidents"), list):
+        data["open_incidents"] = []
+    data["target_system"] = "main_bot"
+    return data
+
+
+def save_knowledge(data: dict) -> None:
+    data["updated_at"] = now_iso()
+    save_json(KNOWLEDGE_FILE, data)
+
+
+def parse_json_file(path_value: object) -> dict | None:
+    if not isinstance(path_value, str) or not path_value.strip():
+        return None
+    path = resolve_path(path_value)
+    if not path.exists():
+        return None
+    try:
+        with path.open("r", encoding="utf-8-sig") as f:
+            payload = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def parse_task_codex_payload(task: dict) -> dict | None:
+    codex_result = task.get("codex_result")
+    if not isinstance(codex_result, dict):
+        return None
+    return parse_json_file(codex_result.get("stdout_file"))
+
+
+def summarize_task_for_admin(task: dict) -> tuple[str | None, str | None]:
+    payload = parse_task_codex_payload(task) or {}
+    changed_files = sanitize_string_list(payload.get("changed_files"))
+    findings = payload.get("findings")
+    findings_count = len(findings) if isinstance(findings, list) else 0
+    summary = str(payload.get("summary") or task.get("completion_note") or "").strip()
+    summary = summary or "Без краткого summary"
+    restart_required = payload.get("restart_required") is True
+    task_id = str(task.get("task_id") or "").strip()
+
+    if str(task.get("final_status") or task.get("status") or "").strip() == "failed":
+        return ("ESCALATION", f"AUTOAGENT ESCALATION\n{task_id}\n{summary}")
+
+    if changed_files:
+        restart_text = "нужен" if restart_required else "не нужен"
+        return (
+            "FIX_APPLIED",
+            f"AUTOAGENT FIX_APPLIED\n{task_id}\n{summary}\nФайлы: {', '.join(changed_files[:5])}\nПерезапуск: {restart_text}",
+        )
+
+    if findings_count > 0:
+        return (
+            "INCIDENT_FOUND",
+            f"AUTOAGENT INCIDENT_FOUND\n{task_id}\n{summary}\nНаходок: {findings_count}",
+        )
+
+    return (None, None)
+
+
+def send_admin_notification(text: str) -> bool:
+    try:
+        from send_tg import send_text  # type: ignore
+    except Exception:
+        return False
+    try:
+        return bool(send_text(text, parse_html=False))
+    except Exception:
+        return False
+
+
+def append_knowledge_event(event_type: str, *, task: dict | None = None, details: dict | None = None) -> None:
+    knowledge = load_knowledge()
+    payload = parse_task_codex_payload(task) if isinstance(task, dict) else None
+    event = {
+        "timestamp": now_iso(),
+        "event_type": event_type,
+        "task_id": str((task or {}).get("task_id") or "").strip() or None,
+        "title": str((task or {}).get("title") or "").strip() or None,
+        "status": str((task or {}).get("status") or "").strip() or None,
+        "stage": str((task or {}).get("stage") or "").strip() or None,
+        "final_status": str((task or {}).get("final_status") or "").strip() or None,
+        "changed_files": sanitize_string_list((payload or {}).get("changed_files")),
+        "details": details or {},
+    }
+    knowledge.setdefault("events", []).append(event)
+    knowledge["events"] = knowledge["events"][-200:]
+    knowledge["last_task"] = {
+        "task_id": event["task_id"],
+        "event_type": event_type,
+        "timestamp": event["timestamp"],
+        "final_status": event["final_status"],
+    }
+
+    incident = (details or {}).get("incident")
+    if isinstance(incident, dict):
+        open_incidents = [item for item in knowledge.get("open_incidents", []) if item.get("key") != incident.get("key")]
+        if incident.get("status") == "open":
+            open_incidents.append(incident)
+        knowledge["open_incidents"] = open_incidents
+
+    save_knowledge(knowledge)
+
+
+def mark_notified(task: dict, event_type: str) -> None:
+    notified = task.get("notified_events")
+    if not isinstance(notified, dict):
+        notified = {}
+        task["notified_events"] = notified
+    notified[event_type] = now_iso()
+
+
+def has_been_notified(task: dict, event_type: str) -> bool:
+    notified = task.get("notified_events")
+    return isinstance(notified, dict) and isinstance(notified.get(event_type), str) and bool(notified.get(event_type))
+
+
+def maybe_notify_admin(task: dict, event_type: str | None = None, message: str | None = None) -> bool:
+    resolved_type = event_type
+    resolved_message = message
+    if resolved_type is None or resolved_message is None:
+        resolved_type, resolved_message = summarize_task_for_admin(task)
+    if not resolved_type or not resolved_message or has_been_notified(task, resolved_type):
+        return False
+    ok = send_admin_notification(resolved_message)
+    if ok:
+        mark_notified(task, resolved_type)
+        append_knowledge_event(
+            "admin_notification_sent",
+            task=task,
+            details={"notification_type": resolved_type, "message": resolved_message},
+        )
+    return ok
+
+
+def latest_today_log(module_prefix: str) -> Path | None:
+    log_dir = ROOT / "logs"
+    if not log_dir.exists():
+        return None
+    day = datetime.now(TZ).strftime("%Y%m%d")
+    candidates = sorted(log_dir.glob(f"{module_prefix}_{day}*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
+    return candidates[0] if candidates else None
+
+
+def get_collector_preview_status() -> dict:
+    log_path = latest_today_log("collector")
+    deadline = datetime.now(TZ).replace(
+        hour=COLLECTOR_PREVIEW_HOUR,
+        minute=COLLECTOR_PREVIEW_GRACE_MINUTES,
+        second=0,
+        microsecond=0,
+    )
+    status = {
+        "found_today": False,
+        "batch_id": None,
+        "admin_msg_id": None,
+        "preview_at": None,
+        "deadline_reached": datetime.now(TZ) >= deadline,
+        "log_file": str(log_path.relative_to(ROOT)) if log_path else None,
+    }
+    if log_path is None or not log_path.exists():
+        return status
+
+    batch_re = re.compile(r"Создан батч ([0-9-]+-[a-z0-9]+):", re.IGNORECASE)
+    admin_re = re.compile(r"\[([0-9-]+-[a-z0-9]+)\] Превью-уведомление админу отправлено \(msg_id=(\d+)\)", re.IGNORECASE)
+    try:
+        lines = log_path.read_text(encoding="utf-8-sig", errors="replace").splitlines()
+    except OSError:
+        return status
+
+    for line in reversed(lines):
+        if status["batch_id"] is None:
+            match = batch_re.search(line)
+            if match:
+                status["batch_id"] = match.group(1)
+        if not status["found_today"]:
+            match = admin_re.search(line)
+            if match:
+                status["found_today"] = True
+                status["batch_id"] = match.group(1)
+                status["admin_msg_id"] = match.group(2)
+                status["preview_at"] = line.split(" INFO ", 1)[0].strip()
+                break
+    return status
+
+
+def collector_preview_note() -> str:
+    preview = get_collector_preview_status()
+    if preview["found_today"]:
+        knowledge = load_knowledge()
+        incident_key = f"collector_preview_missing:{datetime.now(TZ).strftime('%Y-%m-%d')}"
+        open_incidents = [item for item in knowledge.get("open_incidents", []) if item.get("key") != incident_key]
+        if len(open_incidents) != len(knowledge.get("open_incidents", [])):
+            knowledge["open_incidents"] = open_incidents
+            save_knowledge(knowledge)
+        return (
+            "Collector preview today: sent; "
+            f"batch={preview['batch_id']}; admin_msg_id={preview['admin_msg_id']}; at={preview['preview_at']}"
+        )
+    if preview["deadline_reached"]:
+        return "Collector preview today: missing after scheduled deadline"
+    return "Collector preview today: not expected yet or not found before deadline"
+
+
+def maybe_alert_missing_collector_preview() -> None:
+    preview = get_collector_preview_status()
+    if preview["found_today"] or not preview["deadline_reached"]:
+        return
+    knowledge = load_knowledge()
+    incident_key = f"collector_preview_missing:{datetime.now(TZ).strftime('%Y-%m-%d')}"
+    for item in knowledge.get("open_incidents", []):
+        if item.get("key") == incident_key:
+            return
+    incident = {
+        "key": incident_key,
+        "status": "open",
+        "summary": "Сегодня не найдено admin preview collector после планового времени",
+        "detected_at": now_iso(),
+    }
+    append_knowledge_event("collector_preview_missing", details={"incident": incident, **preview})
+    send_admin_notification(
+        "AUTOAGENT INCIDENT_FOUND\ncollector_preview_missing\nПосле планового времени не найдено превью collector для админа."
+    )
 
 
 def load_json(path: Path) -> dict:
@@ -453,7 +719,7 @@ REVIEW CLAUDE:
 
 Верни только итоговый JSON без пояснений, markdown и вводных фраз.
 Ключи JSON:
-summary, findings, addressed_review_items, changed_files, risks, checks_run, next_action.
+summary, findings, addressed_review_items, changed_files, risks, checks_run, restart_required, follow_up_required, next_action.
 
 Важно:
 - внутри JSON используй только ASCII-символы;
@@ -500,7 +766,7 @@ summary, findings, addressed_review_items, changed_files, risks, checks_run, nex
 
 Верни только итоговый JSON без пояснений, markdown и вводных фраз.
 Ключи JSON:
-summary, findings, changed_files, risks, checks_run, next_action.
+summary, findings, changed_files, risks, checks_run, restart_required, follow_up_required, next_action.
 
 Важно:
 - внутри JSON используй только ASCII-символы;
@@ -554,7 +820,53 @@ def build_main_bot_health_task() -> dict:
     task["revise_requested"] = False
     task["required_changes"] = []
     task["out_of_scope_requests"] = []
+    task["notified_events"] = {}
+    task.setdefault("inputs", {}).setdefault("notes", []).append(collector_preview_note())
+    task["inputs"]["notes"].append("Shared knowledge file: orchestrator_knowledge.json")
     return task
+
+
+def maybe_enqueue_followup_health_task(completed_task: dict) -> None:
+    payload = parse_task_codex_payload(completed_task) or {}
+    changed_files = sanitize_string_list(payload.get("changed_files"))
+    if not changed_files:
+        return
+    if str(completed_task.get("task_id") or "").startswith("TASK-003-MAIN-BOT-HEALTH"):
+        return
+
+    task = build_main_bot_health_task()
+    task["requested_by"] = "orchestrator"
+    task["inputs"]["notes"].append(
+        f"Follow-up health-check after fix task {completed_task.get('task_id')}; changed_files={', '.join(changed_files[:5])}"
+    )
+    try:
+        enqueue_task_object(task)
+    except ValueError:
+        return
+    append_knowledge_event(
+        "followup_health_enqueued",
+        task=task,
+        details={"source_task_id": completed_task.get("task_id"), "changed_files": changed_files},
+    )
+
+
+def has_pending_main_bot_health_task(queue: dict) -> bool:
+    active_task = queue.get("active_task")
+    if isinstance(active_task, dict) and str(active_task.get("task_id") or "").startswith("TASK-003-MAIN-BOT-HEALTH"):
+        return True
+    for item in queue.get("tasks", []):
+        if isinstance(item, dict) and str(item.get("task_id") or "").startswith("TASK-003-MAIN-BOT-HEALTH"):
+            return True
+    return False
+
+
+def main_bot_health_once() -> int:
+    maybe_alert_missing_collector_preview()
+    queue = load_json(QUEUE_FILE)
+    if not has_pending_main_bot_health_task(queue) and queue.get("active_task") is None:
+        task = build_main_bot_health_task()
+        enqueue_task_object(task)
+    return worker_once()
 
 
 def enqueue_task_object(task: dict) -> dict:
@@ -586,6 +898,7 @@ def enqueue_task_object(task: dict) -> dict:
         current_agent=None,
         last_error=None,
     )
+    append_knowledge_event("task_enqueued", task=task, details={"queue_tasks": len(queue.get("tasks", []))})
     return task
 
 
@@ -595,6 +908,7 @@ def mark_task_for_review(active_task: dict, queue: dict) -> int:
     active_task["revise_requested"] = False
     queue["active_task"] = active_task
     save_json(QUEUE_FILE, queue)
+    append_knowledge_event("task_waiting_claude_review", task=active_task)
 
     set_state(
         running=True,
@@ -676,6 +990,14 @@ def run_active_codex_pass(*, active_task: dict, queue: dict, agents: dict, reque
             queue["active_task"] = current_active
 
         save_json(QUEUE_FILE, queue)
+        append_knowledge_event(
+            "codex_rate_limited",
+            task=current_active,
+            details={
+                "rate_limit_hint": result.get("rate_limit_hint"),
+                "next_codex_retry_after": current_active["next_codex_retry_after"],
+            },
+        )
 
         set_state(
             running=False,
@@ -701,6 +1023,16 @@ def run_active_codex_pass(*, active_task: dict, queue: dict, agents: dict, reque
     current_active["status"] = "failed"
     queue["active_task"] = current_active
     save_json(QUEUE_FILE, queue)
+    append_knowledge_event(
+        "codex_failed",
+        task=current_active,
+        details={"returncode": result.get("returncode"), "error": result.get("error")},
+    )
+    maybe_notify_admin(
+        current_active,
+        "ESCALATION",
+        f"AUTOAGENT ESCALATION\n{current_active.get('task_id')}\nCodex завершился с ошибкой: {result.get('error') or result.get('returncode')}",
+    )
 
     set_state(
         running=False,
@@ -1299,6 +1631,20 @@ def review_once() -> int:
             active_task["next_claude_retry_after"] = retry_after_iso(CLAUDE_RETRY_MINUTES)
             queue["active_task"] = active_task
             save_json(QUEUE_FILE, queue)
+            append_knowledge_event(
+                "claude_rate_limited",
+                task=active_task,
+                details={
+                    "next_claude_retry_after": active_task["next_claude_retry_after"],
+                    "rate_limit_hint": result.get("rate_limit_hint"),
+                },
+            )
+            if not has_been_notified(active_task, "ESCALATION"):
+                maybe_notify_admin(
+                    active_task,
+                    "ESCALATION",
+                    f"AUTOAGENT ESCALATION\n{active_task.get('task_id')}\nClaude недоступен по лимиту. Следующая попытка: {active_task['next_claude_retry_after']}",
+                )
 
             set_state(
                 running=False,
@@ -1346,6 +1692,15 @@ def review_once() -> int:
             active_task["updated_at"] = now_iso()
             queue["active_task"] = active_task
             save_json(QUEUE_FILE, queue)
+            append_knowledge_event(
+                "claude_requested_revise",
+                task=active_task,
+                details={
+                    "review_round": active_task["review_round"],
+                    "required_changes": active_task["required_changes"],
+                    "out_of_scope_requests": active_task["out_of_scope_requests"],
+                },
+            )
 
             set_state(
                 running=False,
@@ -1365,6 +1720,11 @@ def review_once() -> int:
             }, ensure_ascii=False, indent=2))
             return 0
 
+        append_knowledge_event(
+            "claude_rejected",
+            task=active_task,
+            details={"verdict": verdict, "summary": review_payload.get("summary")},
+        )
         return complete_active_task("failed", "Claude review rejected or failed")
 
     except Exception as e:
@@ -1563,7 +1923,14 @@ def complete_active_task(final_status: str, note: str | None = None, force: bool
 
         queue["active_task"] = None
         queue["history"] = history
+        maybe_notify_admin(active_task)
         save_json(QUEUE_FILE, queue)
+        append_knowledge_event(
+            "task_completed",
+            task=active_task,
+            details={"note": note, "history_tasks": len(history)},
+        )
+        maybe_enqueue_followup_health_task(active_task)
 
         set_state(
             running=False,
@@ -1610,6 +1977,7 @@ def build_parser() -> argparse.ArgumentParser:
     complete_parser.add_argument("--note", default=None)
     complete_parser.add_argument("--force", action="store_true")
 
+    subparsers.add_parser("main-bot-health-once", help="Hourly main bot autoagent cycle")
     return parser
 
 
@@ -1628,6 +1996,9 @@ def main() -> int:
 
     if args.command == "worker-once":
         return worker_once()
+
+    if args.command == "main-bot-health-once":
+        return main_bot_health_once()
 
     if args.command == "review-once":
         return review_once()

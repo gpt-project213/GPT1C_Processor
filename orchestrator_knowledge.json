@@ -1,0 +1,20 @@
+{
+  "version": "1.0",
+  "updated_at": null,
+  "target_system": "main_bot",
+  "shared_context_files": [
+    "AGENTS.md",
+    "SESSION_CONTEXT.md",
+    "orchestrator_knowledge.json"
+  ],
+  "policies": {
+    "restart_main_bot": "manual_by_admin_after_notification",
+    "post_fix_verification": "orchestrator_followup_health_check",
+    "failure_reporting": "orchestrator_short_telegram_alert_to_admin",
+    "complex_review": "claude_required_with_bounded_single_revise",
+    "collector_preview_control": "health_check_tracks_today_preview_and_escalates_if_missing_after_deadline"
+  },
+  "events": [],
+  "open_incidents": [],
+  "last_task": null
+}
