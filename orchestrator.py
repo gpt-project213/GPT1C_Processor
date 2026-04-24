@@ -184,11 +184,35 @@ def summarize_task_for_admin(task: dict) -> tuple[str | None, str | None]:
     payload = parse_task_codex_payload(task) or {}
     changed_files = sanitize_string_list(payload.get("changed_files"))
     findings = payload.get("findings")
-    findings_count = len(findings) if isinstance(findings, list) else 0
-    summary = str(payload.get("summary") or task.get("completion_note") or "").strip()
+    completion_note = str(task.get("completion_note") or "").strip()
+    summary_payload = payload.get("summary")
+    summary_status = ""
+    summary = ""
+    if isinstance(summary_payload, dict):
+        summary_status = str(summary_payload.get("status") or "").strip().lower()
+        summary = str(summary_payload.get("assessment") or "").strip()
+    if not summary:
+        summary = str(summary_payload or completion_note or "").strip()
     summary = summary or "Без краткого summary"
     restart_required = payload.get("restart_required") is True
     task_id = str(task.get("task_id") or "").strip()
+    completion_note_lower = completion_note.lower()
+
+    if "stale active_task" in completion_note_lower or "manual close" in completion_note_lower:
+        return (None, None)
+
+    if summary_status in {"healthy", "healthy_no_confirmed_code_bug"} and not changed_files:
+        return (None, None)
+
+    findings_count = 0
+    if isinstance(findings, list):
+        for item in findings:
+            if not isinstance(item, dict):
+                continue
+            item_status = str(item.get("status") or "").strip().lower()
+            if item_status in {"healthy", "not_found", "ok"}:
+                continue
+            findings_count += 1
 
     if str(task.get("final_status") or task.get("status") or "").strip() == "failed":
         return ("ESCALATION", f"AUTOAGENT ESCALATION\n{task_id}\n{summary}")
