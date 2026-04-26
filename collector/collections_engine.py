@@ -4,7 +4,7 @@
 collections/collections_engine.py
 Главный оркестратор AI-Коллектора долгов.
 
-Версия: 1.4.3 (2026-04-22)
+Версия: 1.4.4 (2026-04-26)
 
 v1.4.3 (2026-04-22): тестовый режим `COLLECTOR_TEST_MODE=1` больше не пишет в
   боевой `logs/collector_YYYYMMDD.log`; это убирает ложные тревоги log_monitor
@@ -93,6 +93,7 @@ from collector.debt_monitor import (
 from collector.collections_db import (
     _DEBT_DATE_PREFIX,
     already_contacted_today,
+    get_client_state,
     get_debt_days_since_first_seen,
     get_pending_promises,
     load_state,
@@ -572,6 +573,12 @@ async def _process_single(
             return result
 
     # Генерируем текст сообщения (только когда реально нужен)
+    _cstate = get_client_state(name)
+    _prev_promise = (
+        _cstate.get("promise_date")
+        if _cstate.get("promise_kept") is False
+        else None
+    )
     text = generate_message(
         client_name=display_name,
         debt_amount=amount,
@@ -581,6 +588,7 @@ async def _process_single(
         manager_name=manager_name,
         msg_type=msg_type,
         report_date=report_date,
+        previous_promise=_prev_promise,
     )
     logger.info("[%s] level=%d days=%d | текст: %s...", name, level, days, text[:60])
 
@@ -985,6 +993,12 @@ async def _send_approved_client(client: Dict[str, Any]) -> Dict[str, Any]:
     msg_type = str(client.get("msg_type") or "")
     report_date = _client_report_date(client, days)
 
+    _cstate2 = get_client_state(name)
+    _prev_promise2 = (
+        _cstate2.get("promise_date")
+        if _cstate2.get("promise_kept") is False
+        else None
+    )
     text = generate_message(
         client_name=name,
         debt_amount=amount,
@@ -994,6 +1008,7 @@ async def _send_approved_client(client: Dict[str, Any]) -> Dict[str, Any]:
         manager_name=manager_name,
         msg_type=msg_type,
         report_date=report_date,
+        previous_promise=_prev_promise2,
     )
 
     if not send_whatsapp(phone, text):

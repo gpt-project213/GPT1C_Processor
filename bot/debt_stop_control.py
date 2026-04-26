@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-debt_stop_control.py · v1.0.5 (2026-04-22)
+debt_stop_control.py · v1.0.6 (2026-04-26)
 
 Контроль стоп-листа отгрузки — уведомление Саиды-бухгалтера.
 
@@ -59,10 +59,11 @@ TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 JSON_DIR   = ROOT / "reports" / "json"
 CONFIG_DIR = ROOT / "config"
 
-STATE_FILE      = ROOT / "reports" / "debt_stop_state.json"
-REGISTRY_FILE   = ROOT / "reports" / "debt_stop_registry.json"
-DELETION_QUEUE  = ROOT / "logs" / "deletion_queue.json"
-SAIDA_INTRO_FILE = ROOT / "reports" / "debt_stop_saida_intro_sent.json"
+STATE_FILE        = ROOT / "reports" / "debt_stop_state.json"
+REGISTRY_FILE     = ROOT / "reports" / "debt_stop_registry.json"
+DELETION_QUEUE    = ROOT / "logs" / "deletion_queue.json"
+SAIDA_INTRO_FILE  = ROOT / "reports" / "debt_stop_saida_intro_sent.json"
+PAYMENT_HOLDS_FILE = ROOT / "logs" / "saida_payment_holds.json"
 
 # Саида — бухгалтер-оператор
 SAIDA_CHAT_ID = int(os.getenv("SAIDA_CHAT_ID", "920236287"))
@@ -537,8 +538,8 @@ async def send_manager_requests(bot) -> None:
             f"🚫 <i>Нет, стоп</i> — передать руководителю\n\n"
             f"Если не ответишь с первого раза — бот будет напоминать каждые 30 минут "
             f"и усиливать тон.\n"
-            f"По каждому менеджеру ведётся статистика игнора; она видна руководителю "
-            f"и может повлиять на отношения с руководителем.\n"
+            f"Я вижу игнор. Каждый день без ответа фиксируется — "
+            f"руководитель получит рекомендацию задержать зарплату на столько же дней.\n"
             f"Если не ответишь до 19:00 — передаётся автоматически."
         )
         try:
@@ -552,9 +553,9 @@ async def send_manager_requests(bot) -> None:
                 f"{icon} <b>{c['client']}</b>\n"
                 f"Молчит: <b>{c['days_silence']}\u202fдн.</b>  |  "
                 f"Долг: <b>{_fmt(c['debt'])}</b>\n\n"
-                f"<i>Ответьте сразу: если запрос останется без ответа, "
-                f"напоминания будут повторяться каждые 30 минут. "
-                f"Статистика игнора видна руководителю.</i>"
+                f"<i>Я вижу игнор. Каждый день без ответа фиксируется — "
+                f"руководитель получит рекомендацию задержать зарплату на столько же дней. "
+                f"Напоминания идут каждые 30 минут.</i>"
             )
             kb = InlineKeyboardMarkup([[
                 InlineKeyboardButton("✅ Договорились", callback_data=f"dstop_yes|{cid}"),
@@ -717,8 +718,8 @@ async def send_manager_reminders(bot) -> None:
             f"Долг: <b>{_fmt(c['debt'])}</b>\n\n"
             f"{tone}\n"
             f"Пока вы не ответите, запрос остаётся активным.\n"
-            f"Ведётся статистика игнора; она видна руководителю и может повлиять "
-            f"на отношения с руководителем."
+            f"Я вижу игнор. Каждый день без ответа фиксируется — "
+            f"руководитель получит рекомендацию задержать зарплату на столько же дней."
         )
         try:
             msg = await bot.send_message(
@@ -948,6 +949,41 @@ async def send_saida_final(bot) -> None:
     except Exception as e:
         LOG.warning("Ошибка отправки футера Саиде: %s", e)
 
+    # Предупреждение об уведомлениях без ответа
+    try:
+        holds_raw = _load_json(PAYMENT_HOLDS_FILE, {})
+        now_dt = datetime.now(TZ)
+        unanswered = [
+            v for v in holds_raw.values()
+            if isinstance(v, dict) and v.get("status") == "pending_saida"
+        ]
+        if unanswered:
+            oldest_days = 0
+            for rec in unanswered:
+                try:
+                    created = datetime.fromisoformat(rec["created_at"])
+                    days = (now_dt - created).days
+                    if days > oldest_days:
+                        oldest_days = days
+                except Exception:
+                    pass
+            warn_text = (
+                f"🚨 <b>Саида, я вижу игнор.</b>\n\n"
+                f"У тебя {len(unanswered)} неотвеченных запроса на проверку оплаты.\n"
+                f"Самый старый — уже {oldest_days} дн. без ответа.\n\n"
+                f"Каждый день игнора фиксируется автоматически.\n"
+                f"Руководитель получит рекомендацию задержать твою зарплату "
+                f"на столько же дней, сколько ты тянешь с ответом.\n\n"
+                f"Это касается и остальных: игнор виден всем — последствия те же."
+            )
+            warn_msg = await bot.send_message(
+                chat_id=SAIDA_CHAT_ID, text=warn_text, parse_mode="HTML"
+            )
+            _schedule_delete(SAIDA_CHAT_ID, warn_msg.message_id, warn_msg.date.timestamp())
+            LOG.info("Саиде отправлено предупреждение: %d неотвеченных запросов, макс. %d дн.", len(unanswered), oldest_days)
+    except Exception as e:
+        LOG.warning("Ошибка отправки предупреждения Саиде: %s", e)
+
     state["saida_sent"] = True
     save_state(state)
     LOG.info("Саиде отправлен стоп-лист: %d позиций", total)
@@ -1069,9 +1105,9 @@ async def _send_manager_help(cid: str, chat_id: int, bot) -> None:
             "• Договорились — если есть понятная договорённость. Потом напишите дату, сумму и условия.\n"
             "• Нет, стоп — если договорённости нет или клиент тянет.\n\n"
             "Что будет если молчать:\n"
-            "Бот будет напоминать каждые 30 минут, затем передаст игнор руководителю. "
-            "Статистика игнора ведётся по каждому менеджеру и может повлиять на "
-            "отношения с руководителем."
+            "Бот будет напоминать каждые 30 минут, затем передаст руководителю. "
+            "Я вижу игнор. Каждый день без ответа фиксируется — "
+            "руководитель получит рекомендацию задержать зарплату на столько же дней."
         )
     try:
         await bot.send_message(

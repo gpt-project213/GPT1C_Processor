@@ -4,7 +4,7 @@
 bot/crm_clients.py
 Универсальная база клиентов Минбаракат (CRM).
 
-Версия: 1.0.5 (2026-04-22)
+Версия: 1.0.7 (2026-04-26)
 Изменения v1.0.5:
   - Fix S1: список менеджеров читается из config/managers.json (single source of truth).
     Раньше был хардкод ("Алена", "Ергали", "Магира", "Оксана"); fallback — тот же
@@ -58,6 +58,24 @@ PHONE_IN_NAME_RE = re.compile(
 # Фильтр служебных записей из sales JSON.
 # Клиенты и товары различаются по колонкам в sales_parser, а не по тексту имени.
 _METADATA_KEYWORDS = ("Дополнительные поля:", "Отборы:", "Сортировка:", "Группировка:")
+
+# Ключевые слова для автоматической пометки записей как вендоров/контрагентов.
+# Записи с этими подстроками — сотрудники, поставщики услуг, внутренние расчёты.
+# Они появляются в 1С как контрагенты, но не являются клиентами-покупателями.
+_VENDOR_NAME_KEYWORDS = (
+    "зарплат",    # зарплата, зарплату, зарплатный
+    "зар.плат",   # зар.плата
+    "зар плат",   # зар плата, зар плату, товар по зар плату
+    "з.п.",       # з.п. в любой позиции
+    "з/п",        # з/п в любой позиции
+    "по зп",       # тов по зп, товар по зп
+    "под зп",      # тов под зп, товар под зп
+    "тов по з",    # тов по зп, тов по з/п, тов по зарплате
+    "тов под з",   # тов под зп, тов под з/п, тов под зарплате
+    "товар по з",  # товар по зп, товар по зарплате
+    "товар под з", # товар под зп, товар под зарплате
+    "аванс сотр", # авансы сотрудникам
+)
 
 
 # ─────────────────────────────────────────────
@@ -350,8 +368,13 @@ def update_from_reports() -> Dict[str, List[str]]:
     today = _today()
     new_by_manager: Dict[str, List[str]] = {}
 
+    def _is_vendor_name(name: str) -> bool:
+        n = name.lower()
+        return any(kw in n for kw in _VENDOR_NAME_KEYWORDS)
+
     def _upsert(name: str, manager: str, source: str) -> bool:
-        """Добавляет/обновляет клиента. Возвращает True если клиент новый."""
+        """Добавляет/обновляет клиента. Возвращает True если клиент новый (не вендор)."""
+        is_vendor = _is_vendor_name(name)
         existing = clients_db.get(name)
         if existing is None:
             clients_db[name] = {
@@ -359,17 +382,22 @@ def update_from_reports() -> Dict[str, List[str]]:
                 "whatsapp": "",
                 "telegram_id": "",
                 "language": "ru",
-                "do_not_call": False,
+                "do_not_call": is_vendor,
+                "is_vendor": is_vendor,
                 "sources": [source],
                 "first_seen": today,
                 "last_seen": today,
             }
-            return True
+            return not is_vendor  # вендоры не считаются "новыми клиентами"
         else:
             # Обновляем last_seen и sources
             existing["last_seen"] = today
             if source not in existing.get("sources", []):
                 existing.setdefault("sources", []).append(source)
+            # Если запись ещё не помечена как вендор — проверяем по имени
+            if is_vendor and not existing.get("is_vendor"):
+                existing["is_vendor"] = True
+                existing["do_not_call"] = True
             # Обновляем менеджера если был не определён или пуст
             # Реальные имена ("Вадим", "Алена" и т.д.) не перезаписываем
             _UNOWNED = ("", "Не определён", "?", "-", "—")
@@ -405,12 +433,15 @@ def get_clients_without_phones(manager: str, limit: int = 5) -> List[str]:
     """
     Возвращает до `limit` имён клиентов данного менеджера без телефона.
     Приоритет: сначала клиенты из дебиторки.
+    Вендоры/контрагенты (is_vendor=True) пропускаются.
     """
     data = load_clients()
     clients_db = data.get("clients", {})
     no_phone = []
     for name, info in clients_db.items():
         if not isinstance(info, dict):
+            continue
+        if info.get("is_vendor"):
             continue
         if info.get("manager", "").lower() != manager.lower():
             continue
