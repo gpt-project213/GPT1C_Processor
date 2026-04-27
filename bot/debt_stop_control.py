@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-debt_stop_control.py · v1.0.6 (2026-04-26)
+debt_stop_control.py · v1.0.7 (2026-04-27)
 
 Контроль стоп-листа отгрузки — уведомление Саиды-бухгалтера.
 
@@ -78,7 +78,9 @@ AUTO_STOP_MIN = 15   # 15+ дней: авто-стоп даже для одоб�
 
 # Минимальная сумма долга — игнорировать мелочь
 MIN_DEBT = 50_000.0
-FULL_PAYMENT_THRESHOLD = float(os.getenv("SHIPMENT_FULL_PAYMENT_THRESHOLD", "1000"))
+STOP_PAID_THRESHOLD = float(os.getenv("STOP_PAID_THRESHOLD", "5000"))
+
+SAIDA_KNOWN_FILE = ROOT / "logs" / "debt_stop_saida_known.json"
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -333,7 +335,7 @@ async def monitor_exceptions(bot) -> None:
         # ── Условная отгрузка: долг оплачен → авто-снятие ────────────
         elif status in ("conditional", "allow_after_payment"):
             current = _get_client_current_state(client_name)
-            if current and current["debt"] <= FULL_PAYMENT_THRESHOLD:
+            if current and current["debt"] <= STOP_PAID_THRESHOLD:
                 limit = float(rec.get("shipment_limit") or 0)
                 rec["status"] = "cleared_limited" if limit > 0 else "cleared"
                 rec["cleared_at"] = today
@@ -360,55 +362,26 @@ async def monitor_exceptions(bot) -> None:
                             LOG.warning("Ошибка уведомления conditional-cleared %s: %s",
                                         client_name, e)
 
+        # ── Лимит cleared_limited: срок истёк → переводим на рассмотрение ──
+        elif status == "cleared_limited":
+            limit_expires = rec.get("limit_expires")
+            if limit_expires and today >= limit_expires:
+                LOG.info("Лимит отгрузки истёк: %s (expires %s)", client_name, limit_expires)
+                rec["status"] = "pending_clearance_mgr"
+                rec.pop("limit_expires", None)
+                paid_in_full_today.append(client_name)
+                await _notify_manager_clearance_proposal(client_name, rec, bot)
+
         # ── Проверка полной оплаты (авто-стоп или утверждённый стоп) ──
         elif status in ("auto_stopped", "stopped", "block_until_payment"):
             current = _get_client_current_state(client_name)
             if not current:
                 continue
-            if current["debt"] <= FULL_PAYMENT_THRESHOLD:
-                rec["status"] = "pending_clearance"
+            if current["debt"] <= STOP_PAID_THRESHOLD:
+                rec["status"] = "pending_clearance_mgr"
                 paid_in_full_today.append(client_name)
-                LOG.info("Полная оплата: %s", client_name)
-
-                kb = InlineKeyboardMarkup([
-                    [
-                        InlineKeyboardButton(
-                            "✅ Разрешить сейчас",
-                            callback_data=f"dstop_clear|{client_name[:26]}"
-                        ),
-                        InlineKeyboardButton(
-                            "📉 Разрешить с лимитом",
-                            callback_data=f"dstop_limit_clear|{client_name[:26]}"
-                        ),
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "🔒 Запретить до оплаты",
-                            callback_data=f"dstop_keep_until_paid|{client_name[:26]}"
-                        ),
-                        InlineKeyboardButton(
-                            "🚫 Запретить",
-                            callback_data=f"dstop_keep|{client_name[:26]}"
-                        ),
-                    ],
-                ])
-                if status == "auto_stopped":
-                    note = f"⚠️ Ранее нарушил финансовую дисциплину ({rec.get('days_at_stop', '?')} дн. молчания).\n"
-                else:
-                    note = f"Был на стопе {rec.get('days_at_stop', '?')} дн.\n"
-                msg = (
-                    f"💰 <b>{client_name}</b> — полностью рассчитался.\n"
-                    f"Остаток в 1С: <b>{_fmt(current['debt'])}</b> "
-                    f"(полная оплата считается до {_fmt(FULL_PAYMENT_THRESHOLD)}).\n"
-                    f"{note}"
-                    f"Выбери решение по отгрузке:"
-                )
-                if admin_id:
-                    try:
-                        await bot.send_message(chat_id=admin_id, text=msg,
-                                               parse_mode="HTML", reply_markup=kb)
-                    except Exception as e:
-                        LOG.warning("Ошибка уведомления о полной оплате %s: %s", client_name, e)
+                LOG.info("Оплата обнаружена: %s → уведомление менеджеру", client_name)
+                await _notify_manager_clearance_proposal(client_name, rec, bot)
 
     save_registry(registry)
 
@@ -440,9 +413,13 @@ def _build_candidates() -> Dict[str, Any]:
     # Клиенты уже под контролем реестра — не дублировать
     already_controlled = {
         name for name, rec in registry.items()
-        if rec.get("status") in ("exception", "auto_stopped", "pending_clearance",
-                                  "stopped", "conditional", "allow_after_payment",
-                                  "block_until_payment", "awaiting_clearance_limit")
+        if rec.get("status") in (
+            "exception", "auto_stopped", "stopped", "conditional",
+            "allow_after_payment", "block_until_payment",
+            "pending_clearance", "pending_clearance_mgr", "pending_clearance_admin",
+            "awaiting_clearance_limit", "awaiting_mgr_limit_input", "awaiting_admin_limit_override",
+            "prepayment_only", "blacklisted", "cleared_limited",
+        )
     }
 
     # Нарушители дисциплины (были авто-остановлены ранее, но уже cleared)
@@ -837,88 +814,119 @@ async def _send_saida_intro(bot) -> None:
         LOG.warning("Ошибка отправки инструкции Саиде: %s", e)
 
 
+def _load_saida_known() -> set:
+    data = _load_json(SAIDA_KNOWN_FILE, {"known": []})
+    return set(data.get("known", []))
+
+
+def _save_saida_known(known: set) -> None:
+    _save_json(SAIDA_KNOWN_FILE, {"known": list(known)})
+
+
 async def send_saida_final(bot) -> None:
-    """22:00 — отправить Саиде утверждённый стоп-лист."""
+    """22:00 — отправить Саиде ДЕЛЬТУ стоп-листа (только новые клиенты)."""
     state = load_state()
     if state.get("saida_sent"):
         return
 
-    # Первый запуск — отправить инструкцию перед списком
     await _send_saida_intro(bot)
 
     candidates = state.get("candidates", {})
     registry   = load_registry()
     today_str  = datetime.now(TZ).strftime("%d.%m.%Y")
+    known      = _load_saida_known()
 
-    # Из суточного состояния: утверждённые руководителем
-    approved_daily = [
+    stop_statuses = ("auto_stopped", "stopped", "allow_after_payment",
+                     "block_until_payment", "prepayment_only", "blacklisted")
+
+    # Из суточного состояния: утверждённые руководителем, только новые
+    approved_daily_new = [
         (cid, c) for cid, c in candidates.items()
-        if c.get("admin_approved") is True
+        if c.get("admin_approved") is True and c.get("client") not in known
     ]
 
-    # Из реестра: авто-стопы и утверждённые стопы (включая сегодняшние)
-    auto_stopped = [
+    # Из реестра: авто-стопы и стопы — только НОВЫЕ (Саида ещё не знает)
+    auto_stopped_new = [
         (name, rec) for name, rec in registry.items()
-        if rec.get("status") in ("auto_stopped", "stopped", "allow_after_payment", "block_until_payment")
+        if rec.get("status") in stop_statuses and name not in known
     ]
 
-    total = len(approved_daily) + len(auto_stopped)
+    total_on_stop = sum(1 for r in registry.values() if r.get("status") in stop_statuses)
+    total_new     = len(approved_daily_new) + len(auto_stopped_new)
+    already_known_count = total_on_stop - len(auto_stopped_new)
 
-    if total == 0:
+    kb_full = InlineKeyboardMarkup([[
+        InlineKeyboardButton("📋 Свежий стоп-лист", callback_data="dstop_saida_stoplist")
+    ]])
+
+    if total_new == 0:
+        known_info = f"\nВ стоп-листе: {already_known_count} клиентов." if already_known_count > 0 else "\nВсе клиенты в порядке."
         try:
             msg = await bot.send_message(
                 chat_id=SAIDA_CHAT_ID,
-                text=f"✅ <b>Стоп-лист на {today_str} пуст</b>\nВсе клиенты в порядке.",
-                parse_mode="HTML"
+                text=f"✅ <b>Новых клиентов в стоп-листе нет — {today_str}</b>{known_info}",
+                parse_mode="HTML",
+                reply_markup=kb_full,
             )
             _schedule_delete(SAIDA_CHAT_ID, msg.message_id, msg.date.timestamp())
         except Exception as e:
-            LOG.warning("Ошибка отправки Саиде (пусто): %s", e)
+            LOG.warning("Ошибка отправки Саиде (нет новых): %s", e)
         state["saida_sent"] = True
         save_state(state)
         return
 
-    header = f"🚫 <b>Не отгружать — {today_str}</b>  ({total} позиций)\n"
+    header_parts = [f"🚫 <b>Новые в стоп-листе — {today_str}</b>  ({total_new} новых)"]
+    if already_known_count > 0:
+        header_parts.append(f"<i>Уже в списке (без изменений): {already_known_count}</i>")
     try:
         hdr_msg = await bot.send_message(
-            chat_id=SAIDA_CHAT_ID, text=header, parse_mode="HTML"
+            chat_id=SAIDA_CHAT_ID,
+            text="\n".join(header_parts),
+            parse_mode="HTML",
+            reply_markup=kb_full,
         )
         _schedule_delete(SAIDA_CHAT_ID, hdr_msg.message_id, hdr_msg.date.timestamp())
     except Exception as e:
         LOG.warning("Ошибка отправки заголовка Саиде: %s", e)
 
-    # Каждый клиент — отдельное сообщение с кнопкой «Оплата получена»
-    all_items: List[Tuple[str, int, str, str, str, float]] = []  # name, days, debt_fmt, manager, level, limit
-    for name, rec in sorted(auto_stopped, key=lambda x: x[1].get("days_at_stop", 0), reverse=True):
+    all_items: List[Tuple[str, int, str, str, str, float]] = []
+    for name, rec in sorted(auto_stopped_new, key=lambda x: x[1].get("days_at_stop", 0), reverse=True):
         status = rec.get("status", "auto_stopped")
-        level = status if status in ("allow_after_payment", "block_until_payment") else "auto"
-        all_items.append((
-            name, rec.get("days_at_stop", 0), "?", rec.get("manager", ""), level,
-            float(rec.get("shipment_limit") or 0),
-        ))
-    for cid, c in sorted(approved_daily, key=lambda x: -x[1]["days_silence"]):
+        if status == "blacklisted":
+            level = "blacklisted"
+        elif status == "prepayment_only":
+            level = "prepayment_only"
+        elif status in ("allow_after_payment",):
+            level = "allow_after_payment"
+        elif status == "block_until_payment":
+            level = "block_until_payment"
+        else:
+            level = "auto"
+        all_items.append((name, rec.get("days_at_stop", 0), "?", rec.get("manager", ""), level,
+                          float(rec.get("shipment_limit") or 0)))
+        known.add(name)
+
+    for cid, c in sorted(approved_daily_new, key=lambda x: -x[1]["days_silence"]):
         all_items.append((c["client"], c["days_silence"], _fmt(c["debt"]), c["manager"], c["level"], 0.0))
+        known.add(c["client"])
 
     for item in all_items:
         name, days, debt_str, manager, level, limit = item
-        if level == "auto":
-            icon = "🚫"
-            note = "нарушение фин. дисциплины"
+        if level == "blacklisted":
+            icon, note = "⛔", "ЧЁРНЫЙ СПИСОК — не отгружать"
+        elif level == "prepayment_only":
+            icon, note = "💳", "только 100% предоплата"
+        elif level == "auto":
+            icon, note = "🚫", "нарушение фин. дисциплины"
         elif level == "allow_after_payment":
             icon = "⏳"
-            if limit > 0:
-                note = f"после полной оплаты, лимит новой отгрузки {_fmt(limit)}"
-            else:
-                note = f"после полной оплаты (до {_fmt(FULL_PAYMENT_THRESHOLD)})"
+            note = (f"после полной оплаты, лимит {_fmt(limit)}" if limit > 0 else "после полной оплаты")
         elif level == "block_until_payment":
-            icon = "🔒"
-            note = f"запрет до полной оплаты (до {_fmt(FULL_PAYMENT_THRESHOLD)})"
+            icon, note = "🔒", "запрет до полной оплаты"
         elif level == "10+":
-            icon = "🔴"
-            note = f"долг: {debt_str}"
+            icon, note = "🔴", f"долг: {debt_str}"
         else:
-            icon = "⚡"
-            note = f"долг: {debt_str}"
+            icon, note = "⚡", f"долг: {debt_str}"
 
         text = (
             f"{icon} <b>{name}</b>\n"
@@ -926,25 +934,19 @@ async def send_saida_final(bot) -> None:
             f"<i>Не отгружать до разрешения руководителя</i>"
         )
         kb = InlineKeyboardMarkup([[
-            InlineKeyboardButton(
-                "💰 Оплата получена",
-                callback_data=f"dstop_paid|{name[:26]}"
-            )
+            InlineKeyboardButton("💰 Оплата получена", callback_data=f"dstop_paid|{name[:26]}")
         ]])
         try:
             item_msg = await bot.send_message(
-                chat_id=SAIDA_CHAT_ID, text=text,
-                parse_mode="HTML", reply_markup=kb
+                chat_id=SAIDA_CHAT_ID, text=text, parse_mode="HTML", reply_markup=kb
             )
             _schedule_delete(SAIDA_CHAT_ID, item_msg.message_id, item_msg.date.timestamp())
         except Exception as e:
             LOG.warning("Ошибка отправки позиции '%s' Саиде: %s", name, e)
 
-    footer = "<i>Список обновляется каждый день. Клиент исчезнет сам после оплаты.</i>"
+    footer = "<i>Нажми «📋 Свежий стоп-лист» для полного актуального списка.</i>"
     try:
-        ftr_msg = await bot.send_message(
-            chat_id=SAIDA_CHAT_ID, text=footer, parse_mode="HTML"
-        )
+        ftr_msg = await bot.send_message(chat_id=SAIDA_CHAT_ID, text=footer, parse_mode="HTML")
         _schedule_delete(SAIDA_CHAT_ID, ftr_msg.message_id, ftr_msg.date.timestamp())
     except Exception as e:
         LOG.warning("Ошибка отправки футера Саиде: %s", e)
@@ -952,7 +954,7 @@ async def send_saida_final(bot) -> None:
     # Предупреждение об уведомлениях без ответа
     try:
         holds_raw = _load_json(PAYMENT_HOLDS_FILE, {})
-        now_dt = datetime.now(TZ)
+        now_dt    = datetime.now(TZ)
         unanswered = [
             v for v in holds_raw.values()
             if isinstance(v, dict) and v.get("status") == "pending_saida"
@@ -962,9 +964,9 @@ async def send_saida_final(bot) -> None:
             for rec in unanswered:
                 try:
                     created = datetime.fromisoformat(rec["created_at"])
-                    days = (now_dt - created).days
-                    if days > oldest_days:
-                        oldest_days = days
+                    d = (now_dt - created).days
+                    if d > oldest_days:
+                        oldest_days = d
                 except Exception:
                     pass
             warn_text = (
@@ -976,17 +978,17 @@ async def send_saida_final(bot) -> None:
                 f"на столько же дней, сколько ты тянешь с ответом.\n\n"
                 f"Это касается и остальных: игнор виден всем — последствия те же."
             )
-            warn_msg = await bot.send_message(
-                chat_id=SAIDA_CHAT_ID, text=warn_text, parse_mode="HTML"
-            )
+            warn_msg = await bot.send_message(chat_id=SAIDA_CHAT_ID, text=warn_text, parse_mode="HTML")
             _schedule_delete(SAIDA_CHAT_ID, warn_msg.message_id, warn_msg.date.timestamp())
-            LOG.info("Саиде отправлено предупреждение: %d неотвеченных запросов, макс. %d дн.", len(unanswered), oldest_days)
+            LOG.info("Саиде предупреждение: %d неотвеченных запросов, макс. %d дн.",
+                     len(unanswered), oldest_days)
     except Exception as e:
-        LOG.warning("Ошибка отправки предупреждения Саиде: %s", e)
+        LOG.warning("Ошибка предупреждения Саиде: %s", e)
 
+    _save_saida_known(known)
     state["saida_sent"] = True
     save_state(state)
-    LOG.info("Саиде отправлен стоп-лист: %d позиций", total)
+    LOG.info("Саиде дельта стоп-листа: %d новых позиций", total_new)
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -1066,6 +1068,35 @@ async def handle_dstop_callback(data: str, chat_id: int, bot) -> Optional[str]:
     if data.startswith("dstop_admin_allow|"):
         cid = data.split("|", 1)[1]
         return await _handle_admin_allow_after_saida(cid, chat_id, bot)
+
+    # ── Новая цепочка: менеджер предлагает → руководитель утверждает ──
+    if (
+        data.startswith("dstop_mgr_cl_clear|")
+        or data.startswith("dstop_mgr_cl_prepay|")
+        or data.startswith("dstop_mgr_cl_limit|")
+        or data.startswith("dstop_mgr_cl_keep|")
+    ):
+        key    = data.split("|", 1)[1]
+        action = data.split("dstop_mgr_cl_")[1].split("|")[0]
+        return await _handle_mgr_clearance_proposal(key, action, chat_id, bot)
+
+    if data.startswith("dstop_adm_cl_confirm|"):
+        key = data.split("|", 1)[1]
+        return await _handle_admin_clearance_confirm(key, chat_id, bot)
+
+    if (
+        data.startswith("dstop_adm_cl_clear|")
+        or data.startswith("dstop_adm_cl_prepay|")
+        or data.startswith("dstop_adm_cl_blacklist|")
+        or data.startswith("dstop_adm_cl_limit|")
+    ):
+        key    = data.split("|", 1)[1]
+        action = data.split("dstop_adm_cl_")[1].split("|")[0]
+        return await _handle_admin_clearance_override(key, action, chat_id, bot)
+
+    if data == "dstop_saida_stoplist":
+        await send_saida_full_stoplist(bot)
+        return ""
 
     return None
 
@@ -1187,8 +1218,148 @@ async def handle_dstop_detail_message(chat_id: int, text: str, bot) -> bool:
     candidates = state.get("candidates", {})
 
     admin_id = _get_admin_chat_id()
+    registry = load_registry()
+
+    # ── Ввод лимита менеджером (шаги: сумма → дни) ──
+    for client_name, rec in registry.items():
+        if rec.get("status") != "awaiting_mgr_limit_input":
+            continue
+        if int(rec.get("manager_chat_id") or 0) != int(chat_id):
+            continue
+        proposal = rec.setdefault("clearance_proposal", {})
+        step = proposal.get("step", "amount")
+
+        if step == "amount":
+            amount = _parse_amount(text)
+            if amount is None:
+                try:
+                    await bot.send_message(
+                        chat_id=chat_id,
+                        text="Не понял сумму. Введи число, например: <code>100000</code>",
+                        parse_mode="HTML",
+                    )
+                except Exception:
+                    pass
+                return True
+            proposal["limit_amount"] = amount
+            proposal["step"] = "days"
+            rec["clearance_proposal"] = proposal
+            save_registry(registry)
+            try:
+                await bot.send_message(
+                    chat_id=chat_id,
+                    text=(
+                        f"Лимит <b>{_fmt(amount)}</b> записан.\n\n"
+                        f"Теперь введи срок (дней), на сколько действует лимит.\n"
+                        f"Например: <code>7</code>"
+                    ),
+                    parse_mode="HTML",
+                )
+            except Exception:
+                pass
+            return True
+
+        if step == "days":
+            days_raw = re.sub(r"[^0-9]", "", text.strip())
+            if not days_raw:
+                try:
+                    await bot.send_message(
+                        chat_id=chat_id,
+                        text="Не понял срок. Введи число дней, например: <code>7</code>",
+                        parse_mode="HTML",
+                    )
+                except Exception:
+                    pass
+                return True
+            proposal["limit_days"] = int(days_raw)
+            proposal["step"] = None
+            rec["status"] = "pending_clearance_admin"
+            rec["clearance_proposal"] = proposal
+            save_registry(registry)
+            await _forward_mgr_proposal_to_admin(client_name, rec, bot)
+            try:
+                await bot.send_message(
+                    chat_id=chat_id,
+                    text=(
+                        f"✅ Предложение передано руководителю:\n"
+                        f"📉 Лимит {_fmt(proposal['limit_amount'])} на {proposal['limit_days']} дн."
+                    ),
+                    parse_mode="HTML",
+                )
+            except Exception:
+                pass
+            return True
+
+    # ── Ввод лимита руководителем (override, шаги: сумма → дни) ──
+    for client_name, rec in registry.items():
+        if rec.get("status") != "awaiting_admin_limit_override":
+            continue
+        if chat_id != admin_id:
+            continue
+        proposal = rec.setdefault("clearance_proposal", {})
+        step = proposal.get("override_step", "amount")
+
+        if step == "amount":
+            amount = _parse_amount(text)
+            if amount is None:
+                try:
+                    await bot.send_message(
+                        chat_id=chat_id,
+                        text="Не понял сумму. Введи число, например: <code>100000</code>",
+                        parse_mode="HTML",
+                    )
+                except Exception:
+                    pass
+                return True
+            proposal["limit_amount"] = amount
+            proposal["override_step"] = "days"
+            rec["clearance_proposal"] = proposal
+            save_registry(registry)
+            try:
+                await bot.send_message(
+                    chat_id=chat_id,
+                    text=(
+                        f"Лимит <b>{_fmt(amount)}</b> записан.\n\n"
+                        f"Теперь введи срок (дней).\nНапример: <code>7</code>"
+                    ),
+                    parse_mode="HTML",
+                )
+            except Exception:
+                pass
+            return True
+
+        if step == "days":
+            days_raw = re.sub(r"[^0-9]", "", text.strip())
+            if not days_raw:
+                try:
+                    await bot.send_message(
+                        chat_id=chat_id,
+                        text="Не понял срок. Введи число дней, например: <code>7</code>",
+                        parse_mode="HTML",
+                    )
+                except Exception:
+                    pass
+                return True
+            proposal["limit_days"] = int(days_raw)
+            proposal["override_step"] = None
+            save_registry(registry)
+            limit = float(proposal.get("limit_amount") or 0)
+            days  = int(days_raw)
+            await _apply_final_clearance(client_name, rec, "limit", limit, days, bot)
+            try:
+                await bot.send_message(
+                    chat_id=chat_id,
+                    text=(
+                        f"✅ Лимит применён — <b>{client_name}</b>\n"
+                        f"📉 {_fmt(limit)} на {days} дн. Менеджер и Саида уведомлены."
+                    ),
+                    parse_mode="HTML",
+                )
+            except Exception:
+                pass
+            return True
+
     if chat_id == admin_id:
-        registry = load_registry()
         for client_name, rec in registry.items():
             if rec.get("status") == "awaiting_clearance_limit":
                 amount = _parse_amount(text)
@@ -1309,14 +1480,14 @@ async def _handle_admin_response(cid: str, action: str, chat_id: int, bot) -> st
             "ok": "Не отгружать до отдельного разрешения руководителя.",
             "block_until": (
                 f"Не отгружать до полной оплаты в 1С "
-                f"(остаток до {_fmt(FULL_PAYMENT_THRESHOLD)}). После оплаты руководитель проверит решение."
+                f"(остаток до {_fmt(STOP_PAID_THRESHOLD)}). После оплаты руководитель проверит решение."
             ),
         }[action]
         manager_action_line = {
             "ok": "Отгрузка запрещена.",
             "block_until": (
                 f"Отгрузка запрещена до полной оплаты в 1С "
-                f"(остаток до {_fmt(FULL_PAYMENT_THRESHOLD)})."
+                f"(остаток до {_fmt(STOP_PAID_THRESHOLD)})."
             ),
         }[action]
         # Уведомить Саиду в реальном времени
@@ -1409,7 +1580,7 @@ async def _handle_admin_limit_after_request(cid: str, chat_id: int, bot) -> str:
         f"📉 <b>{c['client']}</b>\n\n"
         f"Введите лимит новой отгрузки после полной оплаты.\n"
         f"Например: <code>1000000</code>\n\n"
-        f"Старый долг должен быть закрыт в 1С до {_fmt(FULL_PAYMENT_THRESHOLD)}. "
+        f"Старый долг должен быть закрыт в 1С до {_fmt(STOP_PAID_THRESHOLD)}. "
         f"После этого Саида получит разрешение отгружать только в пределах указанного лимита."
     )
 
@@ -1445,7 +1616,7 @@ async def _register_allow_after_payment_with_limit(
         f"⏳ <b>Отгрузка после полной оплаты с лимитом</b>\n"
         f"<b>{client}</b>\n\n"
         f"Сейчас не отгружать. Старый долг должен быть закрыт в 1С "
-        f"(остаток до {_fmt(FULL_PAYMENT_THRESHOLD)}).\n\n"
+        f"(остаток до {_fmt(STOP_PAID_THRESHOLD)}).\n\n"
         f"После закрытия старого долга новая отгрузка разрешена "
         f"только в пределах <b>{_fmt(limit)}</b>.\n"
         f"Больше лимита не отгружать без отдельного разрешения руководителя."
@@ -1842,3 +2013,379 @@ async def _handle_admin_allow_after_saida(cid: str, chat_id: int, bot) -> str:
         LOG.warning("Ошибка уведомления Саиды о разрешении %s: %s", c["client"], e)
 
     return f"✅ Разрешено — <b>{c['client']}</b>. Менеджер и Саида уведомлены."
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Новая цепочка снятия стопа: менеджер → руководитель → финал
+# ══════════════════════════════════════════════════════════════════════
+
+async def _notify_manager_clearance_proposal(
+    client_name: str, rec: Dict[str, Any], bot
+) -> None:
+    """Уведомляет менеджера о полной оплате и запрашивает его предложение."""
+    mgr_id = rec.get("manager_chat_id") or _load_managers().get(rec.get("manager", ""), 0)
+    if not mgr_id:
+        await _notify_admin_clearance_fallback(client_name, rec, bot)
+        return
+
+    current = _get_client_current_state(client_name)
+    debt_line = f"Остаток в 1С: <b>{_fmt(current['debt'])}</b>" if current else ""
+    days_on_stop = rec.get("days_at_stop", "?")
+    key = client_name[:26]
+
+    kb = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("✅ Разрешить полностью", callback_data=f"dstop_mgr_cl_clear|{key}"),
+            InlineKeyboardButton("🔒 Только предоплата",   callback_data=f"dstop_mgr_cl_prepay|{key}"),
+        ],
+        [
+            InlineKeyboardButton("📉 С лимитом",          callback_data=f"dstop_mgr_cl_limit|{key}"),
+            InlineKeyboardButton("🚫 Держать на стопе",   callback_data=f"dstop_mgr_cl_keep|{key}"),
+        ],
+    ])
+    msg = (
+        f"💰 <b>{client_name}</b> — клиент рассчитался.\n"
+        f"{debt_line}\n"
+        f"Был на стопе {days_on_stop}\u202fдн.\n\n"
+        f"Твоё предложение руководителю по дальнейшей работе с клиентом:"
+    )
+    try:
+        await bot.send_message(chat_id=mgr_id, text=msg, parse_mode="HTML", reply_markup=kb)
+    except Exception as e:
+        LOG.warning("Ошибка уведомления менеджера о снятии стопа %s: %s", client_name, e)
+        await _notify_admin_clearance_fallback(client_name, rec, bot)
+
+
+async def _notify_admin_clearance_fallback(
+    client_name: str, rec: Dict[str, Any], bot
+) -> None:
+    """Уведомляет руководителя напрямую если нет менеджера."""
+    admin_id = _get_admin_chat_id()
+    if not admin_id:
+        return
+    current = _get_client_current_state(client_name)
+    debt_line = f"Остаток: <b>{_fmt(current['debt'])}</b>" if current else ""
+    key = client_name[:26]
+    kb = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("✅ Разрешить",       callback_data=f"dstop_adm_cl_clear|{key}"),
+            InlineKeyboardButton("🔒 Предоплата",      callback_data=f"dstop_adm_cl_prepay|{key}"),
+        ],
+        [
+            InlineKeyboardButton("📉 С лимитом",      callback_data=f"dstop_adm_cl_limit|{key}"),
+            InlineKeyboardButton("⛔ Чёрный список",  callback_data=f"dstop_adm_cl_blacklist|{key}"),
+        ],
+    ])
+    msg = (
+        f"💰 <b>{client_name}</b> — оплата в 1С.\n{debt_line}\n"
+        f"Менеджер не назначен. Выберите решение:"
+    )
+    try:
+        await bot.send_message(chat_id=admin_id, text=msg, parse_mode="HTML", reply_markup=kb)
+    except Exception as e:
+        LOG.warning("Ошибка уведомления руководителя (fallback) %s: %s", client_name, e)
+
+
+async def _handle_mgr_clearance_proposal(
+    client_key: str, action: str, chat_id: int, bot
+) -> str:
+    """Менеджер выбрал своё предложение руководителю по снятию стопа."""
+    registry = load_registry()
+    matched_key = next(
+        (n for n in registry if n[:26] == client_key[:26] or n.startswith(client_key)), None
+    )
+    if not matched_key:
+        return "❓ Клиент не найден в реестре."
+    rec = registry[matched_key]
+    if rec.get("status") != "pending_clearance_mgr":
+        return "ℹ️ Статус уже изменён."
+    if int(rec.get("manager_chat_id") or 0) != int(chat_id):
+        return "⛔ Это решение не для вас."
+
+    if action == "limit":
+        rec["status"] = "awaiting_mgr_limit_input"
+        rec["clearance_proposal"] = {"step": "amount", "action": "limit",
+                                     "limit_amount": None, "limit_days": None}
+        save_registry(registry)
+        return (
+            f"📉 <b>{matched_key}</b>\n\n"
+            f"Введи лимит одной отгрузки (₸).\n"
+            f"Например: <code>100000</code>"
+        )
+
+    rec["status"] = "pending_clearance_admin"
+    rec["clearance_proposal"] = {"action": action, "limit_amount": None, "limit_days": None}
+    save_registry(registry)
+
+    await _forward_mgr_proposal_to_admin(matched_key, rec, bot)
+
+    labels = {"clear": "✅ Разрешить полностью", "prepay": "🔒 Только предоплата",
+               "keep": "🚫 Держать на стопе"}
+    return f"Предложение «{labels.get(action, action)}» передано руководителю."
+
+
+async def _forward_mgr_proposal_to_admin(
+    client_name: str, rec: Dict[str, Any], bot
+) -> None:
+    """Пересылает предложение менеджера руководителю с кнопками подтверждения/изменения."""
+    admin_id = _get_admin_chat_id()
+    if not admin_id:
+        return
+
+    proposal = rec.get("clearance_proposal", {})
+    action   = proposal.get("action", "?")
+    manager  = rec.get("manager", "?")
+    key      = client_name[:26]
+
+    limit_amount = float(proposal.get("limit_amount") or 0)
+    limit_days   = proposal.get("limit_days", "?")
+    action_labels = {
+        "clear":  "✅ Разрешить полностью",
+        "prepay": "🔒 Только предоплата",
+        "keep":   "🚫 Держать на стопе",
+        "limit":  f"📉 С лимитом {_fmt(limit_amount)} на {limit_days} дн.",
+    }
+
+    current = _get_client_current_state(client_name)
+    debt_line = f"Остаток: <b>{_fmt(current['debt'])}</b>\n" if current else ""
+
+    msg = (
+        f"💰 <b>{client_name}</b> — оплата в 1С.\n"
+        f"{debt_line}"
+        f"Менеджер <b>{manager}</b> предлагает: <b>{action_labels.get(action, action)}</b>\n\n"
+        f"Утвердить или изменить:"
+    )
+    kb = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("✅ Согласен",       callback_data=f"dstop_adm_cl_confirm|{key}"),
+            InlineKeyboardButton("✅ Разрешить",      callback_data=f"dstop_adm_cl_clear|{key}"),
+        ],
+        [
+            InlineKeyboardButton("📉 С лимитом",     callback_data=f"dstop_adm_cl_limit|{key}"),
+            InlineKeyboardButton("🔒 Предоплата",    callback_data=f"dstop_adm_cl_prepay|{key}"),
+        ],
+        [
+            InlineKeyboardButton("⛔ Чёрный список", callback_data=f"dstop_adm_cl_blacklist|{key}"),
+        ],
+    ])
+    try:
+        await bot.send_message(chat_id=admin_id, text=msg, parse_mode="HTML", reply_markup=kb)
+    except Exception as e:
+        LOG.warning("Ошибка отправки предложения руководителю %s: %s", client_name, e)
+
+
+async def _handle_admin_clearance_confirm(client_key: str, chat_id: int, bot) -> str:
+    """Руководитель согласился с предложением менеджера."""
+    if chat_id != _get_admin_chat_id():
+        return "⛔ Только для руководителя."
+    registry = load_registry()
+    matched_key = next(
+        (n for n in registry if n[:26] == client_key[:26] or n.startswith(client_key)), None
+    )
+    if not matched_key:
+        return "❓ Клиент не найден."
+    rec = registry[matched_key]
+    if rec.get("status") != "pending_clearance_admin":
+        return "ℹ️ Статус уже изменён."
+
+    proposal = rec.get("clearance_proposal", {})
+    action   = proposal.get("action", "clear")
+    limit    = float(proposal.get("limit_amount") or 0)
+    days     = int(proposal.get("limit_days") or 0)
+
+    await _apply_final_clearance(matched_key, rec, action, limit, days, bot)
+    return f"✅ Утверждено — <b>{matched_key}</b>. Менеджер и Саида уведомлены."
+
+
+async def _handle_admin_clearance_override(
+    client_key: str, action: str, chat_id: int, bot
+) -> str:
+    """Руководитель изменяет предложение менеджера."""
+    if chat_id != _get_admin_chat_id():
+        return "⛔ Только для руководителя."
+    registry = load_registry()
+    matched_key = next(
+        (n for n in registry if n[:26] == client_key[:26] or n.startswith(client_key)), None
+    )
+    if not matched_key:
+        return "❓ Клиент не найден."
+    rec = registry[matched_key]
+
+    if action == "limit":
+        rec["status"] = "awaiting_admin_limit_override"
+        rec.setdefault("clearance_proposal", {})["override_step"] = "amount"
+        save_registry(registry)
+        return (
+            f"📉 <b>{matched_key}</b>\n\n"
+            f"Введи лимит одной отгрузки (₸).\n"
+            f"Например: <code>100000</code>"
+        )
+
+    await _apply_final_clearance(matched_key, rec, action, 0, 0, bot)
+    labels = {"clear": "✅ Разрешено", "prepay": "🔒 Только предоплата", "blacklist": "⛔ Чёрный список"}
+    return f"{labels.get(action, action)} — <b>{matched_key}</b>. Менеджер и Саида уведомлены."
+
+
+async def _apply_final_clearance(
+    client_name: str,
+    rec: Dict[str, Any],
+    action: str,
+    limit: float,
+    days: int,
+    bot,
+) -> None:
+    """Применяет финальное решение и уведомляет менеджера и Саиду."""
+    today    = datetime.now(TZ).strftime("%Y-%m-%d")
+    registry = load_registry()
+    stored   = registry.get(client_name, rec)
+    mgr_id   = stored.get("manager_chat_id") or _load_managers().get(stored.get("manager", ""), 0)
+
+    if action == "clear":
+        stored["status"]     = "cleared"
+        stored["cleared_at"] = today
+        saida_text = f"✅ <b>{client_name}</b> снят со стопа. Отгрузка разрешена."
+        mgr_text   = f"✅ <b>Руководитель разрешил отгрузку</b>\n{client_name}\nКлиент снят со стопа."
+        # Убираем из known-файла — Саида должна знать, что он снят
+        known = _load_saida_known()
+        known.discard(client_name)
+        _save_saida_known(known)
+
+    elif action == "prepay":
+        stored["status"]       = "prepayment_only"
+        stored["prepay_set_at"] = today
+        saida_text = (
+            f"💳 <b>{client_name}</b> — только предоплата.\n"
+            f"Отгружать только после 100% предоплаты."
+        )
+        mgr_text = (
+            f"💳 <b>Решение руководителя</b>\n{client_name}\n"
+            f"Отгрузка только после 100% предоплаты."
+        )
+
+    elif action == "limit":
+        expires = (
+            (datetime.now(TZ) + timedelta(days=days)).strftime("%Y-%m-%d")
+            if days > 0 else None
+        )
+        stored["status"]         = "cleared_limited"
+        stored["cleared_at"]     = today
+        stored["shipment_limit"] = limit
+        stored["limit_days"]     = days
+        stored["limit_expires"]  = expires
+        exp_str   = f" до {expires}" if expires else ""
+        limit_str = _fmt(limit)
+        saida_text = (
+            f"📉 <b>{client_name}</b> — отгрузка с лимитом.\n"
+            f"Одна отгрузка ≤ <b>{limit_str}</b>{exp_str}.\n"
+            f"Больше лимита — только с разрешения руководителя."
+        )
+        mgr_text = (
+            f"📉 <b>Решение руководителя</b>\n{client_name}\n"
+            f"Отгрузка разрешена с лимитом <b>{limit_str}</b>{exp_str}."
+        )
+
+    elif action == "blacklist":
+        stored["status"]         = "blacklisted"
+        stored["blacklisted_at"] = today
+        saida_text = (
+            f"⛔ <b>{client_name}</b> — ЧЁРНЫЙ СПИСОК.\n"
+            f"Не отгружать ни при каких условиях."
+        )
+        mgr_text = (
+            f"⛔ <b>Решение руководителя</b>\n{client_name}\n"
+            f"Клиент в чёрном списке. Отгрузка запрещена."
+        )
+
+    else:  # keep
+        stored["status"] = "stopped"
+        registry[client_name] = stored
+        save_registry(registry)
+        LOG.info("Клиент %s оставлен на стопе (action=%s)", client_name, action)
+        return
+
+    registry[client_name] = stored
+    save_registry(registry)
+    LOG.info("Финальное решение '%s' для клиента %s", action, client_name)
+
+    for target, t_text in [(mgr_id, mgr_text), (SAIDA_CHAT_ID, saida_text)]:
+        if target:
+            try:
+                await bot.send_message(chat_id=target, text=t_text, parse_mode="HTML")
+            except Exception as e:
+                LOG.warning("Ошибка уведомления финальное решение %s (chat=%s): %s",
+                            client_name, target, e)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Полный стоп-лист для Саиды по запросу
+# ══════════════════════════════════════════════════════════════════════
+
+async def send_saida_full_stoplist(bot) -> None:
+    """Полный актуальный стоп-лист для Саиды (по нажатию кнопки)."""
+    registry  = load_registry()
+    today_str = datetime.now(TZ).strftime("%d.%m.%Y")
+
+    stop_statuses = (
+        "auto_stopped", "stopped", "allow_after_payment",
+        "block_until_payment", "prepayment_only", "blacklisted", "cleared_limited",
+    )
+    items = [(n, r) for n, r in registry.items() if r.get("status") in stop_statuses]
+
+    if not items:
+        try:
+            await bot.send_message(
+                chat_id=SAIDA_CHAT_ID,
+                text=f"✅ <b>Стоп-лист пуст</b>\nНа {today_str} все клиенты в порядке.",
+                parse_mode="HTML",
+            )
+        except Exception as e:
+            LOG.warning("Ошибка отправки полного стоп-листа Саиде: %s", e)
+        return
+
+    try:
+        hdr = await bot.send_message(
+            chat_id=SAIDA_CHAT_ID,
+            text=f"📋 <b>Стоп-лист — {today_str}</b>  ({len(items)}\u202fклиентов)",
+            parse_mode="HTML",
+        )
+        _schedule_delete(SAIDA_CHAT_ID, hdr.message_id, hdr.date.timestamp())
+    except Exception as e:
+        LOG.warning("Ошибка заголовка полного стоп-листа: %s", e)
+
+    for name, rec in sorted(items, key=lambda x: x[1].get("days_at_stop", 0), reverse=True):
+        status = rec.get("status", "")
+        days   = rec.get("days_at_stop", "?")
+        mgr    = rec.get("manager", "?")
+        limit  = float(rec.get("shipment_limit") or 0)
+
+        if status == "blacklisted":
+            icon, note = "⛔", "ЧЁРНЫЙ СПИСОК — не отгружать"
+        elif status == "prepayment_only":
+            icon, note = "💳", "только 100% предоплата"
+        elif status == "cleared_limited":
+            exp = rec.get("limit_expires", "")
+            icon = "📉"
+            note = f"лимит {_fmt(limit)}" + (f" до {exp}" if exp else "")
+        elif status == "allow_after_payment":
+            icon = "⏳"
+            note = (f"после оплаты, лимит {_fmt(limit)}" if limit > 0 else "после полной оплаты")
+        elif status == "block_until_payment":
+            icon, note = "🔒", "запрет до полной оплаты"
+        else:
+            icon, note = "🚫", "не отгружать"
+
+        text = (
+            f"{icon} <b>{name}</b>\n"
+            f"Молчит {days}\u202fдн. · {note} [{mgr}]\n"
+            f"<i>Не отгружать без разрешения руководителя</i>"
+        )
+        kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton("💰 Оплата получена", callback_data=f"dstop_paid|{name[:26]}")
+        ]])
+        try:
+            item_msg = await bot.send_message(
+                chat_id=SAIDA_CHAT_ID, text=text, parse_mode="HTML", reply_markup=kb
+            )
+            _schedule_delete(SAIDA_CHAT_ID, item_msg.message_id, item_msg.date.timestamp())
+        except Exception as e:
+            LOG.warning("Ошибка позиции '%s' полного стоп-листа: %s", name, e)
