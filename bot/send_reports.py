@@ -1212,12 +1212,17 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
 
         # 4. Бесхозные клиенты — рассылаем всем участникам CRM: "чей клиент?"
         #    До 3 штук в день чтобы не перегружать.
+        #    Исключаем служебные записи: "Без клиента", "Недостача", зарплатные авансы (*ЗП*/*зп*)
+        _CRM_CLAIM_EXCLUDED = {"Без клиента", "Недостача"}
+        def _is_service_entry(name: str) -> bool:
+            nl = name.lower()
+            return nl in {s.lower() for s in _CRM_CLAIM_EXCLUDED} or "зп" in nl
         from bot.crm_clients import load_clients as _crm_load
         _crm_data = _crm_load()
         _unowned = [
             k for k, v in _crm_data.get("clients", {}).items()
-            if not v.get("manager") or v.get("manager") in ("", "Не определён", "?")
-            and k != "Без клиента"
+            if (not v.get("manager") or v.get("manager") in ("", "Не определён", "?"))
+            and not _is_service_entry(k)
         ][:3]
         _participants = _all_crm_participants()
         for _client_key in _unowned:
@@ -1743,7 +1748,7 @@ def schedule_ai_generation(manager: str):
             return
         
         # Проверка 2: Есть ли свежий JSON (не старше 24 часов)?
-        json_file = find_recent_json_for_manager(manager, hours=24)  # ← БЫЛО 48!
+        json_file = find_recent_json_for_manager(manager, hours=24, report_type="DEBT")  # ← БЫЛО 48!
         if not json_file:
             log_event("ai_auto_skipped_old_file", manager=manager, reason="no_recent_file_24h")
             return
@@ -1850,7 +1855,7 @@ async def auto_generate_and_send_ai(manager: str, context: ContextTypes.DEFAULT_
             log_event("ai_auto_no_chat_id", manager=manager)
             return
         
-        json_file = find_recent_json_for_manager(manager, hours=48)
+        json_file = find_recent_json_for_manager(manager, hours=48, report_type="DEBT")
         if not json_file:
             log_event("ai_auto_no_json", manager=manager)
             return
@@ -1894,9 +1899,9 @@ async def auto_generate_and_send_ai(manager: str, context: ContextTypes.DEFAULT_
                 ai_file = html_path
         # ✅ НОВЫЙ КОД ЗАКАНЧИВАЕТСЯ ТУТ ↑↑↑
         
-        await send_ai_file(ai_file, manager, manager_chat_id, context)
-        log_event("ai_auto_sent_to_manager", manager=manager, chat_id=manager_chat_id)
-        
+        # Менеджеру НЕ отправляем: AI-анализ содержит "косяки" — только для руководителя
+        log_event("ai_auto_skip_manager_send", manager=manager, reason="ai_for_admin_only")
+
         for subadmin_chat_id_str, subordinates in ROLES.get("subadmin_scopes", {}).items():
             if manager in subordinates:
                 subadmin_chat_id = int(subadmin_chat_id_str)
@@ -1948,7 +1953,7 @@ async def weekly_ai_generation(context: ContextTypes.DEFAULT_TYPE):
             # Найти последний JSON (<7 дней)
             json_file = None
             for hours in [24, 48, 72, 168]:
-                json_file = find_recent_json_for_manager(manager, hours=hours)
+                json_file = find_recent_json_for_manager(manager, hours=hours, report_type="DEBT")
                 if json_file:
                     break
             
@@ -2027,33 +2032,14 @@ h1 {{color:#2563eb}}
 
 
 async def send_weekly_ai_to_recipients(results: list, context):
-    """Отправляет AI файлы каждому + Алене подшефных + админу все"""
+    """Отправляет AI файлы только админу и субадминам (не менеджерам).
+    AI-анализ содержит "ТОП-3 КОСЯКА" и оценку работы — не для менеджеров."""
     from telegram import InputFile
-    
+
     admin_chat_id = int(os.getenv("ADMIN_CHAT_ID", "0"))
 
-    # 1. Каждому менеджеру его AI
-    for r in results:
-        manager = r['manager']
-        chat_id = MANAGERS_MAP.get(manager)
-        
-        if not chat_id:
-            log_event("weekly_ai_no_chat_id", manager=manager)
-            continue
-        
-        try:
-            caption = f"🤖 Еженедельный AI анализ дебиторки"
-            
-            with open(r['file'], 'rb') as f:
-                await _doc_auto(context, chat_id,
-                    InputFile(f, filename=r['file'].name), caption=caption)
+    # УБРАНО: отправка менеджерам (AI-анализ с "косяками" только для руководителя)
 
-            log_event("weekly_ai_sent_to_manager", manager=manager)
-            await asyncio.sleep(1)
-            
-        except Exception as e:
-            log_event("weekly_ai_send_error", manager=manager, error=str(e))
-    
     # 2. Субадминам — подшефные (из roles.json)
     subadmin_scopes = ROLES.get("subadmin_scopes", {})
     for sa_chat_str, scope_list in subadmin_scopes.items():
@@ -5598,7 +5584,7 @@ async def handle_extended_with_ai(
         status_msg_id = status_message.message_id
     except Exception as e:
         log_event("ai_status_msg_fail", error=str(e), manager=manager)
-    json_file = find_recent_json_for_manager(manager)
+    json_file = find_recent_json_for_manager(manager, report_type="DEBT")
     if not json_file:
         if status_msg_id:
             try:
