@@ -3471,6 +3471,80 @@ def _should_notify_manager_today(manager_name: str, period_str: str) -> bool:
 
 
 
+async def _remind_saida_mtd_if_missing(context) -> None:
+    """После pipeline: если пришёл DAY gross/expenses, но MTD-пара не полная — напомнить Саиде.
+    Срабатывает не чаще 1 раза в день (logs/saida_mtd_reminder.json).
+    """
+    import json as _json
+    _remind_file = LOGS_DIR / "saida_mtd_reminder.json"
+    _today = datetime.now(TZ).strftime("%Y-%m-%d")
+
+    try:
+        _rstate = _json.loads(_remind_file.read_text(encoding="utf-8")) if _remind_file.exists() else {}
+    except Exception:
+        _rstate = {}
+    if _rstate.get("date") == _today:
+        return  # уже напомнили сегодня
+
+    try:
+        import net_profit_report as _np
+        from datetime import date as _date
+
+        all_gross = _np.load_summary_gross_jsons()
+        all_exp   = _np.load_all_jsons("expenses_*.json")
+
+        # Ищем последний DAY gross
+        latest_day: Optional[Any] = None
+        for _g in all_gross:
+            _gs, _ge = _np.extract_period_dates(_np.extract_period_from_json(_g))
+            if _gs and _ge and _gs == _ge:
+                latest_day = _gs
+                break
+
+        if not latest_day:
+            return
+
+        _month_start = latest_day.replace(day=1)
+        _day_str     = latest_day.strftime("%d.%m.%Y")
+        _start_str   = _month_start.strftime("%d.%m.%Y")
+
+        def _has_mtd(items):
+            for _item in items:
+                _s, _e = _np.extract_period_dates(_np.extract_period_from_json(_item))
+                if _s and _e and _s == _month_start and _e >= latest_day and _s != _e:
+                    return True
+            return False
+
+        missing = []
+        if not _has_mtd(all_gross):
+            missing.append("Валовая прибыль (нарастающим)")
+        if not _has_mtd(all_exp):
+            missing.append("Затраты (нарастающим)")
+
+        if not missing:
+            return
+
+        _bullets = "\n".join(f"• {m}" for m in missing)
+        text = (
+            f"📊 Получены дневные отчёты за {_day_str}.\n\n"
+            f"Пришли, пожалуйста, ещё нарастающим за период {_start_str}–{_day_str}:\n"
+            f"{_bullets}\n\n"
+            f"Без них отчёт «Чистая прибыль за период» не обновится."
+        )
+
+        _saida_cid = int(os.getenv("SAIDA_CHAT_ID", "920236287"))
+        await context.bot.send_message(chat_id=_saida_cid, text=text)
+
+        _remind_file.write_text(
+            _json.dumps({"date": _today, "day": _day_str, "missing": missing}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        log_event("saida_mtd_reminder_sent", day=_day_str, missing=missing)
+
+    except Exception as _e:
+        logger.debug("_remind_saida_mtd_if_missing inner error: %s", _e)
+
+
 async def pipeline_task(context: ContextTypes.DEFAULT_TYPE):
     log_event("pipeline_cycle_start")
     _imap_rc, _imap_out, _imap_err = await run_script_async("imap_fetcher.py", "--once")
@@ -3864,6 +3938,13 @@ async def pipeline_task(context: ContextTypes.DEFAULT_TYPE):
                 logger.info("CRM: добавлено %d новых клиентов после пайплайна", _new_total)
         except Exception as _crm_e:
             logger.warning("CRM pipeline update error: %s", _crm_e)
+
+    # Если обработаны новые файлы — проверяем нет ли пропущенного MTD, напоминаем Саиде
+    if processed_files > 0:
+        try:
+            await _remind_saida_mtd_if_missing(context)
+        except Exception as _ms_e:
+            logger.debug("mtd_remind_saida error: %s", _ms_e)
 
     log_event("pipeline_cycle_finish")
 
