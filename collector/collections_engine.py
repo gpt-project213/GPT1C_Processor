@@ -462,6 +462,7 @@ def daily_summary(processed: List[Dict], total_classified: int = 0, dry_run: boo
     escalated = [r for r in processed if r.get("escalated")]
     skipped = total_classified - total if total_classified > total else 0
 
+    wa_sent = [r for r in processed if r.get("wa_phone")]
     mode_label = "🔇 DRY-RUN (сообщения НЕ отправлялись)" if dry_run else "✅ LIVE"
     lines = [
         f"📊 <b>AI Коллектор — ежедневная сводка</b> {mode_label}",
@@ -471,6 +472,12 @@ def daily_summary(processed: List[Dict], total_classified: int = 0, dry_run: boo
         f"Пропущено фильтрами: {skipped}",
         f"Отправлено сообщений: {sent}",
     ]
+    if wa_sent:
+        lines.append(f"\n📲 <b>WhatsApp отправлен ({len(wa_sent)}):</b>")
+        for r in wa_sent:
+            _ph = r["wa_phone"]
+            _ph_show = _ph[:4] + "***" + _ph[-3:] if len(_ph) > 7 else _ph
+            lines.append(f"  • {r['name']} — {_ph_show} — {r.get('amount', 0):,.0f} ₸ / {r.get('days', 0)} дн.")
     if promised:
         lines.append(f"Обещали оплату: {len(promised)}")
         for r in promised[:5]:
@@ -628,6 +635,16 @@ async def _process_single(
         if sent:
             update_after_contact(name, "whatsapp" if wa_ok else "telegram", level, text)
             result["sent"] = True
+            # Мгновенное уведомление admin о каждой WA-отправке
+            if wa_ok:
+                _phone_visible = phone[:4] + "***" + phone[-3:] if len(phone) > 7 else phone
+                result["wa_phone"] = phone
+                await notify_admin(
+                    f"✅ <b>WA отправлен</b>\n"
+                    f"👤 {display_name}\n"
+                    f"📞 {_phone_visible}\n"
+                    f"💰 {amount:,.0f} ₸ / {days} дн."
+                )
             # Регистрируем клиентский диалог если WhatsApp отправлен
             if wa_ok and phone:
                 try:
