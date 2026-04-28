@@ -3471,6 +3471,127 @@ def _should_notify_manager_today(manager_name: str, period_str: str) -> bool:
 
 
 
+async def _validate_daily_reports_saida(context) -> None:
+    """21:00 — проверить все ожидаемые ежедневные отчёты и напомнить Саиде о пропущенных.
+
+    Ожидаемые отчёты:
+      DAY (сегодня): Валовая прибыль, Затраты, Продажи × 4 менеджера, Дебиторка × 4 менеджера
+      MTD (вчера):   Валовая прибыль нарастающим, Затраты нарастающим
+    """
+    from bot.workday_checker import is_holiday_today as _is_holiday
+    if _is_holiday():
+        return
+
+    import json as _json
+    from datetime import date as _date, timedelta as _td
+
+    _today: _date  = datetime.now(TZ).date()
+    _yesterday: _date = _today - _td(days=1)
+    _month_start: _date = _today.replace(day=1)
+    _today_str    = _today.strftime("%d.%m.%Y")
+    _yest_str     = _yesterday.strftime("%d.%m.%Y")
+    _mstart_str   = _month_start.strftime("%d.%m.%Y")
+
+    missing: list[str] = []
+
+    try:
+        import net_profit_report as _np
+
+        all_gross = _np.load_summary_gross_jsons()
+        all_exp   = _np.load_all_jsons("expenses_*.json")
+
+        def _has_day(items, target: _date) -> bool:
+            for item in items:
+                s, e = _np.extract_period_dates(_np.extract_period_from_json(item))
+                if s and e and s == e == target:
+                    return True
+            return False
+
+        def _has_mtd(items, month_start: _date, end: _date) -> bool:
+            for item in items:
+                s, e = _np.extract_period_dates(_np.extract_period_from_json(item))
+                if s and e and s == month_start and e == end and s != e:
+                    return True
+            return False
+
+        if not _has_day(all_gross, _today):
+            missing.append(f"❌ Валовая прибыль за день ({_today_str})")
+        if not _has_day(all_exp, _today):
+            missing.append(f"❌ Затраты за день ({_today_str})")
+        if not _has_mtd(all_gross, _month_start, _yesterday):
+            missing.append(f"❌ Валовая прибыль нарастающим ({_mstart_str}–{_yest_str})")
+        if not _has_mtd(all_exp, _month_start, _yesterday):
+            missing.append(f"❌ Затраты нарастающим ({_mstart_str}–{_yest_str})")
+
+    except Exception as _e:
+        logger.debug("validate_reports gross/exp error: %s", _e)
+
+    # Продажи и Дебиторка — по менеджерам
+    try:
+        _mgrs = list((MANAGERS_MAP or {}).keys())
+        if not _mgrs:
+            import json as _jj
+            _mgrs = list(_jj.loads((CONFIG_DIR / "managers.json").read_text(encoding="utf-8")).keys())
+
+        # Продажи: sales_*.json → period_end == today ISO
+        _today_iso = _today.isoformat()
+        _sales_today: set[str] = set()
+        for _sf in JSON_DIR.glob("sales_*.json"):
+            try:
+                _sd = _json.loads(_sf.read_text(encoding="utf-8"))
+                if str(_sd.get("period_end", "")).startswith(_today_iso):
+                    _period_str = str(_sd.get("period", ""))
+                    _fname = _sf.stem.lower()
+                    for _m in _mgrs:
+                        if _m.lower() in _fname or _m.lower() in _period_str.lower():
+                            _sales_today.add(_m)
+            except Exception:
+                pass
+
+        for _m in _mgrs:
+            if _m not in _sales_today:
+                missing.append(f"❌ Продажи — {_m} ({_today_str})")
+
+        # Дебиторка: debt_ext_*.json → period_max == today DD.MM.YYYY
+        _debt_today: set[str] = set()
+        for _df in JSON_DIR.glob("debt_ext_*.json"):
+            try:
+                _dd = _json.loads(_df.read_text(encoding="utf-8"))
+                _pm = str(_dd.get("period_max", ""))
+                if _pm == _today_str:
+                    _mgr_in_file = str(_dd.get("manager", ""))
+                    _fname_low = _df.stem.lower()
+                    for _m in _mgrs:
+                        if _m.lower() in _mgr_in_file.lower() or _m.lower() in _fname_low:
+                            _debt_today.add(_m)
+            except Exception:
+                pass
+
+        for _m in _mgrs:
+            if _m not in _debt_today:
+                missing.append(f"❌ Дебиторка — {_m} ({_today_str})")
+
+    except Exception as _e:
+        logger.debug("validate_reports sales/debt error: %s", _e)
+
+    if not missing:
+        log_event("daily_reports_validation_ok", date=_today_str)
+        return
+
+    _bullets = "\n".join(missing)
+    text = (
+        f"⚠️ Проверка отчётов за {_today_str}\n\n"
+        f"Не хватает:\n{_bullets}\n\n"
+        f"Пришли, пожалуйста."
+    )
+    _saida_cid = int(os.getenv("SAIDA_CHAT_ID", "920236287"))
+    try:
+        await context.bot.send_message(chat_id=_saida_cid, text=text)
+        log_event("daily_reports_validation_sent", date=_today_str, missing_count=len(missing))
+    except Exception as _e:
+        logger.error("validate_daily_reports send error: %s", _e)
+
+
 async def _remind_saida_mtd_if_missing(context) -> None:
     """После pipeline: если пришёл DAY gross/expenses, но MTD-пара не полная — напомнить Саиде.
     Срабатывает не чаще 1 раза в день (logs/saida_mtd_reminder.json).
@@ -7916,6 +8037,13 @@ def main():
             name="sales_summary"
         )
         logger.info("🛒 Настроена краткая сводка продаж: ежедневно 21:00")
+
+        job_queue.run_daily(
+            _validate_daily_reports_saida,
+            time=dt_time(21, 0, tzinfo=TZ),
+            name="validate_daily_reports",
+        )
+        logger.info("📋 Настроена проверка отчётов Саиды: ежедневно 21:00")
         
         # v9.4.7.5: Автоочистка старых файлов в 03:00
         job_queue.run_daily(
