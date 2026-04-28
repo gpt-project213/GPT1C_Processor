@@ -5431,6 +5431,12 @@ def _crm_cleanup_pending() -> None:
     now = datetime.now(TZ)
     stale_chat_ids: List[int] = []
     for chat_id, pending in list(_CRM_PHONE_PENDING.items()):
+        # Служебные записи (зарплатные авансы и т.п.) — убираем из памяти
+        ck = (pending.get("client_key") or "").lower()
+        if "зп" in ck or ck in ("без клиента", "недостача"):
+            logger.info("CRM cleanup: removing service entry '%s' (chat_id=%s)", ck, chat_id)
+            stale_chat_ids.append(chat_id)
+            continue
         ts_raw = pending.get("last_sent") or pending.get("created_at")
         if not ts_raw:
             continue
