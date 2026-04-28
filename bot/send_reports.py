@@ -5824,6 +5824,21 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error("wa_appr callback error: %s", e)
         return
 
+    # No-movement Saida-first check callbacks (nm_paid/nm_nopay/nm_adm_send/nm_adm_skip)
+    if data.startswith("nm_"):
+        try:
+            from collector.no_movement import handle_nm_callback as _nm_cb
+            handled = await _nm_cb(data, chat_id)
+            if handled:
+                try:
+                    await q.answer()
+                except Exception:
+                    pass
+                return
+        except Exception as e:
+            logger.error("nm callback error: %s", e)
+        return
+
     # [DISABLED v9.4.39] Старый flow: коллектор → reg_lang/reg_name/reg_phone.
     # Заменён на CRM 18:00 + /phone команда (crm_psel|).
     # Оставлен закомментированным на случай отката.

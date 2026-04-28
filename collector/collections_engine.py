@@ -4,7 +4,13 @@
 collections/collections_engine.py
 Главный оркестратор AI-Коллектора долгов.
 
-Версия: 1.4.4 (2026-04-26)
+Версия: 1.4.5 (2026-04-28)
+
+v1.4.5 (2026-04-28): no-movement Saida-first check — debit==0+credit==0 →
+  ask Saida before WhatsApp; new msg_types no_movement_reminder и
+  promise_broken_reminder; admin approves after Saida confirms no payment.
+
+v1.4.4 (2026-04-26): (previous)
 
 v1.4.3 (2026-04-22): тестовый режим `COLLECTOR_TEST_MODE=1` больше не пишет в
   боевой `logs/collector_YYYYMMDD.log`; это убирает ложные тревоги log_monitor
@@ -870,6 +876,43 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
         if _payment_hold:
             logger.info("[%s] пропуск — Саида подтвердила оплату, ждём разноски в 1С", name)
             continue
+
+        # Нет движений (debit==0, credit==0) → сначала спрашиваем Саиду.
+        # Если Саида ответила "нет оплат" и руководитель одобрил (approved_send) —
+        # проходим дальше со специальным msg_type.
+        if not dry_run and not _bypass_active_guard and _debit_val == 0 and _credit_val == 0:
+            try:
+                from collector.no_movement import (
+                    get_nm_state, ask_saida_about_no_movement, was_saida_asked_today,
+                )
+                from collector.collections_db import get_client_state as _get_cstate
+                _nm = get_nm_state(name)
+                if _nm:
+                    _nm_status = _nm.get("status", "")
+                    if _nm_status in ("pending_saida", "nopay_notified_admin",
+                                      "skipped", "paid"):
+                        logger.info("[%s] no_movement status=%s — пропуск", name, _nm_status)
+                        continue
+                    if _nm_status == "approved_send":
+                        # Руководитель одобрил — отправляем с особым тоном
+                        _broken = _get_cstate(name).get("promise_kept") is False
+                        _msg_type = "promise_broken_reminder" if _broken else "no_movement_reminder"
+                        logger.info("[%s] no_movement approved: msg_type=%s", name, _msg_type)
+                        # fall through to _process_single
+                else:
+                    # Первый раз сегодня — задаём вопрос Саиде
+                    _nm_mgr = (contact.get("manager") if contact else None) or \
+                               _get_client_manager_from_crm(name) or ""
+                    _nm_mgr_id = _get_manager_chat_id(_nm_mgr) if _nm_mgr else None
+                    await ask_saida_about_no_movement(
+                        name, float(client.get("amount", 0)),
+                        int(client.get("days", 0)),
+                        _nm_mgr, _nm_mgr_id,
+                    )
+                    logger.info("[%s] вопрос Саиде задан — WA отложен", name)
+                    continue
+            except Exception as _nm_e:
+                logger.debug("[%s] no_movement check error: %s", name, _nm_e)
 
         # Уже контактировали сегодня — пропускаем
         if not dry_run and already_contacted_today(name):

@@ -106,12 +106,14 @@ def _get_fallback_template(msg_type: str, **kwargs) -> str:
     kwargs: client_name, manager_name, amount, days, company — для подстановки в шаблон.
     """
     ftpl = _PROMPTS.get("fallback_templates", {})
-    key = msg_type if msg_type in ftpl else "strict_reminder"
-    if key in ftpl:
-        template = ftpl[key]
+    if msg_type in ftpl:
+        template = ftpl[msg_type]
+    elif msg_type in _FALLBACK_TEMPLATES_DEFAULT:
+        template = _FALLBACK_TEMPLATES_DEFAULT[msg_type]
+    elif "strict_reminder" in ftpl:
+        template = ftpl["strict_reminder"]
     else:
-        # Аварийный fallback если файл отсутствует
-        template = _FALLBACK_TEMPLATES_DEFAULT.get(key, _FALLBACK_TEMPLATES_DEFAULT["strict_reminder"])
+        template = _FALLBACK_TEMPLATES_DEFAULT["strict_reminder"]
     if not kwargs:
         return template
     # Форматируем сумму с пробелами если передана
@@ -231,6 +233,23 @@ _FALLBACK_TEMPLATES_DEFAULT = {
         "Остаток задолженности{report_date_part} составляет {amount} тг и не закрыт уже {days_text}, "
         "поэтому дальнейшие отгрузки ограничены до его закрытия.\n"
         "Подскажите, пожалуйста, когда сможете закрыть остаток или внести ближайший платёж."
+    ),
+    "no_movement_reminder": (
+        "Здравствуйте! Это {company}, отдел по работе с клиентами.\n\n"
+        "Обращаемся по задолженности: {client_name}.\n"
+        "Ответственный менеджер: {manager_name}.\n\n"
+        "Остаток задолженности{report_date_part} составляет {amount} тг и не закрыт уже {days_text}. "
+        "За этот период оплат и отгрузок не поступало.\n"
+        "Требуется незамедлительное подтверждение даты и суммы ближайшего платежа."
+    ),
+    "promise_broken_reminder": (
+        "Здравствуйте! Это {company}, отдел по работе с клиентами.\n\n"
+        "Обращаемся по задолженности: {client_name}.\n"
+        "Ответственный менеджер: {manager_name}.\n\n"
+        "Ранее вы обещали погасить задолженность, однако обещание не выполнено.\n"
+        "Текущий остаток{report_date_part} составляет {amount} тг, просрочка — {days_text}.\n"
+        "Невыполнение повторного обещания влечёт ограничение отгрузок.\n"
+        "Укажите конкретную дату и сумму платежа."
     ),
 }
 
