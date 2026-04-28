@@ -1358,7 +1358,8 @@ _COLLECTOR_TRIGGER_LAST_RUN_PATH = LOGS_DIR / "collector_trigger_last_run.json"
 # Не запускать повторно если коллектор уже сработал по триггеру в последние N часов
 _COLLECTOR_TRIGGER_COOLDOWN_HOURS = 4
 # Триггер считается устаревшим если флаг старше N часов (pipeline завис, не надо реагировать)
-_COLLECTOR_TRIGGER_MAX_AGE_HOURS = 6
+# 14ч — покрывает ночной разрыв: Саида разносит в 20:00, триггер подхватит до 22:00 следующего утра
+_COLLECTOR_TRIGGER_MAX_AGE_HOURS = 14
 
 
 async def debt_collector_trigger_check(context: ContextTypes.DEFAULT_TYPE):
@@ -1378,7 +1379,7 @@ async def debt_collector_trigger_check(context: ContextTypes.DEFAULT_TYPE):
 
     if is_holiday_today():
         return
-    if not (9 <= now.hour < 18):
+    if not (9 <= now.hour < 22):
         return
     if not _COLLECTOR_TRIGGER_PATH.exists():
         return
