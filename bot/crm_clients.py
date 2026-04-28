@@ -447,6 +447,10 @@ def get_clients_without_phones(manager: str, limit: int = 5) -> List[str]:
             continue
         if info.get("whatsapp") or info.get("telegram_id"):
             continue
+        # Служебные записи: зарплатные авансы (*зп*), недостача, без клиента
+        _nl = name.lower()
+        if "зп" in _nl or _nl in ("без клиента", "недостача"):
+            continue
         # Приоритет — дебиторка
         sources = info.get("sources", [])
         priority = 0 if "debt" in sources else 1
