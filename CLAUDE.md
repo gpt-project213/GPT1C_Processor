@@ -357,6 +357,21 @@ Run: `python -X utf8 tests/test_project.py && python -X utf8 tests/test_collecto
 | DOCS | Документация | 7 расхождений CLAUDE.md ↔ код |
 | Issue-4 | ~~Не реализовано~~ **РЕАЛИЗОВАНО** | Условная отгрузка — 4 кнопки admin в `escalate_unanswered()` + 4 кнопки при debt=0 в `monitor_exceptions()`. Все обработчики реализованы. |
 
+### Session 2026-04-29 (сессии 2–3) — Collector Phases 2–4
+
+| ID | Коммит | Файл | Fix |
+|----|--------|------|-----|
+| PH-2Б | wa_dialog_suppress | `collector/collections_db.py`, `client_dialog.py`, `collections_engine.py` | wa_dialog_suppress field; paid_claim→+3d, attachment→+2d; run() checks suppress before send |
+| PH-2А | diff-notice | `collector/collections_engine.py`, `approval_flow.py` | preview_batch_changes(); diff-block shown at admin approval moment |
+| UI | collector batch menu | `bot/send_reports.py` | 🤖 Коллектор кнопка в главном меню admin; статус + список клиентов |
+| PH-3А | audit_log | `collector/audit_log.py` (new), 4 модуля | Append-only JSONL audit; wa_sent/skipped/suppress/batch events |
+| PH-3Б | log prefixes | `collections_engine.py`, `bot/debt_stop_control.py` | [COLLECTOR] и [STOP] через _PrefixAdapter(LoggerAdapter) |
+| PH-4 | `34ec994` | `collector/collection_agent.py`, `config/collector_prompts.json` | Убрана "ограничение отгрузок" из promise_broken_reminder; safe template в JSON |
+
+Tests added: `test_wa_dialog_suppress.py` (7), `test_diff_notice.py` (6), `test_audit_log.py` (7), `test_phase4_hard_ban.py` (7) — итого 27 новых тестов.
+
+---
+
 ### Session 2026-03-10 (pipeline audit)
 | ID | File | Fix |
 |----|------|-----|

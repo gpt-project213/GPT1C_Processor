@@ -1,7 +1,57 @@
 # SESSION CONTEXT — АРХИВ
 
-> **ВНИМАНИЕ:** Этот файл содержит исторические сессии (2026-04-09, 2026-04-13, 2026-04-14).
+> **ВНИМАНИЕ:** Этот файл содержит исторические сессии (2026-04-09, 2026-04-13, 2026-04-14, 2026-04-29).
 > Многие "OPEN" пункты уже закрыты коммитами. **Актуальный статус → `gpt1c.md`.**
+
+---
+
+## HANDOFF 2026-04-29 (сессии 2–3) — Коллектор Фазы 2–4
+
+### Что сделано (ветка `fix/log-noise-by-design-markers`)
+
+**Фаза 2Б — wa_dialog_suppress** (коммит ~`wa_dialog_suppress`):
+- `collector/collections_db.py`: поле `wa_dialog_suppress: {reason, set_at, until}` + set/get/clear API
+- `collector/client_dialog.py`: paid_claim → suppress +3д, attachment → suppress +2д
+- `collector/collections_engine.py` `run()`: проверка suppress после payment_hold, аудит `wa_skipped`
+- Тест: `tests/test_wa_dialog_suppress.py` — 7/7
+
+**Фаза 2А — diff-notice при admin approve** (коммит ~`diff-notice`):
+- `collector/collections_engine.py`: публичная `preview_batch_changes(batch_id, approved_clients) → Optional[str]`
+- `collector/approval_flow.py` `wa_appr_adm_ok`: вставляет diff-блок перед текстом кнопки "Отправить"
+- Тест: `tests/test_diff_notice.py` — 6/6
+
+**UI — кнопка 🤖 Коллектор в главном меню** (коммит ~`collector batch menu`):
+- `bot/send_reports.py`: `kb_main()` admin получил кнопку → `_format_collector_batch_text()` → статус + список клиентов
+
+**Фаза 3А — audit log** (коммит ~`audit_log Phase 3A`):
+- `collector/audit_log.py`: append-only JSONL `logs/collector_audit.jsonl`, thread-safe через `threading.Lock`
+- События: wa_sent, wa_skipped(4 причины), suppress_set/cleared, batch_created/approved/sent/failed
+- Тест: `tests/test_audit_log.py` — 7/7
+
+**Фаза 3Б — log prefixes** (коммит ~`log prefixes Phase 3B`):
+- `collector/collections_engine.py`: `_PrefixAdapter` + `[COLLECTOR]`
+- `bot/debt_stop_control.py`: `_PrefixAdapter` + `[STOP]`
+- Разделяет контуры в grep: `grep "[COLLECTOR]"` vs `grep "[STOP]"`
+
+**Фаза 4 — hard-ban отгрузок** (коммит `34ec994`):
+- Найден реальный риск: `promise_broken_reminder` содержал "влечёт ограничение отгрузок"
+- Этот шаблон назначается via `no_movement + promise_broken` — может достичь legacy_tail-клиентов
+- Фикс: фраза удалена из `_FALLBACK_TEMPLATES_DEFAULT["promise_broken_reminder"]` в `collection_agent.py`
+- Безопасный шаблон добавлен в `config/collector_prompts.json`
+- Тест: `tests/test_phase4_hard_ban.py` — 7/7
+
+### Что проверено
+
+- `python tests/test_wa_dialog_suppress.py` → 7/7
+- `python tests/test_diff_notice.py` → 6/6
+- `python tests/test_audit_log.py` → 7/7
+- `python tests/test_phase4_hard_ban.py` → 7/7
+- Все тесты прогнаны вместе: 27/27
+
+### Что осталось в очереди
+
+- Фаза 3В — единое логирование `collector/*.py` через `get_collector_logger(__name__)`
+- Фаза 5 — CRM аудит: баг повторного "Чей клиент?" (6 точек проверки: get_clients_without_phones, _crm_cleanup_pending, attribution persistence, crm_daily_task, дубли в crm_pending_state.json, TTL)
 
 ---
 

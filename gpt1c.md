@@ -33,6 +33,43 @@
 - старые хвосты без новых отгрузок больше не получают бессмысленную фразу про ограничение отгрузок;
 - именно этот hermetic-suite сейчас считать основным доказательством по collector-правкам, а не полный `tests/test_collector.py`.
 
+### Дополнительные фазы сессии 2026-04-29 (сессии 2–3)
+
+**Фаза 2Б — wa_dialog_suppress** (коммиты сессии 2):
+- `collections_db.py`: поле `wa_dialog_suppress: {reason, set_at, until}` в state; API: set/get/clear
+- `client_dialog.py`: paid_claim → suppress +3д, attachment → suppress +2д
+- `collections_engine.run()`: проверяет suppress, пропускает клиента с аудитом `wa_skipped(reason=suppress)`
+- Тесты: `tests/test_wa_dialog_suppress.py` — 7/7
+
+**Фаза 2А — diff-notice при утверждении** (коммит сессии 2):
+- `collections_engine.py`: `preview_batch_changes(batch_id, approved_clients)` — публичная обёртка над `_refresh_approved_batch_clients`
+- `approval_flow.py` `wa_appr_adm_ok`: вызывает `preview_batch_changes`, вставляет блок "⚠️ Данные обновились" перед текстом утверждения
+- Тесты: `tests/test_diff_notice.py` — 6/6
+
+**UI — кнопка 🤖 Коллектор** (коммит сессии 2):
+- `bot/send_reports.py`: admin-кнопка в главном меню → показывает статус батча, список клиентов до 20 штук, кнопки Обновить/Главное меню
+
+**Фаза 3А — audit log** (коммит сессии 2):
+- `collector/audit_log.py`: append-only JSONL в `logs/collector_audit.jsonl`, thread-safe lock
+- Покрытые события: wa_sent, wa_skipped(4 причины), suppress_set/cleared, batch_created/approved/sent/failed
+- Тесты: `tests/test_audit_log.py` — 7/7
+
+**Фаза 3Б — log prefixes** (коммит сессии 2):
+- `collections_engine.py`: `[COLLECTOR]` префикс через `_PrefixAdapter(LoggerAdapter)`
+- `bot/debt_stop_control.py`: `[STOP]` префикс
+- Позволяет разделить контуры через `grep "[COLLECTOR]"` vs `grep "[STOP]"`
+
+**Фаза 4 — hard-ban отгрузок для хвостовых клиентов** (коммит `34ec994`, сессия 3):
+- Реальный риск: `promise_broken_reminder` содержал "Невыполнение повторного обещания влечёт ограничение отгрузок"
+- Этот шаблон назначается клиентам no_movement + broken promise, среди которых могут быть legacy_tail-клиенты без активных отгрузок
+- Фикс: убрана строка с угрозой отгрузок из `_FALLBACK_TEMPLATES_DEFAULT["promise_broken_reminder"]`
+- Безопасный шаблон добавлен в `config/collector_prompts.json`
+- Тесты: `tests/test_phase4_hard_ban.py` — 7/7 (включая проверку что stoplist_reminder НЕ тронут)
+
+**Незакрытые фазы в очереди:**
+- Фаза 3В — единое логирование всех `collector/*.py` через `get_collector_logger(__name__)`
+- Фаза 5 — полный аудит CRM (баг: менеджерам повторно задаётся "Чей клиент?" по уже закреплённым)
+
 ### Важное разграничение контуров
 
 - `collector/*` — отдельный контур AI debt collector:

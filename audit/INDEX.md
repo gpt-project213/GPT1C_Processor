@@ -45,6 +45,7 @@
 
 | Файл | Дата | Тема | Статус |
 |---|---|---|---|
+| [COLLECTOR_PHASES_2_4_2026_04_29.md](COLLECTOR_PHASES_2_4_2026_04_29.md) | 2026-04-29 | Collector Фазы 2А, 2Б, UI, 3А, 3Б, 4 — wa_dialog_suppress, diff-notice, audit log, prefixes, hard-ban | ✅ Все 4 фазы реализованы, 27 новых тестов |
 | [AUDIT_FINDINGS.md](AUDIT_FINDINGS.md) | 2026-03-20 | Первичный аудит — 28 найденных багов | ✅ Все CRITICAL/HIGH закрыты |
 | [AUDIT_SUMMARY.md](AUDIT_SUMMARY.md) | 2026-03-20 | Итоговая сводка по аудиту | ✅ Актуально |
 | [AUDIT_VERDICT.md](AUDIT_VERDICT.md) | 2026-03-20 | Вердикт: 0 critical / 0 high / 2 arch | ✅ Актуально |
@@ -128,4 +129,5 @@ if is_holiday_today():
 
 | Дата | Что изменено |
 |---|---|
+| 2026-04-29 | Добавлен COLLECTOR_PHASES_2_4_2026_04_29.md |
 | 2026-04-11 | Создан первичный INDEX.md |
