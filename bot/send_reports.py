@@ -200,7 +200,11 @@ from bot.logging_utils import (
     configure_runtime_logging,
     get_log_retention_days,
     get_runtime_logger,
+    has_dead_letters,
     install_filter_on_root_handlers,
+    new_trace_id,
+    pop_dead_letters,
+    push_dead_letter,
     set_telegram_alert_sender,
 )
 
@@ -1189,6 +1193,7 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
     3. Каждому менеджеру — точечный запрос данных для ОДНОГО клиента без телефона:
        бот называет имя из 1С и просит по шагам: как обращаться → телефон → адрес.
     """
+    new_trace_id()  # новый trace_id для всей CRM daily цепочки
     from bot.workday_checker import is_holiday_today
     if is_holiday_today():
         crm_logger.info("crm_daily_task: выходной — пропуск")
@@ -5368,6 +5373,48 @@ async def cmd_health(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await _send_auto(context, update.effective_chat.id, text)
 
+async def cmd_logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показывает последние ERROR/CRITICAL из runtime-лога. Только для admin."""
+    chat_id = update.effective_chat.id
+    if not is_admin(chat_id):
+        await _send_auto(context, chat_id, "⛔ Доступ запрещён.")
+        return
+
+    args = (context.args or [])
+    try:
+        n = max(5, min(50, int(args[0]))) if args else 20
+    except (ValueError, IndexError):
+        n = 20
+
+    log_path = LOGS_DIR / "send_reports.log"
+    if not log_path.exists():
+        await _send_auto(context, chat_id, "📭 Лог-файл не найден.")
+        return
+
+    try:
+        all_lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except Exception as e:
+        await _send_auto(context, chat_id, f"❌ Ошибка чтения лога: {e}")
+        return
+
+    error_lines = [l for l in all_lines if " ERROR " in l or " CRITICAL " in l][-n:]
+
+    if not error_lines:
+        await _send_auto(context, chat_id, "✅ ERROR/CRITICAL записей не найдено.")
+        return
+
+    block = "\n".join(error_lines)
+    # Telegram code-block лимит ~4096 символов, оставляем запас на обёртку
+    if len(block) > 3800:
+        block = "…\n" + block[-3800:]
+
+    await _send_auto(
+        context,
+        chat_id,
+        f"🔍 <b>Последние {len(error_lines)} ERROR/CRITICAL:</b>\n<code>{_html.escape(block)}</code>",
+    )
+
+
 async def _exit_after_reply(delay_sec: float = 1.0) -> None:
     await asyncio.sleep(delay_sec)
     _clear_pid()
@@ -6093,6 +6140,7 @@ async def handle_ai_only(
     await process_and_send_ai_analysis(manager, chat_id, context, json_file, start_time, status_msg_id, report_type)
 
 async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    new_trace_id()  # каждый callback получает свой trace_id для корреляции логов
     q = update.callback_query
     try:
         await q.answer()
@@ -8179,6 +8227,20 @@ def main():
     async def _runtime_alert_sender(text: str) -> None:
         if not ADMIN_CHAT_ID:
             return
+        # Дренируем dead letters накопленные пока Telegram был недоступен
+        if has_dead_letters():
+            drained = pop_dead_letters()
+            for dead_text in drained:
+                try:
+                    await application.bot.send_message(
+                        chat_id=ADMIN_CHAT_ID,
+                        text=dead_text,
+                        parse_mode="HTML",
+                        disable_web_page_preview=True,
+                    )
+                except Exception:
+                    push_dead_letter(dead_text)
+                    break  # Telegram всё ещё недоступен — прекращаем дрейн
         try:
             await application.bot.send_message(
                 chat_id=ADMIN_CHAT_ID,
@@ -8188,6 +8250,7 @@ def main():
             )
         except Exception as exc:
             integration_logger.warning("runtime alert send failed: %s", exc)
+            push_dead_letter(text)
 
     set_telegram_alert_sender(_runtime_alert_sender)
 
@@ -8219,6 +8282,7 @@ def main():
     application.add_handler(CommandHandler("analytics", cmd_analytics))  # 🆕 v9.4.9  # v2.0
     application.add_handler(CommandHandler("phone", cmd_phone))  # CRM: внести телефон клиента
     application.add_handler(CommandHandler("guide", cmd_guide))  # Инструкция для менеджеров
+    application.add_handler(CommandHandler("logs", cmd_logs))    # Последние ERROR/CRITICAL
     application.add_handler(CallbackQueryHandler(cb_data))
     job_queue = application.job_queue
     if job_queue:
