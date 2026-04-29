@@ -2948,6 +2948,7 @@ def kb_main(user_role: str, chat_id: int = 0) -> InlineKeyboardMarkup:
             [InlineKeyboardButton("💸 Затраты", callback_data="menu_expenses")],
             [InlineKeyboardButton("📈 АНАЛИТИКА", callback_data="menu_analytics")],
             [InlineKeyboardButton("🔔 Уведомления сейчас", callback_data="menu_notify")],
+            [InlineKeyboardButton("🤖 Коллектор", callback_data="collector_batch")],
             [InlineKeyboardButton("🗄️ Архив", callback_data="archive|root")],
             [InlineKeyboardButton("📈 Статистика", callback_data="show_stats")],
         ]
@@ -2973,6 +2974,115 @@ def kb_main(user_role: str, chat_id: int = 0) -> InlineKeyboardMarkup:
     else:
         rows = []
     return InlineKeyboardMarkup(rows)
+
+
+# ── Коллектор: статус активного батча ────────────────────────────────────────
+
+_BATCH_STATUS_RU = {
+    "pending_managers":  "⏳ Ожидание менеджеров",
+    "pending_admin":     "📋 Ожидание администратора",
+    "admin_approved":    "✅ Утверждён администратором",
+    "sent":              "📤 Отправлен",
+    "partially_sent":    "📤 Отправлен частично",
+    "send_failed":       "❌ Ошибка отправки",
+    "send_empty":        "⚠️ Нет клиентов к отправке",
+    "expired":           "⌛ Истёк",
+    "cancelled":         "🚫 Отменён",
+    "superseded":        "🔄 Заменён новым",
+}
+
+
+def _format_collector_batch_text() -> str:
+    """Формирует сообщение о последнем батче коллектора для admin."""
+    try:
+        from collector.approval_flow import _load_batches
+        batches = _load_batches()
+    except Exception as exc:
+        return f"⚠️ Не удалось загрузить батчи: {exc}"
+
+    if not batches:
+        return "🤖 <b>Коллектор</b>\n\nАктивных батчей нет."
+
+    # Последний батч по created_at (независимо от статуса)
+    try:
+        latest_id = max(batches.keys())
+        batch = batches[latest_id]
+    except Exception:
+        return "⚠️ Ошибка чтения батча."
+
+    batch_id   = batch.get("batch_id", latest_id)
+    status     = batch.get("status", "—")
+    status_ru  = _BATCH_STATUS_RU.get(status, status)
+    created_at = str(batch.get("created_at") or "—")[:16].replace("T", " ")
+
+    lines = [
+        "🤖 <b>Коллектор — текущий батч</b>",
+        "",
+        f"ID: <code>{batch_id}</code>",
+        f"Статус: <b>{status_ru}</b>",
+        f"Создан: <b>{created_at}</b>",
+    ]
+
+    # Свежесть дебиторки
+    snap = batch.get("debt_snapshot")
+    if isinstance(snap, dict):
+        snap_date = str(snap.get("snapshot_date") or snap.get("max_date") or "")[:10]
+        age_h = snap.get("max_age_hours")
+        if snap_date:
+            age_str = f" ({age_h:.0f}ч)" if age_h is not None else ""
+            lines.append(f"Данные дебиторки: <b>{snap_date}</b>{age_str}")
+
+    # Менеджеры
+    managers = batch.get("managers") or {}
+    if managers:
+        lines.append("")
+        lines.append("<b>Менеджеры:</b>")
+        for mgr_name, mgr_data in managers.items():
+            mgr_status = mgr_data.get("status", "—")
+            clients_count = len(mgr_data.get("clients") or [])
+            status_icon = {
+                "approved": "✅", "rejected": "❌",
+                "partial": "🔸", "timeout": "⌛",
+            }.get(mgr_status, "⏳")
+            lines.append(f"  {status_icon} {mgr_name}: {mgr_status} ({clients_count} кл.)")
+
+    # Список клиентов — одобренные или из pending
+    client_list: list = []
+    approved_clients = batch.get("approved_clients")
+    if approved_clients:
+        client_list = approved_clients
+        lines.append("")
+        lines.append(f"<b>Одобрено к отправке ({len(client_list)}):</b>")
+    else:
+        all_clients = [
+            c for mgr_data in managers.values()
+            for c in (mgr_data.get("clients") or [])
+        ]
+        if all_clients:
+            client_list = all_clients
+            lines.append("")
+            lines.append(f"<b>Клиентов в батче ({len(client_list)}):</b>")
+
+    for c in client_list[:20]:
+        name    = c.get("name", "—")
+        amount  = c.get("amount", 0)
+        days    = c.get("days", 0)
+        manager = c.get("manager", "")
+        amount_str = f"{amount:,.0f} ₸".replace(",", " ") if amount else "—"
+        lines.append(f"  • {name} — {amount_str} / {days} дн. ({manager})")
+    if len(client_list) > 20:
+        lines.append(f"  ... ещё {len(client_list) - 20}")
+
+    # Send results если уже отправлено
+    send_results = batch.get("send_results")
+    if send_results:
+        sent_ok    = sum(1 for r in send_results if r.get("sent"))
+        sent_total = len(send_results)
+        lines.append("")
+        lines.append(f"<b>Результат отправки:</b> {sent_ok}/{sent_total} доставлено")
+
+    return "\n".join(lines)
+
 
 def kb_debt_menu(user_role: str) -> InlineKeyboardMarkup:
     rows = [
@@ -6136,6 +6246,27 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             logger.error(f"Ошибка в show_stats: {e}", exc_info=True)
             await q.answer(f"❌ Ошибка: {e}")
+        return
+
+    # Коллектор: статус активного батча
+    if data == "collector_batch":
+        if user_role != "admin":
+            await q.answer("⛔ Доступ запрещён")
+            return
+        await q.answer()
+        text = _format_collector_batch_text()
+        kb_back = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔄 Обновить", callback_data="collector_batch")],
+            [InlineKeyboardButton("🔙 Главное меню", callback_data="back_main")],
+        ])
+        await hide_main_menu(context, chat_id)
+        try:
+            msg = await context.bot.send_message(
+                chat_id=chat_id, text=text, reply_markup=kb_back, parse_mode="HTML"
+            )
+            _menu_set(chat_id, msg.message_id)
+        except Exception as _e:
+            logger.error("collector_batch send error: %s", _e)
         return
 
     # 🆕 v9.4.9: Аналитика
