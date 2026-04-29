@@ -4,7 +4,7 @@
 collections/collections_engine.py
 Главный оркестратор AI-Коллектора долгов.
 
-Версия: 1.4.9 (2026-04-29)
+Версия: 1.5.0 (2026-04-30)
 
 v1.4.8 (2026-04-29): added debt freshness guardrails. Preview now carries
   debt snapshot date/age warnings, while live run and send-approved can be
@@ -96,6 +96,7 @@ configure_runtime_logging(
     retention_days=get_log_retention_days(),
     error_alert_level=logging.ERROR,
     alert_cooldown_sec=int(os.getenv("LOG_ALERT_COOLDOWN_SEC", "300")),
+    test_mode=_TEST_MODE,
 )
 logger = get_collector_logger(__name__)
 logging.getLogger("httpx").setLevel(logging.WARNING)

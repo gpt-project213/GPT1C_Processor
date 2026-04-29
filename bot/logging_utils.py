@@ -26,7 +26,7 @@ from typing import Any, Awaitable, Callable, Optional
 
 from zoneinfo import ZoneInfo
 
-__VERSION__ = "1.1.0"
+__VERSION__ = "1.1.1"
 
 _ALERT_SENDER: Optional[Callable[[str], Awaitable[None]]] = None
 _ALERT_HANDLER: Optional["TelegramErrorAlertHandler"] = None
@@ -270,6 +270,7 @@ def configure_runtime_logging(
     retention_days: int = 14,
     error_alert_level: int = logging.ERROR,
     alert_cooldown_sec: int = 300,
+    test_mode: bool = False,
 ) -> TelegramErrorAlertHandler:
     global _ALERT_HANDLER
 
@@ -299,19 +300,20 @@ def configure_runtime_logging(
     root.addHandler(stream_handler)
     root.addHandler(alert_handler)
 
-    try:
-        file_handler = TimedRotatingFileHandler(
-            log_path,
-            when="midnight",
-            interval=1,
-            backupCount=retention_days,
-            encoding="utf-8",
-            delay=True,
-        )
-        file_handler.setFormatter(formatter)
-        root.addHandler(file_handler)
-    except Exception:
-        pass
+    if not test_mode:
+        try:
+            file_handler = TimedRotatingFileHandler(
+                log_path,
+                when="midnight",
+                interval=1,
+                backupCount=retention_days,
+                encoding="utf-8",
+                delay=True,
+            )
+            file_handler.setFormatter(formatter)
+            root.addHandler(file_handler)
+        except Exception:
+            pass
 
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
