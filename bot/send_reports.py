@@ -185,7 +185,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.61/29.04.2026"
+__VERSION__ = "v9.4.62/30.04.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
@@ -220,6 +220,12 @@ from silence_alerts import SilenceAlert
 from bot.log_monitor import format_alert as _format_log_monitor_alert
 from bot.log_monitor import run_log_monitor as _run_log_monitor
 from bot.crm_audit_log import audit as crm_audit
+from bot.log_insights import (
+    format_client_timeline,
+    format_error_digest,
+    read_client_timeline,
+    summarize_errors_by_system,
+)
 # v2.0: Мобильная адаптивность и аналитика
 try:
     from user_tracker import track_user, track_action, get_stats, format_stats_message
@@ -5415,6 +5421,41 @@ async def cmd_logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def cmd_timeline(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показывает единую CRM+Collector timeline по клиенту. Только для admin."""
+    chat_id = update.effective_chat.id
+    if not is_admin(chat_id):
+        await _send_auto(context, chat_id, "⛔ Доступ запрещён.")
+        return
+
+    client_key = " ".join(context.args or []).strip()
+    if not client_key:
+        await _send_auto(context, chat_id, "Использование: /timeline <название клиента>")
+        return
+
+    records = read_client_timeline(
+        client_key,
+        crm_path=LOGS_DIR / "crm_audit.jsonl",
+        collector_path=LOGS_DIR / "collector_audit.jsonl",
+        limit=60,
+    )
+    await _send_auto(context, chat_id, format_client_timeline(client_key, records))
+
+
+async def morning_error_digest_task(context: ContextTypes.DEFAULT_TYPE):
+    """Отправляет админу краткий digest WARNING/ERROR/CRITICAL по доменам за ночь."""
+    if not ADMIN_CHAT_ID:
+        return
+    try:
+        now = datetime.now(TZ).replace(tzinfo=None)
+        counts = summarize_errors_by_system(LOGS_DIR, now=now, hours=12)
+        message = format_error_digest(counts, now=now, hours=12)
+        await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=message, parse_mode="HTML")
+        sched_logger.info("morning_error_digest: delivered to admin")
+    except Exception as e:
+        sched_logger.error("morning_error_digest failed: %s", e, exc_info=True)
+
+
 async def _exit_after_reply(delay_sec: float = 1.0) -> None:
     await asyncio.sleep(delay_sec)
     _clear_pid()
@@ -8283,6 +8324,7 @@ def main():
     application.add_handler(CommandHandler("phone", cmd_phone))  # CRM: внести телефон клиента
     application.add_handler(CommandHandler("guide", cmd_guide))  # Инструкция для менеджеров
     application.add_handler(CommandHandler("logs", cmd_logs))    # Последние ERROR/CRITICAL
+    application.add_handler(CommandHandler("timeline", cmd_timeline))  # Единая timeline по клиенту
     application.add_handler(CallbackQueryHandler(cb_data))
     job_queue = application.job_queue
     if job_queue:
@@ -8368,6 +8410,13 @@ def main():
             name="inventory_summary"
         )
         sched_logger.info("📦 Настроена краткая сводка остатков: ежедневно 09:00")
+
+        job_queue.run_daily(
+            morning_error_digest_task,
+            time=dt_time(9, 5, tzinfo=TZ),
+            name="morning_error_digest",
+        )
+        sched_logger.info("🌅 Настроен утренний digest ошибок: ежедневно 09:05")
         
         job_queue.run_daily(
             send_gross_summary,
