@@ -10,6 +10,7 @@ DeepSeek AI для разбора контактных данных и прич�
 
 import json
 import logging
+from collector.logging_utils import get_collector_logger
 import os
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -41,7 +42,7 @@ TEST_TG_CHAT_IDS: List[int] = [
 ]
 OPENAI_API_KEY           = os.getenv("OPENAI_API_KEY", "")
 
-logger = logging.getLogger(__name__)
+logger = get_collector_logger(__name__)
 
 # ─── Telegram helpers ────────────────────────────────────────────────────────
 

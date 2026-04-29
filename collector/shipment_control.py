@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collector.logging_utils import get_collector_logger
 import os
 import tempfile
 from datetime import datetime
@@ -46,7 +47,7 @@ _DECISIONS_PATH = _ROOT / "logs" / "collector_shipment_decisions.json"
 # Порог «полная оплата» — долг ≤ 1000 ₸ считается закрытым (±1С округление)
 FULL_PAYMENT_THRESHOLD = float(os.getenv("SHIPMENT_FULL_PAYMENT_THRESHOLD", "1000"))
 
-logger = logging.getLogger(__name__)
+logger = get_collector_logger(__name__)
 
 VALID_DECISIONS = {"allow", "allow_after", "block_until", "block"}
 

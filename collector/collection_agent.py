@@ -33,6 +33,7 @@ OpenClaw:
 
 import json
 import logging
+from collector.logging_utils import get_collector_logger
 import os
 from datetime import datetime
 from pathlib import Path
@@ -55,7 +56,7 @@ OPENCLAW_ENABLED  = os.getenv("OPENCLAW_ENABLED", "false").lower() == "true"
 OPENCLAW_GATEWAY  = os.getenv("OPENCLAW_GATEWAY", "ws://127.0.0.1:18789")
 COMPANY_NAME      = os.getenv("COMPANY_NAME", "Минбаракат")
 
-logger = logging.getLogger(__name__)
+logger = get_collector_logger(__name__)
 
 _PROMPTS_PATH = Path(__file__).resolve().parent.parent / "config" / "collector_prompts.json"
 

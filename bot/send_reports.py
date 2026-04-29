@@ -1,4 +1,4 @@
-# v. 9.4.38 / 2026-04-22 - fix: bot selectors prefer fresh detailed debt files over stale ledgers
+﻿# v. 9.4.38 / 2026-04-22 - fix: bot selectors prefer fresh detailed debt files over stale ledgers
 # v. 9.4.37 / 2026-04-22 - fix: approval-batch silence escalates to admin hourly; stale manager previews are closed server-side
 # v. 9.4.35 / 2026-04-13 - feat: event-driven collector trigger после обработки debt_ext файлов
 # v. 9.4.34 / 2026-03-16 - Fix: p.stat().st_mtime в _extract_date обёрнут в try/except (audit fix)
@@ -185,7 +185,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.60/23.04.2026"
+__VERSION__ = "v9.4.61/29.04.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
@@ -208,6 +208,7 @@ from telegram.error import BadRequest, RetryAfter, TimedOut, NetworkError
 from silence_alerts import SilenceAlert
 from bot.log_monitor import format_alert as _format_log_monitor_alert
 from bot.log_monitor import run_log_monitor as _run_log_monitor
+from bot.crm_audit_log import audit as crm_audit
 # v2.0: Мобильная адаптивность и аналитика
 try:
     from user_tracker import track_user, track_action, get_stats, format_stats_message
@@ -1213,17 +1214,7 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
         # 4. Бесхозные клиенты — рассылаем всем участникам CRM: "чей клиент?"
         #    До 3 штук в день чтобы не перегружать.
         #    Исключаем служебные записи: "Без клиента", "Недостача", зарплатные авансы (*ЗП*/*зп*)
-        _CRM_CLAIM_EXCLUDED = {"Без клиента", "Недостача"}
-        def _is_service_entry(name: str) -> bool:
-            nl = name.lower()
-            return nl in {s.lower() for s in _CRM_CLAIM_EXCLUDED} or "зп" in nl
-        from bot.crm_clients import load_clients as _crm_load
-        _crm_data = _crm_load()
-        _unowned = [
-            k for k, v in _crm_data.get("clients", {}).items()
-            if (not v.get("manager") or v.get("manager") in ("", "Не определён", "?"))
-            and not _is_service_entry(k)
-        ][:3]
+        _unowned = _crm_collect_unowned_claim_clients(limit=3)
         _participants = _all_crm_participants()
         for _client_key in _unowned:
             _token = _crm_claim_token()
@@ -1250,7 +1241,10 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
                 "client_key": _client_key,
                 "notified": _notified,
                 "claimed": False,
+                "created_at": datetime.now(TZ).isoformat(),
             }
+            _crm_save_claim_pending()
+            crm_audit("claim_broadcast", client_key=_client_key, notified_count=len(_notified), token=_token)
             logger.info("CRM claim: разослано по %d участникам для «%s»", len(_notified), _client_key)
 
         log_event("crm_daily_done",
@@ -5639,8 +5633,9 @@ def _crm_load_pending() -> None:
     _cleanup_legacy_collector_pending_state()
 
 # Рассылка "чей клиент": token → {client_key, notified_chat_ids, claimed}
+CRM_CLAIM_PENDING_PATH = LOGS_DIR / "crm_claim_pending_state.json"
+CRM_CLAIM_TTL_HOURS = int(os.getenv("CRM_CLAIM_TTL_HOURS", "72"))
 _CRM_CLAIM_PENDING: Dict[str, Dict[str, Any]] = {}
-_CRM_CLAIM_COUNTER = 0  # монотонный счётчик токенов
 
 # Имя администратора — участвует в CRM наравне с менеджерами
 ADMIN_NAME = "Вадим"
@@ -5654,10 +5649,79 @@ def _all_crm_participants() -> Dict[str, int]:
     return result
 
 
+def _crm_cleanup_claim_pending(now_dt: Optional[datetime] = None) -> None:
+    now_dt = now_dt or datetime.now(TZ)
+    stale_tokens = []
+    for token, claim in list(_CRM_CLAIM_PENDING.items()):
+        created_raw = claim.get("created_at")
+        if not created_raw:
+            continue
+        try:
+            created_dt = datetime.fromisoformat(created_raw)
+        except Exception:
+            stale_tokens.append(token)
+            continue
+        if (now_dt - created_dt).total_seconds() > CRM_CLAIM_TTL_HOURS * 3600:
+            stale_tokens.append(token)
+    for token in stale_tokens:
+        _CRM_CLAIM_PENDING.pop(token, None)
+
+
+def _crm_save_claim_pending() -> None:
+    CRM_CLAIM_PENDING_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _crm_cleanup_claim_pending()
+    tmp = CRM_CLAIM_PENDING_PATH.with_suffix(".tmp")
+    payload = {k: v for k, v in _CRM_CLAIM_PENDING.items()}
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, CRM_CLAIM_PENDING_PATH)
+
+
+def _crm_load_claim_pending() -> None:
+    _CRM_CLAIM_PENDING.clear()
+    if not CRM_CLAIM_PENDING_PATH.exists():
+        return
+    try:
+        data = json.loads(CRM_CLAIM_PENDING_PATH.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            _CRM_CLAIM_PENDING.update(data)
+        _crm_cleanup_claim_pending()
+        logger.info("CRM claim pending restored: %d records", len(_CRM_CLAIM_PENDING))
+    except Exception as _e:
+        logger.warning("_crm_load_claim_pending error: %s", _e)
+
+
 def _crm_claim_token() -> str:
-    global _CRM_CLAIM_COUNTER
-    _CRM_CLAIM_COUNTER += 1
-    return f"claim_{_CRM_CLAIM_COUNTER}"
+    from uuid import uuid4
+    stamp = datetime.now(TZ).strftime("%Y%m%d%H%M%S")
+    return f"claim_{stamp}_{uuid4().hex[:8]}"
+
+
+def _crm_collect_unowned_claim_clients(limit: int = 3) -> List[str]:
+    _CRM_CLAIM_EXCLUDED = {"Без клиента", "Недостача"}
+
+    def _is_service_entry(name: str) -> bool:
+        nl = name.lower()
+        return nl in {s.lower() for s in _CRM_CLAIM_EXCLUDED} or "зп" in nl
+
+    from bot.crm_clients import load_clients as _crm_load, canonicalize_client_key
+    _crm_data = _crm_load()
+    grouped: Dict[str, List[Tuple[str, Dict[str, Any]]]] = {}
+    for key, value in _crm_data.get("clients", {}).items():
+        if not isinstance(value, dict):
+            continue
+        grouped.setdefault(canonicalize_client_key(key), []).append((key, value))
+
+    result: List[str] = []
+    for _canon, items in grouped.items():
+        owned = any((item.get("manager") or "") not in ("", "Не определён", "?", "-", "—") for _, item in items)
+        if owned:
+            continue
+        candidate = next((k for k, _ in items if not _is_service_entry(k)), None)
+        if candidate:
+            result.append(candidate)
+        if len(result) >= limit:
+            break
+    return result
 
 
 async def cmd_guide(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -6779,38 +6843,38 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data.startswith("weekly_deny|"):
         if user_role != "admin":
-            await q.answer("Только администратор может отклонять")
+            await q.answer("?????? ????????????? ????? ?????????")
             return
         token = data.split("|", 1)[1]
         client_name = _weekly_token_get(token)
         if not client_name:
-            await q.answer("Запрос устарел — перезапустите бот")
+            await q.answer("?????? ??????? ? ????????????? ???")
             return
-        await q.answer("Отклонено")
+        await q.answer("?????????")
         try:
             await q.message.edit_text(
-                f"❌ Запрос на исключение <b>{client_name}</b> отклонён.",
+                f"? ?????? ?? ?????????? <b>{client_name}</b> ????????.",
                 parse_mode="HTML",
             )
         except Exception:
             pass
         return
-    # ── CRM: "Мой клиент" — менеджер/admin забирает бесхозного клиента ──────
+
+    # ?? CRM: "??? ??????" ? ????????/admin ???????? ?????????? ??????? ??????
     if data.startswith("crm_claim|"):
         token = data.split("|", 1)[1]
         claim = _CRM_CLAIM_PENDING.get(token)
         if not claim:
-            await q.answer("Запрос устарел или уже обработан.")
+            await q.answer("?????? ??????? ??? ??? ?????????.")
             return
         if claim.get("claimed"):
-            await q.answer("Этот клиент уже взят другим менеджером.")
+            await q.answer("???? ?????? ??? ???? ?????? ??????????.")
             try:
                 await q.message.edit_reply_markup(reply_markup=None)
             except Exception:
                 pass
             return
 
-        # Определяем имя менеджера/admin по chat_id
         claimer_chat_id = q.message.chat.id
         claimer_name = None
         for mgr, mid in _all_crm_participants().items():
@@ -6818,49 +6882,59 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 claimer_name = mgr
                 break
         if not claimer_name:
-            await q.answer("Не удалось определить менеджера.")
+            await q.answer("?? ??????? ?????????? ?????????.")
             return
 
         client_key = claim["client_key"]
         claim["claimed"] = True
+        claim["claimed_by"] = claimer_name
+        claim["claimed_at"] = datetime.now(TZ).isoformat()
+        _crm_save_claim_pending()
 
-        # Назначаем менеджера в clients.json
         try:
-            from bot.crm_clients import load_clients as _cc_load, save_clients as _cc_save
+            from bot.crm_clients import load_clients as _cc_load, save_clients as _cc_save, canonicalize_client_key
             _cc_data = _cc_load()
             _cc_clients = _cc_data.get("clients", {})
-            if client_key in _cc_clients:
-                _cc_clients[client_key]["manager"] = claimer_name
-                _cc_data["clients"] = _cc_clients
-                _cc_save(_cc_data)
-                logger.info("CRM claim: %s → менеджер %s", client_key, claimer_name)
+            _claim_canon = canonicalize_client_key(client_key)
+            _updated_keys = []
+            for _existing_key, _existing_value in list(_cc_clients.items()):
+                if canonicalize_client_key(_existing_key) != _claim_canon:
+                    continue
+                if not isinstance(_existing_value, dict):
+                    _existing_value = {}
+                _existing_value["manager"] = claimer_name
+                _existing_value["claimed_at"] = datetime.now(TZ).isoformat()
+                _cc_clients[_existing_key] = _existing_value
+                _updated_keys.append(_existing_key)
+            _cc_data["clients"] = _cc_clients
+            _cc_save(_cc_data)
+            logger.info("CRM claim: %s -> manager %s (aliases=%d)", client_key, claimer_name, len(_updated_keys))
+            crm_audit("claim_taken", client_key=client_key, claimer=claimer_name, aliases=_updated_keys, token=token)
         except Exception as _e:
             logger.error("crm_claim save error: %s", _e)
 
-        await q.answer(f"✅ Назначено!")
+        await q.answer("? ?????????!")
         try:
             await q.message.edit_text(
-                f"✅ <b>{client_key}</b>\nВзял: <b>{claimer_name}</b>",
+                f"? <b>{client_key}</b>\n????: <b>{claimer_name}</b>",
                 parse_mode="HTML",
                 reply_markup=None,
             )
         except Exception:
             pass
 
-        # Остальным участникам — убираем кнопку
         for other_chat_id in claim.get("notified", []):
             if other_chat_id == claimer_chat_id:
                 continue
             try:
                 await context.bot.send_message(
                     chat_id=other_chat_id,
-                    text=f"ℹ️ <b>{client_key}</b> — взял {claimer_name}.",
+                    text=f"?? <b>{client_key}</b> ? ???? {claimer_name}.",
                     parse_mode="HTML",
                 )
             except Exception:
                 pass
 
-        # Сразу запускаем цепочку внесения телефона для того кто взял
         try:
             from bot.crm_clients import get_clients_without_phones as _crm_next2
             remaining = len(_crm_next2(claimer_name, limit=500))
@@ -6869,12 +6943,13 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "client_key": client_key,
                 "original_name": client_key,
                 "done_today": 0,
-                "daily_limit": 1,  # один клиент — тот что только что взял
+                "daily_limit": 1,
                 "manager": claimer_name,
                 "total_no_phone": remaining,
                 "last_sent": datetime.now(TZ).isoformat(),
             }
             _crm_save_pending()
+            crm_audit("claim_phone_chain_started", client_key=client_key, claimer=claimer_name, remaining=remaining)
             await context.bot.send_message(
                 chat_id=claimer_chat_id,
                 text=_crm_name_prompt_text(
@@ -6887,9 +6962,8 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=_crm_name_choice_kb(),
             )
         except Exception as _e:
-            logger.warning("crm_claim → phone chain error: %s", _e)
+            logger.warning("crm_claim -> phone chain error: %s", _e)
         return
-
     # ─────────────────────────────────────────────────────────────────────────
 
     await q.answer("Неизвестная команда")
@@ -6909,6 +6983,7 @@ async def post_init(app: Application):
 
     # Восстанавливаем CRM-очередь сбора телефонов
     _crm_load_pending()
+    _crm_load_claim_pending()
 
     # v9.4.27: Уведомление о запуске — admin (техническое) + команда (мотивирующее)
     start_kb = InlineKeyboardMarkup([
@@ -8393,3 +8468,4 @@ def rebuild_index_sync() -> None:
 
 if __name__ == "__main__":
     main()
+

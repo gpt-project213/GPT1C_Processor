@@ -4,7 +4,7 @@
 collections/collections_engine.py
 Главный оркестратор AI-Коллектора долгов.
 
-Версия: 1.4.8 (2026-04-29)
+Версия: 1.4.9 (2026-04-29)
 
 v1.4.8 (2026-04-29): added debt freshness guardrails. Preview now carries
   debt snapshot date/age warnings, while live run and send-approved can be
@@ -73,6 +73,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from dotenv import load_dotenv
 from zoneinfo import ZoneInfo
+from collector.logging_utils import get_collector_logger
 
 # Добавляем корень проекта в sys.path для standalone запуска
 _ROOT = Path(__file__).resolve().parent.parent
@@ -96,16 +97,7 @@ logging.basicConfig(
     format="%(asctime)s, %(levelname)s %(message)s",
     handlers=_handlers,
 )
-class _PrefixAdapter(logging.LoggerAdapter):
-    def __init__(self, base_logger: logging.Logger, prefix: str) -> None:
-        super().__init__(base_logger, {})
-        self._prefix = prefix
-
-    def process(self, msg: str, kwargs: dict) -> tuple:
-        return f"{self._prefix} {msg}", kwargs
-
-
-logger = _PrefixAdapter(logging.getLogger(__name__), "[COLLECTOR]")
+logger = get_collector_logger(__name__)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 

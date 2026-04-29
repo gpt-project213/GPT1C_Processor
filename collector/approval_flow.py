@@ -56,6 +56,7 @@ Callback prefix: wa_appr_
 
 import json
 import logging
+from collector.logging_utils import get_collector_logger
 import os
 import re
 import secrets
@@ -84,7 +85,7 @@ ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID", "")
 BATCH_EXPIRE_HOURS = int(os.getenv("WA_APPROVAL_EXPIRE_HOURS", "9"))
 MANAGER_SILENCE_TIMEOUT_HOURS = int(os.getenv("WA_MANAGER_SILENCE_HOURS", "1"))
 
-logger = logging.getLogger(__name__)
+logger = get_collector_logger(__name__)
 
 
 # ─── State I/O ───────────────────────────────────────────────────────────────

@@ -22,6 +22,7 @@ v1.0.8 (2026-04-29): loader теперь возвращает freshness-мета
 
 import json
 import logging
+from collector.logging_utils import get_collector_logger
 import os
 import re
 from datetime import date, datetime, timedelta
@@ -41,7 +42,7 @@ JSON_DIR = ROOT_DIR / "reports" / "json"
 CONTACTS_PATH = ROOT_DIR / "config" / "debtors_contacts.json"
 LOGS_DIR = ROOT_DIR / "logs"
 
-logger = logging.getLogger(__name__)
+logger = get_collector_logger(__name__)
 
 
 def _safe_float(val: Any) -> float:

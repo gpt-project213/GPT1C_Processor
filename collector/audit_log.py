@@ -4,7 +4,7 @@
 collector/audit_log.py
 Append-only JSONL-журнал событий коллектора.
 
-Версия: 1.0.0 (2026-04-29)
+Версия: 1.0.1 (2026-04-29)
 
 Назначение:
   Единая точка записи всех observable-событий коллектора.
@@ -28,6 +28,7 @@ Append-only JSONL-журнал событий коллектора.
 
 import json
 import logging
+from collector.logging_utils import get_collector_logger
 import os
 import threading
 from datetime import datetime
@@ -36,7 +37,7 @@ from typing import Any
 
 from zoneinfo import ZoneInfo
 
-logger = logging.getLogger(__name__)
+logger = get_collector_logger(__name__)
 
 _TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 _ROOT = Path(__file__).resolve().parent.parent

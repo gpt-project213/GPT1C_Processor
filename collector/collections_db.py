@@ -13,6 +13,7 @@ collections/collections_db.py
 
 import json
 import logging
+from collector.logging_utils import get_collector_logger
 import os
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta
@@ -32,7 +33,7 @@ TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 ROOT_DIR = Path(__file__).resolve().parent.parent
 STATE_PATH = ROOT_DIR / "logs" / "collector_state.json"
 
-logger = logging.getLogger(__name__)
+logger = get_collector_logger(__name__)
 
 
 @contextmanager

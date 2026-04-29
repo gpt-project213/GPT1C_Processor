@@ -131,3 +131,6 @@ if is_holiday_today():
 |---|---|
 | 2026-04-29 | Добавлен COLLECTOR_PHASES_2_4_2026_04_29.md |
 | 2026-04-11 | Создан первичный INDEX.md |
+
+- `CRM_COLLECTOR_AUDIT_20260430.md` — аудит и фиксы CRM duplicate/claim-state + system logging по collector и CRM.
+

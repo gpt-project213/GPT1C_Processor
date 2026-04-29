@@ -4,7 +4,7 @@
 collector/whatsapp_poller.py
 Green API polling — получает входящие сообщения WhatsApp каждые 30 секунд.
 
-Версия: 1.1.6 (2026-04-29)
+Версия: 1.1.7 (2026-04-29)
 
 v1.1.6 (2026-04-29): входящие document/image/video сообщения теперь
   передают в client_dialog метаданные вложения и downloadUrl, чтобы чек
@@ -31,6 +31,7 @@ Endpoints (используется instance-specific URL, напр. https://710
 import asyncio
 import json
 import logging
+from collector.logging_utils import get_collector_logger
 import os
 import tempfile
 from datetime import datetime
@@ -66,7 +67,22 @@ _GREENAPI_BASE = os.getenv(
     f"https://{GREENAPI_ID[:4]}.api.greenapi.com" if GREENAPI_ID else "https://api.green-api.com"
 )
 
-logger = logging.getLogger(__name__)
+logger = get_collector_logger(__name__)
+
+
+def _mask_phone(phone: str) -> str:
+    digits = "".join(c for c in str(phone or "") if c.isdigit())
+    if len(digits) <= 4:
+        return digits
+    return f"{digits[:4]}***{digits[-2:]}"
+
+
+def _audit(event: str, **kwargs: Any) -> None:
+    try:
+        from collector.audit_log import audit as _collector_audit
+        _collector_audit(event, **kwargs)
+    except Exception as exc:
+        logger.debug("audit skipped %s: %s", event, exc)
 
 
 def _extract_phone(sender: str) -> str:
@@ -355,6 +371,7 @@ async def poll_once() -> None:
             # пропускаются до handle_incoming(), где неизвестные номера
             # безопасно игнорируются без ответа клиенту.
             if not _should_process_incoming(phone):
+                _audit("wa_incoming_skipped", phone_masked=_mask_phone(phone), reason="no_active_dialog", receipt_id=receipt_id)
                 logger.info("Нет активного диалога коллектора для номера — пропуск")
                 return
 
@@ -391,6 +408,7 @@ async def poll_once() -> None:
                 logger.info("Входящий %s от %s", msg_type, phone)
 
             if phone and text:
+                _audit("wa_incoming_received", phone_masked=_mask_phone(phone), msg_type=msg_type, receipt_id=receipt_id, has_attachment=bool(attachment), text_preview=text[:160])
                 try:
                     from collector.client_dialog import handle_incoming
                     await handle_incoming(phone, text, attachment=attachment)
@@ -422,6 +440,7 @@ async def _delete_notification(receipt_id: int) -> None:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.delete(delete_url)
         if resp.status_code == 200:
+            _audit("wa_notification_deleted", receipt_id=receipt_id)
             logger.debug("Уведомление %s удалено", receipt_id)
         else:
             logger.warning(

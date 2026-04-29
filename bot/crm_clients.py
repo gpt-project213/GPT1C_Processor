@@ -4,7 +4,7 @@
 bot/crm_clients.py
 Универсальная база клиентов Минбаракат (CRM).
 
-Версия: 1.0.7 (2026-04-26)
+Версия: 1.0.8 (2026-04-29)
 Изменения v1.0.5:
   - Fix S1: список менеджеров читается из config/managers.json (single source of truth).
     Раньше был хардкод ("Алена", "Ергали", "Магира", "Оксана"); fallback — тот же
@@ -36,6 +36,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from dotenv import load_dotenv
 from zoneinfo import ZoneInfo
+from bot.crm_audit_log import audit as crm_audit
 
 load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env",
             encoding="utf-8-sig", override=False)
@@ -168,6 +169,23 @@ def extract_phones_from_client_name(client_name: str) -> List[str]:
         if phone and phone not in phones:
             phones.append(phone)
     return phones
+
+
+def canonicalize_client_key(name: str) -> str:
+    """Canonical form for CRM duplicate detection without changing the display key."""
+    normalized = re.sub(r"\s+", " ", str(name or "").strip())
+    normalized = normalized.replace("ё", "е").replace("Ё", "Е")
+    return normalized.lower()
+
+
+def _find_existing_client_key(clients_db: Dict[str, Any], name: str) -> Optional[str]:
+    if name in clients_db:
+        return name
+    target = canonicalize_client_key(name)
+    for existing_key in clients_db.keys():
+        if canonicalize_client_key(existing_key) == target:
+            return existing_key
+    return None
 
 
 # ─────────────────────────────────────────────
@@ -375,7 +393,8 @@ def update_from_reports() -> Dict[str, List[str]]:
     def _upsert(name: str, manager: str, source: str) -> bool:
         """Добавляет/обновляет клиента. Возвращает True если клиент новый (не вендор)."""
         is_vendor = _is_vendor_name(name)
-        existing = clients_db.get(name)
+        existing_key = _find_existing_client_key(clients_db, name)
+        existing = clients_db.get(existing_key) if existing_key else None
         if existing is None:
             clients_db[name] = {
                 "manager": manager,
@@ -387,31 +406,33 @@ def update_from_reports() -> Dict[str, List[str]]:
                 "sources": [source],
                 "first_seen": today,
                 "last_seen": today,
+                "aliases": [],
             }
-            return not is_vendor  # вендоры не считаются "новыми клиентами"
-        else:
-            # Обновляем last_seen и sources
-            existing["last_seen"] = today
-            if source not in existing.get("sources", []):
-                existing.setdefault("sources", []).append(source)
-            # Если запись ещё не помечена как вендор — проверяем по имени
-            if is_vendor and not existing.get("is_vendor"):
-                existing["is_vendor"] = True
-                existing["do_not_call"] = True
-            # Обновляем менеджера если был не определён или пуст
-            # Реальные имена ("Вадим", "Алена" и т.д.) не перезаписываем
-            _UNOWNED = ("", "Не определён", "?", "-", "—")
-            if existing.get("manager", "") in _UNOWNED and manager and manager not in _UNOWNED:
-                existing["manager"] = manager
-            return False
+            crm_audit("client_created", client_key=name, manager=manager, source=source, is_vendor=is_vendor)
+            return not is_vendor
 
-    # Из дебиторки
+        existing["last_seen"] = today
+        if source not in existing.get("sources", []):
+            existing.setdefault("sources", []).append(source)
+        if is_vendor and not existing.get("is_vendor"):
+            existing["is_vendor"] = True
+            existing["do_not_call"] = True
+        _UNOWNED = ("", "Не определён", "?", "-", "—")
+        if existing.get("manager", "") in _UNOWNED and manager and manager not in _UNOWNED:
+            existing["manager"] = manager
+            crm_audit("manager_assigned", client_key=existing_key or name, manager=manager, source=source)
+        if existing_key and existing_key != name:
+            aliases = existing.setdefault("aliases", [])
+            if name not in aliases and name != existing_key:
+                aliases.append(name)
+                crm_audit("canonical_merge", client_key=existing_key, alias=name, manager=existing.get("manager", ""), source=source)
+        return False
+
     for name, manager in _load_latest_debt_clients():
         is_new = _upsert(name, manager, "debt")
         if is_new and manager:
             new_by_manager.setdefault(manager, []).append(name)
 
-    # Из продаж
     for name, manager in _load_latest_sales_clients():
         is_new = _upsert(name, manager, "sales")
         if is_new and manager:
@@ -421,13 +442,9 @@ def update_from_reports() -> Dict[str, List[str]]:
     save_clients(data)
 
     total_new = sum(len(v) for v in new_by_manager.values())
+    crm_audit("crm_sync_complete", total_clients=len(clients_db), total_new=total_new)
     logger.info("CRM обновлена: %d клиентов всего, %d новых", len(clients_db), total_new)
     return new_by_manager
-
-
-# ─────────────────────────────────────────────
-# Работа с телефонами
-# ─────────────────────────────────────────────
 
 def get_clients_without_phones(manager: str, limit: int = 5) -> List[str]:
     """
@@ -539,9 +556,11 @@ def set_client_phone(client_name: str, phone: str, manager: str = "",
     data = load_clients()
     clients_db = data.get("clients", {})
 
-    entry = clients_db.get(client_name)
+    entry_key = _find_existing_client_key(clients_db, client_name)
+    entry = clients_db.get(entry_key) if entry_key else None
     if entry is None:
         logger.warning("set_client_phone: клиент не найден: %s", client_name)
+        crm_audit("phone_set_missing", client_key=client_name, phone=phone)
         return False
 
     entry["whatsapp"] = phone.strip()
@@ -556,6 +575,7 @@ def set_client_phone(client_name: str, phone: str, manager: str = "",
 
     data["clients"] = clients_db
     save_clients(data)
+    crm_audit("phone_set", client_key=entry_key or client_name, phone=phone, manager=entry.get("manager", manager), phone_source=phone_source or "")
     logger.info("Телефон записан: %s → %s", client_name, phone)
     return True
 
@@ -591,6 +611,7 @@ def set_client_details(client_name: str, display_name: str = "",
         entry["name_review_needed"] = bool(name_review_needed)
     data["clients"] = clients_db
     save_clients(data)
+    crm_audit("client_details_set", client_key=client_name, display_name=display_name or "", phone=phone or "", address=address or "", mode=name_mode or "")
     logger.info("Данные обновлены: %s (name=%r phone=%r address=%r original=%r mode=%r review=%r)",
                 client_name, display_name or "-", phone or "-", address or "-",
                 original_name or "-", name_mode or "-", name_review_needed)
@@ -611,6 +632,7 @@ def set_client_alias(client_name: str, alias: str) -> bool:
     entry["display_name"] = alias.strip()
     data["clients"] = clients_db
     save_clients(data)
+    crm_audit("alias_set", client_key=client_name, alias=alias)
     logger.info("Псевдоним сохранён: %s → «%s»", client_name, alias)
     return True
 

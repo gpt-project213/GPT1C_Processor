@@ -468,3 +468,16 @@ perf(<module>): <оптимизация>
 
 Jinja2 → `templates/base.html`. Layer 5 (f-strings) → фигурные скобки экранировать `{{`/`}}`.
 Footer: `"Сформировано: DD.MM.YYYY HH:MM (Asia/Almaty) | Версия: …"`
+
+
+- 2026-04-29: working C project patched for CRM canonical duplicate merging, restart-safe crm_claim persistence, CRM audit log (logs/crm_audit.jsonl), and collector-wide shared [COLLECTOR] logger helper with end-to-end dialog/poller audit events.
+
+- 30.04.2026: в рабочую копию на `C:\GPT1C_Processor_analitica` доведены CRM и collector logging fixes:
+  - CRM canonical duplicate merge в `bot/crm_clients.py`
+  - restart-safe `crm_claim_pending_state.json`
+  - `bot/crm_audit_log.py` с `logs/crm_audit.jsonl`
+  - общий `collector/logging_utils.py`
+  - system audit events в `collector/client_dialog.py` и `collector/whatsapp_poller.py`
+  - исправлен сломанный callback range `weekly_deny/crm_claim` в `bot/send_reports.py`
+  - проверки: py_compile OK, `tests/test_crm_regression.py` 4/4 OK, `tests/test_collector_regression_hermetic.py` 15/15 OK, `tests/test_audit_log.py` 7/7 OK
+

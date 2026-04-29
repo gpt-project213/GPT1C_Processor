@@ -29,13 +29,14 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collector.logging_utils import get_collector_logger
 import os
 from datetime import datetime
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any, Dict, Optional
 
-logger = logging.getLogger(__name__)
+logger = get_collector_logger(__name__)
 
 ROOT = Path(__file__).resolve().parents[1]
 TZ_NAME = os.getenv("TZ", "Asia/Almaty")

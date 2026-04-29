@@ -1416,3 +1416,33 @@ Observed rebuild result:
 
 - This is a collector-dialog behavior change only.
 - Approval flow, batch state machine, debt selectors, WhatsApp transport, and Telegram scheduler were not changed in this step.
+
+
+## 2026-04-29 CRM + Collector logging patch
+- Working C project patched with CRM canonical duplicate merge in bot/crm_clients.py.
+- CRM claim flow in bot/send_reports.py now persists state in logs/crm_claim_pending_state.json and uses unique claim_<timestamp>_<uuid8> tokens.
+- Added bot/crm_audit_log.py -> logs/crm_audit.jsonl.
+- Added collector/logging_utils.py and switched collector modules to shared [COLLECTOR] logger helper.
+- Added collector stage audit in whatsapp_poller/client_dialog: wa_incoming_received, incoming_ignored_*, dialog_started, client_reply_received, wa_reply_sent/failed, payment_claim_reported, payment_proof_received, dialog_escalated.
+- Added tests/test_crm_regression.py.
+
+2026-04-30
+- Рабочая копия на C: получила CRM и collector system logging patch.
+- CRM:
+  - канонизация ключа клиента в `bot/crm_clients.py`
+  - restart-safe `crm_claim_pending_state.json`
+  - `bot/crm_audit_log.py` -> `logs/crm_audit.jsonl`
+  - `crm_claim` назначает менеджера всем каноническим дублям
+- Collector:
+  - `collector/logging_utils.py`
+  - единый `[COLLECTOR]` logger в collector-модулях
+  - audit events в `client_dialog.py` и `whatsapp_poller.py`
+- Во время внедрения был сломан callback range `weekly_deny/crm_claim` в `bot/send_reports.py`; дефект исправлен до финальной проверки.
+- Проверки:
+  - `python -m py_compile` по измененным runtime-файлам -> OK
+  - `python -X utf8 tests/test_crm_regression.py` -> 4/4 OK
+  - `python -X utf8 tests/test_collector_regression_hermetic.py` -> 15/15 OK
+  - `python -X utf8 tests/test_audit_log.py` -> 7/7 OK
+- Live logs:
+  - `send_reports_20260429.log` подтверждает Green API `200 OK`, Telegram `200 OK`, признаков WhatsApp block нет.
+

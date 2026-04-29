@@ -19,6 +19,7 @@ API: POST https://api.retellai.com/v2/create-phone-call
 """
 
 import logging
+from collector.logging_utils import get_collector_logger
 import os
 from datetime import datetime
 from pathlib import Path
@@ -38,7 +39,7 @@ RETELL_API_KEY  = os.getenv("RETELL_API_KEY", "")
 RETELL_AGENT_ID = os.getenv("RETELL_AGENT_ID", "")
 COMPANY_PHONE   = os.getenv("COMPANY_PHONE", "")
 
-logger = logging.getLogger(__name__)
+logger = get_collector_logger(__name__)
 
 try:
     CALL_LEVEL_MIN  = int(os.getenv("COLLECTOR_CALL_LEVEL", "4"))

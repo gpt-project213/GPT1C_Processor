@@ -4,7 +4,7 @@
 collector/client_dialog.py
 Управление диалогами с должниками через WhatsApp.
 
-Версия: 1.1.0 (2026-04-29)
+Версия: 1.1.1 (2026-04-29)
 
 v1.1.0 (2026-04-29): paid_claim переведён в отдельное состояние
   awaiting_payment_proof; claim об оплате и вложенные чеки/скрины теперь
@@ -29,6 +29,7 @@ v1.0.8 (2026-04-23): мягкая обработка ответов клиент
 import asyncio
 import json
 import logging
+from collector.logging_utils import get_collector_logger
 import os
 import tempfile
 import time
@@ -52,8 +53,23 @@ _ROOT = Path(__file__).resolve().parent.parent
 _DIALOGS_PATH = _ROOT / "logs" / "collector_client_dialogs.json"
 _DELETION_QUEUE_PATH = _ROOT / "logs" / "deletion_queue.json"
 
-logger = logging.getLogger(__name__)
+logger = get_collector_logger(__name__)
 _DIALOG_ACTIVE_STATES = {"active", "awaiting_payment_proof", "awaiting_manager"}
+
+
+def _mask_phone(phone: str) -> str:
+    digits = "".join(c for c in str(phone or "") if c.isdigit())
+    if len(digits) <= 4:
+        return digits
+    return f"{digits[:4]}***{digits[-2:]}"
+
+
+def _audit(event: str, **kwargs: Any) -> None:
+    try:
+        from collector.audit_log import audit as _collector_audit
+        _collector_audit(event, **kwargs)
+    except Exception as exc:
+        logger.debug("audit skipped %s: %s", event, exc)
 
 
 def _schedule_tg_deletion(chat_id: int, message_id: int, delay_hours: int = 24) -> None:
@@ -484,6 +500,14 @@ async def escalate_to_manager(
 
     text = _build_escalation_text(dialog, reason, summary)
     await _notify_dialog_observers(dialog, text)
+    _audit(
+        "dialog_escalated",
+        name=dialog.get("client_name"),
+        phone_masked=_mask_phone(phone),
+        reason=reason,
+        manager=manager_name,
+        state=dialog.get("state"),
+    )
 
     logger.info(
         "[%s] диалог эскалирован менеджеру %s (reason=%s)",
@@ -498,7 +522,10 @@ async def _reply_to_client(phone: str, text: str) -> None:
     try:
         from collector.communications import send_whatsapp
         ok = send_whatsapp(phone, text)
-        if not ok:
+        if ok:
+            _audit("wa_reply_sent", phone_masked=_mask_phone(phone), text_preview=text[:120])
+        else:
+            _audit("wa_reply_failed", phone_masked=_mask_phone(phone), text_preview=text[:120], reason="send_whatsapp_false")
             logger.warning("Не удалось отправить ответ клиенту %s", phone)
     except Exception as e:
         logger.error("Ошибка ответа клиенту %s: %s", phone, e)
@@ -553,6 +580,7 @@ async def start_client_dialog(
         "awaiting_payment_proof": False,
     }
     _set_client_dialog(phone_clean, dialog)
+    _audit("dialog_started", name=client_name, phone_masked=_mask_phone(phone_clean), manager=manager_name, level=level, amount=amount, days=days)
     logger.info(
         "[%s] клиентский диалог зарегистрирован (phone=%s, level=%d)",
         client_name, phone_clean, level,
@@ -572,10 +600,12 @@ async def handle_incoming(phone: str, text: str, attachment: Optional[Dict[str, 
     dialog = dialogs.get(phone_clean)
 
     if not dialog:
+        _audit("incoming_ignored_no_dialog", phone_masked=_mask_phone(phone_clean), text_preview=text[:120], attachment_type=(attachment or {}).get("type", ""))
         logger.info("Неизвестный клиент %s — входящее сообщение проигнорировано", phone_clean)
         return
 
     if dialog.get("state") not in _DIALOG_ACTIVE_STATES:
+        _audit("incoming_ignored_inactive_state", name=dialog.get("client_name"), phone_masked=_mask_phone(phone_clean), state=dialog.get("state"))
         logger.info(
             "Диалог %s в состоянии %s — входящее игнорируется",
             phone_clean, dialog.get("state"),
@@ -594,6 +624,7 @@ async def handle_incoming(phone: str, text: str, attachment: Optional[Dict[str, 
     dialog["exchange_count"] = dialog.get("exchange_count", 0) + 1
     dialog["last_activity"] = now
     exchange_count = dialog["exchange_count"]
+    _audit("client_reply_received", name=client_name, phone_masked=_mask_phone(phone_clean), state=dialog.get("state"), exchange_count=exchange_count, attachment_type=(attachment or {}).get("type", ""), text_preview=text[:160])
 
     # Определяем язык
     language = detect_language(text)
@@ -622,6 +653,7 @@ async def handle_incoming(phone: str, text: str, attachment: Optional[Dict[str, 
                 proof_received=True,
             ),
         )
+        _audit("payment_proof_received", name=client_name, phone_masked=_mask_phone(phone_clean), attachment_type=(attachment or {}).get("type", ""), state=dialog.get("state"))
         return
 
     if _waiting_for_payment_proof(dialog) and _is_brief_reply(text, max_words=2, max_chars=20):
@@ -663,6 +695,7 @@ async def handle_incoming(phone: str, text: str, attachment: Optional[Dict[str, 
             dialog,
             _build_payment_claim_note(dialog, phone_clean, client_text=text),
         )
+        _audit("payment_claim_reported", name=client_name, phone_masked=_mask_phone(phone_clean), source="heuristic_recent_unposted", state=dialog.get("state"))
         return
 
     # Анализируем через DeepSeek (синхронный вызов — выносим в поток)
@@ -749,6 +782,7 @@ async def handle_incoming(phone: str, text: str, attachment: Optional[Dict[str, 
             dialog,
             _build_payment_claim_note(dialog, phone_clean, client_text=text),
         )
+        _audit("payment_claim_reported", name=client_name, phone_masked=_mask_phone(phone_clean), source="ai_paid_claim", state=dialog.get("state"))
         return
 
     if intent == "promise_schedule":
