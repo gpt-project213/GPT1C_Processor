@@ -1738,7 +1738,14 @@ check("PROMPTS T4e: тон level 5 есть", "5" in _tone_keys)
 
 # ── T5: все типы fallback_templates ─────────────────────────────────────────
 _fb = _loaded_prompts.get("fallback_templates", {})
-_required_fb = {"soft_reminder", "payment_plan_control", "strict_reminder", "stoplist_reminder"}
+_required_fb = {
+    "soft_reminder",
+    "payment_plan_control",
+    "strict_reminder",
+    "stoplist_reminder",
+    "legacy_tail_reminder",
+    "partial_tail_reminder",
+}
 _missing_fb = _required_fb - set(_fb.keys())
 check("PROMPTS T5: все типы fallback_templates присутствуют",
       len(_missing_fb) == 0,
@@ -1800,6 +1807,12 @@ check("PROMPTS T9d2: stoplist_reminder указывает дату отчёта 
       "остаток задолженности{report_date_part} составляет" in _stop_tpl.lower(), _stop_tpl)
 check("PROMPTS T9e: stoplist_reminder не пишет 'передан руководству'",
       "руководств" not in _stop_tpl.lower(), _stop_tpl)
+_legacy_tail_tpl = _loaded_prompts.get("fallback_templates", {}).get("legacy_tail_reminder", "")
+check("PROMPTS T9e2: legacy_tail_reminder без фразы про отгрузки",
+      "отгруз" not in _legacy_tail_tpl.lower(), _legacy_tail_tpl)
+_partial_tail_tpl = _loaded_prompts.get("fallback_templates", {}).get("partial_tail_reminder", "")
+check("PROMPTS T9e3: partial_tail_reminder без фразы про отгрузки",
+      "отгруз" not in _partial_tail_tpl.lower(), _partial_tail_tpl)
 check("PROMPTS T9f: тон L5 не содержит 'критическая'",
       "критичес" not in _tone5, _tone5)
 check("PROMPTS T9g: тон L5 не содержит 'передан руководству'",
@@ -1852,6 +1865,20 @@ check("PROMPTS T12f: msg_type=stoplist_reminder использует шабло�
       and "остаток задолженности на 11.04.2026 составляет 830 782 тг" in _typed_stop_msg.lower()
       and "не закрыт уже 31 день" in _typed_stop_msg,
       _typed_stop_msg)
+_typed_legacy_tail_msg = _ca_mod.generate_message(
+    client_name="Е ИП Шахин",
+    debt_amount=340000.0,
+    days_overdue=33,
+    level=5,
+    language="ru",
+    manager_name="Ергали",
+    msg_type="legacy_tail_reminder",
+    report_date="2026-04-27",
+)
+check("PROMPTS T12g: legacy_tail_reminder без упоминания отгрузок",
+      "отгруз" not in _typed_legacy_tail_msg.lower()
+      and "задолженность на 27.04.2026 составляет 340 000 тг" in _typed_legacy_tail_msg.lower(),
+      _typed_legacy_tail_msg)
 
 # ── T13: _get_tone возвращает строку для каждого уровня ──────────────────────
 for lvl in range(1, 6):
@@ -1952,6 +1979,28 @@ check("P4 T8: auto_stopped + debit/credit > 0 → client_approval (active guard 
       _d8.get("action") == "client_approval", str(_d8))
 check("P4 T8b: msg_type=stoplist_reminder при наличии debit/credit",
       _d8.get("msg_type") == "stoplist_reminder", str(_d8))
+
+# T9: stopped + старый хвост без движения -> legacy_tail_reminder
+_d9 = _collector_candidate_decision(
+    {"name": "Е ИП Шахин", "amount": 340000.0, "days": 33, "opening": 340000.0, "debit": 0.0, "credit": 0.0},
+    _p4_contact,
+    {"status": "stopped"},
+)
+check("P4 T9: stopped + старый хвост без движения -> client_approval",
+      _d9.get("action") == "client_approval", str(_d9))
+check("P4 T9b: stopped + старый хвост без движения -> legacy_tail_reminder",
+      _d9.get("msg_type") == "legacy_tail_reminder", str(_d9))
+
+# T10: stopped + старый хвост с частичной оплатой -> partial_tail_reminder
+_d10 = _collector_candidate_decision(
+    {"name": "Е Еркебулан", "amount": 739409.67, "days": 28, "opening": 767268.67, "debit": 0.0, "credit": 27859.0},
+    _p4_contact,
+    {"status": "stopped"},
+)
+check("P4 T10: stopped + старый хвост с частичной оплатой -> client_approval",
+      _d10.get("action") == "client_approval", str(_d10))
+check("P4 T10b: stopped + старый хвост с частичной оплатой -> partial_tail_reminder",
+      _d10.get("msg_type") == "partial_tail_reminder", str(_d10))
 
 
 # ═══════════════════════════════════════════════════════════════

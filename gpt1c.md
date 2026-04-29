@@ -19,6 +19,11 @@
 - `paid_claim` (`оплатили`, `вчера была оплата`, `давно оплатили`) переведен в state `awaiting_payment_proof`, без повторных debt-дожимов;
 - входящие proof-вложения из WhatsApp теперь пробрасываются в dialog с `downloadUrl/fileName/caption` и могут быть сразу переданы менеджеру/наблюдателям;
 - для collector добавлен отдельный безсетевой регрессионный файл `tests/test_collector_regression_hermetic.py`;
+- stop-клиенты теперь делятся на живой shipment-stop и старые хвостовые долги:
+  - `stoplist_reminder` — только для живых stop-кейсов;
+  - `legacy_tail_reminder` — старый хвост без движения;
+  - `partial_tail_reminder` — старый хвост с частичным погашением;
+- старые хвосты без новых отгрузок больше не получают бессмысленную фразу про ограничение отгрузок;
 - именно этот hermetic-suite сейчас считать основным доказательством по collector-правкам, а не полный `tests/test_collector.py`.
 
 ---

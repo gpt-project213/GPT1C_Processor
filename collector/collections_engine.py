@@ -4,7 +4,11 @@
 collections/collections_engine.py
 Главный оркестратор AI-Коллектора долгов.
 
-Версия: 1.4.6 (2026-04-29)
+Версия: 1.4.7 (2026-04-29)
+
+v1.4.7 (2026-04-29): старые хвостовые stop-клиенты отделены от живых
+  shipment-stop кейсов: если клиент долго висит в долге, новых отгрузок нет,
+  используется отдельный msg_type без фразы про ограничение отгрузок.
 
 v1.4.6 (2026-04-29): send-approved теперь перед реальной WhatsApp-рассылкой
   пересверяет admin-approved batch по свежей дебиторке, обновляет суммы/дни/телефоны
@@ -251,6 +255,15 @@ def _fmt_amount(n: float) -> str:
     return f"{n:,.0f}".replace(",", " ")
 
 
+def _is_legacy_tail_client(client: Dict[str, Any]) -> bool:
+    """True for old residual debt clients who no longer trade with us."""
+    amount = float(client.get("amount", 0) or 0)
+    days = int(client.get("days", 0) or 0)
+    debit = float(client.get("debit", 0) or 0)
+    opening = float(client.get("opening", 0) or 0)
+    return amount > 0 and opening > 0 and debit == 0 and days >= 20
+
+
 def _collector_candidate_decision(
     client: Dict[str, Any],
     contact: Optional[Dict[str, Any]],
@@ -289,6 +302,19 @@ def _collector_candidate_decision(
         return {"action": "skip", "reason": "ручной запрет уведомления в stop-registry"}
 
     if stop_status in ("stopped", "auto_stopped"):
+        if _is_legacy_tail_client(client):
+            msg_type = "partial_tail_reminder" if credit > 0 else "legacy_tail_reminder"
+            detail = (
+                f"старый хвост: оплата {_fmt_amount(credit)} тг, остаток {_fmt_amount(amount)} тг"
+                if credit > 0 else
+                f"старый хвост без движения, остаток {_fmt_amount(amount)} тг"
+            )
+            return {
+                "action": "client_approval",
+                "msg_type": msg_type,
+                "reason": f"{stop_status}: {detail}",
+                "stop_status": stop_status,
+            }
         return {
             "action": "client_approval",
             "msg_type": "stoplist_reminder",

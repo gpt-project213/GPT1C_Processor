@@ -27,6 +27,20 @@
   - без реальных отправок в WhatsApp/Telegram;
   - без Green API/Telegram сети;
   - покрывает именно спорные collector-сценарии этой сессии.
+- `collector/collections_engine.py` v`1.4.6` -> v`1.4.7`
+  - stop-клиенты разделены на живой shipment-stop и старые хвостовые долги;
+  - если клиент долго висит в долге, новых отгрузок нет и он не выглядит как живой торговый stop-case, используется отдельный `msg_type` без текста про ограничение отгрузок;
+  - введены `legacy_tail_reminder` и `partial_tail_reminder`.
+- `collector/approval_flow.py` v`1.0.9` -> v`1.1.0`
+  - в согласовании WhatsApp теперь явно различаются:
+    - `stoplist_reminder` — живой stop-кейс;
+    - `legacy_tail_reminder` — старый хвост без движения;
+    - `partial_tail_reminder` — старый хвост с частичным погашением.
+- `collector/collection_agent.py` v`1.0.9` -> v`1.1.0`
+  - добавлены fallback-шаблоны для старых хвостов без слова `отгрузки`.
+- `config/collector_prompts.json`
+  - добавлены `legacy_tail_reminder` и `partial_tail_reminder`;
+  - фраза про ограничение отгрузок оставлена только для настоящего `stoplist_reminder`.
 
 ### Что доказано
 
@@ -38,6 +52,13 @@
   - в runtime-логах есть успешное распознавание входящего `.ogg` через AssemblyAI;
   - проблема этой сессии была не в STT, а в freshness debt и UX client dialog.
 - текущий источник истины по collector regression теперь не legacy `tests/test_collector.py`, а отдельный hermetic-suite.
+- архив `archive/` подтверждает отдельный класс старых хвостовых должников, которым фраза про ограничение отгрузок не подходит:
+  - `Е ИП Шахин`
+  - `Е Еркебулан`
+  - `Е ТД Саянур Леонид`
+  - `Е ТОО ГудФуд № 1 ул Досмухамедулы 48(Аида)`
+  - `М Ресторан Шама ИП Тян ул Мустафина 12`
+- по текущей логике эти клиенты теперь не получают `stoplist_reminder`, если в текущем срезе нет новых отгрузок и долг выглядит как старый хвост.
 
 ### Проверки
 
@@ -45,6 +66,10 @@
 - `python -m py_compile collector\collections_engine.py` — OK
 - `python -m py_compile collector\whatsapp_poller.py` — OK
 - `python -X utf8 tests\test_collector_regression_hermetic.py -v` — **7/7 OK**, `Ran 7 tests in 3.151s`
+- `python -m py_compile collector\approval_flow.py` — OK
+- `python -X pycache_prefix=C:\Users\user\.codex\memories\pycache_tmp -m py_compile collector\collection_agent.py` — OK
+- `python -X utf8 tests\test_collector_regression_hermetic.py -v` — **11/11 OK**, `Ran 11 tests in 3.020s`
+- `python -X utf8 -m unittest tests.test_collector_regression_hermetic.LegacyTailClassificationHermeticTests -v` — **4/4 OK**
 
 ### Что именно покрывает hermetic-suite
 
@@ -55,6 +80,10 @@
 - forwarding входящего чека/доказательства менеджеру/наблюдателям;
 - мгновенная эскалация сервисного запроса;
 - проброс attachment metadata из `whatsapp_poller` в `client_dialog`.
+- отдельная классификация старых хвостов:
+  - stopped + нет новых отгрузок + нет оплат -> `legacy_tail_reminder`;
+  - stopped + нет новых отгрузок + есть частичная оплата -> `partial_tail_reminder`;
+  - живой stop-case с `debit > 0` -> остаётся `stoplist_reminder`.
 
 ### Что осталось открытым
 

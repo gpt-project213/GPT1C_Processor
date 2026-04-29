@@ -243,6 +243,71 @@ class FreshnessGateHermeticTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(any("stale approved batch" in str(r.get("reason", "")) for r in results))
 
 
+class LegacyTailClassificationHermeticTests(unittest.TestCase):
+    def test_stopped_legacy_tail_without_payments_uses_legacy_tail_msg_type(self):
+        decision = collections_engine._collector_candidate_decision(
+            {
+                "name": "Е ИП Шахин",
+                "amount": 340000.0,
+                "days": 33,
+                "opening": 340000.0,
+                "debit": 0.0,
+                "credit": 0.0,
+            },
+            {"whatsapp": "77025626272", "manager": "Ергали"},
+            {"status": "stopped"},
+        )
+        self.assertEqual(decision.get("action"), "client_approval")
+        self.assertEqual(decision.get("msg_type"), "legacy_tail_reminder")
+        self.assertNotIn("отгруз", decision.get("reason", "").lower())
+
+    def test_stopped_legacy_tail_with_partial_payments_uses_partial_tail_msg_type(self):
+        decision = collections_engine._collector_candidate_decision(
+            {
+                "name": "Е Еркебулан",
+                "amount": 739409.67,
+                "days": 28,
+                "opening": 767268.67,
+                "debit": 0.0,
+                "credit": 27859.0,
+            },
+            {"whatsapp": "77087578717", "manager": "Ергали"},
+            {"status": "stopped"},
+        )
+        self.assertEqual(decision.get("action"), "client_approval")
+        self.assertEqual(decision.get("msg_type"), "partial_tail_reminder")
+        self.assertIn("оплата", decision.get("reason", "").lower())
+
+    def test_live_stop_case_keeps_stoplist_reminder(self):
+        decision = collections_engine._collector_candidate_decision(
+            {
+                "name": "Активный клиент",
+                "amount": 250000.0,
+                "days": 8,
+                "opening": 250000.0,
+                "debit": 125000.0,
+                "credit": 0.0,
+            },
+            {"whatsapp": "77010001122", "manager": "Ергали"},
+            {"status": "stopped"},
+        )
+        self.assertEqual(decision.get("msg_type"), "stoplist_reminder")
+
+    def test_generate_message_for_legacy_tail_has_no_shipments_phrase(self):
+        text = collections_engine.generate_message(
+            client_name="Е ИП Шахин",
+            debt_amount=340000.0,
+            days_overdue=33,
+            level=5,
+            language="ru",
+            manager_name="Ергали",
+            msg_type="legacy_tail_reminder",
+            report_date="2026-04-27",
+        )
+        self.assertIn("задолженность", text.lower())
+        self.assertNotIn("отгруз", text.lower())
+
+
 class WhatsAppPollerHermeticTests(unittest.IsolatedAsyncioTestCase):
     async def test_poll_once_passes_attachment_metadata_to_client_dialog(self):
         payload = {

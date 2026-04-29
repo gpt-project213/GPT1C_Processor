@@ -4,7 +4,12 @@
 collector/approval_flow.py
 UX согласования рассылки WhatsApp — менеджер → администратор.
 
-Версия: 1.0.9 (2026-04-22)
+Версия: 1.1.0 (2026-04-29)
+
+v1.1.0 (2026-04-29): stop-клиенты разделены на живой stop-list и старые
+  хвостовые долги. Для старых хвостов без новых отгрузок согласование теперь
+  показывает отдельные типы legacy_tail_reminder / partial_tail_reminder без
+  бессмысленной фразы про ограничение отгрузок.
 
 v1.0.9 (2026-04-22): старые сообщения администратора тоже закрываются при
   появлении нового актуального списка, callback по устаревшему запросу
@@ -249,6 +254,8 @@ _MSG_TYPE_LABELS = {
     "payment_plan_control": "Проверка обещанной оплаты",
     "soft_reminder":        "Мягкое напоминание",
     "stoplist_reminder":    "Напоминание по стоп-листу",
+    "legacy_tail_reminder": "Старый долг без движения",
+    "partial_tail_reminder": "Старый долг с частичным погашением",
 }
 
 _LEVEL_LABELS = {
@@ -332,6 +339,14 @@ def _classify_msg_type_and_reason(c: Dict[str, Any]) -> tuple:
         return f"{n:,.0f}".replace(",", " ")
 
     if stop_status in ("stopped", "auto_stopped"):
+        if amount > 0 and opening > 0 and debit == 0 and days >= 20:
+            if credit > 0:
+                return "partial_tail_reminder", (
+                    f"статус {stop_status}, старый хвост: оплата {fmt(credit)} тг, остаток {fmt(amount)} тг"
+                )
+            return "legacy_tail_reminder", (
+                f"статус {stop_status}, старый хвост без движения, остаток {fmt(amount)} тг"
+            )
         return "stoplist_reminder", f"статус {stop_status}, долг {fmt(amount)} тг не закрыт"
     if stop_status in ("pending_clearance", "conditional"):
         return "payment_plan_control", f"статус {stop_status}, требуется ручная проверка перед текстом"
