@@ -103,7 +103,63 @@ def _empty_record() -> Dict[str, Any]:
         "openclaw_session_id": None,
         "escalated_to_admin": False,
         "history": [],
+        "wa_dialog_suppress": None,
     }
+
+
+def set_wa_dialog_suppress(name: str, reason: str, until_iso: str) -> None:
+    """Устанавливает флаг подавления повторной отправки WA для клиента.
+
+    Вызывается из client_dialog при переходе в awaiting_manager/awaiting_payment_proof,
+    чтобы коллектор не беспокоил клиента до разрешения ситуации менеджером.
+
+    Args:
+        name: Ключ клиента (совпадает с ключом в collector_state.json).
+        reason: Причина подавления (например 'paid_claim', 'attachment').
+        until_iso: ISO-дата включительно, после которой блокировка снимается.
+    """
+    with _state_lock():
+        state = load_state()
+        record = state.get(name, _empty_record())
+        record["wa_dialog_suppress"] = {
+            "reason": reason,
+            "set_at": datetime.now(tz=TZ).isoformat(),
+            "until": until_iso,
+        }
+        state[name] = record
+        save_state(state)
+    logger.info("[%s] wa_dialog_suppress установлен: reason=%s until=%s", name, reason, until_iso)
+
+
+def get_wa_dialog_suppress(name: str) -> Optional[Dict[str, Any]]:
+    """Возвращает активный suppress-флаг или None.
+
+    Флаг считается активным если поле не None и 'until' >= сегодня.
+    Устаревшие флаги автоматически сбрасываются.
+    """
+    state = load_state()
+    record = state.get(name, {})
+    suppress = record.get("wa_dialog_suppress")
+    if not suppress:
+        return None
+    today_str = _today()
+    if suppress.get("until", "") < today_str:
+        # Флаг истёк — очищаем и возвращаем None
+        clear_wa_dialog_suppress(name)
+        return None
+    return suppress
+
+
+def clear_wa_dialog_suppress(name: str) -> None:
+    """Снимает suppress-флаг для клиента."""
+    with _state_lock():
+        state = load_state()
+        record = state.get(name)
+        if record and record.get("wa_dialog_suppress") is not None:
+            record["wa_dialog_suppress"] = None
+            state[name] = record
+            save_state(state)
+            logger.info("[%s] wa_dialog_suppress сброшен", name)
 
 
 def get_client_state(name: str) -> Dict[str, Any]:

@@ -604,6 +604,13 @@ async def handle_incoming(phone: str, text: str, attachment: Optional[Dict[str, 
         dialog["awaiting_payment_proof"] = False
         dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
         _set_client_dialog(phone_clean, dialog)
+        try:
+            from collector.collections_db import set_wa_dialog_suppress
+            from datetime import date, timedelta
+            _until = (date.today() + timedelta(days=2)).isoformat()
+            set_wa_dialog_suppress(client_name, "attachment", _until)
+        except Exception as _e:
+            logger.warning("wa_dialog_suppress (attachment): %s", _e)
         await _reply_to_client(phone_clean, reply)
         await _notify_dialog_observers(
             dialog,
@@ -730,6 +737,13 @@ async def handle_incoming(phone: str, text: str, attachment: Optional[Dict[str, 
         dialog["state"] = "awaiting_payment_proof"
         dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
         _set_client_dialog(phone_clean, dialog)
+        try:
+            from collector.collections_db import set_wa_dialog_suppress
+            from datetime import date, timedelta
+            _until = (date.today() + timedelta(days=3)).isoformat()
+            set_wa_dialog_suppress(client_name, "paid_claim", _until)
+        except Exception as _e:
+            logger.warning("wa_dialog_suppress (paid_claim): %s", _e)
         await _reply_to_client(phone_clean, reply)
         await _notify_dialog_observers(
             dialog,

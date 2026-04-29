@@ -1065,6 +1065,17 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
         if _payment_hold:
             logger.info("[%s] пропуск — Саида подтвердила оплату, ждём разноски в 1С", name)
             continue
+        try:
+            from collector.collections_db import get_wa_dialog_suppress
+            _wa_suppress = get_wa_dialog_suppress(name)
+        except Exception:
+            _wa_suppress = None
+        if _wa_suppress:
+            logger.info(
+                "[%s] пропуск — wa_dialog_suppress reason=%s until=%s",
+                name, _wa_suppress.get("reason"), _wa_suppress.get("until"),
+            )
+            continue
 
         # Нет движений (debit==0, credit==0) → сначала спрашиваем Саиду.
         # Если Саида ответила "нет оплат" и руководитель одобрил (approved_send) —
