@@ -41,7 +41,19 @@ logger = get_collector_logger(__name__)
 
 _TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 _ROOT = Path(__file__).resolve().parent.parent
-_AUDIT_PATH = _ROOT / "logs" / "collector_audit.jsonl"
+_TEST_MODE = os.getenv("COLLECTOR_TEST_MODE", "0").lower() in ("1", "true", "yes")
+
+
+def _resolve_audit_path() -> Path:
+    override = os.getenv("COLLECTOR_AUDIT_PATH", "").strip()
+    if override:
+        return Path(override)
+    if _TEST_MODE:
+        return _ROOT / "logs" / "collector_audit_test.jsonl"
+    return _ROOT / "logs" / "collector_audit.jsonl"
+
+
+_AUDIT_PATH = _resolve_audit_path()
 _write_lock = threading.Lock()
 
 

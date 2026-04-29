@@ -47,6 +47,7 @@ load_dotenv(
 )
 
 TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
+_TEST_MODE = os.getenv("COLLECTOR_TEST_MODE", "0").lower() in ("1", "true", "yes")
 COMPANY_NAME = os.getenv("COMPANY_NAME", "Минбаракат")
 
 _ROOT = Path(__file__).resolve().parent.parent
@@ -182,6 +183,12 @@ async def _send_tg(chat_id: int, text: str, reply_markup: Any = None) -> None:
 
 
 async def _notify_dialog_observers(dialog: Dict[str, Any], text: str) -> None:
+    if _TEST_MODE:
+        logger.info(
+            "COLLECTOR_TEST_MODE: observer notification suppressed for %s",
+            dialog.get("client_name", "unknown"),
+        )
+        return
     manager_chat_id = dialog.get("manager_chat_id")
     manager_name = dialog.get("manager_name", "")
     try:
