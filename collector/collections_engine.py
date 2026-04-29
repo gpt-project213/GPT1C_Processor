@@ -806,6 +806,13 @@ async def _process_single(
                     f"📞 {_phone_visible}\n"
                     f"💰 {amount:,.0f} ₸ / {days} дн."
                 )
+                try:
+                    from collector.audit_log import audit as _audit
+                    _audit("wa_sent", name=name, amount=amount, days=days,
+                           phone_masked=_phone_visible, level=level,
+                           msg_type=msg_type, manager=manager_name, dry_run=dry_run)
+                except Exception:
+                    pass
             # Регистрируем клиентский диалог если WhatsApp отправлен
             if wa_ok and phone:
                 try:
@@ -1052,10 +1059,22 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
         if not _bypass_active_guard and (_debit_val > 0 or _credit_val > 0):
             logger.info("[%s] пропуск — клиент активен (debit=%.0f, credit=%.0f)",
                         name, _debit_val, _credit_val)
+            try:
+                from collector.audit_log import audit as _audit
+                _audit("wa_skipped", name=name, reason="active_client",
+                       debit=_debit_val, credit=_credit_val, dry_run=dry_run)
+            except Exception:
+                pass
             continue
         if client.get("amount", 0) <= 0:
             logger.info("[%s] пропуск — долг погашен или отрицательный (amount=%.0f)",
                         name, client.get("amount", 0))
+            try:
+                from collector.audit_log import audit as _audit
+                _audit("wa_skipped", name=name, reason="zero_amount",
+                       amount=client.get("amount", 0), dry_run=dry_run)
+            except Exception:
+                pass
             continue
         try:
             from collector.payment_hold import get_hold_for_client
@@ -1064,6 +1083,11 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
             _payment_hold = None
         if _payment_hold:
             logger.info("[%s] пропуск — Саида подтвердила оплату, ждём разноски в 1С", name)
+            try:
+                from collector.audit_log import audit as _audit
+                _audit("wa_skipped", name=name, reason="payment_hold", dry_run=dry_run)
+            except Exception:
+                pass
             continue
         try:
             from collector.collections_db import get_wa_dialog_suppress
@@ -1075,6 +1099,13 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
                 "[%s] пропуск — wa_dialog_suppress reason=%s until=%s",
                 name, _wa_suppress.get("reason"), _wa_suppress.get("until"),
             )
+            try:
+                from collector.audit_log import audit as _audit
+                _audit("wa_skipped", name=name, reason="suppress",
+                       suppress_reason=_wa_suppress.get("reason"),
+                       suppress_until=_wa_suppress.get("until"), dry_run=dry_run)
+            except Exception:
+                pass
             continue
 
         # Нет движений (debit==0, credit==0) → сначала спрашиваем Саиду.

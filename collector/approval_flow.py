@@ -241,12 +241,19 @@ def create_batch(
         "admin_approved_at": None,
         "approved_clients": [],
     }
+    total_clients = sum(len(v["clients"]) for v in managers_state.values())
     logger.info(
         "Создан батч %s: менеджеров=%d, клиентов=%d",
         batch_id,
         len(managers_state),
-        sum(len(v["clients"]) for v in managers_state.values()),
+        total_clients,
     )
+    try:
+        from collector.audit_log import audit as _audit
+        _audit("batch_created", batch_id=batch_id,
+               managers=len(managers_state), clients=total_clients)
+    except Exception:
+        pass
     return batch
 
 
@@ -1361,6 +1368,11 @@ async def handle_admin_callback(
         batch["admin_approved_at"] = now_iso
         batch["approved_clients"]  = approved_clients
         save_batch(batch)
+        try:
+            from collector.audit_log import audit as _audit
+            _audit("batch_approved", batch_id=batch_id, clients=len(approved_clients))
+        except Exception:
+            pass
 
         _diff_block = ""
         try:
@@ -1577,6 +1589,13 @@ def record_send_results(batch_id: str, results: List[Dict[str, Any]]) -> Optiona
     else:
         batch["status"] = "sent"
     save_batch(batch)
+    try:
+        from collector.audit_log import audit as _audit
+        _audit(batch["status"],
+               batch_id=batch_id, sent=sent, failed=failed,
+               skipped=skipped, total=len(all_results))
+    except Exception:
+        pass
     return batch
 
 

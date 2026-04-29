@@ -129,6 +129,11 @@ def set_wa_dialog_suppress(name: str, reason: str, until_iso: str) -> None:
         state[name] = record
         save_state(state)
     logger.info("[%s] wa_dialog_suppress установлен: reason=%s until=%s", name, reason, until_iso)
+    try:
+        from collector.audit_log import audit as _audit
+        _audit("suppress_set", name=name, reason=reason, until=until_iso)
+    except Exception:
+        pass
 
 
 def get_wa_dialog_suppress(name: str) -> Optional[Dict[str, Any]]:
@@ -160,6 +165,11 @@ def clear_wa_dialog_suppress(name: str) -> None:
             state[name] = record
             save_state(state)
             logger.info("[%s] wa_dialog_suppress сброшен", name)
+            try:
+                from collector.audit_log import audit as _audit
+                _audit("suppress_cleared", name=name)
+            except Exception:
+                pass
 
 
 def get_client_state(name: str) -> Dict[str, Any]:
