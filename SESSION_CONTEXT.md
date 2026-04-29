@@ -55,6 +55,62 @@
 
 ---
 
+## HANDOFF 2026-04-30 Asia/Qyzylorda — Unified runtime logging
+
+### Что сделано
+
+- Добавлен общий runtime logging core:
+  - `bot/logging_utils.py`
+  - domain-aware formatter
+  - rotating daily logs + retention
+  - Telegram runtime alert handler с cooldown
+- `bot/send_reports.py` переведен на доменные логгеры:
+  - `BOT/CORE`
+  - `BOT/SCHED`
+  - `CRM/FLOW`
+  - `PIPELINE/FLOW`
+  - `STATE/STORE`
+  - `INTEGRATION/API`
+- `log_event()` теперь маршрутизирует события по доменам через `_logger_for_event()`
+- `collector/logging_utils.py` больше не живет отдельной prefix-only схемой:
+  - `get_collector_logger()` → `COLLECTOR/FLOW`
+  - `get_stop_logger()` → `STOP_CONTROL/FLOW`
+- `collector/collections_engine.py` переведен на тот же runtime bootstrap
+- `config.setup_logging()` унифицирован через `configure_module_logger()`:
+  - модули отчетов/парсеров теперь получают общий formatter + rotation + доменную классификацию
+- `bot/crm_clients.py` переведен на `CRM/STORE`
+- `bot/debt_stop_control.py` переведен на `STOP_CONTROL/FLOW`
+
+### Доказательства
+
+- `python -m py_compile bot/logging_utils.py bot/send_reports.py collector/logging_utils.py collector/collections_engine.py config.py` → OK
+- `python -X utf8 tests/test_crm_regression.py` → 6/6 OK
+- `python -X utf8 tests/test_collector_regression_hermetic.py` → 15/15 OK
+- `python -X utf8 tests/test_logging_runtime.py` → OK
+
+### Что это дало
+
+- домен проблемы теперь виден сразу по строке лога:
+  - `CRM`
+  - `STATE`
+  - `PIPELINE`
+  - `INTEGRATION`
+  - `COLLECTOR`
+  - `STOP_CONTROL`
+  - `BOT`
+- unified runtime logging теперь покрывает:
+  - bot orchestration
+  - collector
+  - standalone модульные логгеры через `config.setup_logging()`
+
+### Что осталось
+
+- не все исторические direct `logger.*(...)` внутри `bot/send_reports.py` доменно размечены вручную;
+- основной routing уже закрыт через `log_event()`, но часть старого кода пока остается под `BOT/CORE`;
+- если продолжать, следующий этап — точечная доменная разметка remaining direct logs в крупных старых ветках монолита.
+
+---
+
 ## HANDOFF 2026-04-29 Asia/Qyzylorda
 
 ### Что исправлено

@@ -46,6 +46,7 @@
 | Файл | Дата | Тема | Статус |
 |---|---|---|---|
 | [COLLECTOR_PHASES_2_4_2026_04_29.md](COLLECTOR_PHASES_2_4_2026_04_29.md) | 2026-04-29 | Collector Фазы 2А, 2Б, UI, 3А, 3Б, 4 — wa_dialog_suppress, diff-notice, audit log, prefixes, hard-ban | ✅ Все 4 фазы реализованы, 27 новых тестов |
+| [LOGGING_UNIFICATION_20260430.md](LOGGING_UNIFICATION_20260430.md) | 2026-04-30 | Унификация runtime logging между bot / collector / config.setup_logging(), домены, rotation, alert handler | ✅ Реализовано и подтверждено regression-тестами |
 | [AUDIT_FINDINGS.md](AUDIT_FINDINGS.md) | 2026-03-20 | Первичный аудит — 28 найденных багов | ✅ Все CRITICAL/HIGH закрыты |
 | [AUDIT_SUMMARY.md](AUDIT_SUMMARY.md) | 2026-03-20 | Итоговая сводка по аудиту | ✅ Актуально |
 | [AUDIT_VERDICT.md](AUDIT_VERDICT.md) | 2026-03-20 | Вердикт: 0 critical / 0 high / 2 arch | ✅ Актуально |
@@ -133,4 +134,5 @@ if is_holiday_today():
 | 2026-04-11 | Создан первичный INDEX.md |
 
 - `CRM_COLLECTOR_AUDIT_20260430.md` — аудит и фиксы CRM duplicate/claim-state + system logging по collector и CRM.
+- `LOGGING_UNIFICATION_20260430.md` — аудит и внедрение общего runtime logging core по bot / collector / pipeline-модулям.
 

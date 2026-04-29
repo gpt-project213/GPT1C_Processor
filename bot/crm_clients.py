@@ -37,6 +37,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from dotenv import load_dotenv
 from zoneinfo import ZoneInfo
 from bot.crm_audit_log import audit as crm_audit
+from bot.logging_utils import get_runtime_logger
 
 load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env",
             encoding="utf-8-sig", override=False)
@@ -50,7 +51,7 @@ CLIENTS_PATH = CONFIG_DIR / "clients.json"
 CONTACTS_XLSX_PATH = ROOT_DIR / "contacts.xlsx"
 CONTACTS_XLSX_BACKUP_DIR = ROOT_DIR / "backups" / "contacts_xlsx"
 
-logger = logging.getLogger(__name__)
+logger = get_runtime_logger(__name__, system="CRM", component="STORE")
 
 PHONE_IN_NAME_RE = re.compile(
     r"(?<!\d)(?:\+?7|8)[\s\-\(\)]*\d{3}[\s\-\(\)]*\d{3}[\s\-]*\d{2}[\s\-]*\d{2}(?!\d)"

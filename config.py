@@ -30,6 +30,7 @@ import os, json
 
 from dotenv import load_dotenv
 from zoneinfo import ZoneInfo
+from bot.logging_utils import configure_module_logger, get_log_retention_days
 
 # ── .env ──────────────────────────────────────────────────────
 ROOT: Path = Path(__file__).resolve().parent
@@ -83,39 +84,17 @@ def generated_at_tz(version: Optional[str] = None) -> str:
     base = f"Сформировано: {now} ({TZ.key})"
     return f"{base} | Версия: {ver}" if ver else base
 
-# ── Логирование (файл+консоль) ────────────────────────────────
-class _TzFormatter(logging.Formatter):
-    def __init__(self, fmt: str, datefmt: str, tz: ZoneInfo):
-        super().__init__(fmt=fmt, datefmt=datefmt); self._tz = tz
-    def formatTime(self, record, datefmt=None):
-        dt = datetime.fromtimestamp(record.created, self._tz)
-        return dt.strftime(datefmt) if datefmt else dt.isoformat()
-
-_LOG_FORMAT = "%(asctime)s, %(levelname)s %(message)s"
-_LOG_DATEFMT = "%Y-%m-%d %H:%M:%S"
-
 def setup_logging(module_name: str, level: int = logging.INFO) -> Logger:
     """
-    Логгер: logs/<module>_YYYYMMDD_HHMMSS.log + stdout. Формат из ТЗ. TZ из .env.
+    Unified module logger with daily rotation + stdout.
     """
-    logger = logging.getLogger(module_name)
-    logger.setLevel(level)
-    if getattr(logger, "_gpt1c_configured", False):
-        return logger
-
-    ts = datetime.now(TZ).strftime("%Y%m%d_%H%M%S")
-    log_path = LOGS_DIR / f"{module_name}_{ts}.log"
-
-    fh = logging.FileHandler(log_path, encoding="utf-8", delay=True)
-    sh = logging.StreamHandler()
-
-    fmt = _TzFormatter(_LOG_FORMAT, _LOG_DATEFMT, TZ)
-    fh.setFormatter(fmt); sh.setFormatter(fmt)
-
-    logger.addHandler(fh); logger.addHandler(sh)
-    logger.propagate = False
-    setattr(logger, "_gpt1c_configured", True)
-    return logger
+    return configure_module_logger(
+        module_name,
+        logs_dir=LOGS_DIR,
+        tz=TZ,
+        level=level,
+        retention_days=get_log_retention_days(),
+    )
 
 # ── YAML (опционально) ────────────────────────────────────────
 try:

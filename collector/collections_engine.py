@@ -74,6 +74,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from dotenv import load_dotenv
 from zoneinfo import ZoneInfo
 from collector.logging_utils import get_collector_logger
+from bot.logging_utils import configure_runtime_logging, get_log_retention_days
 
 # Добавляем корень проекта в sys.path для standalone запуска
 _ROOT = Path(__file__).resolve().parent.parent
@@ -88,14 +89,13 @@ LOGS_DIR.mkdir(parents=True, exist_ok=True)
 _TEST_MODE = os.getenv("COLLECTOR_TEST_MODE", "0").lower() in ("1", "true", "yes")
 
 # Настройка логирования
-_log_file = LOGS_DIR / f"collector_{datetime.now(tz=TZ).strftime('%Y%m%d')}.log"
-_handlers = [logging.StreamHandler(sys.stdout)]
-if not _TEST_MODE:
-    _handlers.insert(0, logging.FileHandler(_log_file, encoding="utf-8"))
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s, %(levelname)s %(message)s",
-    handlers=_handlers,
+configure_runtime_logging(
+    logs_dir=LOGS_DIR,
+    tz=TZ,
+    app_name="collector",
+    retention_days=get_log_retention_days(),
+    error_alert_level=logging.ERROR,
+    alert_cooldown_sec=int(os.getenv("LOG_ALERT_COOLDOWN_SEC", "300")),
 )
 logger = get_collector_logger(__name__)
 logging.getLogger("httpx").setLevel(logging.WARNING)

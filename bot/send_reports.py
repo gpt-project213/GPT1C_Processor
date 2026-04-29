@@ -196,6 +196,13 @@ from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile, ReplyKeyboardRemove
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 from telegram.request import HTTPXRequest
+from bot.logging_utils import (
+    configure_runtime_logging,
+    get_log_retention_days,
+    get_runtime_logger,
+    install_filter_on_root_handlers,
+    set_telegram_alert_sender,
+)
 
 # ──────────────────────────────────────────────────────────────────
 # Legacy reply-keyboard cleanup (v9.4.57)
@@ -325,11 +332,11 @@ def _check_single_instance() -> None:
         except (ValueError, OSError):
             old_pid = None
         if old_pid and old_pid != os.getpid() and _is_pid_running(old_pid):
-            logger.critical("Бот уже запущен (PID=%s). Завершение. Убейте старый процесс или удалите %s",
+            sched_logger.critical("Бот уже запущен (PID=%s). Завершение. Убейте старый процесс или удалите %s",
                             old_pid, PID_FILE)
             sys.exit(1)
         else:
-            logger.warning("Устаревший PID-файл (PID=%s), продолжаем.", old_pid)
+            sched_logger.warning("Устаревший PID-файл (PID=%s), продолжаем.", old_pid)
     _write_pid()
     import atexit
     atexit.register(_clear_pid)
@@ -424,24 +431,20 @@ def txt_to_html(txt_path: Path, html_path: Path):
     except Exception as e:
         raise Exception(f"Ошибка конвертации TXT в HTML: {e}")
 # Блок 3_______________Логирование (Asia/Almaty)_____________________________
-class _TzFormatter(logging.Formatter):
-    def formatTime(self, record, datefmt=None):
-        dt = datetime.fromtimestamp(record.created, TZ)
-        return dt.strftime(datefmt or "%Y-%m-%d %H:%M:%S")
-
-LOG_FILE = LOGS_DIR / f"send_reports_{datetime.now(TZ).strftime('%Y%m%d')}.log"
-_log_fmt = _TzFormatter("%(asctime)s, %(levelname)s %(message)s")
-_fh = logging.FileHandler(LOG_FILE, encoding='utf-8')
-_fh.setFormatter(_log_fmt)
-_sh = logging.StreamHandler(
-    io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
+configure_runtime_logging(
+    logs_dir=LOGS_DIR,
+    tz=TZ,
+    app_name="send_reports",
+    retention_days=get_log_retention_days(),
+    error_alert_level=logging.ERROR,
+    alert_cooldown_sec=int(os.getenv("LOG_ALERT_COOLDOWN_SEC", "300")),
 )
-_sh.setFormatter(_log_fmt)
-logging.basicConfig(
-    level=logging.INFO,
-    handlers=[_fh, _sh]
-)
-logger = logging.getLogger(__name__)
+logger = get_runtime_logger(__name__, system="BOT", component="CORE")
+crm_logger = get_runtime_logger(__name__, system="CRM", component="FLOW")
+sched_logger = get_runtime_logger(__name__, system="BOT", component="SCHED")
+pipeline_logger = get_runtime_logger(__name__, system="PIPELINE", component="FLOW")
+state_logger = get_runtime_logger(__name__, system="STATE", component="STORE")
+integration_logger = get_runtime_logger(__name__, system="INTEGRATION", component="API")
 
 # ──────────────────────────────────────────────────────────────
 # Константа лимита Telegram и async-хелпер для длинных сообщений
@@ -458,7 +461,7 @@ async def _send_auto(context, chat_id: int, text: str,
         schedule_message_deletion(chat_id, msg.message_id,
                                   msg.date.timestamp(), delay_hours=delay_hours)
     except Exception as e:
-        logger.error("_send_auto chat_id=%s: %s", chat_id, e)
+        integration_logger.error("_send_auto chat_id=%s: %s", chat_id, e)
 
 
 async def _doc_auto(context, chat_id: int, document, caption: str = "",
@@ -470,7 +473,7 @@ async def _doc_auto(context, chat_id: int, document, caption: str = "",
         schedule_message_deletion(chat_id, msg.message_id,
                                   msg.date.timestamp(), delay_hours=delay_hours)
     except Exception as e:
-        logger.error("_doc_auto chat_id=%s: %s", chat_id, e)
+        integration_logger.error("_doc_auto chat_id=%s: %s", chat_id, e)
 
 
 async def _tg_send_long(context, chat_id: int, text: str,
@@ -509,7 +512,7 @@ async def _tg_send_long(context, chat_id: int, text: str,
                 chat_id, msg.message_id, msg.date.timestamp(), delay_hours=delay_hours
             )
         except Exception as e:
-            logger.error("_tg_send_long: chunk %d/%d chat_id=%s: %s", i, len(chunks), chat_id, e)
+            integration_logger.error("_tg_send_long: chunk %d/%d chat_id=%s: %s", i, len(chunks), chat_id, e)
 
 
 # ──────────────────────────────────────────────────────────────
@@ -719,8 +722,7 @@ class SensitiveDataFilter(logging.Filter):
         return text
 
 _sensitive_filter = SensitiveDataFilter()
-for _h in logging.root.handlers:
-    _h.addFilter(_sensitive_filter)
+install_filter_on_root_handlers(_sensitive_filter)
 # ────────────────────────────────────────────────────────────────────────────
 EMOJI_LOG_MAP = {
     "bot_starting": "🤖", "bot_polling_started": "📡", "bot_shutdown_requested": "⏹️",
@@ -765,18 +767,65 @@ EMOJI_LOG_MAP = {
     "cleanup_error": "❌",
 }
 def log_event(event: str, emoji: str | None = None, **kw):
+    level_name = str(kw.pop("level", "INFO")).upper()
+    level = getattr(logging, level_name, logging.INFO)
+    domain_logger = _logger_for_event(event)
+    payload = {"event": event, **kw}
     if emoji is None:
         emoji = EMOJI_LOG_MAP.get(event)
     if emoji:
         try:
             flat = "; ".join(f"{k}={v}" for k, v in kw.items())
-            logger.info(f"{emoji} {event}" + (f" · {flat}" if flat else ""))
+            domain_logger.log(level, f"{emoji} {event}" + (f" · {flat}" if flat else ""), extra={"event": event})
         except Exception:
             pass
     try:
-        logger.info(json.dumps({"event": event, **kw}, ensure_ascii=False))
+        domain_logger.log(level, json.dumps(payload, ensure_ascii=False), extra={"event": event})
     except Exception:
-        logger.info("%s %s", event, kw)
+        domain_logger.log(level, "%s %s", event, kw, extra={"event": event})
+
+
+def _logger_for_event(event: str):
+    e = (event or "").lower()
+    if e.startswith("crm_") or e.startswith("claim_"):
+        return crm_logger
+    if e.startswith("collector_") or e.startswith("wa_"):
+        return get_runtime_logger(__name__, system="COLLECTOR", component="FLOW")
+    if (
+        e.startswith("pipeline_")
+        or e.startswith("imap_")
+        or e.startswith("inventory_")
+        or e.startswith("sales_")
+        or e.startswith("gross_")
+        or e.startswith("expenses_")
+        or e.startswith("analytics_")
+        or e.startswith("archive_")
+        or e.startswith("cash_")
+        or e.startswith("file_")
+        or e.startswith("report_")
+        or e.startswith("ai_")
+        or e.startswith("net_profit_")
+        or e in {"queue_empty", "queue_found_files"}
+    ):
+        return pipeline_logger
+    if (
+        e.startswith("deletion_")
+        or e.endswith("_state_reset")
+        or e.endswith("_state_load_error")
+        or e.endswith("_state_save_error")
+        or e.startswith("save_state_")
+        or e.startswith("atomic_save_")
+        or e.startswith("json_")
+        or e == "managers_normalized"
+        or e == "config_load_error"
+        or e == "manager_invalid_chat_id"
+    ):
+        return state_logger
+    if e.startswith("tg_") or e.startswith("notification_"):
+        return integration_logger
+    if e.endswith("_start") or e.endswith("_finish") or e.endswith("_done"):
+        return sched_logger
+    return logger
 
 # Блок 4_______________Роли и доступ_________________________________________
 def _load_json_safe(p: Path) -> dict:
@@ -1142,7 +1191,7 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
     """
     from bot.workday_checker import is_holiday_today
     if is_holiday_today():
-        logger.info("crm_daily_task: выходной — пропуск")
+        crm_logger.info("crm_daily_task: выходной — пропуск")
         return
     from bot.crm_clients import (
         update_from_reports as _crm_update,
@@ -1170,7 +1219,7 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
                     parse_mode="HTML",
                 )
             except Exception as _e:
-                logger.warning("crm_daily_task: уведомление %s: %s", manager, _e)
+                crm_logger.warning("crm_daily_task: уведомление %s: %s", manager, _e)
 
         # 3. Точечный запрос — первый клиент из очереди, остальные 9 идут цепочкой
         #    после каждого сохранения (один заполнил → сразу следующий).
@@ -1209,7 +1258,7 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
             except Exception as _e:
                 _CRM_PHONE_PENDING.pop(chat_id, None)
                 _crm_save_pending()
-                logger.warning("crm_daily_task: запрос данных %s: %s", manager, _e)
+                crm_logger.warning("crm_daily_task: запрос данных %s: %s", manager, _e)
 
         # 4. Бесхозные клиенты — рассылаем всем участникам CRM: "чей клиент?"
         #    До 3 штук в день чтобы не перегружать.
@@ -1240,7 +1289,7 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
                     )
                     _notified.append(_mgr_chat)
                 except Exception as _ce:
-                    logger.warning("crm_claim broadcast %s → %s: %s", _client_key, _mgr_name, _ce)
+                    crm_logger.warning("crm_claim broadcast %s → %s: %s", _client_key, _mgr_name, _ce)
             _CRM_CLAIM_PENDING[_token] = {
                 "client_key": _client_key,
                 "notified": _notified,
@@ -1249,13 +1298,13 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
             }
             _crm_save_claim_pending()
             crm_audit("claim_broadcast", client_key=_client_key, notified_count=len(_notified), token=_token)
-            logger.info("CRM claim: разослано по %d участникам для «%s»", len(_notified), _client_key)
+            crm_logger.info("CRM claim: разослано по %d участникам для «%s»", len(_notified), _client_key)
 
         log_event("crm_daily_done",
                   new_total=sum(len(v) for v in new_by_manager.values()))
     except Exception as e:
         log_event("crm_daily_error", error=str(e), level="ERROR")
-        logger.error("crm_daily_task error: %s", e)
+        crm_logger.error("crm_daily_task error: %s", e)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1659,7 +1708,7 @@ async def log_monitor_task(context: ContextTypes.DEFAULT_TYPE):
     try:
         result = _run_log_monitor(LOGS_DIR, state_path, summary_path)
         if result.get("errors_found", 0) > 0:
-            logger.warning(
+            state_logger.warning(
                 "log_monitor: found %s new issue(s) across %s log files",
                 result.get("errors_found", 0),
                 result.get("files_checked", 0),
@@ -1671,13 +1720,13 @@ async def log_monitor_task(context: ContextTypes.DEFAULT_TYPE):
                     parse_mode=None,
                 )
         else:
-            logger.info(
+            state_logger.info(
                 "log_monitor: OK checked=%s initialized=%s",
                 result.get("files_checked", 0),
                 result.get("initialized", False),
             )
     except Exception as e:
-        logger.error("log_monitor_task error: %s", e)
+        state_logger.error("log_monitor_task error: %s", e)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -5543,7 +5592,7 @@ def _crm_cleanup_pending() -> None:
         # Служебные записи (зарплатные авансы и т.п.) — убираем из памяти
         ck = (pending.get("client_key") or "").lower()
         if "зп" in ck or ck in ("без клиента", "недостача"):
-            logger.info("CRM cleanup: removing service entry '%s' (chat_id=%s)", ck, chat_id)
+            state_logger.info("CRM cleanup: removing service entry '%s' (chat_id=%s)", ck, chat_id)
             stale_chat_ids.append(chat_id)
             continue
         ts_raw = pending.get("last_sent") or pending.get("created_at")
@@ -5552,13 +5601,13 @@ def _crm_cleanup_pending() -> None:
         try:
             ts = datetime.fromisoformat(ts_raw)
         except (TypeError, ValueError):
-            logger.warning("CRM pending invalid timestamp: chat_id=%s raw=%r", chat_id, ts_raw)
+            state_logger.warning("CRM pending invalid timestamp: chat_id=%s raw=%r", chat_id, ts_raw)
             stale_chat_ids.append(chat_id)
             continue
         age_hours = (now - ts).total_seconds() / 3600
         if age_hours <= CRM_PENDING_TTL_HOURS:
             continue
-        logger.warning(
+        state_logger.warning(
             "CRM pending expired, removing: chat_id=%s client=%s state=%s age_hours=%.1f",
             chat_id,
             pending.get("client_key"),
@@ -5585,7 +5634,7 @@ def _cleanup_legacy_collector_pending_state() -> None:
         if not (key.startswith("__phone_pending__") or key.startswith("__name_pending__")):
             continue
         if not isinstance(value, dict):
-            logger.warning("legacy pending malformed: %s=%r", key, value)
+            state_logger.warning("legacy pending malformed: %s=%r", key, value)
             del state[key]
             changed = True
             continue
@@ -5593,14 +5642,14 @@ def _cleanup_legacy_collector_pending_state() -> None:
         try:
             record_date = datetime.fromisoformat(raw_date).date()
         except (TypeError, ValueError):
-            logger.warning("legacy pending invalid date: %s=%r", key, raw_date)
+            state_logger.warning("legacy pending invalid date: %s=%r", key, raw_date)
             del state[key]
             changed = True
             continue
         age_days = (today - record_date).days
         if age_days < COLLECTOR_PENDING_TTL_DAYS:
             continue
-        logger.warning("legacy pending expired: %s client=%s age_days=%d", key, value.get("client"), age_days)
+        state_logger.warning("legacy pending expired: %s client=%s age_days=%d", key, value.get("client"), age_days)
         del state[key]
         changed = True
     if changed:
@@ -5616,9 +5665,9 @@ def _crm_save_pending() -> None:
             json.dump({str(k): v for k, v in _CRM_PHONE_PENDING.items()},
                       _f, ensure_ascii=False, indent=2)
         tmp.replace(CRM_PENDING_PATH)
-        logger.debug("CRM pending saved: %d", len(_CRM_PHONE_PENDING))
+        state_logger.debug("CRM pending saved: %d", len(_CRM_PHONE_PENDING))
     except Exception as _e:
-        logger.warning("_crm_save_pending error: %s", _e)
+        state_logger.warning("_crm_save_pending error: %s", _e)
 
 
 def _crm_load_pending() -> None:
@@ -5631,9 +5680,9 @@ def _crm_load_pending() -> None:
             data = json.load(_f)
         _CRM_PHONE_PENDING.update({int(k): v for k, v in data.items()})
         _crm_cleanup_pending()
-        logger.info("CRM pending restored: %d managers", len(_CRM_PHONE_PENDING))
+        state_logger.info("CRM pending restored: %d managers", len(_CRM_PHONE_PENDING))
     except Exception as _e:
-        logger.warning("_crm_load_pending error: %s", _e)
+        state_logger.warning("_crm_load_pending error: %s", _e)
     _cleanup_legacy_collector_pending_state()
 
 # Рассылка "чей клиент": token → {client_key, notified_chat_ids, claimed}
@@ -5689,9 +5738,9 @@ def _crm_load_claim_pending() -> None:
         if isinstance(data, dict):
             _CRM_CLAIM_PENDING.update(data)
         _crm_cleanup_claim_pending()
-        logger.info("CRM claim pending restored: %d records", len(_CRM_CLAIM_PENDING))
+        state_logger.info("CRM claim pending restored: %d records", len(_CRM_CLAIM_PENDING))
     except Exception as _e:
-        logger.warning("_crm_load_claim_pending error: %s", _e)
+        state_logger.warning("_crm_load_claim_pending error: %s", _e)
 
 
 def _crm_claim_token() -> str:
@@ -6912,10 +6961,10 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 _updated_keys.append(_existing_key)
             _cc_data["clients"] = _cc_clients
             _cc_save(_cc_data)
-            logger.info("CRM claim: %s -> manager %s (aliases=%d)", client_key, claimer_name, len(_updated_keys))
+            crm_logger.info("CRM claim: %s -> manager %s (aliases=%d)", client_key, claimer_name, len(_updated_keys))
             crm_audit("claim_taken", client_key=client_key, claimer=claimer_name, aliases=_updated_keys, token=token)
         except Exception as _e:
-            logger.error("crm_claim save error: %s", _e)
+            crm_logger.error("crm_claim save error: %s", _e)
 
         await q.answer("? ?????????!")
         try:
@@ -6966,7 +7015,7 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=_crm_name_choice_kb(),
             )
         except Exception as _e:
-            logger.warning("crm_claim -> phone chain error: %s", _e)
+            crm_logger.warning("crm_claim -> phone chain error: %s", _e)
         return
     # ─────────────────────────────────────────────────────────────────────────
 
@@ -7685,7 +7734,7 @@ async def crm_phone_reminder_task(context: ContextTypes.DEFAULT_TYPE):
     """
     from bot.workday_checker import is_holiday_today
     if is_holiday_today():
-        logger.info("crm_phone_reminder_task: выходной день — пропуск")
+        crm_logger.info("crm_phone_reminder_task: выходной день — пропуск")
         return
     _crm_cleanup_pending()
     if not _CRM_PHONE_PENDING:
@@ -7755,9 +7804,9 @@ async def crm_phone_reminder_task(context: ContextTypes.DEFAULT_TYPE):
             pending["last_sent"] = now.isoformat()
             await _crm_notify_admin_unresolved(context, chat_id, pending, remind_count)
             _crm_save_pending()
-            logger.info("CRM escalating reminder → chat_id=%s client=%s count=%d", chat_id, client_key, remind_count)
+            crm_logger.info("CRM escalating reminder → chat_id=%s client=%s count=%d", chat_id, client_key, remind_count)
         except Exception as e:
-            logger.warning("crm_phone_reminder_task chat_id=%s: %s", chat_id, e)
+            crm_logger.warning("crm_phone_reminder_task chat_id=%s: %s", chat_id, e)
 
 
 async def collector_reminder_task(context: ContextTypes.DEFAULT_TYPE):
@@ -7766,24 +7815,24 @@ async def collector_reminder_task(context: ContextTypes.DEFAULT_TYPE):
     """
     from bot.workday_checker import is_holiday_today
     if is_holiday_today():
-        logger.info("collector_reminder_task: выходной — пропуск")
+        sched_logger.info("collector_reminder_task: выходной — пропуск")
         return
     now = datetime.now(TZ)
     if not (9 <= now.hour < 18):
-        logger.debug("collector_reminder_task: вне рабочих часов (%d:xx) — пропуск", now.hour)
+        sched_logger.debug("collector_reminder_task: вне рабочих часов (%d:xx) — пропуск", now.hour)
         return
     try:
         from collector.manager_dialog import send_reminders as _collector_reminders
         await _collector_reminders()
     except Exception as e:
-        logger.error("collector_reminder_task error: %s", e)
+        sched_logger.error("collector_reminder_task error: %s", e)
     try:
         from collector.approval_flow import promote_silent_batches_to_admin
         promoted = await promote_silent_batches_to_admin()
         if promoted:
-            logger.info("collector_reminder_task: %d approval-батч(ей) передано администратору по таймауту", promoted)
+            sched_logger.info("collector_reminder_task: %d approval-батч(ей) передано администратору по таймауту", promoted)
     except Exception as e:
-        logger.error("collector approval escalation error: %s", e)
+        sched_logger.error("collector approval escalation error: %s", e)
 
 
 
@@ -7795,9 +7844,9 @@ async def whatsapp_poller_task(context: ContextTypes.DEFAULT_TYPE):
         # Жёсткий таймаут 25 сек — не даём задержать следующие джобы.
         await asyncio.wait_for(poll_once(), timeout=25)
     except asyncio.TimeoutError:
-        logger.warning("whatsapp_poller_task: poll_once timeout (>25s) — пропуск итерации")
+        integration_logger.warning("whatsapp_poller_task: poll_once timeout (>25s) — пропуск итерации")
     except Exception as e:
-        logger.error("whatsapp_poller_task error: %s", e)
+        integration_logger.error("whatsapp_poller_task error: %s", e)
 
 
 async def handle_voice_message_tg(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -8105,11 +8154,11 @@ def _log_telegram_transport_settings() -> None:
 
 def main():
     if STOP_FILE.exists():
-        logger.info("Stop file found: %s. Bot startup cancelled.", STOP_FILE)
+        sched_logger.info("Stop file found: %s. Bot startup cancelled.", STOP_FILE)
         sys.exit(0)
     _check_single_instance()  # завершаем если уже запущен другой экземпляр
     if not BOT_TOKEN:
-        logger.critical("TG_BOT_TOKEN не найден в .env! Запуск невозможен.")
+        integration_logger.critical("TG_BOT_TOKEN не найден в .env! Запуск невозможен.")
         sys.exit(1)
 
     # v9.4.6.2: Версия в логе
@@ -8127,20 +8176,35 @@ def main():
         .build()
     )
 
+    async def _runtime_alert_sender(text: str) -> None:
+        if not ADMIN_CHAT_ID:
+            return
+        try:
+            await application.bot.send_message(
+                chat_id=ADMIN_CHAT_ID,
+                text=text,
+                parse_mode="HTML",
+                disable_web_page_preview=True,
+            )
+        except Exception as exc:
+            integration_logger.warning("runtime alert send failed: %s", exc)
+
+    set_telegram_alert_sender(_runtime_alert_sender)
+
     # BUG FIX: глушим "No error handlers are registered" для сетевых ошибок Telegram
     async def _tg_error_handler(update: object, context) -> None:
         err = context.error
         if isinstance(err, NetworkError):
             if "CERTIFICATE_VERIFY_FAILED" in str(err):
-                logger.error(
+                integration_logger.error(
                     "Telegram TLS verify failed: %s | ca_bundle=%s | trust_env=%s",
                     err,
                     certifi.where(),
                     False,
                 )
-            logger.warning("Telegram NetworkError (transient): %s", err)
+            integration_logger.warning("Telegram NetworkError (transient): %s", err)
         else:
-            logger.error("Telegram error: %s", err, exc_info=err)
+            integration_logger.error("Telegram error: %s", err, exc_info=err)
     application.add_error_handler(_tg_error_handler)
 
     application.add_handler(CommandHandler("start", cmd_start))
@@ -8166,7 +8230,7 @@ def main():
             time=dt_time(14, 0, tzinfo=TZ),
             name="silence_alerts_14h"
         )
-        logger.info("⏰ Настроен ежедневный джоб: проверка дней молчания в 14:00")
+        sched_logger.info("⏰ Настроен ежедневный джоб: проверка дней молчания в 14:00")
         
         # v9.4.32: Упущенная прибыль — еженедельно в пятницу 14:05 (было: ежедневно 14:05 и 21:05)
         if _OPPORTUNITY_LOSS_AVAILABLE:
@@ -8175,9 +8239,9 @@ def main():
                 time=dt_time(14, 5, tzinfo=TZ),
                 name="opportunity_loss_weekly"
             )
-            logger.info("💸 Настроен еженедельный джоб: упущенная прибыль по пятницам 14:05")
+            sched_logger.info("💸 Настроен еженедельный джоб: упущенная прибыль по пятницам 14:05")
         else:
-            logger.warning("⚠️ opportunity_loss не загружен — джобы 14:05/21:05 не запущены")
+            sched_logger.warning("⚠️ opportunity_loss не загружен — джобы 14:05/21:05 не запущены")
         
         # v9.4.6.1: Janitor каждые 60 минут (было 60 сек)
         job_queue.run_repeating(
@@ -8186,7 +8250,7 @@ def main():
             first=120,
             name="janitor"
         )
-        logger.info(f"🧹 Настроен janitor: проверка очереди удаления каждые {JANITOR_INTERVAL_SEC} сек ({JANITOR_INTERVAL_SEC//60} мин)")
+        sched_logger.info(f"🧹 Настроен janitor: проверка очереди удаления каждые {JANITOR_INTERVAL_SEC} сек ({JANITOR_INTERVAL_SEC//60} мин)")
 
         # v9.4.7: Обработка очереди автогенерации ИИ
         if AI_AUTO_GENERATION:
@@ -8196,7 +8260,7 @@ def main():
                 first=300,
                 name="ai_queue_processor"
             )
-            logger.info(f"🤖 Настроен обработчик очереди ИИ: интервал {AI_GENERATION_INTERVAL_SEC} сек")
+            sched_logger.info(f"🤖 Настроен обработчик очереди ИИ: интервал {AI_GENERATION_INTERVAL_SEC} сек")
         
         # v9.4.7: Ежедневная сводка админу
         if ADMIN_ACTIVITY_LOG and ADMIN_CHAT_ID:
@@ -8205,7 +8269,7 @@ def main():
                 time=ADMIN_SUMMARY_TIME,
                 name="daily_summary"
             )
-            logger.info(f"📊 Настроена ежедневная сводка админу в {ADMIN_SUMMARY_TIME_STR}")
+            sched_logger.info(f"📊 Настроена ежедневная сводка админу в {ADMIN_SUMMARY_TIME_STR}")
         
         # v9.4.7: Сброс счётчика генераций в полночь
         job_queue.run_daily(
@@ -8213,7 +8277,7 @@ def main():
             time=dt_time(0, 1, tzinfo=TZ),
             name="reset_ai_state"
         )
-        logger.info("🔄 Настроен сброс счётчика ИИ-генераций в 00:01")
+        sched_logger.info("🔄 Настроен сброс счётчика ИИ-генераций в 00:01")
 
         # ═══ v9.4.8: ЕЖЕНЕДЕЛЬНАЯ AI + КРАТКИЕ СВОДКИ ═══
         
@@ -8223,7 +8287,7 @@ def main():
             time=dt_time(10, 0, tzinfo=TZ),
             name="weekly_ai_generation"
         )
-        logger.info("🤖 Настроена еженедельная AI генерация: понедельник 10:00")
+        sched_logger.info("🤖 Настроена еженедельная AI генерация: понедельник 10:00")
         
         # v9.4.16: Ежедневная аналитика в 22:00 (было: только понедельник 10:00)
         job_queue.run_daily(
@@ -8231,7 +8295,7 @@ def main():
             time=dt_time(22, 0, tzinfo=TZ),
             name="daily_analytics"
         )
-        logger.info("📊 Настроена ежедневная аналитика: каждый день 22:00")
+        sched_logger.info("📊 Настроена ежедневная аналитика: каждый день 22:00")
         
         # Краткие сводки
         job_queue.run_daily(
@@ -8239,28 +8303,28 @@ def main():
             time=dt_time(9, 0, tzinfo=TZ),
             name="inventory_summary"
         )
-        logger.info("📦 Настроена краткая сводка остатков: ежедневно 09:00")
+        sched_logger.info("📦 Настроена краткая сводка остатков: ежедневно 09:00")
         
         job_queue.run_daily(
             send_gross_summary,
             time=dt_time(20, 0, tzinfo=TZ),
             name="gross_summary"
         )
-        logger.info("💰 Настроена краткая сводка валовой: ежедневно 20:00")
+        sched_logger.info("💰 Настроена краткая сводка валовой: ежедневно 20:00")
         
         job_queue.run_daily(
             send_sales_summary,
             time=dt_time(21, 0, tzinfo=TZ),
             name="sales_summary"
         )
-        logger.info("🛒 Настроена краткая сводка продаж: ежедневно 21:00")
+        sched_logger.info("🛒 Настроена краткая сводка продаж: ежедневно 21:00")
 
         job_queue.run_daily(
             _validate_daily_reports_saida,
             time=dt_time(21, 0, tzinfo=TZ),
             name="validate_daily_reports",
         )
-        logger.info("📋 Настроена проверка отчётов Саиды: ежедневно 21:00")
+        sched_logger.info("📋 Настроена проверка отчётов Саиды: ежедневно 21:00")
         
         # v9.4.7.5: Автоочистка старых файлов в 03:00
         job_queue.run_daily(
@@ -8268,7 +8332,7 @@ def main():
             time=dt_time(3, 0, tzinfo=TZ),
             name="cleanup_old_files"
         )
-        logger.info("🧹 Настроена автоочистка файлов: логи 2д, AI 7д, HTML 30д, JSON 7д, Excel 14д | Запуск в 03:00")
+        sched_logger.info("🧹 Настроена автоочистка файлов: логи 2д, AI 7д, HTML 30д, JSON 7д, Excel 14д | Запуск в 03:00")
 
         job_queue.run_repeating(
             log_monitor_task,
@@ -8276,7 +8340,7 @@ def main():
             first=10 * 60,
             name="log_monitor",
         )
-        logger.info("🩺 Настроен мониторинг логов: каждые 2 часа")
+        sched_logger.info("🩺 Настроен мониторинг логов: каждые 2 часа")
 
         # Проверка рабочего дня в 10:00 (если нет xlsx — спросить админа)
         job_queue.run_daily(
@@ -8284,7 +8348,7 @@ def main():
             time=dt_time(10, 0, tzinfo=TZ),
             name="check_workday",
         )
-        logger.info("📅 Настроена проверка рабочего дня: ежедневно 10:00 (отчёты приходят 09:07–09:38)")
+        sched_logger.info("📅 Настроена проверка рабочего дня: ежедневно 10:00 (отчёты приходят 09:07–09:38)")
 
         # CRM: обновление базы клиентов + запрос телефонов в 18:00
         job_queue.run_daily(
@@ -8292,7 +8356,7 @@ def main():
             time=dt_time(18, 0, tzinfo=TZ),
             name="crm_daily",
         )
-        logger.info("👥 Настроена CRM: обновление базы + запрос телефонов ежедневно 18:00")
+        sched_logger.info("👥 Настроена CRM: обновление базы + запрос телефонов ежедневно 18:00")
 
         # AI Debt Collector (17:00 — резервный запуск, если триггер не сработал)
         job_queue.run_daily(
@@ -8300,14 +8364,14 @@ def main():
             time=dt_time(17, 0, tzinfo=TZ),
             name="debt_collector_daily",
         )
-        logger.info("💰 Настроен AI Debt Collector: ежедневно 17:00 (резервный)")
+        sched_logger.info("💰 Настроен AI Debt Collector: ежедневно 17:00 (резервный)")
 
         job_queue.run_daily(
             debt_collector_promises,
             time=dt_time(10, 0, tzinfo=TZ),
             name="debt_collector_promises",
         )
-        logger.info("💰 Настроена проверка обещаний: ежедневно 10:00")
+        sched_logger.info("💰 Настроена проверка обещаний: ежедневно 10:00")
 
         # Event-driven: --preview после появления свежих debt_ext файлов
         job_queue.run_repeating(
@@ -8316,7 +8380,7 @@ def main():
             first=120,       # первый check через 2 мин после старта
             name="collector_trigger_check",
         )
-        logger.info("⚡ Настроен event-driven триггер коллектора: проверка каждые 30 мин")
+        sched_logger.info("⚡ Настроен event-driven триггер коллектора: проверка каждые 30 мин")
 
         # Контроль отгрузки: проверка allow_after / block_until после разноски оплат
         async def _job_shipment_check(ctx):
@@ -8327,16 +8391,16 @@ def main():
                 from collector.shipment_control import check_pending_decisions
                 resolved = await check_pending_decisions(ctx.bot)
                 if resolved:
-                    logger.info("shipment_check: закрыто %d решений об отгрузке", resolved)
+                    sched_logger.info("shipment_check: закрыто %d решений об отгрузке", resolved)
             except Exception as e:
-                logger.error("shipment_check job error: %s", e)
+                sched_logger.error("shipment_check job error: %s", e)
 
         job_queue.run_daily(
             _job_shipment_check,
             time=dt_time(14, 0, tzinfo=TZ),
             name="shipment_check",
         )
-        logger.info("🚚 Настроен контроль отгрузки: проверка allow_after/block_until ежедневно 14:00")
+        sched_logger.info("🚚 Настроен контроль отгрузки: проверка allow_after/block_until ежедневно 14:00")
 
         job_queue.run_repeating(
             crm_phone_reminder_task,
@@ -8344,7 +8408,7 @@ def main():
             first=600,
             name="crm_phone_reminders",
         )
-        logger.info("📋 Настроены CRM-напоминания о телефонах: каждые 30 мин (09–19)")
+        sched_logger.info("📋 Настроены CRM-напоминания о телефонах: каждые 30 мин (09–19)")
 
         job_queue.run_repeating(
             collector_reminder_task,
@@ -8352,7 +8416,7 @@ def main():
             first=300,
             name="collector_reminders",
         )
-        logger.info("📨 Настроен AI Коллектор: напоминания менеджерам каждые 30 мин")
+        sched_logger.info("📨 Настроен AI Коллектор: напоминания менеджерам каждые 30 мин")
 
         job_queue.run_repeating(
             whatsapp_poller_task,
@@ -8360,73 +8424,73 @@ def main():
             first=60,
             name="whatsapp_poller",
         )
-        logger.info("📱 Настроен Green API поллер: каждые 30 сек")
+        sched_logger.info("📱 Настроен Green API поллер: каждые 30 сек")
 
         # ── Стоп-лист отгрузки (Саида) ─────────────────────────────
         if _DEBT_STOP_AVAILABLE:
             async def _job_dstop_monitor(ctx):
                 from bot.workday_checker import is_holiday_today
                 if is_holiday_today():
-                    logger.info("_job_dstop_monitor: выходной — пропуск")
+                    sched_logger.info("_job_dstop_monitor: выходной — пропуск")
                     return
                 try:
                     await _dstop_monitor(ctx.bot)
                 except Exception as e:
-                    logger.error("debt_stop monitor error: %s", e)
+                    sched_logger.error("debt_stop monitor error: %s", e)
 
             async def _job_dstop_managers(ctx):
                 from bot.workday_checker import is_holiday_today
                 if is_holiday_today():
-                    logger.info("_job_dstop_managers: выходной — пропуск")
+                    sched_logger.info("_job_dstop_managers: выходной — пропуск")
                     return
                 try:
                     await _dstop_managers(ctx.bot)
                 except Exception as e:
-                    logger.error("debt_stop managers error: %s", e)
+                    sched_logger.error("debt_stop managers error: %s", e)
 
             async def _job_dstop_manager_reminders(ctx):
                 from bot.workday_checker import is_holiday_today
                 if is_holiday_today():
-                    logger.info("_job_dstop_manager_reminders: выходной — пропуск")
+                    sched_logger.info("_job_dstop_manager_reminders: выходной — пропуск")
                     return
                 try:
                     await _dstop_manager_reminders(ctx.bot)
                 except Exception as e:
-                    logger.error("debt_stop manager reminders error: %s", e)
+                    sched_logger.error("debt_stop manager reminders error: %s", e)
 
             async def _job_dstop_escalate(ctx):
                 from bot.workday_checker import is_holiday_today
                 if is_holiday_today():
-                    logger.info("_job_dstop_escalate: выходной — пропуск")
+                    sched_logger.info("_job_dstop_escalate: выходной — пропуск")
                     return
                 try:
                     await _dstop_escalate(ctx.bot)
                 except Exception as e:
-                    logger.error("debt_stop escalate error: %s", e)
+                    sched_logger.error("debt_stop escalate error: %s", e)
 
             async def _job_dstop_saida(ctx):
                 from bot.workday_checker import is_holiday_today
                 if is_holiday_today():
-                    logger.info("_job_dstop_saida: выходной — пропуск")
+                    sched_logger.info("_job_dstop_saida: выходной — пропуск")
                     return
                 try:
                     await _dstop_saida(ctx.bot)
                 except Exception as e:
-                    logger.error("debt_stop saida error: %s", e)
+                    sched_logger.error("debt_stop saida error: %s", e)
 
             job_queue.run_daily(
                 _job_dstop_monitor,
                 time=dt_time(14, 0, tzinfo=TZ),
                 name="debt_stop_monitor",
             )
-            logger.info("🚫 Настроен мониторинг авто-стопа: ежедневно 14:00")
+            sched_logger.info("🚫 Настроен мониторинг авто-стопа: ежедневно 14:00")
 
             job_queue.run_daily(
                 _job_dstop_managers,
                 time=dt_time(17, 0, tzinfo=TZ),
                 name="debt_stop_managers",
             )
-            logger.info("🚫 Настроен запрос менеджерам по стоп-листу: ежедневно 17:00")
+            sched_logger.info("🚫 Настроен запрос менеджерам по стоп-листу: ежедневно 17:00")
 
             job_queue.run_repeating(
                 _job_dstop_manager_reminders,
@@ -8434,23 +8498,23 @@ def main():
                 first=1800,
                 name="debt_stop_manager_reminders",
             )
-            logger.info("🚫 Настроены напоминания менеджерам по стоп-листу: каждые 30 мин")
+            sched_logger.info("🚫 Настроены напоминания менеджерам по стоп-листу: каждые 30 мин")
 
             job_queue.run_daily(
                 _job_dstop_escalate,
                 time=dt_time(19, 0, tzinfo=TZ),
                 name="debt_stop_escalate",
             )
-            logger.info("🚫 Настроена эскалация к руководителю: ежедневно 19:00")
+            sched_logger.info("🚫 Настроена эскалация к руководителю: ежедневно 19:00")
 
             job_queue.run_daily(
                 _job_dstop_saida,
                 time=dt_time(22, 15, tzinfo=TZ),
                 name="debt_stop_saida",
             )
-            logger.info("🚫 Настроено уведомление Саиды: ежедневно 22:15")
+            sched_logger.info("🚫 Настроено уведомление Саиды: ежедневно 22:15")
 
-        logger.info(f"🗑️ Автоудаление сообщений через {AUTO_DELETE_HOURS} часов")
+        sched_logger.info(f"🗑️ Автоудаление сообщений через {AUTO_DELETE_HOURS} часов")
     
     log_event("bot_polling_started")
     try:

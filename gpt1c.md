@@ -481,3 +481,18 @@ Footer: `"Сформировано: DD.MM.YYYY HH:MM (Asia/Almaty) | Верси�
   - исправлен сломанный callback range `weekly_deny/crm_claim` в `bot/send_reports.py`
   - проверки: py_compile OK, `tests/test_crm_regression.py` 4/4 OK, `tests/test_collector_regression_hermetic.py` 15/15 OK, `tests/test_audit_log.py` 7/7 OK
 
+- 30.04.2026: поверх CRM/collector fixes выполнена унификация runtime logging:
+  - добавлен `bot/logging_utils.py`
+  - `bot/send_reports.py` переведен на доменные логгеры `BOT/CRM/PIPELINE/STATE/INTEGRATION`
+  - `collector/logging_utils.py` переведен на общий runtime-core
+  - `collector/collections_engine.py` переведен на общий rotating bootstrap
+  - `config.setup_logging()` теперь тоже использует unified module logger
+  - добавлен runtime Telegram alert handler для `ERROR/CRITICAL` с cooldown
+  - `bot/crm_clients.py` теперь логирует как `CRM/STORE`
+  - `bot/debt_stop_control.py` теперь логирует как `STOP_CONTROL/FLOW`
+  - проверки:
+    - `python -m py_compile bot/logging_utils.py bot/send_reports.py collector/logging_utils.py collector/collections_engine.py config.py` → OK
+    - `python -X utf8 tests/test_crm_regression.py` → 6/6 OK
+    - `python -X utf8 tests/test_collector_regression_hermetic.py` → 15/15 OK
+    - `python -X utf8 tests/test_logging_runtime.py` → OK
+

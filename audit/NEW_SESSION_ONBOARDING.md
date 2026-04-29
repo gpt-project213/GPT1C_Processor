@@ -26,6 +26,7 @@ git branch              # текущая ветка
 ### Шаг 4 — Если работа по коллектору
 ```
 audit/COLLECTOR_PHASES_2_4_2026_04_29.md  ← детали фаз 2–4 (wa_dialog_suppress, audit log, hard-ban)
+audit/LOGGING_UNIFICATION_20260430.md     ← unified runtime logging для bot / collector / pipeline
 collector/collections_engine.py           ← главный оркестратор
 collector/approval_flow.py                ← батч / admin approve flow
 collector/collections_db.py               ← state API (suppress, dialogs)
@@ -70,8 +71,8 @@ memory/project_roadmap.md                 # секция "Фаза 5"
 
 | Фаза | Статус | Описание |
 |------|--------|----------|
-| 3В | Не начато | Единое логирование всех `collector/*.py` через `get_collector_logger()` |
-| 5 | Не начато | CRM аудит — баг повторного "Чей клиент?" |
+| 3В | Закрыто | Единое runtime logging для `bot` / `collector` / `config.setup_logging()` уже внедрено |
+| 5 | Закрыто | CRM баг повторного "Чей клиент?" по уже закреплённым клиентам закрыт |
 
 Детали в `memory/project_roadmap.md` (секции "Очередь: что осталось").
 
