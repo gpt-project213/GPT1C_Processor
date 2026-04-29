@@ -5,6 +5,83 @@
 
 ---
 
+## HANDOFF 2026-04-29 Asia/Qyzylorda
+
+### Что исправлено
+
+- `collector/collections_engine.py` v`1.4.5` -> v`1.4.6`
+  - перед `send-approved` добавлена обязательная пересверка admin-approved batch по свежей дебиторке;
+  - если клиент уже выпал из актуального shortlist, он не уходит в WhatsApp;
+  - если по клиенту изменились сумма/дни/телефон/тип сообщения, в отправку идет уже обновленная версия;
+  - если свежая дебиторка недоступна, отправка блокируется, а администратор получает notice.
+- `collector/client_dialog.py` v`1.0.9` -> v`1.1.0`
+  - `paid_claim` (`оплатили`, `вчера была оплата`, `давно оплатили`) больше не остается в обычной debt-ветке;
+  - введен state `awaiting_payment_proof`: бот один раз просит чек/дату/сумму и дальше не дожимает клиента повторными debt-фразами;
+  - при входящем доказательстве оплаты диалог переводится в `awaiting_manager`, а наблюдателям уходит note со ссылкой на вложение;
+  - короткие реплики вроде `хорошо` после `paid_claim` больше не вызывают второй автоответ;
+  - сервисные запросы вида `акт сверки` сразу эскалируются менеджеру.
+- `collector/whatsapp_poller.py` v`1.1.5` -> v`1.1.6`
+  - входящие `document/image/video` теперь пробрасывают в `handle_incoming()` метаданные вложения (`downloadUrl`, `fileName`, `caption`, `mimeType`);
+  - это нужно, чтобы доказательство оплаты можно было сразу передать менеджеру/наблюдателям без повторного запроса к клиенту.
+- добавлен герметичный regression-suite `tests/test_collector_regression_hermetic.py`
+  - без реальных отправок в WhatsApp/Telegram;
+  - без Green API/Telegram сети;
+  - покрывает именно спорные collector-сценарии этой сессии.
+
+### Что доказано
+
+- stale debt инцидент утром `2026-04-29` был вызван нераскрытым вчерашним batch, а не ошибкой клиента:
+  - старый batch был собран `2026-04-28`, но отправлен только утром `2026-04-29`;
+  - свежая дебиторка после вечерней разноски оплат в 1С подхватилась позже;
+  - значит корень был в frozen snapshot approved batch перед send.
+- WhatsApp voice recognition на текущем HEAD работает:
+  - в runtime-логах есть успешное распознавание входящего `.ogg` через AssemblyAI;
+  - проблема этой сессии была не в STT, а в freshness debt и UX client dialog.
+- текущий источник истины по collector regression теперь не legacy `tests/test_collector.py`, а отдельный hermetic-suite.
+
+### Проверки
+
+- `python -m py_compile collector\client_dialog.py` — OK
+- `python -m py_compile collector\collections_engine.py` — OK
+- `python -m py_compile collector\whatsapp_poller.py` — OK
+- `python -X utf8 tests\test_collector_regression_hermetic.py -v` — **7/7 OK**, `Ran 7 tests in 3.151s`
+
+### Что именно покрывает hermetic-suite
+
+- stale batch refresh перед `send-approved`;
+- пропуск уже неактуального клиента из batch;
+- `paid_claim` -> `awaiting_payment_proof`;
+- отсутствие второго автоответа после короткого подтверждения клиента;
+- forwarding входящего чека/доказательства менеджеру/наблюдателям;
+- мгновенная эскалация сервисного запроса;
+- проброс attachment metadata из `whatsapp_poller` в `client_dialog`.
+
+### Что осталось открытым
+
+- `tests/test_collector.py` остается legacy-интеграционным файлом:
+  - полный прогон в этом окружении не является надежным критерием;
+  - в нем остается старый baseline-failure `send_whatsapp returns False when disabled`;
+  - его нельзя использовать как единственное доказательство качества collector-правок.
+- import-time logging/file locks на Windows никуда не делись как класс риска; для спорных collector-правок сначала запускать hermetic-suite.
+
+### Что не трогать
+
+- untracked audit-черновики:
+  - `audit/AUDIT_TZ_20260422_DATA_DISTORTION.md`
+  - `audit/D_AUDIT_REPORT_20260422.md`
+  - `audit/E_PATCH_PLAN_20260422.md`
+  - `audit/run_20260422_data/`
+- пользовательский untracked файл:
+  - `Новый текстовый документ.txt`
+
+### Следующий безопасный шаг
+
+- перед любыми следующими правками collector-контура сначала прогонять:
+  - `python -X utf8 tests\test_collector_regression_hermetic.py -v`
+- если нужен дальнейший UX-тюнинг, менять только state-driven ветки в `collector/client_dialog.py`, не возвращаясь к свободным повторяющимся reply templates.
+
+---
+
 ## HANDOFF 2026-04-23 09:00 Asia/Almaty
 
 ### Что исправлено

@@ -4,7 +4,11 @@
 collector/whatsapp_poller.py
 Green API polling — получает входящие сообщения WhatsApp каждые 30 секунд.
 
-Версия: 1.1.5 (2026-04-23)
+Версия: 1.1.6 (2026-04-29)
+
+v1.1.6 (2026-04-29): входящие document/image/video сообщения теперь
+  передают в client_dialog метаданные вложения и downloadUrl, чтобы чек
+  или иное доказательство оплаты можно было сразу переслать менеджеру.
 
 v1.1.5 (2026-04-23): номер WhatsApp теперь выделен только под бота,
   поэтому старый privacy-гейт "только активный диалог" стал опциональным
@@ -31,7 +35,7 @@ import os
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import httpx
 from dotenv import load_dotenv
@@ -103,6 +107,33 @@ def _should_process_incoming(phone: str) -> bool:
     client_dialog.handle_incoming().
     """
     return True if not WA_REQUIRE_ACTIVE_DIALOG else _has_active_collector_dialog(phone)
+
+
+def _extract_attachment(message_data: Dict[str, Any], msg_type: str) -> Dict[str, str]:
+    candidates = [
+        message_data.get("fileMessageData", {}) or {},
+        message_data.get("documentMessageData", {}) or {},
+        message_data.get("imageMessageData", {}) or {},
+        message_data.get("videoMessageData", {}) or {},
+    ]
+    download_url = ""
+    caption = ""
+    file_name = ""
+    mime_type = ""
+    for block in candidates:
+        if not isinstance(block, dict):
+            continue
+        download_url = download_url or str(block.get("downloadUrl") or "")
+        caption = caption or str(block.get("caption") or "")
+        file_name = file_name or str(block.get("fileName") or block.get("file_name") or "")
+        mime_type = mime_type or str(block.get("mimeType") or block.get("mime_type") or "")
+    return {
+        "type": msg_type,
+        "download_url": download_url,
+        "caption": caption,
+        "file_name": file_name,
+        "mime_type": mime_type,
+    }
 
 
 async def _download_audio_to_temp(audio_url: str, archive_label: str = "") -> tuple[Optional[str], str]:
@@ -330,6 +361,7 @@ async def poll_once() -> None:
             message_data = body.get("messageData", {})
             msg_type = message_data.get("typeMessage", "")
             text = ""
+            attachment = None
 
             if msg_type == "textMessage":
                 text = message_data.get("textMessageData", {}).get("textMessage", "")
@@ -353,13 +385,15 @@ async def poll_once() -> None:
 
             else:
                 # Изображения, документы и т.д.
-                text = f"[клиент прислал {msg_type}]"
+                attachment = _extract_attachment(message_data, msg_type)
+                caption = str((attachment or {}).get("caption") or "").strip()
+                text = caption if caption else f"[клиент прислал {msg_type}]"
                 logger.info("Входящий %s от %s", msg_type, phone)
 
             if phone and text:
                 try:
                     from collector.client_dialog import handle_incoming
-                    await handle_incoming(phone, text)
+                    await handle_incoming(phone, text, attachment=attachment)
                 except Exception as e:
                     logger.error("handle_incoming ошибка для %s: %s", phone, e)
 

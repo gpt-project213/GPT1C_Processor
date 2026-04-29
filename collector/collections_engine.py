@@ -4,7 +4,11 @@
 collections/collections_engine.py
 Главный оркестратор AI-Коллектора долгов.
 
-Версия: 1.4.5 (2026-04-28)
+Версия: 1.4.6 (2026-04-29)
+
+v1.4.6 (2026-04-29): send-approved теперь перед реальной WhatsApp-рассылкой
+  пересверяет admin-approved batch по свежей дебиторке, обновляет суммы/дни/телефоны
+  и пропускает устаревших клиентов вместо отправки по вчерашнему snapshot.
 
 v1.4.5 (2026-04-28): no-movement Saida-first check — debit==0+credit==0 →
   ask Saida before WhatsApp; new msg_types no_movement_reminder и
@@ -57,7 +61,7 @@ if hasattr(sys.stdout, "buffer"):
 if hasattr(sys.stderr, "buffer"):
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from dotenv import load_dotenv
 from zoneinfo import ZoneInfo
@@ -1100,9 +1104,142 @@ async def _send_approved_client(client: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
+def _batch_client_key(name: str) -> str:
+    return str(name or "").strip().lower()
+
+
+def _prepare_current_approved_clients() -> Tuple[Dict[str, Dict[str, Any]], Optional[str]]:
+    """Builds the latest collector-approved shortlist for send-approved revalidation."""
+    debt_data = load_latest_debt_json()
+    if not debt_data:
+        return {}, "latest debt json unavailable"
+
+    debtors = classify_debtors(debt_data)
+    try:
+        from collector.payment_hold import sync_holds_with_debtors
+        sync_holds_with_debtors(debtors)
+    except Exception as e:
+        logger.debug("payment hold sync skipped during send-approved refresh: %s", e)
+
+    try:
+        from bot.crm_clients import load_contacts_compat as _crm_contacts
+        contacts = _crm_contacts()
+    except Exception:
+        contacts = load_contacts()
+
+    stop_registry = _load_stop_registry_safe()
+    prepared: Dict[str, Dict[str, Any]] = {}
+
+    for raw_client in debtors:
+        name = str(raw_client.get("name") or "").strip()
+        if not name:
+            continue
+
+        client = _apply_collector_day_policy(raw_client, name, use_first_seen=True)
+        level = int(client.get("level", 0) or 0)
+        if level == 0 or float(client.get("amount", 0) or 0) <= 0:
+            continue
+
+        contact = match_client(name, contacts)
+        stop_rec = _get_stop_record(name, stop_registry)
+        decision = _collector_candidate_decision(client, contact, stop_rec)
+        if decision.get("action") != "client_approval":
+            continue
+
+        phone = ((contact or {}).get("whatsapp") or (contact or {}).get("phone") or "").strip()
+        manager_name = (contact or {}).get("manager", "").strip()
+        if not manager_name:
+            manager_name = str((stop_rec or {}).get("manager") or "").strip()
+        if not manager_name:
+            manager_name = _get_client_manager_from_crm(name)
+        if not manager_name:
+            continue
+
+        if not phone:
+            continue
+
+        prepared[_batch_client_key(name)] = {
+            "name": name,
+            "manager": manager_name,
+            "phone": phone,
+            "amount": float(client.get("amount", 0) or 0),
+            "days": int(client.get("days", 0) or 0),
+            "level": level,
+            "opening": float(client.get("opening", 0) or 0),
+            "debit": float(client.get("debit", 0) or 0),
+            "credit": float(client.get("credit", 0) or 0),
+            "payment_silence_days": client.get("payment_silence_days"),
+            "report_date": client.get("report_date", ""),
+            "oldest_unpaid_date": client.get("oldest_unpaid_date"),
+            "unpaid_parts": client.get("unpaid_parts", []),
+            "ignored_tail_parts": client.get("ignored_tail_parts", []),
+            "debt_age_basis": client.get("debt_age_basis", ""),
+            "debt_age_confidence": client.get("debt_age_confidence", ""),
+            "active_turnover": bool(client.get("active_turnover", False)),
+            "violation_shipment": bool(client.get("violation_shipment", False)),
+            "language": (contact or {}).get("language", "ru"),
+            "msg_type": decision.get("msg_type"),
+            "reason": decision.get("reason", ""),
+            "stop_status": decision.get("stop_status", str((stop_rec or {}).get("status") or "")),
+            "review_action": decision.get("action", "client_approval"),
+        }
+
+    return prepared, None
+
+
+def _refresh_approved_batch_clients(
+    batch_id: str,
+    approved_clients: List[Dict[str, Any]],
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[str], Optional[str]]:
+    """Refreshes admin-approved clients against the latest debt snapshot before send."""
+    current_clients, blocked_reason = _prepare_current_approved_clients()
+    if blocked_reason:
+        return [], [], [], blocked_reason
+
+    sendable: List[Dict[str, Any]] = []
+    skipped: List[Dict[str, Any]] = []
+    changes: List[str] = []
+    compare_fields = ("amount", "days", "level", "phone", "manager", "msg_type", "report_date", "language")
+
+    for stored in approved_clients:
+        name = str(stored.get("name") or "").strip()
+        current = current_clients.get(_batch_client_key(name))
+        if not current:
+            skipped.append({
+                "name": name,
+                "manager": str(stored.get("manager") or "").strip(),
+                "phone": str(stored.get("phone") or stored.get("whatsapp") or "").strip(),
+                "status": "skipped",
+                "reason": "stale approved batch: client not present in latest debt shortlist",
+            })
+            changes.append(f"{name}: removed from current debt shortlist")
+            continue
+
+        field_changes: List[str] = []
+        for field in compare_fields:
+            old_value = stored.get(field)
+            new_value = current.get(field)
+            if old_value != new_value:
+                if field == "amount":
+                    field_changes.append(
+                        f"amount {_fmt_amount(float(old_value or 0))}→{_fmt_amount(float(new_value or 0))}"
+                    )
+                else:
+                    field_changes.append(f"{field} {old_value!r}→{new_value!r}")
+
+        if field_changes:
+            changes.append(f"{name}: " + ", ".join(field_changes[:4]))
+
+        sendable.append(current)
+
+    if not sendable and approved_clients and not skipped:
+        changes.append(f"batch {batch_id}: no актуальных клиентов after refresh")
+    return sendable, skipped, changes, None
+
+
 async def send_approved_batch(batch_id: str, single_client: Optional[str] = None) -> List[Dict[str, Any]]:
     """Sends WhatsApp only to clients stored in an admin-approved batch."""
-    from collector.approval_flow import get_approved_clients, is_ready_for_send, record_send_results
+    from collector.approval_flow import get_approved_clients, is_ready_for_send, load_batch, record_send_results
 
     if not is_ready_for_send(batch_id):
         logger.error("send-approved blocked: batch %s is not admin-approved", batch_id)
@@ -1121,8 +1258,33 @@ async def send_approved_batch(batch_id: str, single_client: Optional[str] = None
         f" client_filter={single_client!r}" if single_client else "",
     )
 
-    results = []
-    for client in clients:
+    refreshed_clients, pre_results, changes, blocked_reason = _refresh_approved_batch_clients(batch_id, clients)
+    if blocked_reason:
+        logger.error("send-approved blocked: batch=%s freshness check failed: %s", batch_id, blocked_reason)
+        await notify_admin(
+            f"⚠️ send-approved остановлен для batch <b>{batch_id}</b>.\n"
+            f"Не удалось пересверить batch по свежей дебиторке: {blocked_reason}."
+        )
+        return []
+
+    if changes:
+        batch = load_batch(batch_id) or {}
+        created_at = str(batch.get("created_at") or "—")
+        lines = [
+            f"⚠️ send-approved batch <b>{batch_id}</b> обновлён перед отправкой.",
+            f"Создан: <b>{created_at}</b>",
+            f"К отправке после refresh: <b>{len(refreshed_clients)}</b>",
+        ]
+        if pre_results:
+            lines.append(f"Пропущено как устаревшее: <b>{len(pre_results)}</b>")
+        lines.append("")
+        lines.extend(f"• {item}" for item in changes[:8])
+        if len(changes) > 8:
+            lines.append(f"• ещё изменений: {len(changes) - 8}")
+        await notify_admin("\n".join(lines))
+
+    results = list(pre_results)
+    for client in refreshed_clients:
         results.append(await _send_approved_client(client))
 
     record_send_results(batch_id, results)

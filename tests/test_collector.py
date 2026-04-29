@@ -905,13 +905,16 @@ try:
         mock_paid.return_value = '{"intent":"paid_claim","promise_date":null,"promise_amount":null,"requires_human":false,"suggested_reply":""}'
         with patch("collector.client_dialog._reply_to_client") as mock_paid_reply:
             mock_paid_reply.return_value = None
-            asyncio.run(cd_mod.handle_incoming("77011234575", "Я уже оплатил"))
+            with patch("collector.client_dialog._notify_dialog_observers", new=AsyncMock()) as mock_paid_note:
+                asyncio.run(cd_mod.handle_incoming("77011234575", "Я уже оплатил"))
     d_paid = cd_mod._get_client_dialog("77011234575")
     paid_replies = [ex["text"] for ex in d_paid.get("exchanges", []) if ex["role"] == "bot"]
     last_paid = paid_replies[-1] if paid_replies else ""
-    check("UX paid_claim: state остаётся active", d_paid.get("state") == "active")
+    check("UX paid_claim: state=awaiting_payment_proof", d_paid.get("state") == "awaiting_payment_proof")
+    check("UX paid_claim: awaiting_payment_proof=True", d_paid.get("awaiting_payment_proof") is True)
     check("UX paid_claim: нет повторной ссылки на 1С", "1С" not in last_paid, last_paid)
     check("UX paid_claim: просит чек", "чек" in last_paid.lower(), last_paid)
+    check("UX paid_claim: manager/admin note отправлен", mock_paid_note.await_count == 1)
 
     # ─── UX: soft_positive — один мягкий вопрос, без фиксации ─────────────────
     asyncio.run(cd_mod.start_client_dialog(
@@ -932,6 +935,89 @@ try:
     d_soft = cd_mod._get_client_dialog("77011234576")
     soft_replies = [ex["text"] for ex in d_soft.get("exchanges", []) if ex["role"] == "bot"]
     last_soft = soft_replies[-1] if soft_replies else ""
+    with patch("collector.client_dialog._reply_to_client") as mock_paid_ack_reply:
+        mock_paid_ack_reply.return_value = None
+        with patch("collector.collection_agent._call_deepseek") as mock_paid_ack_ai:
+            mock_paid_ack_ai.return_value = '{"intent":"unclear","promise_date":null,"promise_amount":null,"requires_human":false,"suggested_reply":""}'
+            asyncio.run(cd_mod.handle_incoming("77011234575", "Хорошо"))
+    d_paid_ack = cd_mod._get_client_dialog("77011234575")
+    paid_ack_replies = [ex["text"] for ex in d_paid_ack.get("exchanges", []) if ex["role"] == "bot"]
+    check("UX paid_claim ack: нет лишнего повторного ответа",
+          len(paid_ack_replies) == len(paid_replies),
+          str(paid_ack_replies))
+
+    with patch("collector.client_dialog._reply_to_client") as mock_paid_proof_reply:
+        mock_paid_proof_reply.return_value = None
+        with patch("collector.client_dialog._notify_dialog_observers", new=AsyncMock()) as mock_paid_proof_note:
+            asyncio.run(cd_mod.handle_incoming(
+                "77011234575",
+                "[клиент прислал documentMessage]",
+                attachment={
+                    "type": "documentMessage",
+                    "download_url": "https://example.test/receipt.pdf",
+                    "file_name": "receipt.pdf",
+                    "caption": "чек оплаты",
+                },
+            ))
+    d_paid_proof = cd_mod._get_client_dialog("77011234575")
+    paid_proof_replies = [ex["text"] for ex in d_paid_proof.get("exchanges", []) if ex["role"] == "bot"]
+    last_paid_proof = paid_proof_replies[-1] if paid_proof_replies else ""
+    proof_note_text = mock_paid_proof_note.await_args.args[1] if mock_paid_proof_note.await_args else ""
+    check("UX paid_claim proof: state=awaiting_manager", d_paid_proof.get("state") == "awaiting_manager")
+    check("UX paid_claim proof: awaiting_payment_proof reset", d_paid_proof.get("awaiting_payment_proof") is False)
+    check("UX paid_claim proof: reply confirms forwarding",
+          "передали менеджеру" in last_paid_proof.lower(), last_paid_proof)
+    check("UX paid_claim proof: note contains download url",
+          "https://example.test/receipt.pdf" in proof_note_text, proof_note_text)
+    check("UX paid_claim proof: note sent once", mock_paid_proof_note.await_count == 1)
+
+    asyncio.run(cd_mod.start_client_dialog(
+        phone="77011234577",
+        client_name="Ольга VED-STAR",
+        manager_name="Ергали",
+        manager_chat_id=123,
+        level=2,
+        days=10,
+        amount=1060103.0,
+        message_text="Напоминание по задолженности.",
+    ))
+    with patch("collector.collection_agent._call_deepseek") as mock_soft_commit:
+        mock_soft_commit.return_value = '{"intent":"soft_positive","promise_date":null,"promise_amount":null,"requires_human":false,"suggested_reply":""}'
+        with patch("collector.client_dialog._reply_to_client") as mock_soft_commit_reply:
+            mock_soft_commit_reply.return_value = None
+            with patch("collector.client_dialog.escalate_to_manager") as mock_soft_commit_escalate:
+                asyncio.run(cd_mod.handle_incoming("77011234577", "счс оплачу"))
+    d_soft_commit = cd_mod._get_client_dialog("77011234577")
+    soft_commit_replies = [ex["text"] for ex in d_soft_commit.get("exchanges", []) if ex["role"] == "bot"]
+    last_soft_commit = soft_commit_replies[-1] if soft_commit_replies else ""
+    check("UX soft_positive commitment: state=escalated", d_soft_commit.get("state") == "escalated")
+    check("UX soft_positive commitment: просит чек, а не первый платёж",
+          "чек" in last_soft_commit.lower() and "первый плат" not in last_soft_commit.lower(),
+          last_soft_commit)
+    check("UX soft_positive commitment: менеджер уведомляется", mock_soft_commit_escalate.called)
+
+    asyncio.run(cd_mod.start_client_dialog(
+        phone="77011234578",
+        client_name="Ольга VED-STAR",
+        manager_name="Ергали",
+        manager_chat_id=123,
+        level=2,
+        days=10,
+        amount=1060103.0,
+        message_text="Напоминание по задолженности.",
+    ))
+    with patch("collector.client_dialog._reply_to_client") as mock_service_reply:
+        mock_service_reply.return_value = None
+        with patch("collector.client_dialog.escalate_to_manager") as mock_service_escalate:
+            asyncio.run(cd_mod.handle_incoming("77011234578", "акт сверки сбросьте за апрель"))
+    d_service = cd_mod._get_client_dialog("77011234578")
+    service_replies = [ex["text"] for ex in d_service.get("exchanges", []) if ex["role"] == "bot"]
+    last_service = service_replies[-1] if service_replies else ""
+    check("UX service request: сразу передаёт менеджеру",
+          "передаю вас менеджеру" in last_service.lower(), last_service)
+    check("UX service request: не дожимает оплату",
+          "первый плат" not in last_service.lower(), last_service)
+    check("UX service request: есть эскалация", mock_service_escalate.called)
     check("UX soft_positive: state=active", d_soft.get("state") == "active")
     check("UX soft_positive: мягкий вопрос про первый платёж",
           "первый плат" in last_soft.lower(), last_soft)
@@ -1924,6 +2010,71 @@ except Exception as _e:
 # 16. HIGH-4 PROOF — msg_type preserved through preview → send-approved
 # ═══════════════════════════════════════════════════════════════
 section("HIGH-4 proof: msg_type preserved preview → batch → approved → send-approved")
+
+section("15.5 send-approved freshness gate")
+
+import collector.collections_engine as ce_mod
+
+_approved_batch_client = {
+    "name": "Е Еркебулан",
+    "manager": "Ергали",
+    "phone": "77087578717",
+    "amount": 767269.0,
+    "days": 28,
+    "level": 4,
+    "language": "ru",
+    "msg_type": "strict_reminder",
+    "report_date": "2026-04-27",
+    "reason": "old snapshot",
+}
+
+with patch("collector.approval_flow.is_ready_for_send", return_value=True), \
+     patch("collector.approval_flow.get_approved_clients", return_value=[dict(_approved_batch_client)]), \
+     patch("collector.approval_flow.load_batch", return_value={"batch_id": "batch-1", "created_at": "2026-04-28T13:00:00+05:00"}), \
+     patch("collector.approval_flow.record_send_results") as _record_send, \
+     patch("collector.collections_engine._live_send_allowed", return_value=True), \
+     patch("collector.collections_engine.load_latest_debt_json", return_value={"clients": [{"name": "Е Еркебулан"}]}), \
+     patch("collector.collections_engine.classify_debtors", return_value=[{
+         "name": "Е Еркебулан",
+         "amount": 120000.0,
+         "days": 12,
+         "level": 1,
+         "report_date": "2026-04-28",
+     }]), \
+     patch("collector.collections_engine._apply_collector_day_policy", side_effect=lambda c, name, use_first_seen: c), \
+     patch("collector.collections_engine.match_client", return_value={"manager": "Ергали", "whatsapp": "77087578717", "language": "ru"}), \
+     patch("collector.collections_engine._get_stop_record", return_value={}), \
+     patch("collector.collections_engine._collector_candidate_decision", return_value={"action": "client_approval", "msg_type": "soft_reminder", "reason": "fresh debt"}), \
+     patch("collector.collections_engine._send_approved_client", new=AsyncMock(return_value={"name": "Е Еркебулан", "status": "sent", "reason": "ok"})) as _send_refreshed, \
+     patch("collector.collections_engine.notify_admin", new=AsyncMock()) as _notify_refresh:
+    refreshed_results = asyncio.run(ce_mod.send_approved_batch("batch-1"))
+
+sent_payload = _send_refreshed.await_args.args[0] if _send_refreshed.await_args else {}
+check("freshness gate: send_approved_batch uses refreshed amount",
+      sent_payload.get("amount") == 120000.0, str(sent_payload))
+check("freshness gate: send_approved_batch uses refreshed msg_type",
+      sent_payload.get("msg_type") == "soft_reminder", str(sent_payload))
+check("freshness gate: admin notified about batch refresh", _notify_refresh.await_count == 1)
+check("freshness gate: record_send_results called", _record_send.called)
+check("freshness gate: returned sent result", any(r.get("status") == "sent" for r in refreshed_results), str(refreshed_results))
+
+with patch("collector.approval_flow.is_ready_for_send", return_value=True), \
+     patch("collector.approval_flow.get_approved_clients", return_value=[dict(_approved_batch_client)]), \
+     patch("collector.approval_flow.load_batch", return_value={"batch_id": "batch-2", "created_at": "2026-04-28T13:00:00+05:00"}), \
+     patch("collector.approval_flow.record_send_results") as _record_stale, \
+     patch("collector.collections_engine._live_send_allowed", return_value=True), \
+     patch("collector.collections_engine.load_latest_debt_json", return_value={"clients": []}), \
+     patch("collector.collections_engine.classify_debtors", return_value=[]), \
+     patch("collector.collections_engine._send_approved_client", new=AsyncMock()) as _send_stale, \
+     patch("collector.collections_engine.notify_admin", new=AsyncMock()) as _notify_stale:
+    stale_results = asyncio.run(ce_mod.send_approved_batch("batch-2"))
+
+check("freshness gate stale client: no send happens", _send_stale.await_count == 0)
+check("freshness gate stale client: skipped result returned",
+      any("stale approved batch" in str(r.get("reason", "")) for r in stale_results),
+      str(stale_results))
+check("freshness gate stale client: admin notified", _notify_stale.await_count == 1)
+check("freshness gate stale client: record_send_results called", _record_stale.called)
 
 import asyncio
 from unittest.mock import patch, MagicMock

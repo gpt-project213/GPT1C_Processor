@@ -4,7 +4,16 @@
 collector/client_dialog.py
 Управление диалогами с должниками через WhatsApp.
 
-Версия: 1.0.8 (2026-04-23)
+Версия: 1.1.0 (2026-04-29)
+
+v1.1.0 (2026-04-29): paid_claim переведён в отдельное состояние
+  awaiting_payment_proof; claim об оплате и вложенные чеки/скрины теперь
+  сразу уходят менеджеру/наблюдателям в Telegram с прямой ссылкой на файл.
+
+v1.0.9 (2026-04-29): убраны повторяющиеся ответы в WhatsApp-диалогах:
+  короткие подтверждения после просьбы о чеке больше не вызывают новый ответ,
+  "счс оплачу/всю" не запускает повторный допрос про сумму/дату,
+  сервисные запросы вроде акта сверки сразу эскалируются менеджеру.
 
 v1.0.8 (2026-04-23): мягкая обработка ответов клиентов: soft_positive /
   promise_schedule / paid_claim, без ложной фиксации обещаний и без повторной ссылки на 1С.
@@ -14,7 +23,7 @@ v1.0.8 (2026-04-23): мягкая обработка ответов клиент
 
 Жизненный цикл диалога:
   start_client_dialog() → handle_incoming() → escalate_to_manager()
-  state: active | escalated | closed
+  state: active | awaiting_payment_proof | awaiting_manager | escalated | closed
 """
 
 import asyncio
@@ -44,6 +53,7 @@ _DIALOGS_PATH = _ROOT / "logs" / "collector_client_dialogs.json"
 _DELETION_QUEUE_PATH = _ROOT / "logs" / "deletion_queue.json"
 
 logger = logging.getLogger(__name__)
+_DIALOG_ACTIVE_STATES = {"active", "awaiting_payment_proof", "awaiting_manager"}
 
 
 def _schedule_tg_deletion(chat_id: int, message_id: int, delay_hours: int = 24) -> None:
@@ -155,6 +165,23 @@ async def _send_tg(chat_id: int, text: str, reply_markup: Any = None) -> None:
         logger.error("Ошибка отправки Telegram chat_id=%d: %s", chat_id, e)
 
 
+async def _notify_dialog_observers(dialog: Dict[str, Any], text: str) -> None:
+    manager_chat_id = dialog.get("manager_chat_id")
+    manager_name = dialog.get("manager_name", "")
+    try:
+        from collector.communications import get_observer_ids
+        observer_ids = get_observer_ids(manager_name)
+    except Exception as e:
+        logger.error("get_observer_ids ошибка: %s", e)
+        observer_ids = []
+
+    if manager_chat_id and manager_chat_id not in observer_ids:
+        observer_ids = [manager_chat_id] + observer_ids
+
+    for obs_id in observer_ids:
+        await _send_tg(obs_id, text)
+
+
 def _gender_pronoun(manager_name: str) -> str:
     """Возвращает 'Она' или 'Он' по окончанию имени менеджера."""
     name = manager_name.strip()
@@ -196,6 +223,152 @@ def _mentions_recent_unposted_payment(text: str) -> bool:
     return any(m in t for m in markers) and any(
         m in t for m in ("оплат", "qr", "куар", "киар", "упад", "поступ")
     )
+
+
+def _normalize_text(text: str) -> str:
+    lowered = str(text or "").lower().replace("\u0451", "\u0435")
+    return " ".join(
+        ch if ch.isalnum() or ch.isspace() else " "
+        for ch in lowered
+    ).strip()
+
+
+def _is_greeting_only(text: str) -> bool:
+    normalized = _normalize_text(text)
+    if not normalized:
+        return False
+    greetings = {
+        "\u0437\u0434\u0440\u0430\u0432\u0441\u0442\u0432\u0443\u0439\u0442\u0435",
+        "\u0437\u0434\u0440\u0430\u0441\u0442\u0432\u0443\u0439\u0442\u0435",
+        "\u0434\u043e\u0431\u0440\u044b\u0439 \u0434\u0435\u043d\u044c",
+        "\u0434\u043e\u0431\u0440\u044b\u0439 \u0432\u0435\u0447\u0435\u0440",
+        "\u0434\u043e\u0431\u0440\u043e\u0435 \u0443\u0442\u0440\u043e",
+        "\u043f\u0440\u0438\u0432\u0435\u0442",
+        "\u0441\u0430\u043b\u0430\u043c",
+        "\u0430\u0441\u0441\u0430\u043b\u0430\u0443\u043c\u0430\u0433\u0430\u043b\u0435\u0439\u043a\u0443\u043c",
+    }
+    return normalized in greetings
+
+
+def _is_acknowledgement_only(text: str) -> bool:
+    normalized = _normalize_text(text)
+    if not normalized:
+        return False
+    acknowledgements = {
+        "\u043e\u043a",
+        "\u043e\u043a\u0435\u0439",
+        "\u0445\u043e\u0440\u043e\u0448\u043e",
+        "\u043f\u043e\u043d\u044f\u043b",
+        "\u043f\u043e\u043d\u044f\u043b\u0430",
+        "\u043f\u0440\u0438\u043d\u044f\u043b",
+        "\u043f\u0440\u0438\u043d\u044f\u043b\u0430",
+        "\u044f\u0441\u043d\u043e",
+        "\u043b\u0430\u0434\u043d\u043e",
+        "\u0434\u043e\u0433\u043e\u0432\u043e\u0440\u0438\u043b\u0438\u0441\u044c",
+        "\u0445\u043e\u0440\u043e\u0448\u043e \u0441\u043f\u0430\u0441\u0438\u0431\u043e",
+        "\u043e\u043a \u0441\u043f\u0430\u0441\u0438\u0431\u043e",
+    }
+    return normalized in acknowledgements
+
+
+def _is_service_request(text: str) -> bool:
+    normalized = _normalize_text(text)
+    if not normalized:
+        return False
+    markers = (
+        "\u0430\u043a\u0442 \u0441\u0432\u0435\u0440",
+        "\u0441\u0432\u0435\u0440\u043a",
+        "\u0430\u043a\u0442",
+        "\u0441\u0447\u0435\u0442",
+        "\u0441\u0447\u0435\u0442 \u0444\u0430\u043a\u0442\u0443\u0440",
+        "\u043d\u0430\u043a\u043b\u0430\u0434\u043d",
+        "\u0434\u043e\u0433\u043e\u0432\u043e\u0440",
+        "\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442",
+    )
+    return any(marker in normalized for marker in markers)
+
+
+def _shows_imminent_payment_commitment(text: str) -> bool:
+    normalized = _normalize_text(text)
+    if not normalized:
+        return False
+    explicit = (
+        "\u0441\u0435\u0439\u0447\u0430\u0441 \u043e\u043f\u043b\u0430\u0447\u0443",
+        "\u0449\u0430\u0441 \u043e\u043f\u043b\u0430\u0447\u0443",
+        "\u0441\u0447\u0441 \u043e\u043f\u043b\u0430\u0447\u0443",
+        "\u0441\u0435\u0433\u043e\u0434\u043d\u044f \u043e\u043f\u043b\u0430\u0447\u0443",
+        "\u043e\u043f\u043b\u0430\u0447\u0443 \u0441\u0435\u0433\u043e\u0434\u043d\u044f",
+        "\u0441\u043a\u043e\u0440\u043e \u043e\u043f\u043b\u0430\u0447\u0443",
+        "\u0437\u0430\u043a\u0440\u043e\u044e \u0441\u0435\u0433\u043e\u0434\u043d\u044f",
+        "\u0432\u0441\u044e",
+        "\u043f\u043e\u043b\u043d\u043e\u0441\u0442\u044c\u044e",
+    )
+    if normalized in explicit:
+        return True
+    return any(phrase in normalized for phrase in explicit if " " in phrase)
+
+
+def _last_bot_text(dialog: Dict[str, Any]) -> str:
+    for exchange in reversed(dialog.get("exchanges", [])):
+        if exchange.get("role") == "bot":
+            return str(exchange.get("text") or "")
+    return ""
+
+
+def _waiting_for_payment_proof(dialog: Dict[str, Any]) -> bool:
+    return bool(dialog.get("awaiting_payment_proof"))
+
+
+def _is_brief_reply(text: str, *, max_words: int = 2, max_chars: int = 18) -> bool:
+    raw = str(text or "").strip()
+    if not raw:
+        return False
+    return len(raw) <= max_chars and len(raw.split()) <= max_words
+
+
+def _attachment_note_lines(attachment: Optional[Dict[str, Any]]) -> List[str]:
+    if not isinstance(attachment, dict):
+        return []
+    att_type = str(attachment.get("type") or "file")
+    caption = str(attachment.get("caption") or "").strip()
+    file_name = str(attachment.get("file_name") or "").strip()
+    download_url = str(attachment.get("download_url") or "").strip()
+    lines = [f"📎 Вложение от клиента: <b>{att_type}</b>"]
+    if file_name:
+        lines.append(f"Файл: <b>{file_name}</b>")
+    if caption:
+        lines.append(f"Подпись: {caption}")
+    if download_url:
+        lines.append(f"Ссылка: {download_url}")
+    return lines
+
+
+def _build_payment_claim_note(
+    dialog: Dict[str, Any],
+    phone: str,
+    *,
+    client_text: str = "",
+    attachment: Optional[Dict[str, Any]] = None,
+    proof_received: bool = False,
+) -> str:
+    client_name = str(dialog.get("client_name") or "—")
+    manager_name = str(dialog.get("manager_name") or "—")
+    amount = _fmt_amount(float(dialog.get("amount", 0) or 0))
+    days = int(dialog.get("days", 0) or 0)
+    lines = [
+        f"💳 <b>{client_name}</b> сообщил об оплате.",
+        f"Менеджер: <b>{manager_name}</b>",
+        f"Телефон: <code>+{phone}</code>",
+        f"Текущий долг в контуре: <b>{amount} тг</b> | {days} дн.",
+    ]
+    if client_text:
+        lines.append(f"Сообщение клиента: {client_text}")
+    if proof_received:
+        lines.append("Статус: клиент прислал подтверждение оплаты.")
+    else:
+        lines.append("Статус: ждём чек / дату и сумму платежа.")
+    lines.extend(_attachment_note_lines(attachment))
+    return "\n".join(lines)
 
 
 def _fmt_amount(amount: float) -> str:
@@ -302,29 +475,15 @@ async def escalate_to_manager(
         summary: Человекочитаемое описание.
         phone:   Номер телефона клиента.
     """
-    manager_chat_id = dialog.get("manager_chat_id")
     manager_name = dialog.get("manager_name", "")
 
     # Обновляем состояние диалога
-    dialog["state"] = "escalated"
+    if dialog.get("state") not in {"awaiting_payment_proof", "awaiting_manager"}:
+        dialog["state"] = "escalated"
     _set_client_dialog(phone, dialog)
 
     text = _build_escalation_text(dialog, reason, summary)
-
-    # Получаем всех наблюдателей
-    try:
-        from collector.communications import get_observer_ids
-        observer_ids = get_observer_ids(manager_name)
-    except Exception as e:
-        logger.error("get_observer_ids ошибка: %s", e)
-        observer_ids = []
-
-    # Если менеджер не в списке — добавляем его
-    if manager_chat_id and manager_chat_id not in observer_ids:
-        observer_ids = [manager_chat_id] + observer_ids
-
-    for obs_id in observer_ids:
-        await _send_tg(obs_id, text)
+    await _notify_dialog_observers(dialog, text)
 
     logger.info(
         "[%s] диалог эскалирован менеджеру %s (reason=%s)",
@@ -391,6 +550,7 @@ async def start_client_dialog(
         "last_activity":     now,
         "phone_silent_cycles": 0,
         "off_topic_count":   0,
+        "awaiting_payment_proof": False,
     }
     _set_client_dialog(phone_clean, dialog)
     logger.info(
@@ -399,7 +559,7 @@ async def start_client_dialog(
     )
 
 
-async def handle_incoming(phone: str, text: str) -> None:
+async def handle_incoming(phone: str, text: str, attachment: Optional[Dict[str, Any]] = None) -> None:
     """Обрабатывает входящее WhatsApp-сообщение от клиента.
 
     Args:
@@ -415,7 +575,7 @@ async def handle_incoming(phone: str, text: str) -> None:
         logger.info("Неизвестный клиент %s — входящее сообщение проигнорировано", phone_clean)
         return
 
-    if dialog.get("state") != "active":
+    if dialog.get("state") not in _DIALOG_ACTIVE_STATES:
         logger.info(
             "Диалог %s в состоянии %s — входящее игнорируется",
             phone_clean, dialog.get("state"),
@@ -438,14 +598,64 @@ async def handle_incoming(phone: str, text: str) -> None:
     # Определяем язык
     language = detect_language(text)
 
+    if attachment and dialog.get("state") in {"awaiting_payment_proof", "awaiting_manager"}:
+        reply = "Спасибо, подтверждение получили и уже передали менеджеру."
+        dialog["state"] = "awaiting_manager"
+        dialog["awaiting_payment_proof"] = False
+        dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
+        _set_client_dialog(phone_clean, dialog)
+        await _reply_to_client(phone_clean, reply)
+        await _notify_dialog_observers(
+            dialog,
+            _build_payment_claim_note(
+                dialog,
+                phone_clean,
+                client_text=text,
+                attachment=attachment,
+                proof_received=True,
+            ),
+        )
+        return
+
+    if _waiting_for_payment_proof(dialog) and _is_brief_reply(text, max_words=2, max_chars=20):
+        _set_client_dialog(phone_clean, dialog)
+        return
+
+    if _is_greeting_only(text):
+        reply = "Здравствуйте. Подскажите, пожалуйста, когда ожидать ближайшую оплату?"
+        dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
+        _set_client_dialog(phone_clean, dialog)
+        await _reply_to_client(phone_clean, reply)
+        return
+
+    if _is_service_request(text):
+        reply = (
+            f"Спасибо, передаю вас менеджеру {manager_name}. "
+            f"{pronoun} свяжется с вами и поможет по документам."
+        )
+        dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
+        _set_client_dialog(phone_clean, dialog)
+        await _reply_to_client(phone_clean, reply)
+        await escalate_to_manager(
+            dialog, "question",
+            "Клиент запросил документы/акт сверки — нужен менеджер", phone_clean,
+        )
+        return
+
     if _mentions_recent_unposted_payment(text):
         reply = (
             "Спасибо. Если оплата уже прошла, пришлите, пожалуйста, чек или дату и сумму платежа. "
             f"Передадим информацию менеджеру {manager_name}."
         )
+        dialog["awaiting_payment_proof"] = True
+        dialog["state"] = "awaiting_payment_proof"
         dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
         _set_client_dialog(phone_clean, dialog)
         await _reply_to_client(phone_clean, reply)
+        await _notify_dialog_observers(
+            dialog,
+            _build_payment_claim_note(dialog, phone_clean, client_text=text),
+        )
         return
 
     # Анализируем через DeepSeek (синхронный вызов — выносим в поток)
@@ -516,9 +726,15 @@ async def handle_incoming(phone: str, text: str) -> None:
             "Спасибо. Если оплата уже прошла, пришлите, пожалуйста, чек или дату и сумму платежа. "
             f"Передадим информацию менеджеру {manager_name}."
         )
+        dialog["awaiting_payment_proof"] = True
+        dialog["state"] = "awaiting_payment_proof"
         dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
         _set_client_dialog(phone_clean, dialog)
         await _reply_to_client(phone_clean, reply)
+        await _notify_dialog_observers(
+            dialog,
+            _build_payment_claim_note(dialog, phone_clean, client_text=text),
+        )
         return
 
     if intent == "promise_schedule":
@@ -547,11 +763,12 @@ async def handle_incoming(phone: str, text: str) -> None:
         return
 
     if intent == "soft_positive":
-        if exchange_count >= 2:
+        if exchange_count >= 2 or _is_brief_reply(text, max_words=2, max_chars=18):
             reply = (
                 "Понял вас. Тогда ждём ближайшую оплату. "
                 "Как оплатите — пришлите, пожалуйста, чек."
             )
+            dialog["awaiting_payment_proof"] = True
             dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
             dialog["state"] = "escalated"
             _set_client_dialog(phone_clean, dialog)
@@ -592,6 +809,7 @@ async def handle_incoming(phone: str, text: str) -> None:
             reply = (
                 "Спасибо, понял. Как оплатите — пришлите, пожалуйста, чек."
             )
+        dialog["awaiting_payment_proof"] = True
         dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
         dialog["state"] = "escalated"
         _set_client_dialog(phone_clean, dialog)
@@ -668,6 +886,21 @@ async def handle_incoming(phone: str, text: str) -> None:
         return
 
     if intent == "promise_without_date":
+        if _is_brief_reply(text, max_words=2, max_chars=18):
+            reply = (
+                "Понял вас. Тогда ждём ближайшую оплату. "
+                "Как оплатите — пришлите, пожалуйста, чек."
+            )
+            dialog["awaiting_payment_proof"] = True
+            dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
+            dialog["state"] = "escalated"
+            _set_client_dialog(phone_clean, dialog)
+            await _reply_to_client(phone_clean, reply)
+            await escalate_to_manager(
+                dialog, "soft_positive",
+                "Клиент подтвердил ближайшую оплату без точной даты", phone_clean,
+            )
+            return
         # Клиент подтверждает готовность, но без даты — просим уточнить
         reply = suggested_reply if suggested_reply else (
             "Спасибо, понял. Когда планируете первый платёж?"

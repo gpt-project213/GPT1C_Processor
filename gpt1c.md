@@ -13,6 +13,14 @@
 **TZ:** Asia/Almaty → `ZoneInfo(os.getenv("TZ", "Asia/Almaty"))` — всегда через env  
 **Venv:** `.venv/` | **Tests:** `python -X utf8 tests/test_project.py && python -X utf8 tests/test_collector.py`
 
+### Текущий статус collector на 2026-04-29
+
+- stale admin-approved batch перед `send-approved` закрыт: batch теперь пересверяется по свежей дебиторке перед фактической WhatsApp-отправкой;
+- `paid_claim` (`оплатили`, `вчера была оплата`, `давно оплатили`) переведен в state `awaiting_payment_proof`, без повторных debt-дожимов;
+- входящие proof-вложения из WhatsApp теперь пробрасываются в dialog с `downloadUrl/fileName/caption` и могут быть сразу переданы менеджеру/наблюдателям;
+- для collector добавлен отдельный безсетевой регрессионный файл `tests/test_collector_regression_hermetic.py`;
+- именно этот hermetic-suite сейчас считать основным доказательством по collector-правкам, а не полный `tests/test_collector.py`.
+
 ---
 
 ## Архитектура (9 слоёв)
