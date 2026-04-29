@@ -50,7 +50,16 @@ except Exception:
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-LOG = logging.getLogger("debt_stop_control")
+class _PrefixAdapter(logging.LoggerAdapter):
+    def __init__(self, base_logger: logging.Logger, prefix: str) -> None:
+        super().__init__(base_logger, {})
+        self._prefix = prefix
+
+    def process(self, msg: str, kwargs: dict) -> tuple:
+        return f"{self._prefix} {msg}", kwargs
+
+
+LOG = _PrefixAdapter(logging.getLogger("debt_stop_control"), "[STOP]")
 
 # ── Пути ────────────────────────────────────────────────────────────
 _THIS = Path(__file__).resolve()

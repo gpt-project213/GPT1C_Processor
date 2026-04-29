@@ -96,7 +96,16 @@ logging.basicConfig(
     format="%(asctime)s, %(levelname)s %(message)s",
     handlers=_handlers,
 )
-logger = logging.getLogger(__name__)
+class _PrefixAdapter(logging.LoggerAdapter):
+    def __init__(self, base_logger: logging.Logger, prefix: str) -> None:
+        super().__init__(base_logger, {})
+        self._prefix = prefix
+
+    def process(self, msg: str, kwargs: dict) -> tuple:
+        return f"{self._prefix} {msg}", kwargs
+
+
+logger = _PrefixAdapter(logging.getLogger(__name__), "[COLLECTOR]")
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 
