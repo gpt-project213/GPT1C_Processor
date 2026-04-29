@@ -4,7 +4,11 @@
 collections/collections_engine.py
 Главный оркестратор AI-Коллектора долгов.
 
-Версия: 1.4.7 (2026-04-29)
+Версия: 1.4.8 (2026-04-29)
+
+v1.4.8 (2026-04-29): added debt freshness guardrails. Preview now carries
+  debt snapshot date/age warnings, while live run and send-approved can be
+  blocked when debt files are too old to trust.
 
 v1.4.7 (2026-04-29): старые хвостовые stop-клиенты отделены от живых
   shipment-stop кейсов: если клиент долго висит в долге, новых отгрузок нет,
@@ -253,6 +257,133 @@ def _flag_enabled(data: Optional[Dict[str, Any]], *keys: str) -> bool:
 
 def _fmt_amount(n: float) -> str:
     return f"{n:,.0f}".replace(",", " ")
+
+
+def _fmt_date_ru(value: str) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return "—"
+    for fmt in ("%Y-%m-%d", "%d.%m.%Y"):
+        try:
+            return datetime.strptime(raw[:10], fmt).strftime("%d.%m.%Y")
+        except ValueError:
+            continue
+    return raw
+
+
+def _summarize_debt_freshness(
+    debt_data: Dict[str, Any],
+    manager_names: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    meta = debt_data.get("_freshness") if isinstance(debt_data, dict) else {}
+    if not isinstance(meta, dict):
+        meta = {}
+    managers_meta = meta.get("managers") if isinstance(meta.get("managers"), dict) else {}
+    if not managers_meta:
+        return {
+            "warn_threshold_days": int(meta.get("warn_threshold_days", 1) or 1),
+            "block_threshold_days": int(meta.get("block_threshold_days", 2) or 2),
+            "snapshot_label_ru": "—",
+            "max_age_days": None,
+            "warning_managers": [],
+            "stale_managers": [],
+            "has_warning": False,
+            "is_stale": False,
+            "managers": {},
+            "block_reason": "",
+        }
+    wanted = {str(name or "").strip() for name in (manager_names or []) if str(name or "").strip()}
+
+    selected: Dict[str, Any] = {}
+    if wanted:
+        for manager_name in wanted:
+            entry = managers_meta.get(manager_name)
+            if isinstance(entry, dict):
+                selected[manager_name] = dict(entry)
+            else:
+                selected[manager_name] = {
+                    "period_max": "",
+                    "period_max_ru": "—",
+                    "age_days": None,
+                    "warn": True,
+                    "stale": True,
+                    "file": "",
+                    "missing": True,
+                }
+    else:
+        selected = {
+            manager_name: dict(entry)
+            for manager_name, entry in managers_meta.items()
+            if isinstance(entry, dict)
+        }
+
+    warn_threshold = int(meta.get("warn_threshold_days", 1) or 1)
+    block_threshold = int(meta.get("block_threshold_days", max(2, warn_threshold)) or max(2, warn_threshold))
+    warning_managers: List[str] = []
+    stale_managers: List[str] = []
+    date_values: List[str] = []
+    max_age_days: Optional[int] = None
+
+    for manager_name, entry in selected.items():
+        age_days = entry.get("age_days")
+        if isinstance(age_days, int):
+            max_age_days = age_days if max_age_days is None else max(max_age_days, age_days)
+        period_max = str(entry.get("period_max") or "").strip()
+        if period_max:
+            date_values.append(period_max)
+        if entry.get("warn"):
+            warning_managers.append(manager_name)
+        if entry.get("stale"):
+            stale_managers.append(manager_name)
+
+    date_values = sorted(set(date_values))
+    if not date_values:
+        snapshot_label_ru = "—"
+    elif len(date_values) == 1:
+        snapshot_label_ru = _fmt_date_ru(date_values[0])
+    else:
+        snapshot_label_ru = f"{_fmt_date_ru(date_values[0])} → {_fmt_date_ru(date_values[-1])}"
+
+    summary = {
+        "warn_threshold_days": warn_threshold,
+        "block_threshold_days": block_threshold,
+        "snapshot_label_ru": snapshot_label_ru,
+        "max_age_days": max_age_days,
+        "warning_managers": warning_managers,
+        "stale_managers": stale_managers,
+        "has_warning": bool(warning_managers),
+        "is_stale": bool(stale_managers),
+        "managers": selected,
+    }
+    if stale_managers:
+        details = []
+        for manager_name in stale_managers[:4]:
+            entry = selected.get(manager_name) or {}
+            age = entry.get("age_days")
+            period_ru = entry.get("period_max_ru") or "—"
+            age_text = "дата не определена" if age is None else f"{age} дн."
+            details.append(f"{manager_name}: {period_ru} ({age_text})")
+        summary["block_reason"] = (
+            f"устаревшие debt-данные по менеджерам: {'; '.join(details)}. "
+            f"Порог блокировки: {block_threshold} дн."
+        )
+    else:
+        summary["block_reason"] = ""
+    return summary
+
+
+def _freshness_notice_lines(summary: Dict[str, Any]) -> List[str]:
+    if not summary:
+        return []
+    lines = [f"🗓 Данные дебиторки: <b>{summary.get('snapshot_label_ru') or '—'}</b>"]
+    max_age_days = summary.get("max_age_days")
+    if isinstance(max_age_days, int):
+        lines.append(f"⌛ Возраст данных: <b>{max_age_days} дн.</b>")
+    if summary.get("has_warning"):
+        warn_managers = summary.get("warning_managers") or []
+        suffix = f" и ещё {len(warn_managers) - 5}" if len(warn_managers) > 5 else ""
+        lines.append(f"⚠️ Старые данные: {', '.join(warn_managers[:5])}{suffix}")
+    return lines
 
 
 def _is_legacy_tail_client(client: Dict[str, Any]) -> bool:
@@ -766,6 +897,17 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
         await notify_admin("⚠️ AI Коллектор: нет данных дебиторки для обработки")
         return
 
+    freshness = _summarize_debt_freshness(debt_data)
+    if not dry_run and freshness.get("is_stale"):
+        block_reason = str(freshness.get("block_reason") or "устаревшие debt-данные")
+        logger.error("LIVE SEND BLOCKED: stale debt snapshot: %s", block_reason)
+        await notify_admin(
+            "⛔ <b>AI Коллектор: live-send заблокирован</b>\n\n"
+            f"{block_reason}\n\n"
+            "Сначала обновите debt_ext-файлы, потом повторите отправку."
+        )
+        return
+
     debtors = classify_debtors(debt_data)
     try:
         from collector.payment_hold import sync_holds_with_debtors
@@ -1134,11 +1276,22 @@ def _batch_client_key(name: str) -> str:
     return str(name or "").strip().lower()
 
 
-def _prepare_current_approved_clients() -> Tuple[Dict[str, Dict[str, Any]], Optional[str]]:
+def _prepare_current_approved_clients(
+    approved_clients: Optional[List[Dict[str, Any]]] = None,
+) -> Tuple[Dict[str, Dict[str, Any]], Optional[str], Dict[str, Any]]:
     """Builds the latest collector-approved shortlist for send-approved revalidation."""
     debt_data = load_latest_debt_json()
     if not debt_data:
-        return {}, "latest debt json unavailable"
+        return {}, "latest debt json unavailable", {}
+
+    manager_names = sorted({
+        str(client.get("manager") or "").strip()
+        for client in (approved_clients or [])
+        if str(client.get("manager") or "").strip()
+    })
+    freshness = _summarize_debt_freshness(debt_data, manager_names or None)
+    if freshness.get("is_stale"):
+        return {}, str(freshness.get("block_reason") or "stale debt snapshot"), freshness
 
     debtors = classify_debtors(debt_data)
     try:
@@ -1210,7 +1363,7 @@ def _prepare_current_approved_clients() -> Tuple[Dict[str, Dict[str, Any]], Opti
             "review_action": decision.get("action", "client_approval"),
         }
 
-    return prepared, None
+    return prepared, None, freshness
 
 
 def _refresh_approved_batch_clients(
@@ -1218,7 +1371,7 @@ def _refresh_approved_batch_clients(
     approved_clients: List[Dict[str, Any]],
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[str], Optional[str]]:
     """Refreshes admin-approved clients against the latest debt snapshot before send."""
-    current_clients, blocked_reason = _prepare_current_approved_clients()
+    current_clients, blocked_reason, _freshness = _prepare_current_approved_clients(approved_clients)
     if blocked_reason:
         return [], [], [], blocked_reason
 
@@ -1349,6 +1502,7 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
     if not debt_data:
         logger.warning("run_approval_preview: нет данных дебиторки")
         return None
+    preview_freshness = _summarize_debt_freshness(debt_data)
 
     debtors = classify_debtors(debt_data)
     try:
@@ -1477,6 +1631,16 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
 
     active_batch = load_latest_batch()
     batch = create_batch(debtors_by_manager)
+    batch["debt_snapshot"] = _summarize_debt_freshness(
+        debt_data,
+        list(debtors_by_manager.keys()),
+    )
+    if preview_freshness.get("has_warning"):
+        logger.warning(
+            "run_approval_preview: debt snapshot warning for batch %s: %s",
+            batch["batch_id"],
+            "; ".join(_freshness_notice_lines(batch["debt_snapshot"])),
+        )
     if active_batch:
         batch["replaced_batch_id"] = active_batch.get("batch_id")
         supersede_batch(active_batch, superseded_by=batch["batch_id"])

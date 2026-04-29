@@ -4,7 +4,10 @@
 collector/approval_flow.py
 UX согласования рассылки WhatsApp — менеджер → администратор.
 
-Версия: 1.1.0 (2026-04-29)
+Версия: 1.1.1 (2026-04-29)
+
+v1.1.1 (2026-04-29): manager/admin preview texts now show debt snapshot
+  date and age warnings, so approvals are not blind when debt files are old.
 
 v1.1.0 (2026-04-29): stop-клиенты разделены на живой stop-list и старые
   хвостовые долги. Для старых хвостов без новых отгрузок согласование теперь
@@ -468,12 +471,32 @@ def _debt_age_text(c: Dict[str, Any]) -> str:
     return text
 
 
+def _freshness_lines(batch: Dict[str, Any]) -> List[str]:
+    snap = batch.get("debt_snapshot")
+    if not isinstance(snap, dict):
+        return []
+    lines = []
+    label = str(snap.get("snapshot_label_ru") or "").strip()
+    if label:
+        lines.append(f"🗓 Данные дебиторки: <b>{label}</b>")
+    max_age_days = snap.get("max_age_days")
+    if isinstance(max_age_days, int):
+        lines.append(f"⌛ Возраст данных: <b>{max_age_days} дн.</b>")
+    if snap.get("has_warning"):
+        warn_managers = snap.get("warning_managers") or []
+        if warn_managers:
+            suffix = f" и ещё {len(warn_managers) - 5}" if len(warn_managers) > 5 else ""
+            lines.append(f"⚠️ В snapshot есть старые данные: {', '.join(warn_managers[:5])}{suffix}")
+    return lines
+
+
 # ─── Manager preview ──────────────────────────────────────────────────────────
 
 def _format_manager_preview_text(
     manager_name: str,
     clients: List[Dict[str, Any]],
     batch_id: str,
+    batch: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Формирует текст превью для менеджера."""
     def _fmt(n: float) -> str:
@@ -483,6 +506,11 @@ def _format_manager_preview_text(
         f"👋 <b>{manager_name}</b>, добрый день!\n",
         f"Бот предлагает отправить уведомление <b>{len(clients)} клиент(ам)</b>:\n",
     ]
+    if batch:
+        freshness_lines = _freshness_lines(batch)
+        lines.extend(freshness_lines)
+        if freshness_lines:
+            lines.append("")
     for i, c in enumerate(clients, 1):
         viol_tag = " ⚠️" if c.get("violation_shipment") else ""
         phone_note = (
@@ -565,7 +593,7 @@ async def send_manager_previews(
             continue
 
         clients = mgr_state["clients"]
-        text = _format_manager_preview_text(manager_name, clients, batch["batch_id"])
+        text = _format_manager_preview_text(manager_name, clients, batch["batch_id"], batch=batch)
         markup = _manager_main_keyboard(batch["batch_id"], mgr_idx)
 
         msg_id = await _tg_send(int(chat_id), text, markup)
@@ -882,7 +910,7 @@ async def handle_manager_callback(
     elif action == "wa_appr_mgr_view":
         # Показываем список с кнопками по каждому клиенту
         decisions = _build_decisions(mgr_state)
-        text = _format_manager_preview_text(manager_name, clients, batch_id)
+        text = _format_manager_preview_text(manager_name, clients, batch_id, batch=batch)
         markup = _client_list_keyboard(batch_id, mgr_idx, clients, decisions)
         await _tg_edit(chat_id, message_id, text, markup)
         return True
@@ -1016,6 +1044,10 @@ def _format_admin_summary_text(batch: Dict[str, Any]) -> str:
         "📋 <b>Согласование рассылки WhatsApp — итог менеджеров</b>\n",
         f"Батч: {batch['batch_id']}\n",
     ]
+    freshness_lines = _freshness_lines(batch)
+    lines.extend(freshness_lines)
+    if freshness_lines:
+        lines.append("")
     if batch.get("escalated_to_admin_at"):
         lines += [
             "⚠️ <b>Часть менеджеров не ответила вовремя.</b>",
@@ -1237,6 +1269,12 @@ async def send_admin_preview_notice(batch: Dict[str, Any], bot=None) -> None:
         f"Клиентов всего: <b>{total_clients}</b>",
         f"Менеджеров: <b>{len(managers)}</b>",
         "",
+    ]
+    freshness_lines = _freshness_lines(batch)
+    lines.extend(freshness_lines)
+    if freshness_lines:
+        lines.append("")
+    lines += [
         "<b>Ожидается ответ от менеджеров:</b>",
     ]
     for mgr_name, mgr_state in managers.items():

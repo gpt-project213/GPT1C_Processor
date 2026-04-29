@@ -16,15 +16,45 @@
 ### Текущий статус collector на 2026-04-29
 
 - stale admin-approved batch перед `send-approved` закрыт: batch теперь пересверяется по свежей дебиторке перед фактической WhatsApp-отправкой;
+- debt snapshot freshness теперь явный runtime-фактор:
+  - `load_latest_debt_json()` возвращает `_freshness` metadata по менеджерам;
+  - preview/admin summary показывают дату и возраст debt-данных;
+  - live collector run и `send-approved` могут быть заблокированы, если snapshot устарел сверх SLA;
 - `paid_claim` (`оплатили`, `вчера была оплата`, `давно оплатили`) переведен в state `awaiting_payment_proof`, без повторных debt-дожимов;
 - входящие proof-вложения из WhatsApp теперь пробрасываются в dialog с `downloadUrl/fileName/caption` и могут быть сразу переданы менеджеру/наблюдателям;
 - для collector добавлен отдельный безсетевой регрессионный файл `tests/test_collector_regression_hermetic.py`;
+- trigger window для collector preview/check расширен с `09:00–18:00` до `09:00–22:00`, а TTL debt-trigger увеличен с `6ч` до `14ч`, потому что Саида временно разносит оплаты и после `20:00`;
+- после каждого `send_whatsapp()` администратор получает мгновенное notice, а `daily_summary()` показывает отдельный блок с фактическими WA-получателями;
+- CRM служебные/зарплатные записи теперь должны фильтроваться в двух местах: на входе `get_clients_without_phones()` и в cleanup pending state, иначе `clarify_phone` бесконечно загрязняется;
 - stop-клиенты теперь делятся на живой shipment-stop и старые хвостовые долги:
   - `stoplist_reminder` — только для живых stop-кейсов;
   - `legacy_tail_reminder` — старый хвост без движения;
   - `partial_tail_reminder` — старый хвост с частичным погашением;
 - старые хвосты без новых отгрузок больше не получают бессмысленную фразу про ограничение отгрузок;
 - именно этот hermetic-suite сейчас считать основным доказательством по collector-правкам, а не полный `tests/test_collector.py`.
+
+### Важное разграничение контуров
+
+- `collector/*` — отдельный контур AI debt collector:
+  - WhatsApp касания по дебиторке;
+  - `wa_approval_batches.json`;
+  - manager/admin approval на рассылку;
+  - stale batch, dialog UX, payment proof.
+- `bot/debt_stop_control.py` — отдельный stop/clearance контур:
+  - stop-лист по отгрузкам;
+  - Саида;
+  - руководитель;
+  - `reports/debt_stop_registry.json`;
+  - статусы `pending_clearance_mgr`, `pending_clearance_admin`, `clear/prepay/limit/blacklist`.
+- Ответ вида `✅ Утверждено — <клиент>. Менеджер и Саида уведомлены.` относится именно к `debt_stop_control`, а не к collector.
+- Кейс `Е ИП Реян (Жангали)` 29.04.2026:
+  - утреннее WhatsApp-сообщение про долг было collector-историей;
+  - дневное `Утверждено ... Менеджер и Саида уведомлены` было штатным stop-clearance workflow после полной оплаты и подтверждения предложения Ергали;
+  - это не запрос на новый лимит, если менеджер не выбирал ветку `📉 С лимитом`.
+- Кейс отсутствия Ергали в новых collector-batches `20260429-135316-54e7` и `20260429-140258-5881`:
+  - это не поломка routing;
+  - утром `29.04.2026` его клиенты уже ушли в старом admin-approved batch `20260428-170001-2bef`;
+  - после этого сработал дневной антидубль `already_contacted_today()`, поэтому новые preview не включили этих же клиентов повторно в тот же день.
 
 ---
 
@@ -286,7 +316,7 @@ Get-Content logs\log_monitor_summary.log -Tail 50
 
 ```
 Уровни: 0-9д→L0(skip), 10-14→L1, 15-19→L2, 20-24→L3, 25-29→L4, 30+→L5
-Отправка: только 09:00-18:00 Asia/Almaty, НЕ выходные
+Trigger-check/preview: 09:00-22:00 по текущему runtime-регламенту; live WhatsApp send отдельно проверять по guard-коду и не считать автоматически расширенным до 22:00
 Звонки: только 09:00-17:00, level>=4, do_not_call=false
 Макс: 1 сообщение на клиента в день
 

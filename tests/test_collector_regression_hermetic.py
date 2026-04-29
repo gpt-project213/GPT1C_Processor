@@ -29,7 +29,9 @@ sys.path.insert(0, str(ROOT))
 os.environ["COLLECTOR_TEST_MODE"] = "1"
 
 import collector.client_dialog as client_dialog
+import collector.debt_monitor as debt_monitor
 import collector.collections_engine as collections_engine
+import collector.approval_flow as approval_flow
 import collector.whatsapp_poller as whatsapp_poller
 
 
@@ -172,6 +174,32 @@ class ClientDialogHermeticTests(unittest.IsolatedAsyncioTestCase):
 
 
 class FreshnessGateHermeticTests(unittest.IsolatedAsyncioTestCase):
+    def test_load_latest_debt_json_exposes_stale_freshness_metadata(self):
+        tmpdir = tempfile.mkdtemp()
+        original_json_dir = debt_monitor.JSON_DIR
+        debt_monitor.JSON_DIR = Path(tmpdir)
+        try:
+            payload = {
+                "manager": "Ергали",
+                "period_max": "26.04.2026",
+                "clients": [
+                    {"name": "Е ИП Шахин", "debt": 340000, "days": 33}
+                ],
+            }
+            (debt_monitor.JSON_DIR / "debt_ext_test.json").write_text(
+                json.dumps(payload, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            loaded = debt_monitor.load_latest_debt_json()
+        finally:
+            debt_monitor.JSON_DIR = original_json_dir
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+        freshness = loaded.get("_freshness") or {}
+        self.assertTrue(freshness.get("is_stale"))
+        self.assertIn("Ергали", freshness.get("stale_managers") or [])
+        self.assertEqual((freshness.get("managers") or {}).get("Ергали", {}).get("period_max_ru"), "26.04.2026")
+
     async def test_send_approved_batch_refreshes_client_before_send(self):
         approved_client = {
             "name": "Е Еркебулан",
@@ -242,6 +270,53 @@ class FreshnessGateHermeticTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(record_mock.called)
         self.assertTrue(any("stale approved batch" in str(r.get("reason", "")) for r in results))
 
+    async def test_send_approved_batch_blocks_when_selected_manager_data_is_stale(self):
+        approved_client = {
+            "name": "Е Еркебулан",
+            "manager": "Ергали",
+            "phone": "77087578717",
+            "amount": 767269.0,
+            "days": 28,
+            "level": 4,
+            "language": "ru",
+            "msg_type": "strict_reminder",
+            "report_date": "2026-04-27",
+            "reason": "old snapshot",
+        }
+        stale_debt = {
+            "clients": [{"name": "Е Еркебулан"}],
+            "_freshness": {
+                "warn_threshold_days": 1,
+                "block_threshold_days": 2,
+                "managers": {
+                    "Ергали": {
+                        "period_max": "2026-04-26",
+                        "period_max_ru": "26.04.2026",
+                        "age_days": 3,
+                        "warn": True,
+                        "stale": True,
+                        "file": "debt_ext_test.json",
+                    }
+                },
+            },
+        }
+        with patch("collector.approval_flow.is_ready_for_send", return_value=True), \
+             patch("collector.approval_flow.get_approved_clients", return_value=[dict(approved_client)]), \
+             patch("collector.approval_flow.record_send_results") as record_mock, \
+             patch("collector.collections_engine._live_send_allowed", return_value=True), \
+             patch("collector.collections_engine.load_latest_debt_json", return_value=stale_debt), \
+             patch("collector.collections_engine.classify_debtors") as classify_mock, \
+             patch("collector.collections_engine._send_approved_client", new=AsyncMock()) as send_mock, \
+             patch("collector.collections_engine.notify_admin", new=AsyncMock()) as admin_mock:
+            results = await collections_engine.send_approved_batch("batch-stale")
+
+        self.assertEqual(classify_mock.call_count, 0)
+        self.assertEqual(send_mock.await_count, 0)
+        self.assertEqual(record_mock.call_count, 0)
+        self.assertEqual(results, [])
+        self.assertEqual(admin_mock.await_count, 1)
+        self.assertIn("26.04.2026", admin_mock.await_args.args[0])
+
 
 class LegacyTailClassificationHermeticTests(unittest.TestCase):
     def test_stopped_legacy_tail_without_payments_uses_legacy_tail_msg_type(self):
@@ -306,6 +381,61 @@ class LegacyTailClassificationHermeticTests(unittest.TestCase):
         )
         self.assertIn("задолженность", text.lower())
         self.assertNotIn("отгруз", text.lower())
+
+
+class PreviewFreshnessFormattingHermeticTests(unittest.TestCase):
+    def test_manager_preview_shows_snapshot_date_and_warning(self):
+        batch = {
+            "batch_id": "batch-1",
+            "debt_snapshot": {
+                "snapshot_label_ru": "28.04.2026",
+                "max_age_days": 1,
+                "has_warning": True,
+                "warning_managers": ["Ергали"],
+            },
+        }
+        text = approval_flow._format_manager_preview_text(
+            "Ергали",
+            [{
+                "name": "Е ИП Шахин",
+                "amount": 340000.0,
+                "days": 33,
+                "debit": 0.0,
+                "credit": 0.0,
+                "msg_type": "legacy_tail_reminder",
+                "reason": "старый хвост",
+            }],
+            "batch-1",
+            batch=batch,
+        )
+        self.assertIn("Данные дебиторки", text)
+        self.assertIn("28.04.2026", text)
+        self.assertIn("Ергали", text)
+
+    def test_admin_summary_shows_snapshot_date_and_warning(self):
+        batch = approval_flow.create_batch({
+            "Ергали": [{
+                "name": "Е ИП Шахин",
+                "amount": 340000.0,
+                "days": 33,
+                "level": 5,
+                "debit": 0.0,
+                "credit": 0.0,
+                "phone": "77025626272",
+                "msg_type": "legacy_tail_reminder",
+                "reason": "старый хвост",
+            }]
+        })
+        batch["debt_snapshot"] = {
+            "snapshot_label_ru": "28.04.2026",
+            "max_age_days": 1,
+            "has_warning": True,
+            "warning_managers": ["Ергали"],
+        }
+        text = approval_flow._format_admin_summary_text(batch)
+        self.assertIn("Данные дебиторки", text)
+        self.assertIn("28.04.2026", text)
+        self.assertIn("Ергали", text)
 
 
 class WhatsAppPollerHermeticTests(unittest.IsolatedAsyncioTestCase):

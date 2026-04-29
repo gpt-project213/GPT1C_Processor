@@ -41,6 +41,26 @@
 - `config/collector_prompts.json`
   - добавлены `legacy_tail_reminder` и `partial_tail_reminder`;
   - фраза про ограничение отгрузок оставлена только для настоящего `stoplist_reminder`.
+- `collector/debt_monitor.py` v`1.0.7` -> v`1.0.8`
+  - loader теперь возвращает `_freshness` metadata по debt snapshot: `period_max`, `age_days`, `warn/stale`, `file` по каждому менеджеру;
+  - это стало базой для блокировки live-send по старой дебиторке и для показа даты данных в preview.
+- `collector/collections_engine.py` v`1.4.7` -> v`1.4.8`
+  - live `run()` теперь блокируется, если debt snapshot устарел сверх SLA;
+  - `send-approved` тоже блокируется по stale debt snapshot выбранных менеджеров;
+  - `run_approval_preview()` сохраняет в batch `debt_snapshot` summary, чтобы preview/admin summary показывали дату и возраст данных.
+- `collector/approval_flow.py` v`1.1.0` -> v`1.1.1`
+  - manager preview, admin preview notice и admin summary теперь показывают `Данные дебиторки` и `Возраст данных`;
+  - при stale-warning это видно ещё до финального утверждения отправки.
+- операционный регламент collector уточнен:
+  - trigger/check окно расширено до `09:00–22:00`;
+  - TTL флага свежей debt-trigger логики расширен до `14ч`;
+  - причина: Саида временно может разносить оплаты после `20:00`.
+- усилена наблюдаемость live WhatsApp:
+  - после каждого `send_whatsapp()` администратор получает мгновенный notice;
+  - `daily_summary()` включает отдельный блок с перечнем фактических WA-получателей.
+- CRM clarify-phone hygiene уточнена:
+  - служебные/зарплатные записи должны фильтроваться и на входе `get_clients_without_phones()`, и в `send_reports._crm_cleanup_pending()`;
+  - иначе queue `clarify_phone` бесконечно загрязняется ЗП/служебными хвостами.
 
 ### Что доказано
 
@@ -48,6 +68,14 @@
   - старый batch был собран `2026-04-28`, но отправлен только утром `2026-04-29`;
   - свежая дебиторка после вечерней разноски оплат в 1С подхватилась позже;
   - значит корень был в frozen snapshot approved batch перед send.
+- важно не смешивать два разных контура:
+  - `collector/*` и `logs/wa_approval_batches.json` — это WhatsApp debt collector и его manager/admin approval batch;
+  - `bot/debt_stop_control.py` и `reports/debt_stop_registry.json` — это отдельный stop/clearance workflow по отгрузкам, Саиде и руководителю.
+- кейс `Е ИП Реян (Жангали)` с ответом `✅ Утверждено — ... Менеджер и Саида уведомлены` был штатным `debt_stop_control` сценарием:
+  - в `14:00:56` stop-monitor увидел, что `current["debt"] <= STOP_PAID_THRESHOLD(5000)`;
+  - Ергали получил запрос выбрать дальнейший режим работы с клиентом после полной оплаты;
+  - руководитель подтвердил предложение менеджера через `dstop_adm_cl_confirm`;
+  - это не было подтверждением нового лимита и не было bug-сигналом collector.
 - WhatsApp voice recognition на текущем HEAD работает:
   - в runtime-логах есть успешное распознавание входящего `.ogg` через AssemblyAI;
   - проблема этой сессии была не в STT, а в freshness debt и UX client dialog.
@@ -59,6 +87,10 @@
   - `Е ТОО ГудФуд № 1 ул Досмухамедулы 48(Аида)`
   - `М Ресторан Шама ИП Тян ул Мустафина 12`
 - по текущей логике эти клиенты теперь не получают `stoplist_reminder`, если в текущем срезе нет новых отгрузок и долг выглядит как старый хвост.
+- отсутствие Ергали в новых collector-batches `20260429-135316-54e7` и `20260429-140258-5881` не было bug-сигналом routing:
+  - утром `29.04.2026` его клиенты уже были отправлены из старого admin-approved batch `20260428-170001-2bef`;
+  - после этого дневной guard `already_contacted_today()` корректно не дал включить их в новые preview повторно;
+  - отдельные stop-control уведомления Ергали в этот день были штатным другим контуром и не относятся к collector approval batch.
 
 ### Проверки
 
@@ -70,6 +102,14 @@
 - `python -X pycache_prefix=C:\Users\user\.codex\memories\pycache_tmp -m py_compile collector\collection_agent.py` — OK
 - `python -X utf8 tests\test_collector_regression_hermetic.py -v` — **11/11 OK**, `Ran 11 tests in 3.020s`
 - `python -X utf8 -m unittest tests.test_collector_regression_hermetic.LegacyTailClassificationHermeticTests -v` — **4/4 OK**
+- `python -X pycache_prefix=C:\Users\user\.codex\memories\pycache_tmp -m py_compile collector\debt_monitor.py` — OK
+- `python -X pycache_prefix=C:\Users\user\.codex\memories\pycache_tmp -m py_compile collector\collections_engine.py` — OK
+- `python -X pycache_prefix=C:\Users\user\.codex\memories\pycache_tmp -m py_compile collector\approval_flow.py` — OK
+- `python -X utf8 tests\test_collector_regression_hermetic.py -v` — **15/15 OK**, включая freshness metadata, stale live-send block и preview snapshot warning
+- документальные уточнения collector knowledge base внесены в:
+  - `SESSION_CONTEXT.md`
+  - `gpt1c.md`
+  - `audit/ARCHITECTURE.md`
 
 ### Что именно покрывает hermetic-suite
 
