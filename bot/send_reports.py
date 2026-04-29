@@ -1215,6 +1215,10 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
         #    До 3 штук в день чтобы не перегружать.
         #    Исключаем служебные записи: "Без клиента", "Недостача", зарплатные авансы (*ЗП*/*зп*)
         _unowned = _crm_collect_unowned_claim_clients(limit=3)
+        _active_claim_keys = {
+            v["client_key"] for v in _CRM_CLAIM_PENDING.values() if not v.get("claimed")
+        }
+        _unowned = [k for k in _unowned if k not in _active_claim_keys]
         _participants = _all_crm_participants()
         for _client_key in _unowned:
             _token = _crm_claim_token()
@@ -5555,13 +5559,13 @@ def _crm_cleanup_pending() -> None:
         if age_hours <= CRM_PENDING_TTL_HOURS:
             continue
         logger.warning(
-            "CRM pending stale but kept active: chat_id=%s client=%s state=%s age_hours=%.1f",
+            "CRM pending expired, removing: chat_id=%s client=%s state=%s age_hours=%.1f",
             chat_id,
             pending.get("client_key"),
             pending.get("state"),
             age_hours,
         )
-        pending["stale_logged_at"] = now.isoformat()
+        stale_chat_ids.append(chat_id)
     for chat_id in stale_chat_ids:
         _CRM_PHONE_PENDING.pop(chat_id, None)
 

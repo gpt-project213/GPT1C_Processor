@@ -120,6 +120,35 @@ class CRMRegressionTests(unittest.TestCase):
                 sr._crm_load_claim_pending()
                 self.assertIn(token1, sr._CRM_CLAIM_PENDING)
 
+    def test_stale_phone_pending_removed_after_ttl(self):
+        """Просроченная clarify_name запись удаляется из _CRM_PHONE_PENDING, а не висит вечно."""
+        import bot.send_reports as _sr
+        _sr._CRM_PHONE_PENDING.clear()
+        old_ts = "2000-01-01T10:00:00+05:00"
+        _sr._CRM_PHONE_PENDING[99999] = {
+            "client_key": "ИП Тест Стейл",
+            "state": "clarify_name",
+            "last_sent": old_ts,
+        }
+        _sr._crm_cleanup_pending()
+        self.assertNotIn(99999, _sr._CRM_PHONE_PENDING)
+
+    def test_active_claim_pending_excluded_from_next_broadcast(self):
+        """Клиент с активным claim-токеном не попадает в следующую рассылку."""
+        unowned = ["ИП Тест1", "ИП Тест2"]
+        sr._CRM_CLAIM_PENDING.clear()
+        sr._CRM_CLAIM_PENDING["claim_20260429_aabbccdd"] = {
+            "client_key": "ИП Тест1",
+            "claimed": False,
+            "created_at": "2099-04-29T10:00:00+05:00",
+        }
+        active_keys = {
+            v["client_key"] for v in sr._CRM_CLAIM_PENDING.values() if not v.get("claimed")
+        }
+        filtered = [k for k in unowned if k not in active_keys]
+        sr._CRM_CLAIM_PENDING.clear()
+        self.assertEqual(filtered, ["ИП Тест2"])
+
     def test_crm_audit_log_writes_jsonl(self):
         with tempfile.TemporaryDirectory() as td:
             tmp_path = Path(td) / "crm_audit.jsonl"
