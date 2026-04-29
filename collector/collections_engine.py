@@ -1427,6 +1427,38 @@ def _refresh_approved_batch_clients(
     return sendable, skipped, changes, None
 
 
+def preview_batch_changes(
+    batch_id: str,
+    approved_clients: List[Dict[str, Any]],
+) -> Optional[str]:
+    """Возвращает текст-сводку изменений данных с момента создания батча, или None.
+
+    Вызывается из approval_flow при утверждении администратором (wa_appr_adm_ok),
+    чтобы показать изменившиеся данные до нажатия «Отправить».
+    Не производит никаких отправок.
+    """
+    try:
+        _, skipped, changes, blocked_reason = _refresh_approved_batch_clients(
+            batch_id, approved_clients
+        )
+    except Exception as exc:
+        logger.warning("preview_batch_changes[%s]: ошибка вычисления diff: %s", batch_id, exc)
+        return None
+    if blocked_reason:
+        return f"⚠️ Проверка свежести невозможна: {blocked_reason}"
+    if not changes and not skipped:
+        return None
+    lines: List[str] = []
+    if changes:
+        lines.append(f"Изменений с момента формирования ({len(changes)}):")
+        lines.extend(f"  • {c}" for c in changes[:6])
+        if len(changes) > 6:
+            lines.append(f"  • ещё: {len(changes) - 6}")
+    if skipped:
+        lines.append(f"Исчезли из дебиторки: {len(skipped)} кл.")
+    return "\n".join(lines)
+
+
 async def send_approved_batch(batch_id: str, single_client: Optional[str] = None) -> List[Dict[str, Any]]:
     """Sends WhatsApp only to clients stored in an admin-approved batch."""
     from collector.approval_flow import get_approved_clients, is_ready_for_send, load_batch, record_send_results

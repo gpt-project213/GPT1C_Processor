@@ -1362,10 +1362,20 @@ async def handle_admin_callback(
         batch["approved_clients"]  = approved_clients
         save_batch(batch)
 
+        _diff_block = ""
+        try:
+            from collector.collections_engine import preview_batch_changes as _preview_changes
+            _diff_text = _preview_changes(batch_id, approved_clients)
+            if _diff_text:
+                _diff_block = f"\n\n⚠️ <b>Данные обновились с момента формирования:</b>\n{_diff_text}"
+        except Exception as _de:
+            logger.warning("[%s] preview_batch_changes при утверждении: %s", batch_id, _de)
+
         text = (
             f"✅ <b>Отправка утверждена!</b>\n\n"
             f"К отправке выбрано клиентов: <b>{len(approved_clients)}</b>\n\n"
             + "\n".join(f"  • {c['name']} ({c.get('manager', '—')})" for c in approved_clients)
+            + _diff_block
             + "\n\n"
             f"<b>Следующий шаг:</b> можно отправить прямо отсюда кнопкой ниже\n"
             f"или вручную командой:\n"
