@@ -110,6 +110,10 @@ class TelegramErrorAlertHandler(logging.Handler):
         if now - last_ts < self._cooldown_sec:
             return
         self._recent[signature] = now
+        # Чистим устаревшие записи чтобы dict не рос бесконечно
+        if len(self._recent) > 500:
+            cutoff = now - self._cooldown_sec * 2
+            self._recent = {k: v for k, v in self._recent.items() if v > cutoff}
 
         text = self._format_alert_text(record, system, component, event, message)
         try:
@@ -160,6 +164,8 @@ def configure_runtime_logging(
     logs_dir.mkdir(parents=True, exist_ok=True)
     root = logging.getLogger()
     root.setLevel(level)
+    for _h in root.handlers[:]:
+        _h.close()
     root.handlers.clear()
 
     formatter = RuntimeFormatter(tz)
@@ -261,6 +267,10 @@ def configure_module_logger(
     stream_handler.addFilter(_ContextDefaultsFilter(system=system, component=component))
     logger.addHandler(stream_handler)
 
+    # Подключаем alert handler чтобы ERROR из модулей доходили до Telegram
+    # несмотря на propagate=False
+    if _ALERT_HANDLER is not None:
+        logger.addHandler(_ALERT_HANDLER)
     logger.propagate = False
     setattr(logger, "_gpt1c_configured", True)
     return logger
