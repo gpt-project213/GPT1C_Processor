@@ -1,7 +1,110 @@
 # SESSION CONTEXT — АРХИВ
 
-> **ВНИМАНИЕ:** Этот файл содержит исторические сессии (2026-04-09, 2026-04-13, 2026-04-14, 2026-04-29).
+> **ВНИМАНИЕ:** Этот файл содержит исторические сессии (2026-04-09, 2026-04-13, 2026-04-14, 2026-04-29, 2026-04-30).
 > Многие "OPEN" пункты уже закрыты коммитами. **Актуальный статус → `gpt1c.md`.**
+
+---
+
+## HANDOFF 2026-04-30 — CRM duplicate phone review + cleanup
+
+### Что сделано (ветка `fix/log-noise-by-design-markers`)
+
+**Задача:** убрать CRM phone-queue шум от legacy-дублей, исключить служебные строки из phone queue, провести разовую сверку конфликтных телефонов через живого Telegram-бота и зафиксировать выбор менеджеров.
+
+**Root cause:**
+- `get_clients_without_phones()` поднимал legacy-дубли отдельно, даже если sibling-карточка уже имела телефон
+- loose duplicate matching был недостаточно управляем для CRM cleanup
+- служебные строки (`... под ЗП`, `Недостача`, `Без клиента`, `Водитель ...`) попадали в CRM-очереди как обычные клиенты
+- в `config/clients.json` накопились runtime-дубли: часть с пустым sibling, часть с разными телефонами
+
+**Фикс в коде:**
+- `bot/crm_clients.py` v1.1.0
+  - `canonicalize_client_key_loose()` ограничен legacy-паттерном хвостового дубля
+  - `is_service_client_name()` централизует фильтр служебных строк
+  - merge legacy duplicate -> preferred card с сохранением `aliases`
+  - `get_clients_without_phones()` пропускает legacy-дубли, если sibling уже имеет контакт
+  - добавлены `get_phone_conflict_groups()`, `resolve_phone_conflict()`, `mark_phone_conflict_distinct()`
+- `bot/send_reports.py` v9.4.63/30.04.2026
+  - добавлен разовый manager-review flow по конфликтным телефонам через Telegram inline-кнопки
+  - persisted state: `logs/crm_duplicate_review_state.json`
+  - admin command: `/crmdupsend`
+  - обработка custom phone text и варианта `это разные клиенты`
+- `tests/test_crm_regression.py`
+  - регрессии на legacy sibling skip
+  - регрессии на service-row filtering
+  - защита от ложного merge реальных адресов
+  - conflict-review API tests
+
+**Live-операция:**
+- очищены 6 safe data-дублей в локальном `config/clients.json` там, где был empty sibling при наличии карточки с телефоном
+- создан backup: `config/clients.json.bak-20260430-crm-dedup`
+- через живой бот разослано 13 review-case менеджерам по конфликтным дублям с разными телефонами
+- все 13 кейсов закрыты менеджерами в тот же день
+- выборы зафиксированы в CRM, состояние и audit сохранены в:
+  - `logs/crm_duplicate_review_state.json`
+  - `logs/crm_audit.jsonl`
+
+**Итог после manager review и cleanup:**
+- конфликтных duplicate groups с разными телефонами: `0`
+- safe duplicate groups с одинаковым телефоном: `17`
+- ambiguous/no-phone duplicate groups: `1`
+  - `М Плов центр ЕСБОЛОВА Дукенулы 22 87055791444`
+  - там обе записи без телефона и один manager = `Не определён`
+
+**Доказательства / проверки:**
+- `python -m py_compile bot/crm_clients.py bot/send_reports.py` -> OK
+- `python -X utf8 tests/test_session_20260428.py` -> 15/15 OK
+- `python -X utf8 tests/test_crm_regression.py` -> 13/13 OK
+- runtime evidence:
+  - `logs/send_reports.log` содержит `CRM duplicate review restored: 13 records`
+  - `logs/crm_audit.jsonl` содержит 13 `duplicate_phone_conflict_sent` и 13 resolved events
+
+### Что не трогать
+
+- `autoagent/orchestrator_agents.json`, `autoagent/task_prompt.txt` — пользовательские/служебные
+- audit-черновики в `audit/`
+- `config/clients.json` не коммитится; cleanup остался локальным operational change
+
+### Следующий безопасный шаг
+
+- отдельным патчем авто-схлопнуть оставшиеся 17 safe duplicate groups с одинаковым телефоном
+- отдельно вручную разобрать 1 ambiguous no-phone group (`Плов центр ... Дукенулы 22`)
+
+---
+
+## HANDOFF 2026-04-30 — test log isolation fix
+
+### Что сделано (ветка `fix/log-noise-by-design-markers`)
+
+**Баг:** `test_collector_regression_hermetic.py` загрязнял боевой `logs/collector.log` тестовыми строками (`batch-stale`, `Task-31`, `[Тест Клиент]`).
+
+**Root cause:** после logging-унификации 30.04 `configure_runtime_logging()` в `bot/logging_utils.py` всегда открывает `TimedRotatingFileHandler` на `logs/collector.log`. `COLLECTOR_TEST_MODE=1` читался в `_TEST_MODE`, но в вызов `configure_runtime_logging()` не передавался — файловый хэндлер открывался в любом случае.
+
+**Фикс (коммит `522df85`):**
+- `bot/logging_utils.py` v1.1.1 — параметр `test_mode: bool = False`; при `True` `TimedRotatingFileHandler` не создаётся
+- `collector/collections_engine.py` v1.5.0 — передаёт `test_mode=_TEST_MODE`
+
+**Доказательства:**
+- `python -m py_compile bot/logging_utils.py collector/collections_engine.py` → OK
+- `python -X utf8 tests/test_collector_regression_hermetic.py -v` → 15/15 OK
+- хвост `logs/collector.log` остался на `03:37` после тестового прогона в `04:17`
+- бот перезапущен в `04:18`, стартовал чисто, все 30+ джобов зарегистрированы, ошибок нет
+
+### Состояние git
+
+- Ветка: `fix/log-noise-by-design-markers`
+- HEAD: `522df85`
+- Незакоммиченное: `autoagent/orchestrator_agents.json`, `autoagent/task_prompt.txt` (не трогать)
+
+### Что не трогать
+
+- `audit/AUDIT_TZ_20260422_DATA_DISTORTION.md`, `audit/D_AUDIT_REPORT_20260422.md`, `audit/E_PATCH_PLAN_20260422.md`, `audit/run_20260422_data/` — untracked черновики
+- `Новый текстовый документ.txt` — пользовательский файл
+
+### Следующий безопасный шаг
+
+- При следующем прогоне тестов убедиться, что `logs/collector.log` больше не получает тестовый шум
+- Открытых P1/P2 на момент закрытия сессии нет
 
 ---
 

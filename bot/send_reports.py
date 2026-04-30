@@ -185,7 +185,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.62/30.04.2026"
+__VERSION__ = "v9.4.63/30.04.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
@@ -5777,6 +5777,10 @@ def _crm_load_pending() -> None:
 CRM_CLAIM_PENDING_PATH = LOGS_DIR / "crm_claim_pending_state.json"
 CRM_CLAIM_TTL_HOURS = int(os.getenv("CRM_CLAIM_TTL_HOURS", "72"))
 _CRM_CLAIM_PENDING: Dict[str, Dict[str, Any]] = {}
+CRM_DUP_REVIEW_PATH = LOGS_DIR / "crm_duplicate_review_state.json"
+CRM_DUP_REVIEW_TTL_HOURS = int(os.getenv("CRM_DUP_REVIEW_TTL_HOURS", "336"))
+_CRM_DUP_REVIEW_PENDING: Dict[str, Dict[str, Any]] = {}
+_CRM_DUP_REVIEW_AWAITING_TEXT: Dict[int, str] = {}
 
 # Имя администратора — участвует в CRM наравне с менеджерами
 ADMIN_NAME = "Вадим"
@@ -5788,6 +5792,140 @@ def _all_crm_participants() -> Dict[str, int]:
     if ADMIN_CHAT_ID and ADMIN_NAME not in result:
         result[ADMIN_NAME] = ADMIN_CHAT_ID
     return result
+
+
+def _crmdup_cleanup_pending(now_dt: Optional[datetime] = None) -> None:
+    now_dt = now_dt or datetime.now(TZ)
+    stale_tokens = []
+    stale_chats = []
+    for token, review in list(_CRM_DUP_REVIEW_PENDING.items()):
+        created_raw = review.get("created_at")
+        if not created_raw:
+            stale_tokens.append(token)
+            continue
+        try:
+            created_dt = datetime.fromisoformat(created_raw)
+        except (TypeError, ValueError):
+            stale_tokens.append(token)
+            continue
+        if (now_dt - created_dt).total_seconds() > CRM_DUP_REVIEW_TTL_HOURS * 3600:
+            stale_tokens.append(token)
+    for token in stale_tokens:
+        _CRM_DUP_REVIEW_PENDING.pop(token, None)
+    for chat_id, token in list(_CRM_DUP_REVIEW_AWAITING_TEXT.items()):
+        if token not in _CRM_DUP_REVIEW_PENDING:
+            stale_chats.append(chat_id)
+    for chat_id in stale_chats:
+        _CRM_DUP_REVIEW_AWAITING_TEXT.pop(chat_id, None)
+
+
+def _crmdup_save_pending() -> None:
+    CRM_DUP_REVIEW_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _crmdup_cleanup_pending()
+    tmp = CRM_DUP_REVIEW_PATH.with_suffix(".tmp")
+    payload = {
+        "reviews": _CRM_DUP_REVIEW_PENDING,
+        "awaiting_text": {str(k): v for k, v in _CRM_DUP_REVIEW_AWAITING_TEXT.items()},
+    }
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, CRM_DUP_REVIEW_PATH)
+
+
+def _crmdup_load_pending() -> None:
+    _CRM_DUP_REVIEW_PENDING.clear()
+    _CRM_DUP_REVIEW_AWAITING_TEXT.clear()
+    if not CRM_DUP_REVIEW_PATH.exists():
+        return
+    try:
+        payload = json.loads(CRM_DUP_REVIEW_PATH.read_text(encoding="utf-8"))
+        reviews = payload.get("reviews", {}) if isinstance(payload, dict) else {}
+        awaiting_text = payload.get("awaiting_text", {}) if isinstance(payload, dict) else {}
+        if isinstance(reviews, dict):
+            _CRM_DUP_REVIEW_PENDING.update(reviews)
+        if isinstance(awaiting_text, dict):
+            _CRM_DUP_REVIEW_AWAITING_TEXT.update({int(k): v for k, v in awaiting_text.items()})
+        _crmdup_cleanup_pending()
+        state_logger.info("CRM duplicate review restored: %d records", len(_CRM_DUP_REVIEW_PENDING))
+    except Exception as _e:
+        state_logger.warning("_crmdup_load_pending error: %s", _e)
+
+
+def _crmdup_token() -> str:
+    from uuid import uuid4
+    stamp = datetime.now(TZ).strftime("%Y%m%d%H%M%S")
+    return f"dup_{stamp}_{uuid4().hex[:8]}"
+
+
+def _crmdup_choice_kb(token: str, items: List[Dict[str, Any]]) -> InlineKeyboardMarkup:
+    rows = []
+    for idx, item in enumerate(items[:2]):
+        label = item.get("phone") or f"Вариант {idx + 1}"
+        rows.append([InlineKeyboardButton(f"✅ Оставить {label}", callback_data=f"crmdup|pick|{token}|{idx}")])
+    rows.append([InlineKeyboardButton("✏️ Ввести другой номер", callback_data=f"crmdup|custom|{token}")])
+    rows.append([InlineKeyboardButton("↔️ Это разные клиенты", callback_data=f"crmdup|distinct|{token}")])
+    return InlineKeyboardMarkup(rows)
+
+
+def _crmdup_prompt_text(review: Dict[str, Any]) -> str:
+    items = review.get("items", [])
+    lines = []
+    for idx, item in enumerate(items[:2], start=1):
+        lines.append(
+            f"{idx}. <b>{_html.escape(item.get('client_key', '?'))}</b>\n"
+            f"Телефон: <code>{_html.escape(item.get('phone', '-'))}</code>\n"
+            f"Источник: <code>{_html.escape(','.join(item.get('sources', [])) or '-')}</code>"
+        )
+    manager = review.get("manager") or "не назначен"
+    return (
+        f"📞 <b>Разовая CRM-сверка дублей</b>\n\n"
+        f"Менеджер: <b>{_html.escape(manager)}</b>\n"
+        f"Ниже две карточки, которые похожи на одного клиента, но в CRM у них разные номера.\n\n"
+        f"{chr(10).join(lines)}\n\n"
+        f"Выберите действующий номер, введите новый или отметьте, что это разные клиенты."
+    )
+
+
+async def _crmdup_broadcast_once(context: ContextTypes.DEFAULT_TYPE, limit: int = 100) -> Dict[str, int]:
+    from bot.crm_clients import get_phone_conflict_groups
+
+    conflicts = get_phone_conflict_groups(limit=limit)
+    sent = 0
+    skipped = 0
+    for conflict in conflicts:
+        manager = (conflict.get("manager") or "").strip()
+        if not manager:
+            skipped += 1
+            continue
+        chat_id = _all_crm_participants().get(manager)
+        items = conflict.get("items", [])
+        if not chat_id or len(items) < 2:
+            skipped += 1
+            continue
+        signature = "|".join(sorted(item.get("client_key", "") for item in items[:2]))
+        if any(review.get("signature") == signature and not review.get("resolved_at") for review in _CRM_DUP_REVIEW_PENDING.values()):
+            skipped += 1
+            continue
+        token = _crmdup_token()
+        review = {
+            "token": token,
+            "signature": signature,
+            "manager": manager,
+            "chat_id": chat_id,
+            "items": items[:2],
+            "created_at": datetime.now(TZ).isoformat(),
+        }
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=_crmdup_prompt_text(review),
+            parse_mode="HTML",
+            reply_markup=_crmdup_choice_kb(token, review["items"]),
+        )
+        _CRM_DUP_REVIEW_PENDING[token] = review
+        crm_audit("duplicate_phone_conflict_sent", manager=manager, token=token, client_keys=[item.get("client_key", "") for item in review["items"]])
+        sent += 1
+    _crmdup_save_pending()
+    crm_logger.info("CRM duplicate review broadcast: sent=%d skipped=%d", sent, skipped)
+    return {"sent": sent, "skipped": skipped, "total": len(conflicts)}
 
 
 def _crm_cleanup_claim_pending(now_dt: Optional[datetime] = None) -> None:
@@ -5947,6 +6085,30 @@ def _set_client_phone_wrapper(client_name: str, phone: str, manager: str,
     """Обёртка для set_client_phone без async."""
     from bot.crm_clients import set_client_phone as _set_phone
     return _set_phone(client_name, phone, manager, alias=alias, phone_source="manager_manual")
+
+
+async def cmd_crmdupsend(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin-only: one-off broadcast of CRM duplicate phone conflicts to managers."""
+    chat_id = update.effective_chat.id
+    if not is_admin(chat_id):
+        await _send_auto(context, chat_id, "⛔ Доступно только администратору.")
+        return
+    try:
+        result = await _crmdup_broadcast_once(context, limit=100)
+        await _send_auto(
+            context,
+            chat_id,
+            (
+                "📞 Разовая CRM-сверка дублей запущена.\n\n"
+                f"Отправлено менеджерам: <b>{result['sent']}</b>\n"
+                f"Пропущено: <b>{result['skipped']}</b>\n"
+                f"Всего конфликтов найдено: <b>{result['total']}</b>"
+            ),
+            parse_mode="HTML",
+        )
+    except Exception as e:
+        crm_logger.error("cmd_crmdupsend error: %s", e)
+        await _send_auto(context, chat_id, "❌ Не удалось запустить разовую CRM-сверку.")
 
 
 def _chat_to_manager(chat_id: int) -> str:
@@ -6478,6 +6640,108 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 🆕 v9.4.9: Аналитика
     if data.startswith("analytics|"):
         await handle_analytics(update, context, data)
+        return
+
+    if data.startswith("crmdup|"):
+        parts = data.split("|")
+        action = parts[1] if len(parts) > 1 else ""
+        token = parts[2] if len(parts) > 2 else ""
+        review = _CRM_DUP_REVIEW_PENDING.get(token)
+        if not review:
+            await q.answer("Запрос сверки устарел.")
+            return
+        if review.get("chat_id") != chat_id and not is_admin(chat_id):
+            await q.answer("Это не ваш запрос.")
+            return
+
+        items = review.get("items", [])
+        client_keys = [item.get("client_key", "") for item in items]
+        reviewer = _chat_to_manager(chat_id) or ("Вадим" if is_admin(chat_id) else "")
+
+        if action == "pick":
+            try:
+                idx = int(parts[3]) if len(parts) > 3 else -1
+            except ValueError:
+                idx = -1
+            if idx < 0 or idx >= len(items):
+                await q.answer("Вариант уже недоступен.")
+                return
+            chosen = items[idx]
+            try:
+                from bot.crm_clients import resolve_phone_conflict
+                ok = resolve_phone_conflict(
+                    client_keys=client_keys,
+                    chosen_phone=chosen.get("phone", ""),
+                    chosen_key=chosen.get("client_key", ""),
+                    reviewer=reviewer,
+                )
+            except Exception as e:
+                crm_logger.error("crmdup pick resolve error: %s", e)
+                ok = False
+            if not ok:
+                await q.answer("Не удалось сохранить решение.")
+                return
+            review["resolved_at"] = datetime.now(TZ).isoformat()
+            review["resolution"] = "pick"
+            review["chosen_phone"] = chosen.get("phone", "")
+            _CRM_DUP_REVIEW_AWAITING_TEXT.pop(chat_id, None)
+            _crmdup_save_pending()
+            await q.answer("Сохранено.")
+            try:
+                await q.message.edit_text(
+                    (
+                        "✅ <b>CRM-сверка закрыта</b>\n\n"
+                        f"Выбран номер: <code>{_html.escape(chosen.get('phone', ''))}</code>\n"
+                        f"Карточки объединены в CRM, alias сохранены."
+                    ),
+                    parse_mode="HTML",
+                    reply_markup=None,
+                )
+            except Exception:
+                pass
+            return
+
+        if action == "custom":
+            _CRM_DUP_REVIEW_AWAITING_TEXT[chat_id] = token
+            _crmdup_save_pending()
+            await q.answer("Жду новый номер.")
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text="Введите действующий номер WhatsApp:\n<code>+7XXXXXXXXXX</code>",
+                parse_mode="HTML",
+            )
+            return
+
+        if action == "distinct":
+            try:
+                from bot.crm_clients import mark_phone_conflict_distinct
+                ok = mark_phone_conflict_distinct(client_keys=client_keys, reviewer=reviewer)
+            except Exception as e:
+                crm_logger.error("crmdup distinct error: %s", e)
+                ok = False
+            if not ok:
+                await q.answer("Не удалось отметить различие.")
+                return
+            review["resolved_at"] = datetime.now(TZ).isoformat()
+            review["resolution"] = "distinct"
+            _CRM_DUP_REVIEW_AWAITING_TEXT.pop(chat_id, None)
+            _crmdup_save_pending()
+            await q.answer("Отмечено.")
+            try:
+                await q.message.edit_text(
+                    (
+                        "↔️ <b>CRM-сверка закрыта</b>\n\n"
+                        "Пара отмечена как разные клиенты. "
+                        "Автосверка больше не будет поднимать этот конфликт."
+                    ),
+                    parse_mode="HTML",
+                    reply_markup=None,
+                )
+            except Exception:
+                pass
+            return
+
+        await q.answer("Неизвестное действие CRM duplicate review.")
         return
 
     if data == "crm_help":
@@ -7126,6 +7390,7 @@ async def post_init(app: Application):
     # Восстанавливаем CRM-очередь сбора телефонов
     _crm_load_pending()
     _crm_load_claim_pending()
+    _crmdup_load_pending()
 
     # v9.4.27: Уведомление о запуске — admin (техническое) + команда (мотивирующее)
     start_kb = InlineKeyboardMarkup([
@@ -7980,6 +8245,55 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
             logger.warning("legacy reply-menu cleanup failed: %s", e)
         return
 
+    dup_token = _CRM_DUP_REVIEW_AWAITING_TEXT.get(chat_id)
+    if dup_token:
+        review = _CRM_DUP_REVIEW_PENDING.get(dup_token)
+        if not review:
+            _CRM_DUP_REVIEW_AWAITING_TEXT.pop(chat_id, None)
+            _crmdup_save_pending()
+        else:
+            import re as _re
+            phone_digits = _re.sub(r"\D", "", text.strip())
+            if _re.fullmatch(r"8\d{10}", phone_digits):
+                phone_digits = "7" + phone_digits[1:]
+            if not _re.fullmatch(r"7\d{10}", phone_digits):
+                await update.message.reply_text(
+                    "❌ Неверный формат.\nВведите: <code>+7XXXXXXXXXX</code>",
+                    parse_mode="HTML",
+                )
+                return
+            reviewer = _chat_to_manager(chat_id) or ("Вадим" if is_admin(chat_id) else "")
+            client_keys = [item.get("client_key", "") for item in review.get("items", [])]
+            try:
+                from bot.crm_clients import resolve_phone_conflict
+                ok = resolve_phone_conflict(
+                    client_keys=client_keys,
+                    chosen_phone="+" + phone_digits,
+                    chosen_key=client_keys[0] if client_keys else "",
+                    reviewer=reviewer,
+                    phone_source="manager_duplicate_review_manual",
+                )
+            except Exception as e:
+                crm_logger.error("crmdup manual resolve error: %s", e)
+                ok = False
+            if not ok:
+                await update.message.reply_text("⚠️ Не удалось сохранить решение по дублю.")
+                return
+            review["resolved_at"] = datetime.now(TZ).isoformat()
+            review["resolution"] = "custom"
+            review["chosen_phone"] = "+" + phone_digits
+            _CRM_DUP_REVIEW_AWAITING_TEXT.pop(chat_id, None)
+            _crmdup_save_pending()
+            await update.message.reply_text(
+                (
+                    "✅ Сохранено.\n\n"
+                    f"Новый номер: <code>+{phone_digits}</code>\n"
+                    "Карточки объединены в CRM, alias сохранены."
+                ),
+                parse_mode="HTML",
+            )
+            return
+
     # CRM: уточняющий диалог по шагам (clarify_name → clarify_phone → clarify_address)
     _crm_cleanup_pending()
     pending = _CRM_PHONE_PENDING.get(chat_id)
@@ -8322,6 +8636,7 @@ def main():
     application.add_handler(CommandHandler("stats", cmd_stats))
     application.add_handler(CommandHandler("analytics", cmd_analytics))  # 🆕 v9.4.9  # v2.0
     application.add_handler(CommandHandler("phone", cmd_phone))  # CRM: внести телефон клиента
+    application.add_handler(CommandHandler("crmdupsend", cmd_crmdupsend))  # CRM: разовая сверка конфликтных дублей
     application.add_handler(CommandHandler("guide", cmd_guide))  # Инструкция для менеджеров
     application.add_handler(CommandHandler("logs", cmd_logs))    # Последние ERROR/CRITICAL
     application.add_handler(CommandHandler("timeline", cmd_timeline))  # Единая timeline по клиенту

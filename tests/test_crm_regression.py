@@ -102,6 +102,304 @@ class CRMRegressionTests(unittest.TestCase):
                 result = sr._crm_collect_unowned_claim_clients(limit=3)
             self.assertEqual(result, ["ИП Другой"])
 
+    def test_get_clients_without_phones_skips_duplicate_when_sibling_has_phone(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            config_dir = root / "config"
+            config_dir.mkdir(parents=True)
+            clients_path = config_dir / "clients.json"
+            clients_path.write_text(
+                json.dumps(
+                    {
+                        "clients": {
+                            "О ТОО Petro Retail (Автогаз) ул Мангилик Ел 89 В": {
+                                "manager": "Оксана",
+                                "whatsapp": "+77769992271",
+                                "sources": ["debt", "sales"],
+                            },
+                            "О ТОО Petro Retail (Автогаз) ул Мангилик Ел 89 В 2": {
+                                "manager": "Оксана",
+                                "whatsapp": "",
+                                "sources": ["debt", "sales"],
+                            },
+                            "О ТОО Реальный клиент без телефона": {
+                                "manager": "Оксана",
+                                "whatsapp": "",
+                                "sources": ["debt"],
+                            },
+                        }
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            with patch.object(crm, "CONFIG_DIR", config_dir), patch.object(crm, "CLIENTS_PATH", clients_path):
+                result = crm.get_clients_without_phones("Оксана", limit=50)
+            self.assertNotIn("О ТОО Petro Retail (Автогаз) ул Мангилик Ел 89 В 2", result)
+            self.assertIn("О ТОО Реальный клиент без телефона", result)
+
+    def test_get_clients_without_phones_skips_service_rows_only(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            config_dir = root / "config"
+            config_dir.mkdir(parents=True)
+            clients_path = config_dir / "clients.json"
+            clients_path.write_text(
+                json.dumps(
+                    {
+                        "clients": {
+                            "Ергали тов. под ЗП": {
+                                "manager": "Ергали",
+                                "whatsapp": "",
+                                "sources": ["sales"],
+                            },
+                            "Недостача": {
+                                "manager": "Ергали",
+                                "whatsapp": "",
+                                "sources": ["sales"],
+                            },
+                            "Без клиента": {
+                                "manager": "Ергали",
+                                "whatsapp": "",
+                                "sources": ["sales"],
+                            },
+                            "Водитель Серик": {
+                                "manager": "Ергали",
+                                "whatsapp": "",
+                                "sources": ["sales"],
+                            },
+                            "ИП Реальный клиент без телефона": {
+                                "manager": "Ергали",
+                                "whatsapp": "",
+                                "sources": ["debt"],
+                            },
+                        }
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            with patch.object(crm, "CONFIG_DIR", config_dir), patch.object(crm, "CLIENTS_PATH", clients_path):
+                result = crm.get_clients_without_phones("Ергали", limit=50)
+            self.assertEqual(result, ["ИП Реальный клиент без телефона"])
+
+    def test_loose_duplicate_match_does_not_collapse_real_address_numbers(self):
+        clients_db = {
+            "М ЕНУ Евразийский универ ул Кажымукана 11": {
+                "manager": "Магира",
+                "whatsapp": "+77023174146",
+            },
+            "М ЕНУ Евразийский универ ул Кажымукана 13": {
+                "manager": "Магира",
+                "whatsapp": "",
+            },
+        }
+        self.assertIsNone(
+            crm._find_phone_donor_key(
+                clients_db,
+                "М ЕНУ Евразийский универ ул Кажымукана 13",
+                manager="Магира",
+            )
+        )
+
+    def test_update_from_reports_merges_legacy_duplicate_into_phoneful_sibling(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            config_dir = root / "config"
+            json_dir = root / "reports" / "json"
+            config_dir.mkdir(parents=True)
+            json_dir.mkdir(parents=True)
+            clients_path = config_dir / "clients.json"
+            clients_path.write_text(
+                json.dumps(
+                    {
+                        "clients": {
+                            "О ТОО Petro Retail (Автогаз) ул Мангилик Ел 89 В": {
+                                "manager": "Оксана",
+                                "whatsapp": "+77769992271",
+                                "sources": ["debt", "sales"],
+                                "first_seen": "2026-04-01",
+                                "last_seen": "2026-04-28",
+                                "aliases": [],
+                            },
+                            "О ТОО Petro Retail (Автогаз) ул Мангилик Ел 89 В 2": {
+                                "manager": "Оксана",
+                                "whatsapp": "",
+                                "sources": ["debt", "sales"],
+                                "first_seen": "2026-04-28",
+                                "last_seen": "2026-04-29",
+                                "aliases": [],
+                            },
+                        }
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            (json_dir / "debt_ext_Детальный Дебиторы Оксана (1).json").write_text(
+                json.dumps(
+                    {
+                        "manager": "Оксана",
+                        "clients": [{"name": "О ТОО Petro Retail (Автогаз) ул Мангилик Ел 89 В 2"}],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            with patch.object(crm, "CONFIG_DIR", config_dir), patch.object(
+                crm, "CLIENTS_PATH", clients_path
+            ), patch.object(crm, "JSON_DIR", json_dir), patch.object(
+                crm, "CONTACTS_XLSX_PATH", root / "contacts.xlsx"
+            ), patch.object(
+                crm, "CONTACTS_XLSX_BACKUP_DIR", root / "backups"
+            ):
+                crm.update_from_reports()
+                data = crm.load_clients()
+            clients = data["clients"]
+            self.assertIn("О ТОО Petro Retail (Автогаз) ул Мангилик Ел 89 В", clients)
+            self.assertNotIn("О ТОО Petro Retail (Автогаз) ул Мангилик Ел 89 В 2", clients)
+            self.assertIn(
+                "О ТОО Petro Retail (Автогаз) ул Мангилик Ел 89 В 2",
+                clients["О ТОО Petro Retail (Автогаз) ул Мангилик Ел 89 В"].get("aliases", []),
+            )
+
+    def test_get_phone_conflict_groups_returns_only_real_phone_conflicts(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            config_dir = root / "config"
+            config_dir.mkdir(parents=True)
+            clients_path = config_dir / "clients.json"
+            clients_path.write_text(
+                json.dumps(
+                    {
+                        "clients": {
+                            "М Erzo Park  Косши ТОО Best Management group": {
+                                "manager": "Магира",
+                                "whatsapp": "+77025806778",
+                                "sources": ["debt"],
+                            },
+                            "М Erzo Park Косши ТОО Best Management group": {
+                                "manager": "Магира",
+                                "whatsapp": "+77019257122",
+                                "sources": ["sales"],
+                            },
+                            "О ТОО Safe Same Phone 89 В": {
+                                "manager": "Оксана",
+                                "whatsapp": "+77769992271",
+                                "sources": ["debt"],
+                            },
+                            "О ТОО Safe Same Phone 89 В 2": {
+                                "manager": "Оксана",
+                                "whatsapp": "+77769992271",
+                                "sources": ["sales"],
+                            },
+                        }
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            with patch.object(crm, "CONFIG_DIR", config_dir), patch.object(crm, "CLIENTS_PATH", clients_path):
+                result = crm.get_phone_conflict_groups()
+            self.assertEqual(len(result), 1)
+            self.assertEqual(result[0]["manager"], "Магира")
+            self.assertEqual(len(result[0]["items"]), 2)
+
+    def test_resolve_phone_conflict_merges_entries_and_keeps_alias(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            config_dir = root / "config"
+            config_dir.mkdir(parents=True)
+            clients_path = config_dir / "clients.json"
+            clients_path.write_text(
+                json.dumps(
+                    {
+                        "clients": {
+                            "М Erzo Park  Косши ТОО Best Management group": {
+                                "manager": "Магира",
+                                "whatsapp": "+77025806778",
+                                "sources": ["debt"],
+                                "aliases": [],
+                            },
+                            "М Erzo Park Косши ТОО Best Management group": {
+                                "manager": "Магира",
+                                "whatsapp": "+77019257122",
+                                "sources": ["sales"],
+                                "aliases": [],
+                            },
+                        }
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            with patch.object(crm, "CONFIG_DIR", config_dir), patch.object(
+                crm, "CLIENTS_PATH", clients_path
+            ), patch.object(crm, "CONTACTS_XLSX_PATH", root / "contacts.xlsx"), patch.object(
+                crm, "CONTACTS_XLSX_BACKUP_DIR", root / "backups"
+            ):
+                ok = crm.resolve_phone_conflict(
+                    client_keys=[
+                        "М Erzo Park  Косши ТОО Best Management group",
+                        "М Erzo Park Косши ТОО Best Management group",
+                    ],
+                    chosen_phone="+77019257122",
+                    chosen_key="М Erzo Park Косши ТОО Best Management group",
+                    reviewer="Магира",
+                )
+                data = crm.load_clients()
+            self.assertTrue(ok)
+            clients = data["clients"]
+            self.assertIn("М Erzo Park Косши ТОО Best Management group", clients)
+            self.assertNotIn("М Erzo Park  Косши ТОО Best Management group", clients)
+            self.assertEqual(clients["М Erzo Park Косши ТОО Best Management group"]["whatsapp"], "+77019257122")
+            self.assertIn(
+                "М Erzo Park  Косши ТОО Best Management group",
+                clients["М Erzo Park Косши ТОО Best Management group"].get("aliases", []),
+            )
+
+    def test_mark_phone_conflict_distinct_blocks_future_review(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            config_dir = root / "config"
+            config_dir.mkdir(parents=True)
+            clients_path = config_dir / "clients.json"
+            clients_path.write_text(
+                json.dumps(
+                    {
+                        "clients": {
+                            "М Erzo Park  Косши ТОО Best Management group": {
+                                "manager": "Магира",
+                                "whatsapp": "+77025806778",
+                                "sources": ["debt"],
+                            },
+                            "М Erzo Park Косши ТОО Best Management group": {
+                                "manager": "Магира",
+                                "whatsapp": "+77019257122",
+                                "sources": ["sales"],
+                            },
+                        }
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            with patch.object(crm, "CONFIG_DIR", config_dir), patch.object(
+                crm, "CLIENTS_PATH", clients_path
+            ), patch.object(crm, "CONTACTS_XLSX_PATH", root / "contacts.xlsx"), patch.object(
+                crm, "CONTACTS_XLSX_BACKUP_DIR", root / "backups"
+            ):
+                ok = crm.mark_phone_conflict_distinct(
+                    [
+                        "М Erzo Park  Косши ТОО Best Management group",
+                        "М Erzo Park Косши ТОО Best Management group",
+                    ],
+                    reviewer="Магира",
+                )
+                result = crm.get_phone_conflict_groups()
+            self.assertTrue(ok)
+            self.assertEqual(result, [])
+
     def test_claim_pending_persists_and_tokens_are_unique(self):
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "crm_claim_pending_state.json"
