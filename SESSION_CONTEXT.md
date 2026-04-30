@@ -46,10 +46,13 @@
 
 **Итог после manager review и cleanup:**
 - конфликтных duplicate groups с разными телефонами: `0`
-- safe duplicate groups с одинаковым телефоном: `17`
-- ambiguous/no-phone duplicate groups: `1`
-  - `М Плов центр ЕСБОЛОВА Дукенулы 22 87055791444`
-  - там обе записи без телефона и один manager = `Не определён`
+- safe duplicate groups с одинаковым телефоном: `17` -> авто-схлопнуты локальным data cleanup
+- ambiguous/no-phone duplicate groups: `1` -> закрыта вручную
+  - оставлена карточка `М Плов центр ЕСБОЛОВА  Дукенулы 22 87055791444`
+  - manager = `Магира`
+  - номер подтверждён из имени клиента: `+77055791444`
+  - sibling `manager=Не определён` схлопнут в `alias`
+- итоговый локальный статус `config/clients.json`: `duplicate_groups=0`
 
 **Доказательства / проверки:**
 - `python -m py_compile bot/crm_clients.py bot/send_reports.py` -> OK
@@ -64,11 +67,14 @@
 - `autoagent/orchestrator_agents.json`, `autoagent/task_prompt.txt` — пользовательские/служебные
 - audit-черновики в `audit/`
 - `config/clients.json` не коммитится; cleanup остался локальным operational change
+- backups локального cleanup:
+  - `config/clients.json.bak-20260430-crm-dedup`
+  - `config/clients.json.bak-20260430-053134-safe-merge`
 
 ### Следующий безопасный шаг
 
-- отдельным патчем авто-схлопнуть оставшиеся 17 safe duplicate groups с одинаковым телефоном
-- отдельно вручную разобрать 1 ambiguous no-phone group (`Плов центр ... Дукенулы 22`)
+- если понадобится, вынести local data-cleanup в отдельный воспроизводимый admin-скрипт/команду
+- держать `/crmdupsend` как разовый инструмент для будущих конфликтов телефонов
 
 ---
 
