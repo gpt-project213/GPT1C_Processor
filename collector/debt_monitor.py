@@ -100,6 +100,9 @@ def load_latest_debt_json() -> Dict[str, Any]:
     Клиенты всех групп объединяются; при дублях берётся запись с большим days_silence.
     """
     candidates = list(JSON_DIR.glob("debt_ext_*.json"))
+    # v9.4.41: Ведомости взаиморасчётов порождают debt_ext_*json с period_max на день позади —
+    #   для коллектора не нужны, только INFO-шум "устаревший". Исключаем по имени файла.
+    candidates = [p for p in candidates if "взаиморасч" not in p.name.lower()]
     if not candidates:
         logger.warning("Нет debt_ext_*.json в %s", JSON_DIR)
         return {}
