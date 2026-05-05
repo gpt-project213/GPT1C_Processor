@@ -1,4 +1,5 @@
 ﻿# v. 9.4.38 / 2026-04-22 - fix: bot selectors prefer fresh detailed debt files over stale ledgers
+# v. 9.4.39 / 2026-05-05 - feat(pipeline): silence_alerts по приходу долговых файлов, не по расписанию
 # v. 9.4.38 / 2026-05-05 - fix(pipeline): именные Ведомости взаиморасчётов → debt_auto_report вместо rejected
 # v. 9.4.37 / 2026-04-22 - fix: approval-batch silence escalates to admin hourly; stale manager previews are closed server-side
 # v. 9.4.35 / 2026-04-13 - feat: event-driven collector trigger после обработки debt_ext файлов
@@ -3872,6 +3873,8 @@ async def pipeline_task(context: ContextTypes.DEFAULT_TYPE):
     
     # v9.4.7.5: Batch-логирование cash-отчётов (экономия ~240 строк логов/час)
     skipped_cash = []
+    # v9.4.39: счётчик долговых файлов — silence_alerts запускается только по ним
+    debt_files_processed = 0
     
     if not queue_files:
         log_event("queue_empty")
@@ -3902,7 +3905,8 @@ async def pipeline_task(context: ContextTypes.DEFAULT_TYPE):
                 
                 script_executed = False
                 script_rc = -1
-                
+                _this_file_is_debt = False  # v9.4.39
+
                 if RE_INV.search(fname_lower):
                     script_rc, _, _ = await run_script_async("inventory.py", str(file_path))
                     script_executed = True
@@ -4052,6 +4056,7 @@ async def pipeline_task(context: ContextTypes.DEFAULT_TYPE):
                     if _is_named:
                         script_rc, _, _ = await run_script_async("debt_auto_report.py", str(file_path))
                         script_executed = True
+                        _this_file_is_debt = True  # v9.4.39
                     else:
                         timestamp = datetime.now(TZ).strftime('%Y%m%d_%H%M%S')
                         rejected_path = REJECTED_UNKNOWN_DIR / f"{timestamp}_{file_path.name}"
@@ -4062,6 +4067,7 @@ async def pipeline_task(context: ContextTypes.DEFAULT_TYPE):
                 else:
                     script_rc, _, _ = await run_script_async("debt_auto_report.py", str(file_path))
                     script_executed = True
+                    _this_file_is_debt = True  # v9.4.39
 
                 # v9.4.8: AI генерация отключена (теперь еженедельная)
                 if script_executed and script_rc == 0:
@@ -4083,6 +4089,8 @@ async def pipeline_task(context: ContextTypes.DEFAULT_TYPE):
                 
                 if script_executed and script_rc == 0:
                     processed_files += 1
+                    if _this_file_is_debt:  # v9.4.39
+                        debt_files_processed += 1
                 
                 if script_executed and script_rc == 0 and file_path.exists():
                     processed_path = PROCESSED_DIR / f"{datetime.now(TZ).strftime('%Y%m%d%H%M%S')}_{file_path.name}"
@@ -4106,7 +4114,9 @@ async def pipeline_task(context: ContextTypes.DEFAULT_TYPE):
         await _build_index(force=True)
         log_event("index_rebuilt_after_generation", files_processed=len(queue_files))
     
-    if processed_files > 0:
+    # v9.4.39: silence_alerts только по долговым файлам (не продажи/затраты/остатки)
+    if debt_files_processed > 0:
+        logger.info("🔔 Обработано долговых файлов: %d — запускаю проверку молчания", debt_files_processed)
         try:
             await check_and_send_silence_alerts(context)
         except Exception as e:
@@ -8661,12 +8671,9 @@ def main():
         job_queue.run_repeating(pipeline_task, interval=PIPELINE_INTERVAL_MIN * 60, first=60, name="pipeline")
         job_queue.run_repeating(new_reports_notifier, interval=SCAN_INTERVAL_MIN * 60, first=180, name="new_reports")
         
-        job_queue.run_daily(
-            check_and_send_silence_alerts,
-            time=dt_time(14, 0, tzinfo=TZ),
-            name="silence_alerts_14h"
-        )
-        sched_logger.info("⏰ Настроен ежедневный джоб: проверка дней молчания в 14:00")
+        # v9.4.39: silence_alerts убран из расписания — теперь только event-driven
+        # (запускается после каждого пайплайн-цикла где обработаны долговые файлы)
+        sched_logger.info("🔔 silence_alerts: event-driven по приходу долговых отчётов (без 14:00)")
         
         # v9.4.32: Упущенная прибыль — еженедельно в пятницу 14:05 (было: ежедневно 14:05 и 21:05)
         if _OPPORTUNITY_LOSS_AVAILABLE:
