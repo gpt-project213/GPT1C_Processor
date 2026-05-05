@@ -1,4 +1,5 @@
 ﻿# v. 9.4.38 / 2026-04-22 - fix: bot selectors prefer fresh detailed debt files over stale ledgers
+# v. 9.4.38 / 2026-05-05 - fix(pipeline): именные Ведомости взаиморасчётов → debt_auto_report вместо rejected
 # v. 9.4.37 / 2026-04-22 - fix: approval-batch silence escalates to admin hourly; stale manager previews are closed server-side
 # v. 9.4.35 / 2026-04-13 - feat: event-driven collector trigger после обработки debt_ext файлов
 # v. 9.4.34 / 2026-03-16 - Fix: p.stat().st_mtime в _extract_date обёрнут в try/except (audit fix)
@@ -185,7 +186,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.63/30.04.2026"
+__VERSION__ = "v9.4.64/30.04.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
@@ -1382,7 +1383,7 @@ async def debt_collector_daily(context: ContextTypes.DEFAULT_TYPE):
     mode_flag = "--dry-run" if dry_run else "--preview"
     try:
         rc, stdout, stderr = await run_script_async(
-            "collector/collections_engine.py",
+            "module:collector.collections_engine",
             mode_flag,
             timeout=900,
         )
@@ -1401,7 +1402,7 @@ async def debt_collector_promises(context: ContextTypes.DEFAULT_TYPE):
     log_event("collector_promises_start")
     try:
         rc, stdout, stderr = await run_script_async(
-            "collector/collections_engine.py",
+            "module:collector.collections_engine",
             "--check-promises",
             timeout=120,
         )
@@ -1518,7 +1519,7 @@ async def debt_collector_trigger_check(context: ContextTypes.DEFAULT_TYPE):
 
     try:
         rc, stdout, stderr = await run_script_async(
-            "collector/collections_engine.py",
+            "module:collector.collections_engine",
             "--preview",
             timeout=600,
         )
@@ -1989,14 +1990,14 @@ async def auto_generate_and_send_ai(manager: str, context: ContextTypes.DEFAULT_
 
 async def weekly_ai_generation(context: ContextTypes.DEFAULT_TYPE):
     """
-    v9.4.8: Еженедельная AI генерация (понедельник 10:00)
+    v9.4.8: Еженедельная AI генерация (вторник 10:00)
     Генерирует для всех менеджеров, отправляет:
     - Каждому менеджеру его AI
     - Алене (subadmin) её + подшефных
     - Админу все
     """
-    # Проверка: запускаем только в понедельник
-    if datetime.now(TZ).weekday() != 0:  # 0 = понедельник
+    # Проверка: запускаем только во вторник
+    if datetime.now(TZ).weekday() != 1:  # 1 = вторник
         return
     from bot.workday_checker import is_holiday_today
     if is_holiday_today():
@@ -3506,14 +3507,21 @@ async def send_with_acl(section: str, intended_mgr: str,
 
 # Блок 8_______________Фоновые задачи (pipeline + скрипты)__________________
 async def run_script_async(script_name: str, *args: str, timeout: int = 600) -> Tuple[int, str, str]:
-    script_path = ROOT_DIR / script_name
-    if not script_path.exists():
-        script_path_tool = ROOT_DIR / "tools" / script_name
-        if not script_path_tool.exists():
+    if script_name.startswith("module:"):
+        module_name = script_name.split(":", 1)[1].strip()
+        if not module_name:
             log_event("script_not_found", script=script_name, level="ERROR")
-            return -1, "", f"Script not found: {script_path}"
-        script_path = script_path_tool
-    command = [sys.executable, str(script_path), *args]
+            return -1, "", f"Module name not provided: {script_name}"
+        command = [sys.executable, "-m", module_name, *args]
+    else:
+        script_path = ROOT_DIR / script_name
+        if not script_path.exists():
+            script_path_tool = ROOT_DIR / "tools" / script_name
+            if not script_path_tool.exists():
+                log_event("script_not_found", script=script_name, level="ERROR")
+                return -1, "", f"Script not found: {script_path}"
+            script_path = script_path_tool
+        command = [sys.executable, str(script_path), *args]
     log_event("run_script_start", script=script_name, args=args)
     try:
         process = await asyncio.create_subprocess_exec(
@@ -4037,13 +4045,20 @@ async def pipeline_task(context: ContextTypes.DEFAULT_TYPE):
                         script_executed = True
                         log_event("expenses_report_error", file=file_path.name, error=str(e), level="ERROR")
                 elif "взаиморасч" in fname_lower:
-                    # Взаиморасчёты — нет обработчика; перемещаем в rejected/unknown
-                    timestamp = datetime.now(TZ).strftime('%Y%m%d_%H%M%S')
-                    rejected_path = REJECTED_UNKNOWN_DIR / f"{timestamp}_{file_path.name}"
-                    shutil.move(file_path, rejected_path)
-                    log_event("unknown_file_rejected", original=file_path.name,
-                              moved_to=rejected_path.name, reason="взаиморасчёты")
-                    continue
+                    # Именная Ведомость (Ергали/Алена/Магира/Оксана в имени) → debt_auto_report
+                    # Сводная (без имени менеджера) → rejected/unknown
+                    _known = set(m.lower() for m in get_managers_list())
+                    _is_named = any(m in fname_lower for m in _known)
+                    if _is_named:
+                        script_rc, _, _ = await run_script_async("debt_auto_report.py", str(file_path))
+                        script_executed = True
+                    else:
+                        timestamp = datetime.now(TZ).strftime('%Y%m%d_%H%M%S')
+                        rejected_path = REJECTED_UNKNOWN_DIR / f"{timestamp}_{file_path.name}"
+                        shutil.move(file_path, rejected_path)
+                        log_event("unknown_file_rejected", original=file_path.name,
+                                  moved_to=rejected_path.name, reason="взаиморасчёты-сводный")
+                        continue
                 else:
                     script_rc, _, _ = await run_script_async("debt_auto_report.py", str(file_path))
                     script_executed = True
@@ -7464,7 +7479,7 @@ async def post_init(app: Application):
             for f in analytics_files
         )
         if not has_fresh:
-            log_event("analytics_startup_trigger", reason="Monday, no fresh analytics found")
+            log_event("analytics_startup_trigger", reason="Tuesday, no fresh analytics found")
             await weekly_analytics_job(app)
 
 
@@ -8702,13 +8717,13 @@ def main():
 
         # ═══ v9.4.8: ЕЖЕНЕДЕЛЬНАЯ AI + КРАТКИЕ СВОДКИ ═══
         
-        # Еженедельная AI генерация (понедельник через run_daily)
+        # Еженедельная AI генерация (вторник через run_daily + weekday guard)
         job_queue.run_daily(
             weekly_ai_generation,
             time=dt_time(10, 0, tzinfo=TZ),
             name="weekly_ai_generation"
         )
-        sched_logger.info("🤖 Настроена еженедельная AI генерация: понедельник 10:00")
+        sched_logger.info("🤖 Настроена еженедельная AI генерация: вторник 10:00")
         
         # v9.4.16: Ежедневная аналитика в 22:00 (было: только понедельник 10:00)
         job_queue.run_daily(
