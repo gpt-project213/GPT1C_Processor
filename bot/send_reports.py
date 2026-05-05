@@ -1,4 +1,5 @@
 ﻿# v. 9.4.38 / 2026-04-22 - fix: bot selectors prefer fresh detailed debt files over stale ledgers
+# v. 9.4.40 / 2026-05-05 - feat(silence): удаление предыдущего уведомления если пришло повторно в тот же день
 # v. 9.4.39 / 2026-05-05 - feat(pipeline): silence_alerts по приходу долговых файлов, не по расписанию
 # v. 9.4.38 / 2026-05-05 - fix(pipeline): именные Ведомости взаиморасчётов → debt_auto_report вместо rejected
 # v. 9.4.37 / 2026-04-22 - fix: approval-batch silence escalates to admin hourly; stale manager previews are closed server-side
@@ -305,6 +306,26 @@ NOTIFY_STATE_PATH = LOGS_DIR / "notify_state.json"
 SALES_NOTIFY_DECADE_PATH = LOGS_DIR / "sales_notify_decade.json"  # v9.4.25: подекадные уведомления
 PID_FILE = LOGS_DIR / "bot.pid"
 STOP_FILE = LOGS_DIR / "bot.stop"
+SILENCE_SENT_PATH = LOGS_DIR / "silence_last_sent.json"  # v9.4.40: track sent silence msg_ids per manager
+
+
+def _silence_load() -> dict:
+    """Загружает state последних silence-сообщений: {key: {chat_id, ids, date}}."""
+    try:
+        if SILENCE_SENT_PATH.exists():
+            import json as _j
+            return _j.loads(SILENCE_SENT_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return {}
+
+
+def _silence_save(state: dict) -> None:
+    try:
+        import json as _j
+        SILENCE_SENT_PATH.write_text(_j.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as e:
+        logger.warning("_silence_save: %s", e)
 
 
 # ── Защита от нескольких экземпляров (pid-файл) ───────────────────────────────
@@ -489,11 +510,13 @@ async def _doc_auto(context, chat_id: int, document, caption: str = "",
 
 
 async def _tg_send_long(context, chat_id: int, text: str,
-                        parse_mode=None, delay_hours: int = 24) -> None:
+                        parse_mode=None, delay_hours: int = 24,
+                        _collect_ids: "list[int] | None" = None) -> None:
     """
     Отправляет текст в Telegram, разбивая его на части <= TG_MAX_MSG символов.
     Разбивка выполняется по строкам (\\n), чтобы не рвать слова.
     Каждое сообщение ставится в очередь на автоудаление (delay_hours).
+    _collect_ids: если передан список, в него добавляются message_id отправленных сообщений.
     """
     if not text:
         return
@@ -520,6 +543,8 @@ async def _tg_send_long(context, chat_id: int, text: str,
             msg = await context.bot.send_message(
                 chat_id=chat_id, text=chunk, parse_mode=parse_mode
             )
+            if _collect_ids is not None:
+                _collect_ids.append(msg.message_id)
             schedule_message_deletion(
                 chat_id, msg.message_id, msg.date.timestamp(), delay_hours=delay_hours
             )
@@ -4363,6 +4388,30 @@ async def _send_payment_check_buttons(context, chat_id: int, manager: str, categ
         logger.warning("payment check buttons send error manager=%s: %s", manager, exc)
 
 
+async def _silence_delete_prev(context, key: str, state: dict) -> None:
+    """v9.4.40: Удаляет предыдущее silence-сообщение если оно отправлено сегодня."""
+    entry = state.get(key)
+    if not entry:
+        return
+    today = datetime.now(TZ).strftime("%Y-%m-%d")
+    if entry.get("date") != today:
+        return  # старое (вчера и раньше) — не трогаем, auto-delete сам уберёт
+    chat_id = entry.get("chat_id")
+    ids = entry.get("ids", [])
+    if not chat_id or not ids:
+        return
+    deleted = 0
+    for mid in ids:
+        try:
+            await context.bot.delete_message(chat_id=chat_id, message_id=mid)
+            deleted += 1
+        except Exception:
+            pass  # уже удалено или истёк срок
+    if deleted:
+        log_event("silence_outdated_deleted", key=key, chat_id=chat_id, deleted=deleted)
+        logger.info("🗑️ Удалено %d устаревших silence-сообщений для %s", deleted, key)
+
+
 async def check_and_send_silence_alerts(context=None):
     """Проверяет дни молчания у всех менеджеров и отправляет уведомления"""
     from bot.workday_checker import is_holiday_today
@@ -4374,6 +4423,8 @@ async def check_and_send_silence_alerts(context=None):
     reports_dir = HTML_DIR
     all_managers_data = {}
     manager_dates = {}  # v9.4.23: дата отчёта по каждому менеджеру
+    _silence_state = _silence_load()       # v9.4.40
+    _today = datetime.now(TZ).strftime("%Y-%m-%d")  # v9.4.40
     
     for manager in get_managers_list():
         try:
@@ -4474,7 +4525,12 @@ async def check_and_send_silence_alerts(context=None):
             
             if context:
                 try:
-                    await _tg_send_long(context, chat_id, message, parse_mode=None, delay_hours=24)
+                    _key_sub = f"subadmin_{manager}"
+                    await _silence_delete_prev(context, _key_sub, _silence_state)  # v9.4.40
+                    _ids_sub: list[int] = []
+                    await _tg_send_long(context, chat_id, message, parse_mode=None, delay_hours=24,
+                                        _collect_ids=_ids_sub)
+                    _silence_state[_key_sub] = {"chat_id": chat_id, "ids": _ids_sub, "date": _today}
                     await _send_payment_check_buttons(context, chat_id, manager, categorized)
                     logger.info(f"✅ Уведомление отправлено субадмину {manager} (свои: {total_silent}, подшефные: {'есть' if has_subordinate_alerts else 'нет'})")
                     await send_main_menu(context, chat_id, get_user_role(chat_id))  # Fix #MENU-SILENCE
@@ -4484,7 +4540,11 @@ async def check_and_send_silence_alerts(context=None):
             message = alert.format_manager_alert(manager, categorized, report_date=report_date)
             if message and context:
                 try:
-                    await _tg_send_long(context, chat_id, message, parse_mode=None, delay_hours=24)
+                    await _silence_delete_prev(context, manager, _silence_state)  # v9.4.40
+                    _ids_mgr: list[int] = []
+                    await _tg_send_long(context, chat_id, message, parse_mode=None, delay_hours=24,
+                                        _collect_ids=_ids_mgr)
+                    _silence_state[manager] = {"chat_id": chat_id, "ids": _ids_mgr, "date": _today}
                     await _send_payment_check_buttons(context, chat_id, manager, categorized)
                     logger.info(f"✅ Уведомление отправлено: {manager} ({total_silent} клиентов)")
                     await send_main_menu(context, chat_id, get_user_role(chat_id))  # Fix #MENU-SILENCE
@@ -4500,13 +4560,18 @@ async def check_and_send_silence_alerts(context=None):
             # Детальная сводка для админа (с именами клиентов)
             admin_summary = alert.format_admin_detailed(all_managers_data, manager_dates=manager_dates)  # v9.4.23
             if ADMIN_CHAT_ID:
-                await _tg_send_long(context, ADMIN_CHAT_ID, admin_summary, parse_mode=None, delay_hours=24)
+                await _silence_delete_prev(context, "admin", _silence_state)  # v9.4.40
+                _ids_admin: list[int] = []
+                await _tg_send_long(context, ADMIN_CHAT_ID, admin_summary, parse_mode=None, delay_hours=24,
+                                    _collect_ids=_ids_admin)
+                _silence_state["admin"] = {"chat_id": ADMIN_CHAT_ID, "ids": _ids_admin, "date": _today}
                 logger.info(f"✅ Детальная сводка отправлена админу")
                 await send_main_menu(context, ADMIN_CHAT_ID, "admin")  # Fix #MENU-SILENCE
             else:
                 logger.warning("⚠️ ADMIN_CHAT_ID не установлен")
         except Exception as e:
             logger.error(f"❌ Ошибка отправки сводки админу: {e}", exc_info=True)
+    _silence_save(_silence_state)  # v9.4.40: сохранить все id после полного прохода
     logger.info(f"🔔 Проверка дней молчания завершена")
 
 # ─────────────────────────────────────────────────────────────────
