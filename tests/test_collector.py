@@ -781,7 +781,8 @@ try:
             mock_rpwd.return_value = None
             asyncio.run(cd_mod.handle_incoming("77011234569", "Я оплачу"))
     d_pwd = cd_mod._get_client_dialog("77011234569")
-    check("promise_without_date 'Я оплачу': state=active", d_pwd.get("state") == "active")
+    # v1.1.0: краткое promise_without_date ("Я оплачу") → soft_positive → escalated
+    check("promise_without_date 'Я оплачу': state=escalated", d_pwd.get("state") == "escalated")
     bot_replies_pwd = [ex["text"] for ex in d_pwd.get("exchanges", []) if ex["role"] == "bot"]
     check("promise_without_date 'Я оплачу': ответ не пустой",
           bool(bot_replies_pwd[-1].strip() if bot_replies_pwd else ""))
@@ -803,6 +804,7 @@ try:
             mock_rpwd2.return_value = None
             asyncio.run(cd_mod.handle_incoming("77011234570", "Передам на оплату"))
     d_pwd2 = cd_mod._get_client_dialog("77011234570")
+    # fix: "Передам на оплату" — обещание, не факт оплаты → не срабатывает хеуристик → active
     check("promise_without_date 'Передам на оплату': state=active", d_pwd2.get("state") == "active")
     bot_replies_pwd2 = [ex["text"] for ex in d_pwd2.get("exchanges", []) if ex["role"] == "bot"]
     # Должен использоваться дефолтный текст с датой
@@ -835,8 +837,9 @@ try:
               and "1С" not in t
               for t in qr_bot_replies),
           str(qr_bot_replies))
-    check("recent payment: диалог остаётся active, не эскалируется сразу",
-          d_qr.get("state") == "active",
+    # awaiting_payment_proof — промежуточный статус: бот ждёт чек, к менеджеру не эскалировано
+    check("recent payment: диалог в awaiting_payment_proof, не эскалирован к менеджеру",
+          d_qr.get("state") == "awaiting_payment_proof",
           str(d_qr.get("state")))
 
     # ─── UX: promise с датой, но без суммы — без ложного "фиксируем" ───────────
@@ -2367,9 +2370,9 @@ try:
                 "client": "ТОО Напоминание",
                 "manager": "Магира",
                 "manager_chat_id": 777,
-                "days_silence": 9,
+                "days_silence": 10,
                 "debt": 250_000,
-                "level": "7-9",
+                "level": "10+",
                 "manager_response": None,
                 "admin_approved": None,
             }
@@ -2455,6 +2458,45 @@ try:
     check("DSTOP FILE T2: _build_candidates не поднимает клиента из свежего файла, если он уже не проходит пороги",
           len(_cand_values) == 0,
           str(_cand_values))
+
+    (_dstop.JSON_DIR / "debt_ext_Детальный Дебиторы Алена (144).json").write_text(
+        json.dumps({
+            "clients": [ {
+                "client": "А Фурманова Евгений (склад № 20)",
+                "days_silence": 10,
+                "debt": 36588.52,
+            } ]
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    os.utime(_dstop.JSON_DIR / "debt_ext_Детальный Дебиторы Алена (144).json", (3, 3))
+
+    (_dstop.JSON_DIR / "debt_ext_Детальный Дебиторы Алена (145).json").write_text(
+        json.dumps({
+            "clients": [ {
+                "client": "А Тестовый стоп-клиент",
+                "days_silence": 9,
+                "debt": 150000.0,
+            }, {
+                "client": "А Тестовый стоп-клиент 10д",
+                "days_silence": 10,
+                "debt": 150000.0,
+            } ]
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    os.utime(_dstop.JSON_DIR / "debt_ext_Детальный Дебиторы Алена (145).json", (4, 4))
+
+    _dstop.save_registry({})
+    _dstop.save_state({"date": _today, "candidates": {}, "next_id": 1, "saida_sent": False})
+    _rebuilt10 = _dstop._build_candidates()
+    _cand_names10 = {item.get("client") for item in _rebuilt10.get("candidates", {}).values()}
+    check("DSTOP FILE T3: клиент с 9 днями молчания больше не попадает в stop-flow",
+          "А Тестовый стоп-клиент" not in _cand_names10,
+          str(_cand_names10))
+    check("DSTOP FILE T4: клиент с 10 днями молчания уже попадает в stop-flow",
+          "А Тестовый стоп-клиент 10д" in _cand_names10,
+          str(_cand_names10))
 finally:
     _dstop.JSON_DIR = _orig_dstop_json_dir
     _dstop.CONFIG_DIR = _orig_dstop_config_dir

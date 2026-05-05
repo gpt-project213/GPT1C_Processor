@@ -237,15 +237,20 @@ def _report_date_context(dialog: Optional[Dict[str, Any]] = None) -> str:
 
 
 def _mentions_recent_unposted_payment(text: str) -> bool:
-    """True, если клиент говорит про недавнюю оплату, которая могла не попасть в 1С."""
+    """True, если клиент говорит про недавнюю оплату, которая могла не попасть в 1С.
+
+    Требует КОНТЕКСТНЫЙ сигнал (QR/временной/1С-статус) + ПЛАТЁЖНЫЙ сигнал.
+    "оплат" убран из контекстных маркеров: иначе "Передам на оплату"
+    ложно срабатывает, т.к. "оплат" входит как подстрока в "оплату".
+    """
     t = text.lower()
-    markers = (
-        "qr", "куар", "киар", "оплат", "упад", "поступ", "за выходные",
-        "сегодня", "завтра", "не разнес", "не провел", "не прошло",
+    context_markers = (
+        "qr", "куар", "киар", "упад", "поступ",
+        "за выходные", "сегодня", "завтра",
+        "не разнес", "не провел", "не прошло",
     )
-    return any(m in t for m in markers) and any(
-        m in t for m in ("оплат", "qr", "куар", "киар", "упад", "поступ")
-    )
+    payment_markers = ("оплат", "qr", "куар", "киар", "упад", "поступ")
+    return any(m in t for m in context_markers) and any(m in t for m in payment_markers)
 
 
 def _normalize_text(text: str) -> str:
@@ -958,7 +963,7 @@ async def handle_incoming(phone: str, text: str, attachment: Optional[Dict[str, 
             return
         # Клиент подтверждает готовность, но без даты — просим уточнить
         reply = suggested_reply if suggested_reply else (
-            "Спасибо, понял. Когда планируете первый платёж?"
+            "Понятно. Уточните, пожалуйста, дату оплаты — когда планируете?"
         )
         dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
         _set_client_dialog(phone_clean, dialog)
