@@ -157,11 +157,11 @@ class TestDebtFilesCounter(unittest.TestCase):
             elif RE_EXP.search(fl):
                 pass  # expenses
             elif "взаиморасч" in fl:
+                # v9.4.41: Ведомости взаиморасчётов НЕ тригерят silence_alerts.
+                # Они обрабатываются debt_auto_report, но this_is_debt остаётся False.
                 is_named = any(m in fl for m in known)
-                if is_named:
-                    this_is_debt = True
-                else:
-                    continue  # rejected → continue
+                if not is_named:
+                    continue  # сводная → rejected
             else:
                 this_is_debt = True  # debt_auto_report fallback
 
@@ -212,14 +212,16 @@ class TestDebtFilesCounter(unittest.TestCase):
         self.assertEqual(p, 5)
         self.assertEqual(d, 2, "Только 2 долговых файла из 5")
 
-    def test_named_vzaimo_counts_as_debt(self):
-        """Именные Ведомости взаиморасчётов → debt_files_processed увеличивается."""
+    def test_named_vzaimo_does_not_trigger_silence(self):
+        """v9.4.41: Именные Ведомости взаиморасчётов → обрабатываются, но НЕ тригерят silence.
+        silence_alerts читает только Детальный Дебиторы; Ведомость — другой формат без age-данных."""
         files = [
             "Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (353).xlsx",
             "Ведомость_по_взаиморасчетам_с_контрагентами_Алена (352).xlsx",
         ]
         p, d = self._simulate_pipeline(files, self.MANAGERS)
-        self.assertEqual(d, 2, "Именные Ведомости — долговые файлы")
+        self.assertEqual(p, 2, "Ведомости обрабатываются (debt_auto_report)")
+        self.assertEqual(d, 0, "v9.4.41: Ведомости НЕ тригерят silence_alerts")
 
     def test_summary_vzaimo_not_counted(self):
         """Сводные Ведомости → rejected → debt_files_processed=0."""
@@ -230,16 +232,17 @@ class TestDebtFilesCounter(unittest.TestCase):
         p, d = self._simulate_pipeline(files, self.MANAGERS)
         self.assertEqual(d, 0, "Сводные Ведомости не должны считаться")
 
-    def test_two_batches_trigger_twice(self):
-        """Два отдельных батча → debt_files_processed > 0 дважды → silence_alerts вызывается дважды."""
-        batch1 = ["Детальный Дебиторы Ергали (146).xlsx"]
+    def test_only_detailny_triggers_silence(self):
+        """v9.4.41: silence_alerts срабатывает только от Детальный, не от Ведомостей.
+        Батч 1 (Детальный) → d1 > 0. Батч 2 (Ведомость) → d2 == 0."""
+        batch1 = ["Детальный Дебиторы Ергали (147).xlsx"]
         batch2 = ["Ведомость_по_взаиморасчетам_с_контрагентами_Ергали (353).xlsx"]
 
         _, d1 = self._simulate_pipeline(batch1, self.MANAGERS)
         _, d2 = self._simulate_pipeline(batch2, self.MANAGERS)
 
-        self.assertGreater(d1, 0, "Батч 1: silence_alerts должен запуститься")
-        self.assertGreater(d2, 0, "Батч 2: silence_alerts должен запуститься")
+        self.assertGreater(d1, 0, "Детальный → silence_alerts запускается")
+        self.assertEqual(d2, 0, "v9.4.41: Ведомость → silence_alerts НЕ запускается")
 
 
 # ──────────────────────────────────────────────────────────

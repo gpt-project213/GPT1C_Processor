@@ -1,4 +1,4 @@
-﻿# v. 9.4.38 / 2026-04-22 - fix: bot selectors prefer fresh detailed debt files over stale ledgers
+﻿# v. 9.4.41 / 2026-05-05 - fix(pipeline): Ведомость взаиморасчётов не тригерит silence_alerts (только Детальный)
 # v. 9.4.40 / 2026-05-05 - feat(silence): удаление предыдущего уведомления если пришло повторно в тот же день
 # v. 9.4.39 / 2026-05-05 - feat(pipeline): silence_alerts по приходу долговых файлов, не по расписанию
 # v. 9.4.38 / 2026-05-05 - fix(pipeline): именные Ведомости взаиморасчётов → debt_auto_report вместо rejected
@@ -4076,12 +4076,14 @@ async def pipeline_task(context: ContextTypes.DEFAULT_TYPE):
                 elif "взаиморасч" in fname_lower:
                     # Именная Ведомость (Ергали/Алена/Магира/Оксана в имени) → debt_auto_report
                     # Сводная (без имени менеджера) → rejected/unknown
+                    # v9.4.41: _this_file_is_debt НЕ устанавливаем — silence_alerts
+                    #   использует только Детальный Дебиторы, Ведомость не тригерит silence.
                     _known = set(m.lower() for m in get_managers_list())
                     _is_named = any(m in fname_lower for m in _known)
                     if _is_named:
                         script_rc, _, _ = await run_script_async("debt_auto_report.py", str(file_path))
                         script_executed = True
-                        _this_file_is_debt = True  # v9.4.39
+                        # _this_file_is_debt остаётся False: не тригерит silence_alerts
                     else:
                         timestamp = datetime.now(TZ).strftime('%Y%m%d_%H%M%S')
                         rejected_path = REJECTED_UNKNOWN_DIR / f"{timestamp}_{file_path.name}"
