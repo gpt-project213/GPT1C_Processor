@@ -8257,14 +8257,14 @@ async def crm_phone_reminder_task(context: ContextTypes.DEFAULT_TYPE):
 
 async def collector_reminder_task(context: ContextTypes.DEFAULT_TYPE):
     """Hourly: send reminders to managers with pending collector dialogs.
-    Работает только в рабочие часы 09–18, пропускает выходные.
+    Работает 09–19 (включительно): нужно успеть перевести батч к 19:00.
     """
     from bot.workday_checker import is_holiday_today
     if is_holiday_today():
         sched_logger.info("collector_reminder_task: выходной — пропуск")
         return
     now = datetime.now(TZ)
-    if not (9 <= now.hour < 18):
+    if not (9 <= now.hour < 19):
         sched_logger.debug("collector_reminder_task: вне рабочих часов (%d:xx) — пропуск", now.hour)
         return
     try:

@@ -81,9 +81,10 @@ _BATCHES_PATH = _ROOT / "logs" / "wa_approval_batches.json"
 BOT_TOKEN = os.getenv("TG_BOT_TOKEN") or os.getenv("BOT_TOKEN", "")
 ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID", "")
 
-# Срок жизни батча — до конца рабочего дня (18:00)
 BATCH_EXPIRE_HOURS = int(os.getenv("WA_APPROVAL_EXPIRE_HOURS", "9"))
 MANAGER_SILENCE_TIMEOUT_HOURS = int(os.getenv("WA_MANAGER_SILENCE_HOURS", "1"))
+# До которого часа разрешено отправлять сводку администратору и делать рассылку (вкл.)
+SEND_WINDOW_CUTOFF_HOUR = int(os.getenv("WA_SEND_WINDOW_CUTOFF_HOUR", "19"))
 
 logger = get_collector_logger(__name__)
 
@@ -535,11 +536,30 @@ def _format_manager_preview_text(
             f"     Причина: {c.get('reason', '—')}"
             f"{phone_note}"
         )
+    deadline_str = ""
+    if batch:
+        created_raw = batch.get("created_at")
+        if created_raw:
+            try:
+                created_dt = datetime.fromisoformat(created_raw)
+                if created_dt.tzinfo is None:
+                    created_dt = created_dt.replace(tzinfo=TZ)
+                deadline_dt = created_dt + timedelta(hours=MANAGER_SILENCE_TIMEOUT_HOURS)
+                deadline_str = deadline_dt.strftime("%H:%M")
+            except (ValueError, TypeError):
+                pass
+    deadline_line = (
+        f"⏰ Ответьте до <b>{deadline_str}</b>. Если не успеете — уведомления уйдут автоматически."
+        if deadline_str
+        else "⏰ У вас 1 час на ответ. Если не успеете — уведомления уйдут автоматически."
+    )
     lines += [
+        "",
+        deadline_line,
         "",
         "Пожалуйста, проверьте список и дайте разрешение на отправку.",
         "",
-        "<i>Реальное сообщение клиентам уйдёт только после вашего и директора подтверждения.</i>",
+        "<i>Реальное сообщение клиентам уйдёт только после подтверждения директора.</i>",
     ]
     return "\n".join(lines)
 
@@ -737,9 +757,20 @@ def _build_admin_decisions(batch: Dict[str, Any]) -> Dict[str, str]:
     decisions = {}
     for manager_name, mgr_state in batch.get("managers", {}).items():
         approved = set(mgr_state.get("approved_names", []))
+        rejected = set(mgr_state.get("rejected_names", []))
+        mgr_timed_out = mgr_state.get("status") == "timeout"
         for client in mgr_state.get("clients", []):
             key = _admin_client_key(manager_name, client["name"])
-            decisions[key] = "keep" if client["name"] in approved else "skip"
+            name = client["name"]
+            if name in approved:
+                decisions[key] = "keep"
+            elif name in rejected:
+                decisions[key] = "skip"
+            elif mgr_timed_out:
+                # Молчание менеджера = согласие: авто-включаем всех не отклонённых
+                decisions[key] = "keep"
+            else:
+                decisions[key] = "skip"
     return decisions
 
 
@@ -1072,7 +1103,10 @@ def _format_admin_summary_text(batch: Dict[str, Any]) -> str:
         rejected  = mgr_state.get("rejected_names", [])
         postponed = mgr_state.get("postponed_names", [])
         clients   = mgr_state.get("clients", [])
+        rejected_set = set(rejected)
         invalid_phone_clients = [c["name"] for c in clients if c.get("invalid_phone")]
+        # Клиенты авто-включённые по таймауту: не были явно отклонены
+        auto_included = [c["name"] for c in clients if c["name"] not in rejected_set] if status == "timeout" else []
 
         if status == "pending":
             status_label = "⏳ не ответил"
@@ -1081,11 +1115,11 @@ def _format_admin_summary_text(batch: Dict[str, Any]) -> str:
         elif status == "rejected_all":
             status_label = f"⛔ отклонил всех ({len(rejected)})"
         elif status == "manual_editing":
-            status_label = f"✏️ выбирает вручную"
+            status_label = "✏️ выбирает вручную"
         elif status in ("manual", "manual_done"):
-            status_label = f"✏️ выбрал вручную"
+            status_label = "✏️ выбрал вручную"
         elif status == "timeout":
-            status_label = "⏰ не ответил вовремя"
+            status_label = f"🔇 не ответил → авто ({len(auto_included)} кл.)"
         else:
             status_label = status
 
@@ -1095,6 +1129,10 @@ def _format_admin_summary_text(batch: Dict[str, Any]) -> str:
             lines.append(f"  Разрешено ({len(approved)}):")
             for n in approved:
                 lines.append(f"    ✅ {n}")
+        if auto_included:
+            lines.append(f"  Авто-включено ({len(auto_included)}):")
+            for n in auto_included:
+                lines.append(f"    🔇 {n}")
         if rejected:
             lines.append(f"  Убрано ({len(rejected)}):")
             for n in rejected:
@@ -1108,7 +1146,7 @@ def _format_admin_summary_text(batch: Dict[str, Any]) -> str:
             for n in invalid_phone_clients:
                 lines.append(f"    ⚠️ {n}")
 
-        total_ok    += len(approved)
+        total_ok    += len(approved) + len(auto_included)
         total_no    += len(rejected)
         total_later += len(postponed)
 
@@ -1659,10 +1697,16 @@ def expire_old_batches() -> int:
 
 
 async def promote_silent_batches_to_admin(bot=None) -> int:
-    """Через час молчания менеджеров переводит батч на этап решения администратора."""
+    """Через час молчания менеджеров переводит батч на этап решения администратора.
+
+    Если уже позже SEND_WINDOW_CUTOFF_HOUR — батч помечается как too_late,
+    администратор получает уведомление что сегодня рассылка не состоится.
+    """
     batches = _load_batches()
     now = datetime.now(tz=TZ)
     changed_ids: List[str] = []
+    too_late_ids: List[str] = []
+
     for bid, batch in batches.items():
         if batch.get("status") != "pending_managers":
             continue
@@ -1672,6 +1716,18 @@ async def promote_silent_batches_to_admin(bot=None) -> int:
         if not created_at:
             continue
         if now <= created_at + timedelta(hours=MANAGER_SILENCE_TIMEOUT_HOURS):
+            continue
+
+        # Уже за окном отправки — закрываем батч без эскалации
+        if now.hour >= SEND_WINDOW_CUTOFF_HOUR:
+            for mgr_state in (batch.get("managers") or {}).values():
+                if mgr_state.get("status") in ("pending", "manual_editing"):
+                    mgr_state["status"] = "timeout"
+            batch["status"] = "too_late"
+            batch["closed_at"] = now.isoformat()
+            batch["escalation_reason"] = "send_window_missed"
+            too_late_ids.append(bid)
+            logger.info("[%s] батч закрыт: окно отправки %d:00 пропущено", bid, SEND_WINDOW_CUTOFF_HOUR)
             continue
 
         pending_found = False
@@ -1688,10 +1744,22 @@ async def promote_silent_batches_to_admin(bot=None) -> int:
         changed_ids.append(bid)
         logger.info("[%s] батч эскалирован админу после %d ч молчания", bid, MANAGER_SILENCE_TIMEOUT_HOURS)
 
-    if not changed_ids:
+    if not changed_ids and not too_late_ids:
         return 0
 
     _save_batches(batches)
+
+    for bid in too_late_ids:
+        try:
+            admin_id = int(ADMIN_CHAT_ID)
+            await _tg_send(
+                admin_id,
+                "⏰ <b>Рассылка сегодня не состоится.</b>\n\n"
+                f"Батч <code>{bid}</code> создан, но менеджеры не ответили до {SEND_WINDOW_CUTOFF_HOUR}:00.\n"
+                "Следующий батч будет создан автоматически при поступлении новой дебиторки.",
+            )
+        except (ValueError, TypeError):
+            pass
 
     for bid in changed_ids:
         batch = load_batch(bid)
