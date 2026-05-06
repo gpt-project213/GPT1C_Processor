@@ -4,7 +4,11 @@
 collector/approval_flow.py
 UX согласования рассылки WhatsApp — менеджер → администратор.
 
-Версия: 1.1.2 (2026-05-06)
+Версия: 1.1.3 (2026-05-06)
+
+v1.1.3 (2026-05-06): добавлена read-only аналитика качества обещаний менеджеров
+  по wa_agreed_promises.json: агрегированные счётчики, просроченные активные обещания,
+  исполнено/сорвано по каждому менеджеру для директорской сводки.
 
 v1.1.2 (2026-05-06): директор получил отдельный B-lite review-контур для
   «Договорились»: можно принять или отклонить каждую договорённость менеджера
@@ -2137,6 +2141,118 @@ def save_agreed_promise(
     }
     _save_promises(promises)
     return deadline
+
+
+def get_agreed_promise_stats() -> Dict[str, Any]:
+    """Агрегирует статистику обещаний менеджеров из wa_agreed_promises.json."""
+    promises = _load_promises()
+    today = datetime.now(tz=TZ).date()
+    statuses = ("active", "accepted", "rejected", "fulfilled", "broken")
+    totals: Dict[str, int] = {name: 0 for name in statuses}
+    totals.update({"total": 0, "in_control": 0, "overdue_active": 0})
+    managers: Dict[str, Dict[str, Any]] = {}
+
+    for client_name, promise in promises.items():
+        manager_name = str(promise.get("manager") or "—")
+        status = str(promise.get("status") or "active")
+        deadline_raw = promise.get("deadline")
+        deadline_obj: Optional[date] = None
+        if isinstance(deadline_raw, str):
+            try:
+                deadline_obj = date.fromisoformat(deadline_raw)
+            except ValueError:
+                deadline_obj = None
+
+        mgr_stats = managers.setdefault(
+            manager_name,
+            {
+                "manager": manager_name,
+                "total": 0,
+                "active": 0,
+                "accepted": 0,
+                "rejected": 0,
+                "fulfilled": 0,
+                "broken": 0,
+                "in_control": 0,
+                "overdue_active": 0,
+                "clients": [],
+            },
+        )
+
+        mgr_stats["total"] += 1
+        totals["total"] += 1
+        if status in statuses:
+            mgr_stats[status] += 1
+            totals[status] += 1
+        if status in {"active", "accepted"}:
+            mgr_stats["in_control"] += 1
+            totals["in_control"] += 1
+            if deadline_obj and deadline_obj < today:
+                mgr_stats["overdue_active"] += 1
+                totals["overdue_active"] += 1
+
+        mgr_stats["clients"].append(
+            {
+                "name": client_name,
+                "status": status,
+                "deadline": deadline_obj.isoformat() if deadline_obj else "",
+                "details": str(promise.get("details") or ""),
+                "batch_id": str(promise.get("batch_id") or ""),
+            }
+        )
+
+    managers_list = sorted(
+        managers.values(),
+        key=lambda item: (-item["broken"], -item["fulfilled"], -item["total"], item["manager"].lower()),
+    )
+    for item in managers_list:
+        resolved = item["fulfilled"] + item["broken"]
+        item["success_rate"] = round((item["fulfilled"] / resolved) * 100, 1) if resolved else None
+
+    return {
+        "generated_at": datetime.now(tz=TZ).isoformat(),
+        "totals": totals,
+        "managers": managers_list,
+    }
+
+
+def format_agreed_promise_stats_text() -> str:
+    """Формирует директорскую сводку качества обещаний менеджеров."""
+    stats = get_agreed_promise_stats()
+    totals = stats.get("totals", {})
+    managers = stats.get("managers", [])
+
+    if not totals.get("total"):
+        return "🤝 <b>Обещания менеджеров</b>\n\nПока нет сохранённых договорённостей."
+
+    lines = [
+        "🤝 <b>Обещания менеджеров</b>",
+        "",
+        f"Всего: <b>{totals.get('total', 0)}</b>",
+        f"На контроле: <b>{totals.get('in_control', 0)}</b>",
+        f"Исполнено: <b>{totals.get('fulfilled', 0)}</b>",
+        f"Сорвано: <b>{totals.get('broken', 0)}</b>",
+        f"Отклонено директором: <b>{totals.get('rejected', 0)}</b>",
+    ]
+    if totals.get("overdue_active", 0):
+        lines.append(f"Просрочено без закрытия: <b>{totals['overdue_active']}</b>")
+
+    if managers:
+        lines.append("")
+        lines.append("<b>По менеджерам:</b>")
+        for item in managers:
+            line = (
+                f"• <b>{item['manager']}</b> — всего {item['total']}, "
+                f"в работе {item['in_control']}, исполнено {item['fulfilled']}, "
+                f"сорвано {item['broken']}, отклонено {item['rejected']}"
+            )
+            if item.get("overdue_active"):
+                line += f", просрочено {item['overdue_active']}"
+            if item.get("success_rate") is not None:
+                line += f", успех {item['success_rate']:.1f}%"
+            lines.append(line)
+
+    return "\n".join(lines)
 
 
 def get_second_chance_blocked_clients() -> List[str]:

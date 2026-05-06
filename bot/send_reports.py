@@ -188,7 +188,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.64/30.04.2026"
+__VERSION__ = "v9.4.65/06.05.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
@@ -3168,6 +3168,15 @@ def _format_collector_batch_text() -> str:
         lines.append(f"<b>Результат отправки:</b> {sent_ok}/{sent_total} доставлено")
 
     return "\n".join(lines)
+
+
+def _format_collector_agreed_stats_text() -> str:
+    """Формирует read-only сводку качества обещаний менеджеров."""
+    try:
+        from collector.approval_flow import format_agreed_promise_stats_text
+        return format_agreed_promise_stats_text()
+    except Exception as exc:
+        return f"⚠️ Не удалось загрузить статистику обещаний: {exc}"
 
 
 def kb_debt_menu(user_role: str) -> InlineKeyboardMarkup:
@@ -6775,6 +6784,7 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = _format_collector_batch_text()
         kb_back = InlineKeyboardMarkup([
             [InlineKeyboardButton("🔄 Обновить", callback_data="collector_batch")],
+            [InlineKeyboardButton("🤝 Обещания менеджеров", callback_data="collector_agreed_stats")],
             [InlineKeyboardButton("🔙 Главное меню", callback_data="back_main")],
         ])
         await hide_main_menu(context, chat_id)
@@ -6785,6 +6795,27 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             _menu_set(chat_id, msg.message_id)
         except Exception as _e:
             logger.error("collector_batch send error: %s", _e)
+        return
+
+    if data == "collector_agreed_stats":
+        if user_role != "admin":
+            await q.answer("⛔ Доступ запрещён")
+            return
+        await q.answer()
+        text = _format_collector_agreed_stats_text()
+        kb_back = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔄 Обновить", callback_data="collector_agreed_stats")],
+            [InlineKeyboardButton("↩️ К батчу", callback_data="collector_batch")],
+            [InlineKeyboardButton("🔙 Главное меню", callback_data="back_main")],
+        ])
+        await hide_main_menu(context, chat_id)
+        try:
+            msg = await context.bot.send_message(
+                chat_id=chat_id, text=text, reply_markup=kb_back, parse_mode="HTML"
+            )
+            _menu_set(chat_id, msg.message_id)
+        except Exception as _e:
+            logger.error("collector_agreed_stats send error: %s", _e)
         return
 
     # 🆕 v9.4.9: Аналитика

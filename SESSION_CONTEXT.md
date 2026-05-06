@@ -1718,3 +1718,95 @@ Observed rebuild result:
   - fresh `send_reports.log` tail confirmed normal scheduler activity
   - fresh `email_20260502.log` tail confirmed IMAP recovery
 - No new code tests were run in this last monitoring-only step.
+
+## Handoff Update - 2026-05-06 13:30 +05:00
+
+### Closed in this session
+
+- `285db0a` `feat(approval): Б-lite — директор проверяет договорённости менеджеров`
+  - `collector/approval_flow.py`
+  - director now has a separate agreed-review screen with `accept/reject` per manager promise
+  - rejected `Договорились` returns the client into the current WA batch
+  - accepted promises continue participating in broken-promise daily checks
+- `202e677` `feat(stop): auto-clear stop after Saida full payment`
+  - `bot/debt_stop_control.py`
+  - `tests/test_collector.py`
+  - when Saida confirms full payment in stop-flow, client is auto-cleared from stop registry
+  - manager and Saida are notified immediately
+  - linked `collector/shipment_control.py` decision is auto-resolved with reason `saida_confirmed_full`
+
+### Verification
+
+- `python -m py_compile collector/approval_flow.py` -> OK
+- `python -m py_compile bot/debt_stop_control.py` -> OK
+- `WHATSAPP_ENABLED=0 LIVE_SEND_ALLOWED=0 python -X utf8 tests/test_collector.py` -> `324/324`
+
+### Current operational/product state
+
+- WA approval flow is now effectively closed:
+  - `Оплатил` and `Договорились` are mandatory business reasons
+  - `Договорились` is one-time, stores details/deadline, auto-returns on broken promise
+  - director can review and reject promises instead of being forced to accept manager wording
+- Stop/payment loop is closed for the full-payment path:
+  - manager claim -> Saida confirms full -> stop auto-clears without second manual action
+- Remaining wider topics are not bugs, but next-stage work:
+  - analytics on promise quality by manager
+  - operational backlog/SLA discipline around Saida
+  - richer handling for partial-payment conflicts and director reporting
+
+### Dirty files intentionally left alone
+
+- `autoagent/orchestrator_agents.json`
+- `autoagent/task_prompt.txt`
+- untracked `audit/*`
+- local backups `config/clients.json.bak-*`
+- untracked `site/`
+
+### Next recommended action
+
+- If continuing product work: build manager promise-quality analytics (`Договорились` used / broken / accepted / rejected by manager).
+- If continuing operations: review real backlog in `logs/saida_payment_holds.json` and decide whether partial-payment path needs stricter automation/escalation.
+
+## Handoff Update - 2026-05-06 13:58 +05:00
+
+### Closed in this session
+
+- `approval_flow` director visibility gap on manager promises is now closed at the summary level:
+  - `collector/approval_flow.py`
+  - `bot/send_reports.py`
+  - `tests/test_collector.py`
+  - added read-only analytics over `logs/wa_agreed_promises.json`
+  - director can open `🤖 Коллектор -> 🤝 Обещания менеджеров` and see per-manager totals:
+    - total promises
+    - in control
+    - fulfilled
+    - broken
+    - rejected by director
+    - overdue active promises
+
+### Verification
+
+- `python -m py_compile collector/approval_flow.py` -> OK
+- `python -m py_compile bot/send_reports.py` -> OK
+- `WHATSAPP_ENABLED=0 LIVE_SEND_ALLOWED=0 python -X utf8 tests/test_collector.py` -> `327/327`
+
+### Current product state
+
+- Director now has both:
+  - point control over each `Договорились` in batch review
+  - aggregate quality view over accumulated promises by manager
+- This closes the visibility gap where promises existed in `wa_agreed_promises.json` but were not visible as manager discipline metrics.
+- The new analytics is read-only: it does not alter batch routing, deadlines, stop-flow, or promise lifecycle.
+
+### Dirty files intentionally left alone
+
+- `autoagent/orchestrator_agents.json`
+- `autoagent/task_prompt.txt`
+- untracked `audit/*`
+- local backups `config/clients.json.bak-*`
+- untracked `site/`
+
+### Next recommended action
+
+- If continuing product work: add similar aggregate reporting for Saida (`pending_saida`, oldest age, closed today, overdue SLA).
+- If continuing control logic: decide whether partial-payment path should auto-resolve any shipment/stop state or always stay manual.

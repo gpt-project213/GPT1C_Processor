@@ -1627,6 +1627,52 @@ finally:
     _af_mod._BATCHES_PATH = _orig_path
     _shutil_t3.rmtree(_tmp_dir10h, ignore_errors=True)
 
+section("10i. agreed promise stats")
+_orig_promises_path = _af_mod._PROMISES_PATH
+_tmp_promises_dir = _tempfile.mkdtemp()
+_af_mod._PROMISES_PATH = Path(_tmp_promises_dir) / "wa_agreed_promises.json"
+try:
+    _af_mod.save_agreed_promise("ИП Исполнен", "Магира", "до 10.05, 50000 тг", "batch-a")
+    _af_mod.save_agreed_promise("ТОО Срыв", "Магира", "до 11.05, 80000 тг", "batch-a")
+    _af_mod.save_agreed_promise("ИП Отказ", "Ергали", "до 12.05, 30000 тг", "batch-b")
+    _af_mod.save_agreed_promise("ТОО Активный", "Ергали", "до 13.05, 40000 тг", "batch-b")
+    _promises10i = _af_mod._load_promises()
+    _promises10i["ИП Исполнен"]["status"] = "fulfilled"
+    _promises10i["ТОО Срыв"]["status"] = "broken"
+    _promises10i["ИП Отказ"]["status"] = "rejected"
+    _af_mod._save_promises(_promises10i)
+    _stats10i = _af_mod.get_agreed_promise_stats()
+    _mgr10i = {item["manager"]: item for item in _stats10i.get("managers", [])}
+    check(
+        "APPROVAL T10i: статистика обещаний считает общие статусы",
+        _stats10i["totals"]["total"] == 4
+        and _stats10i["totals"]["fulfilled"] == 1
+        and _stats10i["totals"]["broken"] == 1
+        and _stats10i["totals"]["rejected"] == 1
+        and _stats10i["totals"]["in_control"] == 1,
+        str(_stats10i["totals"]),
+    )
+    check(
+        "APPROVAL T10j: статистика обещаний агрегируется по менеджерам",
+        _mgr10i["Магира"]["fulfilled"] == 1
+        and _mgr10i["Магира"]["broken"] == 1
+        and _mgr10i["Ергали"]["rejected"] == 1
+        and _mgr10i["Ергали"]["in_control"] == 1,
+        str(_mgr10i),
+    )
+    _stats_text10i = _af_mod.format_agreed_promise_stats_text()
+    check(
+        "APPROVAL T10k: текстовая сводка обещаний содержит менеджеров и ключевые счётчики",
+        "Магира" in _stats_text10i
+        and "Ергали" in _stats_text10i
+        and "Сорвано: <b>1</b>" in _stats_text10i
+        and "Отклонено директором: <b>1</b>" in _stats_text10i,
+        _stats_text10i,
+    )
+finally:
+    _af_mod._PROMISES_PATH = _orig_promises_path
+    _shutil_t3.rmtree(_tmp_promises_dir, ignore_errors=True)
+
 _batch10i = create_batch({"Алена": _batch1_clients})
 _batch10i["status"] = "pending_admin"
 _batch10i["admin_status"] = "pending"
