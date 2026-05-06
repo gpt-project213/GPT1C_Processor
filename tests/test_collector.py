@@ -19,6 +19,13 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 os.environ["COLLECTOR_TEST_MODE"] = "1"
 
+# ── Глобальный guard: заглушить все реальные отправки до импорта модулей ──────
+# Устанавливаем env ДО импорта — модули читают их при загрузке
+os.environ.setdefault("WHATSAPP_ENABLED", "0")
+os.environ.setdefault("LIVE_SEND_ALLOWED", "0")
+os.environ.setdefault("GREENAPI_ID", "")
+os.environ.setdefault("GREENAPI_TOKEN", "")
+
 PASS = "✅"
 FAIL = "❌"
 results = []
@@ -2437,6 +2444,46 @@ section("19. Debt stop admin shipment limit")
 
 import bot.debt_stop_control as _dstop
 
+
+class _DstopIsolation:
+    """Перенаправляет ВСЕ файловые пути debt_stop_control в temp-директорию.
+
+    Использовать как контекстный менеджер:
+        with _DstopIsolation(tmpdir) as iso:
+            iso.json_dir.mkdir(...)  # iso.json_dir → tmpdir/json
+    """
+    _ATTRS = (
+        "STATE_FILE", "REGISTRY_FILE", "DELETION_QUEUE",
+        "SAIDA_INTRO_FILE", "PAYMENT_HOLDS_FILE", "SAIDA_KNOWN_FILE",
+        "JSON_DIR", "CONFIG_DIR",
+    )
+
+    def __init__(self, tmpdir: Path):
+        self._tmp = Path(tmpdir)
+        self._saved: dict = {}
+
+    def __enter__(self):
+        for attr in self._ATTRS:
+            self._saved[attr] = getattr(_dstop, attr)
+        _dstop.STATE_FILE        = self._tmp / "debt_stop_state.json"
+        _dstop.REGISTRY_FILE     = self._tmp / "debt_stop_registry.json"
+        _dstop.DELETION_QUEUE    = self._tmp / "deletion_queue.json"
+        _dstop.SAIDA_INTRO_FILE  = self._tmp / "saida_intro.json"
+        _dstop.PAYMENT_HOLDS_FILE = self._tmp / "saida_payment_holds.json"
+        _dstop.SAIDA_KNOWN_FILE  = self._tmp / "saida_known.json"
+        _dstop.JSON_DIR          = self._tmp / "json"
+        _dstop.CONFIG_DIR        = self._tmp / "config"
+        _dstop.JSON_DIR.mkdir(parents=True, exist_ok=True)
+        _dstop.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        self.json_dir   = _dstop.JSON_DIR
+        self.config_dir = _dstop.CONFIG_DIR
+        return self
+
+    def __exit__(self, *_):
+        for attr, val in self._saved.items():
+            setattr(_dstop, attr, val)
+
+
 class _FakeDstopBot:
     def __init__(self):
         self.messages = []
@@ -2596,18 +2643,8 @@ _ship_for_saida._DECISIONS_PATH = _orig_ship_for_saida
 
 # 20. Shipment control — collector/shipment_control.py
 # ═══════════════════════════════════════════════════════════════
-_orig_dstop_json_dir = _dstop.JSON_DIR
-_orig_dstop_config_dir = _dstop.CONFIG_DIR
-# STATE_FILE и REGISTRY_FILE уже восстановлены внешним finally — переизолируем их здесь
-_orig_dstop_state2 = _dstop.STATE_FILE
-_orig_dstop_registry2 = _dstop.REGISTRY_FILE
-try:
-    _dstop.JSON_DIR = Path(_dstop_tmpdir) / "json"
-    _dstop.CONFIG_DIR = Path(_dstop_tmpdir) / "config"
-    _dstop.STATE_FILE = Path(_dstop_tmpdir) / "state_file_inner.json"
-    _dstop.REGISTRY_FILE = Path(_dstop_tmpdir) / "registry_inner.json"
-    _dstop.JSON_DIR.mkdir(parents=True, exist_ok=True)
-    _dstop.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+# _DstopIsolation изолирует ВСЕ пути включая STATE_FILE и REGISTRY_FILE
+with _DstopIsolation(_dstop_tmpdir) as _iso:
 
     (_dstop.CONFIG_DIR / "managers.json").write_text(
         json.dumps({"Алена": 188939016}, ensure_ascii=False),
@@ -2696,11 +2733,7 @@ try:
     check("DSTOP FILE T4: клиент с 10 днями молчания уже попадает в stop-flow",
           "А Тестовый стоп-клиент 10д" in _cand_names10,
           str(_cand_names10))
-finally:
-    _dstop.JSON_DIR = _orig_dstop_json_dir
-    _dstop.CONFIG_DIR = _orig_dstop_config_dir
-    _dstop.STATE_FILE = _orig_dstop_state2
-    _dstop.REGISTRY_FILE = _orig_dstop_registry2
+# _DstopIsolation.__exit__ восстанавливает все пути автоматически
 
 section("20. Shipment control (условная отгрузка)")
 
@@ -2895,9 +2928,44 @@ check("results text shows Ошибок: 1",    "Ошибок: <b>1</b>" in _res)
 check("results text shows Пропущено: 1", "Пропущено: <b>1</b>" in _res)
 
 # ═══════════════════════════════════════════════════════════════
-# 23. ИТОГ (бывший 22)
+# 23. Проверка целостности продакшн-файлов
 # ═══════════════════════════════════════════════════════════════
-section("ИТОГ")  # секция 23
+section("23. Production file integrity check")
+
+_PROD_FILES_TO_CHECK = [
+    ROOT / "reports" / "debt_stop_state.json",
+    ROOT / "reports" / "debt_stop_registry.json",
+    ROOT / "logs" / "collector_dialogs.json",
+    ROOT / "logs" / "saida_payment_holds.json",
+    ROOT / "logs" / "wa_approval_batches.json",
+]
+# Строки, которые НИКОГДА не должны быть в продакшн-файлах после тестов
+_FORBIDDEN_IN_PROD = [
+    "А Тестовый стоп-клиент",
+    "ТОО Лимит После Оплаты",   # только в тест-стейте
+    "ТОО Уже Оплатил",          # только в тест-стейте
+    "OTHER CLIENT",              # collector dialog test marker
+    "NO PHONE CLIENT",           # collector dialog test marker
+]
+
+for _pf in _PROD_FILES_TO_CHECK:
+    if not _pf.exists():
+        continue
+    try:
+        _pf_text = _pf.read_text(encoding="utf-8")
+    except OSError:
+        continue
+    for _forbidden in _FORBIDDEN_IN_PROD:
+        check(
+            f"prod {_pf.name}: нет тестового маркера '{_forbidden}'",
+            _forbidden not in _pf_text,
+            f"CONTAMINATED: '{_forbidden}' found in {_pf}",
+        )
+
+# ═══════════════════════════════════════════════════════════════
+# 24. ИТОГ
+# ═══════════════════════════════════════════════════════════════
+section("ИТОГ")  # секция 24
 total  = len(results)
 passed = sum(1 for _, ok in results if ok)
 failed = total - passed
