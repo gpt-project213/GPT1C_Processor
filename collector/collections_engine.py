@@ -1741,6 +1741,14 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
     except Exception as e:
         logger.error("send_admin_preview_notice failed: %s", e)
 
+    # Немедленная проверка узкого окна: если до cutoff < 1 ч — не ждём
+    # следующего цикла collector_reminders (каждые 30 мин), эскалируем сразу.
+    try:
+        from collector.approval_flow import promote_silent_batches_to_admin
+        await promote_silent_batches_to_admin()
+    except Exception as e:
+        logger.error("promote_silent_batches_to_admin (immediate check) failed: %s", e)
+
     logger.info("run_approval_preview: батч %s создан и отправлен менеджерам", batch["batch_id"])
     return batch["batch_id"]
 
