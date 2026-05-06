@@ -6630,6 +6630,32 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             from collector.approval_flow import handle_callback as _wa_appr_cb
             handled = await _wa_appr_cb(data, chat_id, q.message.message_id)
             if handled:
+                # Если менеджер выбрал "оплатил без документа" → создаём payment hold для Саиды
+                if "wa_appr_cli_paid_nodoc" in data:
+                    try:
+                        from collector.approval_flow import find_manager_waiting_state
+                        from collector.payment_hold import create_manager_payment_request
+                        parts = data.split("|")
+                        if len(parts) >= 4:
+                            batch_id_cb = parts[1]
+                            cli_idx_cb  = int(parts[3])
+                            from collector.approval_flow import _load_batches
+                            batch_cb = (_load_batches() or {}).get(batch_id_cb)
+                            if batch_cb:
+                                for mgr_n, mgr_s in batch_cb.get("managers", {}).items():
+                                    if mgr_s.get("chat_id") == chat_id:
+                                        clients_cb = mgr_s.get("clients", [])
+                                        if cli_idx_cb < len(clients_cb):
+                                            cl = clients_cb[cli_idx_cb]
+                                            create_manager_payment_request(
+                                                manager=mgr_n,
+                                                manager_chat_id=chat_id,
+                                                client=cl.get("name", ""),
+                                                debt=cl.get("amount", 0),
+                                                claimed_by_manager=True,
+                                            )
+                    except Exception as _ph_e:
+                        logger.warning("payment hold create error: %s", _ph_e)
                 return
         except Exception as e:
             logger.error("wa_appr callback error: %s", e)
@@ -8342,6 +8368,52 @@ async def handle_voice_message_tg(update: Update, context: ContextTypes.DEFAULT_
             logger.error("voice handler error: %s", e)
 
 
+async def handle_proof_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Перехватывает фото/документ от менеджера ожидающего подтверждения оплаты."""
+    chat_id = update.effective_chat.id
+    if get_user_role(chat_id) == "unknown":
+        return
+    try:
+        from collector.approval_flow import handle_manager_proof
+        msg = update.message
+        if msg.photo:
+            file_id   = msg.photo[-1].file_id
+            file_type = "photo"
+        elif msg.document:
+            file_id   = msg.document.file_id
+            file_type = "document"
+        else:
+            return
+        handled = await handle_manager_proof(
+            chat_id=chat_id,
+            file_id=file_id,
+            file_type=file_type,
+            admin_chat_id=ADMIN_CHAT_ID,
+            bot=context.bot,
+        )
+        if handled:
+            return
+    except Exception as e:
+        logger.error("handle_proof_document error: %s", e)
+
+
+async def handle_agreed_details_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Перехватывает текст с деталями договорённости от менеджера."""
+    chat_id = update.effective_chat.id
+    if get_user_role(chat_id) == "unknown":
+        return
+    text = update.message.text or ""
+    if not text.strip():
+        return
+    try:
+        from collector.approval_flow import handle_manager_agreed_details
+        handled = await handle_manager_agreed_details(chat_id=chat_id, text=text.strip())
+        if handled:
+            return
+    except Exception as e:
+        logger.error("handle_agreed_details_text error: %s", e)
+
+
 async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик текстовых сообщений (v9.4.12, cleanup v9.4.57)."""
     text = update.message.text
@@ -8754,6 +8826,8 @@ def main():
     from telegram.ext import MessageHandler, filters
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_persistent_menu))
     application.add_handler(MessageHandler(filters.VOICE, handle_voice_message_tg))
+    application.add_handler(MessageHandler(filters.PHOTO | filters.Document.ALL, handle_proof_document))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_agreed_details_text), group=1)
     application.add_handler(CommandHandler("health", cmd_health))
     application.add_handler(CommandHandler("restart", cmd_restart))
     application.add_handler(CommandHandler("shutdown", cmd_shutdown))

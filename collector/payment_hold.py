@@ -86,6 +86,7 @@ def create_manager_payment_request(
     debt: float = 0.0,
     debt_str: str = "",
     manager_chat_id: Optional[int] = None,
+    claimed_by_manager: bool = False,  # True когда менеджер заявил оплату в WA approval
 ) -> Dict[str, Any]:
     """Create or refresh a manager-to-Saida payment check request."""
     data = _load()
@@ -103,6 +104,7 @@ def create_manager_payment_request(
         "debt": float(debt or 0.0),
         "debt_str": debt_str,
         "manager_chat_id": int(manager_chat_id or 0),
+        "claimed_by_manager": claimed_by_manager,
         "created_at": current.get("created_at") or _now_iso(),
         "updated_at": _now_iso(),
     }

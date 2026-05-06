@@ -243,12 +243,20 @@ def create_batch(
             })
 
         managers_state[manager_name] = {
-            "clients":         normalized,
-            "status":          "pending",        # pending | approved_all | rejected_all | manual_editing | manual_done | timeout
-            "approved_names":  [],
-            "rejected_names":  [],
-            "postponed_names": [],
-            "responded_at":    None,
+            "clients":              normalized,
+            "status":               "pending",   # pending | approved_all | rejected_all | manual_editing | manual_done | timeout
+            "approved_names":       [],
+            "rejected_names":       [],          # legacy — оставляем для совместимости
+            "postponed_names":      [],          # legacy — оставляем для совместимости
+            # новые поля с бизнес-семантикой
+            "agreed_names":         [],          # 🤝 договорились (убраны из WA, детали обязательны)
+            "agreed_details":       {},          # {client_name: {date, amount, conditions, recorded_at}}
+            "paid_with_doc_names":  [],          # 💰 оплатил + документ приложен
+            "paid_no_doc_names":    [],          # 💰 оплатил, документа нет → Саиде
+            "second_chance_used":   [],          # клиенты, по которым уже использовали 🤝
+            "waiting_for_proof":    None,        # {client_name, batch_id} — ждём фото от менеджера
+            "waiting_for_agreed":   None,        # {client_name, batch_id} — ждём детали договорённости
+            "responded_at":         None,
         }
 
     batch: Dict[str, Any] = {
@@ -587,10 +595,10 @@ def _manager_main_keyboard(batch_id: str, manager_idx: int) -> Dict[str, Any]:
     b = batch_id
     i = manager_idx
     return _inline_kb([
-        [("✅ Разрешить всем отправить",    f"wa_appr_mgr_ok|{b}|{i}")],
-        [("👀 Посмотреть список клиентов",  f"wa_appr_mgr_view|{b}|{i}")],
-        [("✏️ Выбрать вручную",             f"wa_appr_mgr_manual|{b}|{i}")],
-        [("⛔ Не отправлять никому",        f"wa_appr_mgr_no|{b}|{i}")],
+        [("✅ Разрешить всем отправить",      f"wa_appr_mgr_ok|{b}|{i}")],
+        [("🤝 Со всеми договорились",         f"wa_appr_mgr_agree_all|{b}|{i}")],
+        [("💰 Все оплатили — разобраться",    f"wa_appr_mgr_paid_all|{b}|{i}")],
+        [("✏️ Выбрать вручную",               f"wa_appr_mgr_manual|{b}|{i}")],
     ])
 
 
@@ -611,11 +619,11 @@ def _client_list_keyboard(
         rows.append([
             (f"{status_icon} {short_name}", f"wa_appr_cli_info|{batch_id}|{manager_idx}|{ci}"),
         ])
-        # Кнопки действия (только если ещё не решено)
+        # Кнопки действия
         rows.append([
-            ("✅ Оставить", f"wa_appr_cli_keep|{batch_id}|{manager_idx}|{ci}"),
-            ("❌ Убрать",   f"wa_appr_cli_skip|{batch_id}|{manager_idx}|{ci}"),
-            ("⏸ Позже",    f"wa_appr_cli_later|{batch_id}|{manager_idx}|{ci}"),
+            ("✅ Отправить",    f"wa_appr_cli_keep|{batch_id}|{manager_idx}|{ci}"),
+            ("💰 Оплатил",      f"wa_appr_cli_paid|{batch_id}|{manager_idx}|{ci}"),
+            ("🤝 Договорились", f"wa_appr_cli_agree|{batch_id}|{manager_idx}|{ci}"),
         ])
     # Финальная кнопка
     rows.append([("✅ Готово — принять мои выборы", f"wa_appr_mgr_done|{batch_id}|{manager_idx}")])
@@ -732,15 +740,34 @@ def _get_manager_by_idx(batch: Dict[str, Any], idx: int) -> Tuple[Optional[str],
 
 
 def _build_decisions(mgr_state: Dict[str, Any]) -> Dict[str, str]:
-    """Строит dict {client_name → keep|skip|later} из mgr_state."""
+    """Строит dict {client_name → keep|skip|agreed|paid} из mgr_state."""
     d = {}
     for name in mgr_state.get("approved_names", []):
         d[name] = "keep"
-    for name in mgr_state.get("rejected_names", []):
+    for name in mgr_state.get("rejected_names", []):   # legacy
         d[name] = "skip"
-    for name in mgr_state.get("postponed_names", []):
+    for name in mgr_state.get("postponed_names", []):  # legacy
         d[name] = "later"
+    for name in mgr_state.get("agreed_names", []):
+        d[name] = "agreed"
+    for name in mgr_state.get("paid_with_doc_names", []):
+        d[name] = "paid"
+    for name in mgr_state.get("paid_no_doc_names", []):
+        d[name] = "paid"
     return d
+
+
+def _client_removal_reason(mgr_state: Dict[str, Any], client_name: str) -> Optional[str]:
+    """Возвращает причину снятия клиента из WA или None если не снят."""
+    if client_name in mgr_state.get("agreed_names", []):
+        return "agreed"
+    if client_name in mgr_state.get("paid_with_doc_names", []):
+        return "paid_doc"
+    if client_name in mgr_state.get("paid_no_doc_names", []):
+        return "paid_no_doc"
+    if client_name in mgr_state.get("rejected_names", []):
+        return "rejected"
+    return None
 
 
 def _admin_client_key(manager_name: str, client_name: str) -> str:
@@ -774,18 +801,22 @@ def _build_admin_decisions(batch: Dict[str, Any]) -> Dict[str, str]:
 
     decisions = {}
     for manager_name, mgr_state in batch.get("managers", {}).items():
-        approved = set(mgr_state.get("approved_names", []))
-        rejected = set(mgr_state.get("rejected_names", []))
-        mgr_timed_out = mgr_state.get("status") == "timeout"
+        approved       = set(mgr_state.get("approved_names", []))
+        rejected       = set(mgr_state.get("rejected_names", []))       # legacy
+        agreed         = set(mgr_state.get("agreed_names", []))
+        paid_doc       = set(mgr_state.get("paid_with_doc_names", []))
+        paid_no_doc    = set(mgr_state.get("paid_no_doc_names", []))
+        mgr_timed_out  = mgr_state.get("status") == "timeout"
         for client in mgr_state.get("clients", []):
-            key = _admin_client_key(manager_name, client["name"])
+            key  = _admin_client_key(manager_name, client["name"])
             name = client["name"]
             if name in approved:
                 decisions[key] = "keep"
-            elif name in rejected:
+            elif name in agreed or name in paid_doc or name in paid_no_doc or name in rejected:
+                # Снят с причиной → не отправляем WA
                 decisions[key] = "skip"
             elif mgr_timed_out:
-                # Молчание менеджера = согласие: авто-включаем всех не отклонённых
+                # Молчание менеджера = согласие: авто-включаем всех без явного снятия
                 decisions[key] = "keep"
             else:
                 decisions[key] = "skip"
@@ -948,21 +979,37 @@ async def handle_manager_callback(
         await _tg_edit(chat_id, message_id, text)
         logger.info("[%s] %s одобрил всех (%d клиентов)", batch_id, manager_name, len(clients))
 
-    elif action == "wa_appr_mgr_no":
-        mgr_state["status"]         = "rejected_all"
-        mgr_state["approved_names"] = []
-        mgr_state["rejected_names"] = [c["name"] for c in clients]
-        mgr_state["postponed_names"] = []
-        mgr_state["responded_at"]   = now_iso
+    elif action == "wa_appr_mgr_agree_all":
+        # 🤝 Со всеми договорились — открываем поклиентный режим
+        mgr_state["status"] = "manual_editing"
+        mgr_state["responded_at"] = None
         save_batch(batch)
-
+        decisions = _build_decisions(mgr_state)
         text = (
-            f"⛔ <b>Зафиксировано.</b>\n\n"
-            f"Никому из ваших {len(clients)} клиентов сообщения не отправляются.\n"
-            f"Если передумаете — обратитесь к директору."
+            f"🤝 <b>Договорились — разбираем по каждому</b>\n\n"
+            f"По каждому клиенту нажмите 🤝 Договорились и укажите детали.\n"
+            f"Массово убрать без причины нельзя — нужен срок и условия по каждому.\n\n"
+            f"Когда закончите — нажмите <b>«Готово»</b>."
         )
-        await _tg_edit(chat_id, message_id, text)
-        logger.info("[%s] %s отклонил всех (%d клиентов)", batch_id, manager_name, len(clients))
+        markup = _client_list_keyboard(batch_id, mgr_idx, clients, decisions)
+        await _tg_edit(chat_id, message_id, text, markup)
+        return True
+
+    elif action == "wa_appr_mgr_paid_all":
+        # 💰 Все оплатили — открываем поклиентный режим для подтверждения каждого
+        mgr_state["status"] = "manual_editing"
+        mgr_state["responded_at"] = None
+        save_batch(batch)
+        decisions = _build_decisions(mgr_state)
+        text = (
+            f"💰 <b>Все оплатили — разбираем по каждому</b>\n\n"
+            f"По каждому клиенту нажмите 💰 Оплатил и приложите документ.\n"
+            f"Массово подтвердить всех без документов нельзя.\n\n"
+            f"Когда закончите — нажмите <b>«Готово»</b>."
+        )
+        markup = _client_list_keyboard(batch_id, mgr_idx, clients, decisions)
+        await _tg_edit(chat_id, message_id, text, markup)
+        return True
 
     elif action == "wa_appr_mgr_view":
         # Показываем список с кнопками по каждому клиенту
@@ -981,9 +1028,10 @@ async def handle_manager_callback(
         text = (
             f"✏️ <b>Выбор вручную</b>\n\n"
             f"Для каждого клиента нажмите:\n"
-            f"  ✅ Оставить — разрешить отправку\n"
-            f"  ❌ Убрать — не отправлять\n"
-            f"  ⏸ Позже — отложить до следующего дня\n\n"
+            f"  ✅ Отправить — разрешить отправку\n"
+            f"  💰 Оплатил — клиент оплатил (нужен документ или проверка)\n"
+            f"  🤝 Договорились — нужно указать детали\n\n"
+            f"Снять без причины нельзя.\n"
             f"Когда выберете всех — нажмите <b>«Готово»</b>."
         )
         markup = _client_list_keyboard(batch_id, mgr_idx, clients, decisions)
@@ -991,47 +1039,62 @@ async def handle_manager_callback(
         return True
 
     elif action == "wa_appr_mgr_done":
-        # Менеджер завершил ручной выбор
+        # Менеджер завершил выбор — проверяем что каждый клиент имеет причину
         decisions = _build_decisions(mgr_state)
-        approved = [c["name"] for c in clients if decisions.get(c["name"]) == "keep"]
-        rejected = [c["name"] for c in clients if decisions.get(c["name"]) == "skip"]
-        postponed = [c["name"] for c in clients if decisions.get(c["name"]) == "later"]
-        undecided = [c["name"] for c in clients if decisions.get(c["name"]) not in ("keep", "skip", "later")]
+        valid_decisions = {"keep", "skip", "later", "agreed", "paid"}
+        approved  = [c["name"] for c in clients if decisions.get(c["name"]) == "keep"]
+        agreed    = mgr_state.get("agreed_names", [])
+        paid_doc  = mgr_state.get("paid_with_doc_names", [])
+        paid_ndoc = mgr_state.get("paid_no_doc_names", [])
+        undecided = [c["name"] for c in clients if decisions.get(c["name"]) not in valid_decisions]
 
-        if undecided:
+        # Клиенты в состоянии "ждём фото/детали" не считаются завершёнными
+        waiting_proof  = mgr_state.get("waiting_for_proof") or {}
+        waiting_agreed = mgr_state.get("waiting_for_agreed") or {}
+        still_waiting  = []
+        if isinstance(waiting_proof, dict) and waiting_proof.get("client_name"):
+            still_waiting.append(waiting_proof["client_name"] + " (ждём документ)")
+        if isinstance(waiting_agreed, dict) and waiting_agreed.get("client_name"):
+            still_waiting.append(waiting_agreed["client_name"] + " (ждём детали)")
+
+        if undecided or still_waiting:
+            problem_list = [f"  • {n}" for n in undecided + still_waiting]
             text = (
-                f"⚠️ Не все клиенты размечены.\n\n"
-                f"Ещё нужно решить по {len(undecided)} клиент(ам):\n"
-                + "\n".join(f"  • {n}" for n in undecided)
-                + "\n\nПожалуйста, нажмите кнопки для каждого."
+                f"⚠️ Не все клиенты оформлены.\n\n"
+                f"Нужно завершить по {len(undecided) + len(still_waiting)} клиент(ам):\n"
+                + "\n".join(problem_list)
+                + "\n\nВыберите ✅ Отправить, 💰 Оплатил или 🤝 Договорились по каждому."
             )
             markup = _client_list_keyboard(batch_id, mgr_idx, clients, decisions)
             await _tg_edit(chat_id, message_id, text, markup)
             return True
 
-        mgr_state["status"]          = "manual_done"
-        mgr_state["approved_names"]  = approved
-        mgr_state["rejected_names"]  = rejected
-        mgr_state["postponed_names"] = postponed
-        mgr_state["responded_at"]    = now_iso
+        mgr_state["status"]         = "manual_done"
+        mgr_state["approved_names"] = approved
+        mgr_state["responded_at"]   = now_iso
         save_batch(batch)
 
         text = (
             f"✅ <b>Ваш выбор зафиксирован:</b>\n\n"
-            f"  Разрешено: {len(approved)} клиент(ов)\n"
-            f"  Убрано:   {len(rejected)} клиент(ов)\n"
-            f"  Отложено: {len(postponed)} клиент(ов)\n\n"
+            f"  ✅ Отправить:          {len(approved)} кл.\n"
+            f"  🤝 Договорились:       {len(agreed)} кл.\n"
+            f"  💰 Оплатил + документ: {len(paid_doc)} кл.\n"
+            f"  💰 Оплатил без документа: {len(paid_ndoc)} кл.\n\n"
             f"Итоговое решение — у директора."
         )
         await _tg_edit(chat_id, message_id, text)
         logger.info(
-            "[%s] %s завершил ручной выбор: ok=%d, no=%d, later=%d",
-            batch_id, manager_name, len(approved), len(rejected), len(postponed),
+            "[%s] %s завершил выбор: отправить=%d, договорились=%d, оплатил_doc=%d, оплатил_nodoc=%d",
+            batch_id, manager_name, len(approved), len(agreed), len(paid_doc), len(paid_ndoc),
         )
 
     # ── Кнопки по конкретному клиенту ────────────────────────────────────────
 
-    elif action in ("wa_appr_cli_keep", "wa_appr_cli_skip", "wa_appr_cli_later", "wa_appr_cli_info"):
+    elif action in (
+        "wa_appr_cli_keep", "wa_appr_cli_skip", "wa_appr_cli_later", "wa_appr_cli_info",
+        "wa_appr_cli_paid", "wa_appr_cli_agree",
+        "wa_appr_cli_paid_doc", "wa_appr_cli_paid_nodoc",
+    ):
         if len(parts) < 4:
             return True
         cli_idx = int(parts[3])
@@ -1041,7 +1104,6 @@ async def handle_manager_callback(
         client_name = clients[cli_idx]["name"]
 
         if action == "wa_appr_cli_info":
-            # Просто показываем детали клиента без изменения
             c = clients[cli_idx]
             amount_fmt = f"{c['amount']:,.0f}".replace(",", " ")
             await _tg_send(
@@ -1053,17 +1115,98 @@ async def handle_manager_callback(
             )
             return True
 
-        # Убираем из всех списков (чтобы не дублировалось)
-        for lst_key in ("approved_names", "rejected_names", "postponed_names"):
-            if client_name in mgr_state[lst_key]:
-                mgr_state[lst_key].remove(client_name)
+        # Убираем клиента из всех списков перед добавлением в нужный
+        all_lists = (
+            "approved_names", "rejected_names", "postponed_names",
+            "agreed_names", "paid_with_doc_names", "paid_no_doc_names",
+        )
+        for lst_key in all_lists:
+            lst = mgr_state.get(lst_key, [])
+            if client_name in lst:
+                lst.remove(client_name)
 
         if action == "wa_appr_cli_keep":
             mgr_state["approved_names"].append(client_name)
-        elif action == "wa_appr_cli_skip":
+
+        elif action in ("wa_appr_cli_skip", "wa_appr_cli_later"):
+            # legacy-пути — оставляем для совместимости
             mgr_state["rejected_names"].append(client_name)
-        elif action == "wa_appr_cli_later":
-            mgr_state["postponed_names"].append(client_name)
+
+        elif action == "wa_appr_cli_paid":
+            # Первый клик — спрашиваем есть ли документ
+            kb = _inline_kb([
+                [("📎 Отправлю документ",  f"wa_appr_cli_paid_doc|{batch_id}|{mgr_idx}|{cli_idx}")],
+                [("⚠️ Без документа",      f"wa_appr_cli_paid_nodoc|{batch_id}|{mgr_idx}|{cli_idx}")],
+            ])
+            await _tg_send(
+                chat_id,
+                f"💰 Клиент <b>{client_name}</b> отмечен как оплативший.\n\n"
+                f"Пришли фото чека или выписку следующим сообщением.\n"
+                f"Если документа нет — нажми «Без документа».",
+                kb,
+            )
+            return True  # клиент ещё не перемещён — ждём уточнения
+
+        elif action == "wa_appr_cli_paid_doc":
+            # Менеджер выбрал "есть документ" — ставим в режим ожидания фото
+            mgr_state["waiting_for_proof"] = {
+                "client_name": client_name,
+                "batch_id":    batch_id,
+                "cli_idx":     cli_idx,
+            }
+            mgr_state["paid_with_doc_names"].append(client_name)
+            save_batch(batch)
+            await _tg_send(
+                chat_id,
+                f"📎 Жду фото чека или выписки по клиенту <b>{client_name}</b>.\n"
+                f"Отправь документ следующим сообщением.",
+            )
+            # Обновляем клавиатуру
+            decisions = _build_decisions(mgr_state)
+            markup = _client_list_keyboard(batch_id, mgr_idx, clients, decisions)
+            await _tg_edit(chat_id, message_id,
+                f"✏️ <b>Список клиентов</b> — {manager_name}\n\nКогда закончите — нажмите «Готово».",
+                markup)
+            return True
+
+        elif action == "wa_appr_cli_paid_nodoc":
+            # Нет документа — клиент снят из WA, запрос уйдёт Саиде
+            mgr_state["paid_no_doc_names"].append(client_name)
+            mgr_state["waiting_for_proof"] = None
+            save_batch(batch)
+            await _tg_send(
+                chat_id,
+                f"⚠️ <b>{client_name}</b> снят из рассылки.\n"
+                f"Запрос на проверку оплаты будет отправлен бухгалтеру.",
+            )
+
+        elif action == "wa_appr_cli_agree":
+            # Проверяем что менеджер не использовал второй шанс по этому клиенту
+            if client_name in mgr_state.get("second_chance_used", []):
+                await _tg_send(
+                    chat_id,
+                    f"🚫 <b>{client_name}</b> — «Договорились» уже было использовано.\n"
+                    f"После сорванного обещания снять клиента через «Договорились» нельзя.\n"
+                    f"Обратитесь к директору.",
+                )
+                return True
+            # Ставим в режим ожидания деталей
+            mgr_state["waiting_for_agreed"] = {
+                "client_name": client_name,
+                "batch_id":    batch_id,
+                "cli_idx":     cli_idx,
+            }
+            save_batch(batch)
+            await _tg_send(
+                chat_id,
+                f"🤝 Клиент <b>{client_name}</b>.\n\n"
+                f"Укажи детали договорённости одним сообщением:\n"
+                f"  • дата обещанной оплаты\n"
+                f"  • сумма\n"
+                f"  • что именно согласовано\n\n"
+                f"<i>Пример: «до 15 мая, 300 000 тг, договорился лично»</i>",
+            )
+            return True  # ждём текстовое сообщение
 
         save_batch(batch)
 
@@ -1072,7 +1215,6 @@ async def handle_manager_callback(
         markup = _client_list_keyboard(batch_id, mgr_idx, clients, decisions)
         header = (
             f"✏️ <b>Список клиентов</b> — {manager_name}\n\n"
-            f"Выбираем по каждому клиенту.\n"
             f"Когда закончите — нажмите «Готово»."
         )
         await _tg_edit(chat_id, message_id, header, markup)
@@ -1111,31 +1253,39 @@ def _format_admin_summary_text(batch: Dict[str, Any]) -> str:
             "Батч передан вам на ручное решение без ожидания всех ответов.\n",
         ]
 
-    total_ok = 0
-    total_no = 0
-    total_later = 0
+    total_send = 0
+    total_agreed = 0
+    total_paid_doc = 0
+    total_paid_ndoc = 0
+    total_auto = 0
 
     for manager_name, mgr_state in batch["managers"].items():
-        status = mgr_state.get("status", "pending")
+        status    = mgr_state.get("status", "pending")
         approved  = mgr_state.get("approved_names", [])
-        rejected  = mgr_state.get("rejected_names", [])
-        postponed = mgr_state.get("postponed_names", [])
+        agreed    = mgr_state.get("agreed_names", [])
+        paid_doc  = mgr_state.get("paid_with_doc_names", [])
+        paid_ndoc = mgr_state.get("paid_no_doc_names", [])
+        rejected  = mgr_state.get("rejected_names", [])   # legacy
         clients   = mgr_state.get("clients", [])
-        rejected_set = set(rejected)
+        agreed_details = mgr_state.get("agreed_details", {})
         invalid_phone_clients = [c["name"] for c in clients if c.get("invalid_phone")]
-        # Клиенты авто-включённые по таймауту: не были явно отклонены
-        auto_included = [c["name"] for c in clients if c["name"] not in rejected_set] if status == "timeout" else []
+
+        # Авто-включённые по таймауту: все без явного снятия с причиной
+        removed_set = set(agreed) | set(paid_doc) | set(paid_ndoc) | set(rejected)
+        auto_included = [c["name"] for c in clients if c["name"] not in removed_set] if status == "timeout" else []
 
         if status == "pending":
             status_label = "⏳ не ответил"
         elif status == "approved_all":
             status_label = f"✅ разрешил всех ({len(approved)})"
-        elif status == "rejected_all":
-            status_label = f"⛔ отклонил всех ({len(rejected)})"
         elif status == "manual_editing":
             status_label = "✏️ выбирает вручную"
         elif status in ("manual", "manual_done"):
-            status_label = "✏️ выбрал вручную"
+            n_send = len(approved)
+            n_agr  = len(agreed)
+            n_pd   = len(paid_doc)
+            n_pnd  = len(paid_ndoc)
+            status_label = f"✏️ выбрал: ✅{n_send} 🤝{n_agr} 💰{n_pd}+{n_pnd}"
         elif status == "timeout":
             status_label = f"🔇 не ответил → авто ({len(auto_included)} кл.)"
         else:
@@ -1144,40 +1294,50 @@ def _format_admin_summary_text(batch: Dict[str, Any]) -> str:
         lines.append(f"\n<b>{manager_name}</b> — {status_label}")
 
         if approved:
-            lines.append(f"  Разрешено ({len(approved)}):")
+            lines.append(f"  ✅ Отправить ({len(approved)}):")
             for n in approved:
-                lines.append(f"    ✅ {n}")
+                lines.append(f"    • {n}")
         if auto_included:
-            lines.append(f"  Авто-включено ({len(auto_included)}):")
+            lines.append(f"  🔇 Авто-включено ({len(auto_included)}):")
             for n in auto_included:
-                lines.append(f"    🔇 {n}")
-        if rejected:
-            lines.append(f"  Убрано ({len(rejected)}):")
+                lines.append(f"    • {n}")
+        if agreed:
+            lines.append(f"  🤝 Договорились ({len(agreed)}):")
+            for n in agreed:
+                detail = agreed_details.get(n, {}).get("details", "—")
+                lines.append(f"    • {n}: <i>{detail}</i>")
+        if paid_doc:
+            lines.append(f"  💰 Оплатил + документ ({len(paid_doc)}):")
+            for n in paid_doc:
+                lines.append(f"    • {n} (документ у директора)")
+        if paid_ndoc:
+            lines.append(f"  💰 Оплатил без документа ({len(paid_ndoc)}) → Саиде:")
+            for n in paid_ndoc:
+                lines.append(f"    • {n}")
+        if rejected:  # legacy
+            lines.append(f"  ❌ Убрано без причины ({len(rejected)}):")
             for n in rejected:
-                lines.append(f"    ❌ {n}")
-        if postponed:
-            lines.append(f"  Отложено ({len(postponed)}):")
-            for n in postponed:
-                lines.append(f"    ⏸ {n}")
+                lines.append(f"    • {n}")
         if invalid_phone_clients:
-            lines.append(f"  ⚠️ invalid_phone ({len(invalid_phone_clients)}):")
+            lines.append(f"  ⚠️ Нет телефона ({len(invalid_phone_clients)}):")
             for n in invalid_phone_clients:
                 lines.append(f"    ⚠️ {n}")
 
-        total_ok    += len(approved) + len(auto_included)
-        total_no    += len(rejected)
-        total_later += len(postponed)
+        total_send    += len(approved) + len(auto_included)
+        total_agreed  += len(agreed)
+        total_paid_doc  += len(paid_doc)
+        total_paid_ndoc += len(paid_ndoc)
 
     admin_decisions = _build_admin_decisions(batch)
     admin_selected = sum(1 for v in admin_decisions.values() if v == "keep")
 
     lines += [
         "",
-        f"<b>Итого к отправке: {total_ok}</b> | убрано: {total_no} | отложено: {total_later}",
+        f"<b>Итого к отправке в WA: {total_send}</b>",
+        f"🤝 Договорились: {total_agreed} | 💰 Оплатил+документ: {total_paid_doc} | 💰 Без документа (→Саиде): {total_paid_ndoc}",
         f"<b>Сейчас выбрано вами к отправке:</b> {admin_selected}",
         "",
-        "Если нужно, откройте список клиентов и вручную решите, кому отправлять, а кому нет.",
-        "Нажмите <b>«Утвердить отправку»</b>, чтобы разрешить отправку выбранных клиентов.",
+        "Нажмите <b>«Утвердить отправку»</b>, чтобы разрешить отправку.",
         "<i>Сообщения уйдут только после вашего подтверждения.</i>",
     ]
     return "\n".join(lines)
@@ -1665,6 +1825,123 @@ def get_pending_managers(batch_id: str) -> List[str]:
         name for name, state in batch["managers"].items()
         if state.get("status") in ("pending", "manual_editing")
     ]
+
+
+# ─── Обработка входящих сообщений от менеджеров (фото/детали) ────────────────
+
+def find_manager_waiting_state(chat_id: int) -> Optional[Dict[str, Any]]:
+    """Ищет менеджера с waiting_for_proof или waiting_for_agreed по chat_id.
+
+    Возвращает {batch_id, manager_name, mgr_state, wait_type} или None.
+    """
+    batches = _load_batches()
+    for bid, batch in batches.items():
+        if batch.get("status") not in ("pending_managers", "pending_admin"):
+            continue
+        for mgr_name, mgr_state in batch.get("managers", {}).items():
+            if mgr_state.get("chat_id") != chat_id:
+                continue
+            if mgr_state.get("waiting_for_proof"):
+                return {
+                    "batch_id":    bid,
+                    "batch":       batch,
+                    "manager_name": mgr_name,
+                    "mgr_state":   mgr_state,
+                    "wait_type":   "proof",
+                    "wait_data":   mgr_state["waiting_for_proof"],
+                }
+            if mgr_state.get("waiting_for_agreed"):
+                return {
+                    "batch_id":    bid,
+                    "batch":       batch,
+                    "manager_name": mgr_name,
+                    "mgr_state":   mgr_state,
+                    "wait_type":   "agreed",
+                    "wait_data":   mgr_state["waiting_for_agreed"],
+                }
+    return None
+
+
+async def handle_manager_proof(
+    chat_id: int,
+    file_id: str,
+    file_type: str,
+    admin_chat_id: int,
+    bot,
+) -> bool:
+    """Перехватывает фото/документ от менеджера ожидающего подтверждения оплаты.
+
+    Пересылает директору, снимает waiting_for_proof. Возвращает True если обработано.
+    """
+    state = find_manager_waiting_state(chat_id)
+    if not state or state["wait_type"] != "proof":
+        return False
+
+    batch      = state["batch"]
+    mgr_state  = state["mgr_state"]
+    mgr_name   = state["manager_name"]
+    client_name = state["wait_data"].get("client_name", "—")
+
+    mgr_state["waiting_for_proof"] = None
+    _save_batches({state["batch_id"]: batch} | _load_batches())
+
+    # Пересылаем директору
+    caption = (
+        f"💰 <b>Доказательство оплаты</b>\n\n"
+        f"Менеджер: {mgr_name}\n"
+        f"Клиент: {client_name}\n"
+        f"Клиент снят из WA-рассылки. Документ приложен.\n"
+        f"Саида не задействована."
+    )
+    try:
+        if file_type == "photo":
+            await bot.send_photo(chat_id=admin_chat_id, photo=file_id, caption=caption, parse_mode="HTML")
+        else:
+            await bot.send_document(chat_id=admin_chat_id, document=file_id, caption=caption, parse_mode="HTML")
+    except Exception as e:
+        logger.warning("handle_manager_proof: не удалось переслать директору: %s", e)
+
+    await _tg_send(
+        chat_id,
+        f"✅ Документ по <b>{client_name}</b> отправлен директору. Спасибо.",
+    )
+    save_batch(batch)
+    logger.info("[%s] %s прислал документ оплаты по %s", state["batch_id"], mgr_name, client_name)
+    return True
+
+
+async def handle_manager_agreed_details(chat_id: int, text: str) -> bool:
+    """Принимает текст с деталями договорённости от менеджера.
+
+    Сохраняет в agreed_details, снимает waiting_for_agreed. Возвращает True если обработано.
+    """
+    state = find_manager_waiting_state(chat_id)
+    if not state or state["wait_type"] != "agreed":
+        return False
+
+    batch       = state["batch"]
+    mgr_state   = state["mgr_state"]
+    mgr_name    = state["manager_name"]
+    client_name = state["wait_data"].get("client_name", "—")
+    now_iso     = datetime.now(tz=TZ).isoformat()
+
+    mgr_state.setdefault("agreed_details", {})[client_name] = {
+        "details":     text,
+        "recorded_at": now_iso,
+    }
+    if client_name not in mgr_state.get("agreed_names", []):
+        mgr_state.setdefault("agreed_names", []).append(client_name)
+    mgr_state["waiting_for_agreed"] = None
+
+    save_batch(batch)
+    await _tg_send(
+        chat_id,
+        f"🤝 Зафиксировано по <b>{client_name}</b>:\n<i>{text}</i>\n\n"
+        f"Клиент снят из сегодняшней рассылки. Если оплата не придёт в срок — "
+        f"вернётся в список автоматически и повторно снять через «Договорились» будет нельзя.",
+    )
+    logger.info("[%s] %s зафиксировал договорённость по %s: %s", state["batch_id"], mgr_name, client_name, text[:80])
+    return True
 
 
 # ─── Utility ──────────────────────────────────────────────────────────────────
