@@ -2598,9 +2598,14 @@ _ship_for_saida._DECISIONS_PATH = _orig_ship_for_saida
 # ═══════════════════════════════════════════════════════════════
 _orig_dstop_json_dir = _dstop.JSON_DIR
 _orig_dstop_config_dir = _dstop.CONFIG_DIR
+# STATE_FILE и REGISTRY_FILE уже восстановлены внешним finally — переизолируем их здесь
+_orig_dstop_state2 = _dstop.STATE_FILE
+_orig_dstop_registry2 = _dstop.REGISTRY_FILE
 try:
     _dstop.JSON_DIR = Path(_dstop_tmpdir) / "json"
     _dstop.CONFIG_DIR = Path(_dstop_tmpdir) / "config"
+    _dstop.STATE_FILE = Path(_dstop_tmpdir) / "state_file_inner.json"
+    _dstop.REGISTRY_FILE = Path(_dstop_tmpdir) / "registry_inner.json"
     _dstop.JSON_DIR.mkdir(parents=True, exist_ok=True)
     _dstop.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -2694,6 +2699,8 @@ try:
 finally:
     _dstop.JSON_DIR = _orig_dstop_json_dir
     _dstop.CONFIG_DIR = _orig_dstop_config_dir
+    _dstop.STATE_FILE = _orig_dstop_state2
+    _dstop.REGISTRY_FILE = _orig_dstop_registry2
 
 section("20. Shipment control (условная отгрузка)")
 
