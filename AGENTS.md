@@ -1,7 +1,7 @@
-# CLAUDE.md
+# AGENTS.md
 <!-- Единственный мастер-документ проекта. Обновлён: 2026-04-14 -->
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
 ---
 
@@ -354,7 +354,7 @@ Run: `python -X utf8 tests/test_project.py && python -X utf8 tests/test_collecto
 | HARDCODE | Бизнес-решения | ~25+ hardcoded порогов/процентов/лимитов |
 | FEATURE | Feature request | Retry для AI API вызовов |
 | FEATURE | Feature request | Тесты для `silence_alerts`, `opportunity_loss` |
-| DOCS | Документация | 7 расхождений CLAUDE.md ↔ код |
+| DOCS | Документация | 7 расхождений AGENTS.md ↔ код |
 | Issue-4 | ~~Не реализовано~~ **РЕАЛИЗОВАНО** | Условная отгрузка — 4 кнопки admin в `escalate_unanswered()` + 4 кнопки при debt=0 в `monitor_exceptions()`. Все обработчики реализованы. |
 
 ### Session 2026-04-29 (сессии 2–3) — Collector Phases 2–4
@@ -391,9 +391,10 @@ Tests added: `test_wa_dialog_suppress.py` (7), `test_diff_notice.py` (6), `test_
 
 When working in this repository:
 
-1. Read `CLAUDE.md` (this file) — full project context
-2. Read `repo_map.json` — machine-readable file index
-3. Only then open the exact Python files required for the task
+1. Read `AGENTS.md` (this file) — full project context
+2. Read `PROJECT_ENCYCLOPEDIA.md` — consolidated project knowledge and current subsystem status
+3. Read `repo_map.json` — machine-readable file index
+4. Only then open the exact Python files required for the task
 
 Rules:
 - Do not broadly rescan the repository. Use `repo_map.json` as the primary file map.
@@ -421,7 +422,7 @@ Use this as the active workflow overlay for Python/1C work in this repository.
 
 ---
 
-## Operational Rules for Claude Code
+## Operational Rules for Codex
 
 ### 1. Editing Safety Rules
 

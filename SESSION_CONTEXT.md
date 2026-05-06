@@ -1792,6 +1792,62 @@ Observed rebuild result:
 - local backups `config/clients.json.bak-*`
 - untracked `site/`
 
+## Handoff Update - 2026-05-06 16:05 +05:00
+
+### Documentation consolidation
+
+- Consolidated scattered project docs, audits, context notes, and duplicate `.md` files into:
+  - `PROJECT_ENCYCLOPEDIA.md`
+- Updated `AGENTS.md` navigation rules so future work reads:
+  - `AGENTS.md`
+  - `PROJECT_ENCYCLOPEDIA.md`
+  - `repo_map.json`
+- Left `SESSION_CONTEXT.md` as the live handoff journal.
+
+### What was intentionally kept
+
+- `AGENTS.md` — active engineering protocol
+- `PROJECT_ENCYCLOPEDIA.md` — single consolidated knowledge base
+- `SESSION_CONTEXT.md` — live session/handoff log
+- `openclaw/SOUL.md`
+- `openclaw/skills/debt_collector.md`
+- `autoagent/.ai_reviews/REVIEW_TEMPLATE.md`
+
+### What was removed from active docs
+
+- deleted duplicate root docs:
+  - `CLAUDE.md`
+  - `gpt1c.md`
+- deleted dated audit/history markdown set under `audit/`
+- deleted dated orchestrator context:
+  - `autoagent/ORCHESTRATOR_CONTEXT_2026-04-23_v2.md`
+
+### External C: findings folded into encyclopedia
+
+- `C:\Users\user\.codex\memories\gpt1c-python-audit-context.md`
+- `C:\Users\user\.claude\projects\e--GPT1C-Processor-analitica\memory\*`
+- `C:\_migration_to_C_drive_20260429\backup_GPT1C_Processor_analitica_20260429_203309\*`
+- `C:\_migration_to_C_drive_20260429\collector_crm_*_backup_*\*`
+
+These were treated as auxiliary/external memory or archive, not as active source-of-truth docs.
+
+### Verification
+
+- Product code was not changed.
+- No Python/runtime tests were required.
+- Repo markdown inventory after cleanup is effectively:
+  - `AGENTS.md`
+  - `PROJECT_ENCYCLOPEDIA.md`
+  - `SESSION_CONTEXT.md`
+  - retained prompt assets (`openclaw/*`, `.ai_reviews/REVIEW_TEMPLATE.md`)
+
+### Dirty files intentionally left alone
+
+- `autoagent/orchestrator_agents.json`
+- `autoagent/task_prompt.txt`
+- local backups `config/clients.json.bak-*`
+- untracked `site/`
+
 ### Next recommended action
 
 - If continuing product work: build manager promise-quality analytics (`Договорились` used / broken / accepted / rejected by manager).
@@ -1884,3 +1940,39 @@ Observed rebuild result:
 
 - Decide whether partial-payment path should stay fully manual or also receive director-facing analytics/escalation.
 - If moving into operations: use the new Saida backlog screen to validate real counts/oldest-age on production data and set a business SLA threshold.
+
+## Handoff Update - 2026-05-06 15:31 +05:00
+
+### Operational cleanup (no code changes)
+
+- Reviewed live `logs/saida_payment_holds.json` after mass Saida reminder/bypass burst seen in `logs/send_reports.log`.
+- Confirmed backlog was mixed:
+  - `51` total `pending_saida`
+  - `40` stale entries older than `48h`
+  - `11` still-recent entries within `48h` (`7` within `24h`)
+- Per user direction, cleaned only the stale historical tail and preserved recent live cases.
+
+### Files created / changed
+
+- Full archive saved:
+  - `logs/saida_payment_holds.archive_20260506_153047.json`
+- Removed stale subset saved separately:
+  - `logs/saida_payment_holds.removed_pending_gt48h_20260506_153047.json`
+- Working queue rewritten:
+  - `logs/saida_payment_holds.json`
+
+### Result
+
+- Working `pending_saida` queue reduced from `51` to `11`
+- Remaining live queue age band after cleanup:
+  - min age `23.49h`
+  - max age `30.87h`
+- No product code changed, no tests required for this operational data cleanup.
+
+### Dirty files intentionally left alone
+
+- `autoagent/orchestrator_agents.json`
+- `autoagent/task_prompt.txt`
+- untracked `audit/*`
+- local backups `config/clients.json.bak-*`
+- untracked `site/`
