@@ -4,7 +4,12 @@
 collector/approval_flow.py
 UX согласования рассылки WhatsApp — менеджер → администратор.
 
-Версия: 1.1.1 (2026-04-29)
+Версия: 1.1.2 (2026-05-06)
+
+v1.1.2 (2026-05-06): директор получил отдельный B-lite review-контур для
+  «Договорились»: можно принять или отклонить каждую договорённость менеджера
+  без перегруза основной сводки. Решения сохраняются в батче и отражаются в
+  wa_agreed_promises.json.
 
 v1.1.1 (2026-04-29): manager/admin preview texts now show debt snapshot
   date and age warnings, so approvals are not blind when debt files are old.
@@ -843,6 +848,58 @@ def _get_admin_reviewed_keys(batch: Dict[str, Any]) -> set[str]:
     return {str(key) for key in reviewed}
 
 
+def _get_agreed_review_decisions(batch: Dict[str, Any]) -> Dict[str, str]:
+    decisions = batch.get("agreed_review_decisions") or {}
+    return decisions if isinstance(decisions, dict) else {}
+
+
+def _iter_agreed_review_clients(batch: Dict[str, Any]) -> List[Dict[str, Any]]:
+    items: List[Dict[str, Any]] = []
+    review_decisions = _get_agreed_review_decisions(batch)
+    for manager_name, mgr_state in batch.get("managers", {}).items():
+        agreed_details = mgr_state.get("agreed_details", {}) or {}
+        names: List[str] = list(mgr_state.get("agreed_names", []) or [])
+        for key in review_decisions:
+            mgr_key, _, client_name = str(key).partition("|")
+            if mgr_key != manager_name or not client_name:
+                continue
+            if client_name in agreed_details and client_name not in names:
+                names.append(client_name)
+        for client_name in names:
+            detail = agreed_details.get(client_name, {}) or {}
+            items.append({
+                "manager": manager_name,
+                "name": client_name,
+                "details": detail.get("details", "—"),
+                "deadline": detail.get("deadline", ""),
+                "client_key": _admin_client_key(manager_name, client_name),
+            })
+    return items
+
+
+def _set_agreed_promise_status(
+    client_name: str,
+    status: str,
+    *,
+    batch_id: str,
+    manager_name: str,
+) -> None:
+    promises = _load_promises()
+    promise = promises.get(client_name)
+    if not isinstance(promise, dict):
+        return
+    promise["status"] = status
+    promise["updated_at"] = datetime.now(tz=TZ).isoformat()
+    promise["reviewed_in_batch"] = batch_id
+    promise["reviewed_by_manager"] = manager_name
+    if status == "accepted":
+        promise["accepted_at"] = promise["updated_at"]
+    elif status == "rejected":
+        promise["rejected_at"] = promise["updated_at"]
+    promises[client_name] = promise
+    _save_promises(promises)
+
+
 def _admin_client_list_keyboard(
     batch_id: str,
     flat_clients: List[Dict[str, Any]],
@@ -1416,13 +1473,81 @@ def _format_admin_detail_text(batch: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _admin_keyboard(batch_id: str) -> Dict[str, Any]:
-    return _inline_kb([
+def _admin_keyboard(batch_id: str, batch: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    batch = batch or load_batch(batch_id) or {}
+    rows = [
         [("✏️ Выбрать клиентов вручную",       f"wa_appr_adm_view|{batch_id}")],
+    ]
+    agreed_count = sum(len(mgr.get("agreed_names", []) or []) for mgr in (batch.get("managers") or {}).values())
+    if agreed_count > 0:
+        rows.append([("🤝 Проверить договорённости (%d)" % agreed_count, f"wa_appr_adm_agreed_review|{batch_id}")])
+    rows.extend([
         [("✅ Утвердить отправку",             f"wa_appr_adm_ok|{batch_id}")],
         [("❌ Отменить",                       f"wa_appr_adm_no|{batch_id}")],
         [("⏸ Отложить",                       f"wa_appr_adm_later|{batch_id}")],
     ])
+    return _inline_kb(rows)
+
+
+def _format_agreed_review_text(batch: Dict[str, Any]) -> str:
+    lines = ["🤝 <b>Договорённости менеджеров — проверка</b>", ""]
+    agreed_clients = _iter_agreed_review_clients(batch)
+    decisions = _get_agreed_review_decisions(batch)
+    if not agreed_clients:
+        lines += [
+            "Сейчас в батче нет активных договорённостей для проверки.",
+            "",
+            "Нажмите «Назад к сводке».",
+        ]
+        return "\n".join(lines)
+
+    current_manager = None
+    for item in agreed_clients:
+        if item["manager"] != current_manager:
+            current_manager = item["manager"]
+            if len(lines) > 2:
+                lines.append("")
+            lines.append(f"<b>{current_manager}</b>:")
+        deadline_raw = item.get("deadline")
+        deadline_text = ""
+        if deadline_raw:
+            try:
+                deadline_text = datetime.fromisoformat(str(deadline_raw)).strftime("%d.%m.%Y")
+            except ValueError:
+                deadline_text = str(deadline_raw)
+        detail_text = item.get("details") or "—"
+        status = decisions.get(item["client_key"], "pending")
+        status_prefix = {
+            "accepted": "✅ Принято",
+            "rejected": "❌ Не принято",
+        }.get(status, "◯ На проверке")
+        suffix = f" — до {deadline_text}" if deadline_text else ""
+        lines.append(f"  • <b>{item['name']}</b>{suffix}")
+        lines.append(f"    {detail_text}")
+        lines.append(f"    <i>{status_prefix}</i>")
+    lines += [
+        "",
+        "По каждому клиенту: принять договорённость или вернуть клиента в WA этого батча.",
+    ]
+    return "\n".join(lines)
+
+
+def _agreed_review_keyboard(batch_id: str, agreed_clients: List[Dict[str, Any]], decisions: Dict[str, str]) -> Dict[str, Any]:
+    rows = []
+    for idx, item in enumerate(agreed_clients):
+        key = item["client_key"]
+        state = decisions.get(key, "pending")
+        status_icon = {"accepted": "✅", "rejected": "❌", "pending": "◯"}.get(state, "◯")
+        label = f"{status_icon} {item['manager']}: {item['name']}"
+        short_label = label[:34] + "…" if len(label) > 34 else label
+        rows.append([(short_label, f"wa_appr_adm_agreed_info|{batch_id}|{idx}")])
+        if state == "pending":
+            rows.append([
+                ("✅ Принять", f"wa_appr_adm_agreed_ok|{batch_id}|{idx}"),
+                ("❌ Не принимаю", f"wa_appr_adm_agreed_no|{batch_id}|{idx}"),
+            ])
+    rows.append([("↩️ Назад к сводке", f"wa_appr_adm_agreed_back|{batch_id}")])
+    return _inline_kb(rows)
 
 
 def _admin_send_now_keyboard(batch_id: str) -> Dict[str, Any]:
@@ -1464,7 +1589,7 @@ async def send_admin_summary(batch: Dict[str, Any], bot=None) -> None:
         return
 
     text   = _format_admin_summary_text(batch)
-    markup = _admin_keyboard(batch["batch_id"])
+    markup = _admin_keyboard(batch["batch_id"], batch)
 
     msg_id = await _tg_send(admin_id, text, markup)
     if msg_id:
@@ -1630,7 +1755,7 @@ async def handle_admin_callback(
                 chat_id,
                 message_id,
                 "⚠️ Отправка недоступна: батч ещё не утверждён администратором.",
-                _admin_keyboard(batch_id),
+                _admin_keyboard(batch_id, batch),
             )
             return True
 
@@ -1654,6 +1779,101 @@ async def handle_admin_callback(
         save_batch(batch)
         text = _format_admin_manual_header(batch, decisions)
         markup = _admin_client_list_keyboard(batch_id, flat_clients, decisions, _get_admin_reviewed_keys(batch))
+        await _tg_edit(chat_id, message_id, text, markup)
+
+    elif action == "wa_appr_adm_agreed_review":
+        agreed_clients = _iter_agreed_review_clients(batch)
+        decisions = _get_agreed_review_decisions(batch)
+        text = _format_agreed_review_text(batch)
+        markup = _agreed_review_keyboard(batch_id, agreed_clients, decisions)
+        await _tg_edit(chat_id, message_id, text, markup)
+
+    elif action in ("wa_appr_adm_agreed_ok", "wa_appr_adm_agreed_no", "wa_appr_adm_agreed_info"):
+        if len(parts) < 3:
+            return True
+        cli_idx = int(parts[2])
+        agreed_clients = _iter_agreed_review_clients(batch)
+        if cli_idx >= len(agreed_clients):
+            return True
+
+        agreed_item = agreed_clients[cli_idx]
+        client_key = agreed_item["client_key"]
+        review_decisions = _get_agreed_review_decisions(batch)
+
+        if action == "wa_appr_adm_agreed_info":
+            deadline_raw = agreed_item.get("deadline")
+            deadline_text = "—"
+            if deadline_raw:
+                try:
+                    deadline_text = datetime.fromisoformat(str(deadline_raw)).strftime("%d.%m.%Y")
+                except ValueError:
+                    deadline_text = str(deadline_raw)
+            state_label = {
+                "accepted": "Принято",
+                "rejected": "Не принято",
+            }.get(review_decisions.get(client_key, "pending"), "На проверке")
+            await _tg_send(
+                chat_id,
+                (
+                    f"🤝 <b>{agreed_item['name']}</b>\n"
+                    f"Менеджер: <b>{agreed_item['manager']}</b>\n"
+                    f"Срок: <b>{deadline_text}</b>\n"
+                    f"Статус: <b>{state_label}</b>\n\n"
+                    f"{agreed_item.get('details') or '—'}"
+                ),
+            )
+            return True
+
+        manager_name = agreed_item["manager"]
+        client_name = agreed_item["name"]
+        mgr_state = (batch.get("managers") or {}).get(manager_name)
+        if not mgr_state:
+            return True
+
+        if action == "wa_appr_adm_agreed_ok":
+            review_decisions[client_key] = "accepted"
+            batch["agreed_review_decisions"] = review_decisions
+            _set_agreed_promise_status(client_name, "accepted", batch_id=batch_id, manager_name=manager_name)
+            if "admin_keep_keys" in batch or "admin_skip_keys" in batch:
+                admin_decisions = _build_admin_decisions(batch)
+                admin_decisions[client_key] = "skip"
+                _save_admin_decisions(batch, admin_decisions)
+            save_batch(batch)
+            logger.info("[%s] директор принял договорённость: %s / %s", batch_id, manager_name, client_name)
+
+        elif action == "wa_appr_adm_agreed_no":
+            review_decisions[client_key] = "rejected"
+            batch["agreed_review_decisions"] = review_decisions
+            if client_name in mgr_state.get("agreed_names", []):
+                mgr_state["agreed_names"].remove(client_name)
+            if client_name not in mgr_state.get("approved_names", []):
+                mgr_state.setdefault("approved_names", []).append(client_name)
+            _set_agreed_promise_status(client_name, "rejected", batch_id=batch_id, manager_name=manager_name)
+            if "admin_keep_keys" in batch or "admin_skip_keys" in batch:
+                admin_decisions = _build_admin_decisions(batch)
+                admin_decisions[client_key] = "keep"
+                _save_admin_decisions(batch, admin_decisions)
+            save_batch(batch)
+            mgr_chat_id = mgr_state.get("chat_id")
+            if mgr_chat_id:
+                await _tg_send(
+                    int(mgr_chat_id),
+                    (
+                        f"⚠️ Директор не принял договорённость по <b>{client_name}</b>.\n"
+                        f"Клиент войдёт в WA-рассылку этого батча.\n"
+                        f"Твоя договорённость аннулирована."
+                    ),
+                )
+            logger.info("[%s] директор отклонил договорённость: %s / %s", batch_id, manager_name, client_name)
+
+        agreed_clients = _iter_agreed_review_clients(batch)
+        text = _format_agreed_review_text(batch)
+        markup = _agreed_review_keyboard(batch_id, agreed_clients, _get_agreed_review_decisions(batch))
+        await _tg_edit(chat_id, message_id, text, markup)
+
+    elif action == "wa_appr_adm_agreed_back":
+        text = _format_admin_summary_text(batch)
+        markup = _admin_keyboard(batch_id, batch)
         await _tg_edit(chat_id, message_id, text, markup)
 
     elif action in ("wa_appr_adm_cli_keep", "wa_appr_adm_cli_skip", "wa_appr_adm_info"):
@@ -1691,12 +1911,12 @@ async def handle_admin_callback(
             f"Не отправлять: <b>{sum(1 for v in decisions.values() if v == 'skip')}</b>\n\n"
             "Можно утвердить отправку или вернуться к списку и изменить выбор."
         )
-        markup = _admin_keyboard(batch_id)
+        markup = _admin_keyboard(batch_id, batch)
         await _tg_edit(chat_id, message_id, text, markup)
 
     elif action == "wa_appr_adm_back":
         text = _format_admin_summary_text(batch)
-        markup = _admin_keyboard(batch_id)
+        markup = _admin_keyboard(batch_id, batch)
         await _tg_edit(chat_id, message_id, text, markup)
 
     elif action == "wa_appr_adm_no":
@@ -1913,7 +2133,7 @@ def save_agreed_promise(
         "details":    details,
         "deadline":   deadline.isoformat(),
         "set_at":     datetime.now(tz=TZ).isoformat(),
-        "status":     "active",   # active | broken | fulfilled
+        "status":     "active",   # active | accepted | rejected | broken | fulfilled
     }
     _save_promises(promises)
     return deadline
@@ -1951,7 +2171,7 @@ async def check_broken_agreed_deadlines(bot=None) -> int:
     managers_cfg = _load_managers_cfg()
 
     for client_name, promise in promises.items():
-        if promise.get("status") != "active":
+        if promise.get("status") not in {"active", "accepted"}:
             continue
         try:
             deadline = date.fromisoformat(promise["deadline"])
