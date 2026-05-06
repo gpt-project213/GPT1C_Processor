@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-debt_stop_control.py · v1.0.8 (2026-05-03)
+debt_stop_control.py · v1.0.9 (2026-05-06)
 
 Контроль стоп-листа отгрузки — уведомление Саиды-бухгалтера.
 
@@ -1844,6 +1844,50 @@ async def _handle_clearance(client_key: str, action: str, chat_id: int, bot) -> 
         return f"🚫 {matched_key} — оставлен на стопе."
 
 
+async def _auto_clear_stop_after_saida_full(c: Dict[str, Any], bot) -> bool:
+    """Авто-снимает клиента со стопа после полной оплаты, подтверждённой Саидой."""
+    client_name = str(c.get("client") or "").strip()
+    if not client_name:
+        return False
+
+    registry = load_registry()
+    rec = registry.get(client_name)
+    if not isinstance(rec, dict):
+        return False
+
+    today = datetime.now(TZ).strftime("%Y-%m-%d")
+    rec["status"] = "cleared"
+    rec["cleared_at"] = today
+    rec["saida_confirmed_full_at"] = datetime.now(TZ).strftime("%H:%M")
+    registry[client_name] = rec
+    save_registry(registry)
+
+    try:
+        from collector.shipment_control import resolve_decision as _resolve_ship_decision
+        _resolve_ship_decision(client_name, "saida_confirmed_full")
+    except Exception as e:
+        LOG.warning("Ошибка закрытия shipment decision %s после подтверждения Саиды: %s", client_name, e)
+
+    mgr_chat_id = rec.get("manager_chat_id") or c.get("manager_chat_id")
+    saida_msg = (
+        f"✅ <b>{client_name}</b> снят со стопа автоматически.\n"
+        f"Полная оплата подтверждена, можно отгружать."
+    )
+    mgr_msg = (
+        f"✅ <b>{client_name}</b> снят со стопа автоматически.\n"
+        f"Саида подтвердила полную оплату. Клиент больше не в стоп-листе."
+    )
+    for target, msg in ((SAIDA_CHAT_ID, saida_msg), (mgr_chat_id, mgr_msg)):
+        if target:
+            try:
+                await bot.send_message(chat_id=target, text=msg, parse_mode="HTML")
+            except Exception as e:
+                LOG.warning("Ошибка уведомления об авто-снятии стопа %s (chat=%s): %s", client_name, target, e)
+
+    LOG.info("Авто-снятие стопа после полной оплаты Саиды: %s", client_name)
+    return True
+
+
 async def _handle_conditional_clearance(client_key: str, chat_id: int, bot) -> str:
     """
     Руководитель нажал «⚠️ Условная отгрузка».
@@ -2024,32 +2068,15 @@ async def _handle_saida_confirm_full(cid: str, chat_id: int, bot) -> str:
     c["saida_payment_confirmed"] = "full"
     save_state(state)
 
-    admin_id = _get_admin_chat_id()
-    now_str = datetime.now(TZ).strftime("%H:%M")
+    cleared = await _auto_clear_stop_after_saida_full(c, bot)
+    if cleared:
+        return f"✅ Полная оплата подтверждена. <b>{c['client']}</b> снят со стопа автоматически."
 
-    # Руководителю — запрос на разрешение отгрузки
-    if admin_id:
-        kb_admin = InlineKeyboardMarkup([[
-            InlineKeyboardButton("✅ Разрешить отгрузку", callback_data=f"dstop_admin_allow|{cid}"),
-            InlineKeyboardButton("🚫 Отказать",           callback_data=f"dstop_admin_ok|{cid}"),
-        ]])
-        try:
-            await bot.send_message(
-                chat_id=admin_id,
-                text=(
-                    f"💰 <b>Саида подтвердила полную оплату</b>\n\n"
-                    f"Клиент: <b>{c['client']}</b>  [{c['manager']}]\n"
-                    f"Время: {now_str}\n\n"
-                    f"Разрешить отгрузку?"
-                ),
-                parse_mode="HTML",
-                reply_markup=kb_admin
-            )
-        except Exception as e:
-            LOG.warning("Ошибка уведомления руководителя о полной оплате %s: %s", c["client"], e)
-
-    return f"✅ Руководитель уведомлён. Ожидайте решения."
-
+    LOG.warning("Саида подтвердила полную оплату, но клиент %s не найден в реестре стопа", c.get("client"))
+    return (
+        f"⚠️ Полная оплата подтверждена, но <b>{c['client']}</b> не найден в реестре стопа.\n"
+        f"Проверьте запись вручную."
+    )
 
 async def _handle_saida_confirm_partial(cid: str, chat_id: int, bot) -> str:
     """Саида сообщила о частичной оплате — конфликт с заявлением менеджера."""

@@ -2400,6 +2400,57 @@ finally:
 
 
 # ═══════════════════════════════════════════════════════════════
+# 19b. Saida full payment auto-clears stop
+import collector.shipment_control as _ship_for_saida
+_orig_ship_for_saida = _ship_for_saida._DECISIONS_PATH
+_ship_for_saida._DECISIONS_PATH = Path(_dstop_tmpdir) / "collector_shipment_decisions_auto_clear.json"
+_ship_for_saida.set_decision("77011110000", "ТОО АвтоСнятие", "block_until", manager_name="Алена", manager_chat_id=111, amount=300_000)
+_dstop.save_registry({
+    "ТОО АвтоСнятие": {
+        "manager": "Алена",
+        "manager_chat_id": 111,
+        "approved_at": _today,
+        "days_at_approval": 18,
+        "debt_at_approval": 300_000,
+        "status": "block_until_payment",
+        "added_by": "admin_block_until_payment",
+        "discipline_violation": False,
+        "cleared_at": None,
+    }
+})
+_dstop.save_state({
+    "date": _today,
+    "next_id": 2,
+    "saida_sent": False,
+    "candidates": {
+        "1": {
+            "client": "ТОО АвтоСнятие",
+            "manager": "Алена",
+            "manager_chat_id": 111,
+            "days_silence": 18,
+            "debt": 300_000,
+            "saida_payment_confirmed": None,
+        }
+    },
+})
+_fake_dstop_bot.messages.clear()
+_full_result = asyncio.run(_dstop._handle_saida_confirm_full("1", 0, _fake_dstop_bot))
+_reg_after_full = _dstop.load_registry().get("ТОО АвтоСнятие", {})
+_ship_after_full = _ship_for_saida.get_decision("ТОО АвтоСнятие")
+check("DSTOP SAIDA FULL T1: полная оплата Саиды авто-снимает стоп",
+      _reg_after_full.get("status") == "cleared" and bool(_reg_after_full.get("cleared_at")),
+      str(_reg_after_full))
+check("DSTOP SAIDA FULL T2: manager notified after auto-clear",
+      any(m.get("chat_id") == 111 and "АвтоСнятие" in str(m.get("text", "")) for m in _fake_dstop_bot.messages),
+      str(_fake_dstop_bot.messages))
+check("DSTOP SAIDA FULL T3: shipment decision closed after auto-clear",
+      _ship_after_full is None,
+      str(_ship_after_full))
+check("DSTOP SAIDA FULL T4: callback returns auto-clear confirmation",
+      "автоматичес" in str(_full_result).lower(),
+      str(_full_result))
+_ship_for_saida._DECISIONS_PATH = _orig_ship_for_saida
+
 # 20. Shipment control — collector/shipment_control.py
 # ═══════════════════════════════════════════════════════════════
 _orig_dstop_json_dir = _dstop.JSON_DIR
