@@ -1792,6 +1792,60 @@ Observed rebuild result:
 - local backups `config/clients.json.bak-*`
 - untracked `site/`
 
+## Handoff Update - 2026-05-06 17:20 +05:00
+
+### Manager dialog migration: manager_chat_id -> dialog_id
+
+- Continued the isolated architectural migration of collector manager dialogs away from the single-slot `manager_chat_id` state key.
+- `collector/dialog_store.py` is now on a v2 container model:
+  - `dialogs[dialog_id]`
+  - `active_by_chat[manager_chat_id] -> [dialog_id, ...]`
+- Added backward compatibility:
+  - old flat `{str(manager_chat_id): dialog}` files migrate automatically on first read
+  - migrated file is rewritten in v2 format
+- Updated stale cleanup to work on inner `dialogs` map rather than the old flat dict.
+
+### Files changed
+
+- `collector/dialog_store.py`
+- `collector/manager_dialog.py`
+- `tests/test_collector.py`
+- `tests/test_manager_dialog_sessions.py` (new)
+
+### Behavior changed
+
+- One manager can now hold multiple active collector dialog sessions safely.
+- Callback data moved to the new format:
+  - `col|<action>|<dialog_id>`
+- Legacy callback format is still tolerated:
+  - `col_<action>_<manager_chat_id>`
+  - if more than one active dialog exists for that manager, legacy callback is rejected safely instead of corrupting state
+- Text routing now uses dialog-level targeting:
+  - if exactly one active text-awaiting dialog exists -> route there
+  - if multiple active dialogs exist -> do not guess, send a warning and require button-driven interaction
+- Reminder/escalation updates now write by `dialog_id`, not by `manager_chat_id`.
+
+### Verification
+
+- `python -m py_compile collector/dialog_store.py` -> OK
+- `python -m py_compile collector/manager_dialog.py` -> OK
+- `python -X utf8 tests/test_manager_dialog_sessions.py` -> `10/10`
+- `WHATSAPP_ENABLED=0 LIVE_SEND_ALLOWED=0 python -X utf8 tests/test_collector.py` -> `335/335`
+
+### Remaining caution
+
+- Legacy callback compatibility is intentionally best-effort only.
+- If a manager clicks an old pre-migration inline button while several dialogs are active, the bot now refuses safely instead of picking a random session.
+- `collector/collections_db.py` lightweight phone/name pending helpers were intentionally not migrated in this phase because they are not used as the active routing source in `manager_dialog.py`.
+
+### Dirty files intentionally left alone
+
+- `autoagent/orchestrator_agents.json`
+- `autoagent/task_prompt.txt`
+- deleted/removed non-product docs/log artifacts under `audit/`
+- local backups `config/clients.json.bak-*`
+- untracked `site/`
+
 ## Handoff Update - 2026-05-06 16:05 +05:00
 
 ### Documentation consolidation
@@ -1940,6 +1994,77 @@ These were treated as auxiliary/external memory or archive, not as active source
 
 - Decide whether partial-payment path should stay fully manual or also receive director-facing analytics/escalation.
 - If moving into operations: use the new Saida backlog screen to validate real counts/oldest-age on production data and set a business SLA threshold.
+
+## Handoff Update - 2026-05-06 16:55 +05:00
+
+### Closed / verified in this session
+
+- `runtime-state cleanup before acceptance`:
+  - `logs/collector_dialogs.json` already sterile (`{}`), no test-tail cleanup required
+- `Phase 3B unified collector logging`:
+  - verified against current `master`
+  - live `collector/*.py` modules already use `get_collector_logger(__name__)` / profile helpers
+  - no legacy collector logger init remained in active modules
+- `legacy collector/debtors_contacts.json` confusion:
+  - verified no active `collector/debtors_contacts.json` file remains
+  - active collector code reads `config/debtors_contacts.json`
+- `NET-SSL-TELEGRAM-01`:
+  - treated as external/transient for now
+  - no fresh `CERTIFICATE_VERIFY_FAILED` reproduced in current `2026-05-06` runtime logs
+- `partial payment visibility gap` is now closed with read-only director analytics:
+  - `collector/payment_hold.py`
+  - `bot/send_reports.py`
+  - `tests/test_collector.py`
+  - new director screen in `🤖 Коллектор -> 🔸 Частичные оплаты`
+- `Saida help text` corrected where it falsely implied every reply auto-clears stop:
+  - `bot/debt_stop_control.py`
+
+### Commit
+
+- `930c963` — `feat(stop): add partial payment analytics and clarify Saida help`
+
+### Verification
+
+- `python -m py_compile bot/debt_stop_control.py` -> OK
+- `python -m py_compile collector/payment_hold.py` -> OK
+- `python -m py_compile bot/send_reports.py` -> OK
+- `python -X utf8 tests/test_crm_regression.py` -> `14/14`
+- `WHATSAPP_ENABLED=0 LIVE_SEND_ALLOWED=0 python -X utf8 tests/test_collector.py` -> `332/332`
+
+### Current status of formerly open items
+
+- `Phase 3B unified logging` -> closed by verification on current HEAD
+- `legacy debtors_contacts path confusion` -> closed by verification on current HEAD
+- `runtime-state cleanup` -> no-op, state already sterile
+- `NET-SSL-TELEGRAM-01` -> no code action, currently non-reproducible
+- `partial payment analytics/escalation gap` -> read-only analytics closed
+- `manager_dialog state key bound to manager_chat_id` -> still open architectural risk
+
+### Remaining real open technical item
+
+- `manager_dialog / dialog_store keying by manager_chat_id`
+  - code still uses one-dialog-per-manager slot in:
+    - `collector/dialog_store.py`
+    - `collector/manager_dialog.py`
+    - related pending helpers in `collector/collections_db.py`
+  - not changed in this session because it requires an isolated migration and backward-compatibility plan
+
+### Dirty files intentionally left alone
+
+- `autoagent/orchestrator_agents.json`
+- `autoagent/task_prompt.txt`
+- deleted/removed non-product docs/log artifacts under `audit/`
+- local backups `config/clients.json.bak-*`
+- untracked `site/`
+
+### Next recommended action
+
+- If continuing code work: isolate and redesign `manager_dialog` storage key away from plain `manager_chat_id`
+- If moving into operations: run a real event-driven approval smoke-test on next incoming debt batch and validate:
+  - manager previews
+  - tight-window escalation
+  - director summary
+  - `🔸 Частичные оплаты` screen against live data
 
 ## Handoff Update - 2026-05-06 15:31 +05:00
 

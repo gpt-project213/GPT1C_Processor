@@ -188,7 +188,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.68/06.05.2026"
+__VERSION__ = "v9.4.72/06.05.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
@@ -487,11 +487,13 @@ TG_MAX_MSG = 4000  # чуть меньше 4096 — запас на перено
 
 
 async def _send_auto(context, chat_id: int, text: str,
-                     parse_mode=None, delay_hours: int = 24) -> None:
+                     parse_mode=None, delay_hours: int = 24,
+                     reply_markup=None) -> None:
     """Отправляет сообщение и сразу ставит его в очередь на удаление через delay_hours."""
     try:
         msg = await context.bot.send_message(chat_id=chat_id, text=text,
-                                             parse_mode=parse_mode)
+                                             parse_mode=parse_mode,
+                                             reply_markup=reply_markup)
         schedule_message_deletion(chat_id, msg.message_id,
                                   msg.date.timestamp(), delay_hours=delay_hours)
     except Exception as e:
@@ -3171,6 +3173,24 @@ def _format_collector_batch_text() -> str:
         lines.append(f"<b>Результат отправки:</b> {sent_ok}/{sent_total} доставлено")
 
     return "\n".join(lines)
+
+
+def _collector_batch_keyboard() -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton("🔄 Обновить", callback_data="collector_batch")],
+        [InlineKeyboardButton("🤝 Обещания менеджеров", callback_data="collector_agreed_stats")],
+        [InlineKeyboardButton("📋 Саида backlog", callback_data="collector_saida_stats")],
+        [InlineKeyboardButton("🔸 Частичные оплаты", callback_data="collector_partial_stats")],
+    ]
+    try:
+        from collector.approval_flow import get_latest_send_ready_batch
+        send_ready = get_latest_send_ready_batch()
+    except Exception:
+        send_ready = None
+    if send_ready:
+        rows.append([InlineKeyboardButton("📤 Готовый список", callback_data="collector_send_latest")])
+    rows.append([InlineKeyboardButton("🔙 Главное меню", callback_data="back_main")])
+    return InlineKeyboardMarkup(rows)
 
 
 def _format_collector_agreed_stats_text() -> str:
@@ -6742,9 +6762,13 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             manager = updated.get("manager", "")
             manager_chat_id = int(updated.get("manager_chat_id") or 0)
             if status in ("full", "partial"):
+                status_label = "полная оплата" if status == "full" else "частичная оплата"
                 answer_text = (
-                    f"Принято: по клиенту {client} оплата подтверждена. "
-                    f"Ждём разноски в 1С."
+                    "✅ <b>Ответ сохранён</b>\n\n"
+                    f"Клиент: <b>{client}</b>\n"
+                    f"Статус: <b>{status_label}</b>\n\n"
+                    "Менеджер и директор уведомлены.\n"
+                    "Дальше ждём разноску в 1С."
                 )
                 notify_text = (
                     f"Саида подтвердила оплату по клиенту:\n\n"
@@ -6754,7 +6778,13 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"Клиент временно не будет попадать под давление до обновления 1С."
                 )
             else:
-                answer_text = f"Принято: по клиенту {client} Саида не видит оплату."
+                answer_text = (
+                    "✅ <b>Ответ сохранён</b>\n\n"
+                    f"Клиент: <b>{client}</b>\n"
+                    "Статус: <b>оплаты нет</b>\n\n"
+                    "Менеджер и директор уведомлены.\n"
+                    "Клиент остаётся в обычной дебиторке."
+                )
                 notify_text = (
                     f"Саида не видит оплату по клиенту:\n\n"
                     f"{client}\n"
@@ -6767,10 +6797,18 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         await context.bot.send_message(chat_id=target, text=notify_text, parse_mode=None)
                     except Exception as send_exc:
                         logger.warning("payhold notify error target=%s: %s", target, send_exc)
+            logger.info(
+                "payhold saved: client=%s manager=%s status=%s manager_chat_id=%s token=%s",
+                client,
+                manager,
+                status,
+                manager_chat_id,
+                token,
+            )
             try:
-                await q.edit_message_text(answer_text)
+                await q.edit_message_text(answer_text, parse_mode="HTML")
             except Exception:
-                await q.answer("Ответ сохранён.")
+                await q.answer("Ответ сохранён.", show_alert=True)
             return
         except Exception as e:
             logger.error("payment hold callback error: %s", e, exc_info=True)
@@ -6942,13 +6980,7 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         await q.answer()
         text = _format_collector_batch_text()
-        kb_back = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔄 Обновить", callback_data="collector_batch")],
-            [InlineKeyboardButton("🤝 Обещания менеджеров", callback_data="collector_agreed_stats")],
-            [InlineKeyboardButton("📋 Саида backlog", callback_data="collector_saida_stats")],
-            [InlineKeyboardButton("🔸 Частичные оплаты", callback_data="collector_partial_stats")],
-            [InlineKeyboardButton("🔙 Главное меню", callback_data="back_main")],
-        ])
+        kb_back = _collector_batch_keyboard()
         await hide_main_menu(context, chat_id)
         try:
             msg = await context.bot.send_message(
@@ -6957,6 +6989,39 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             _menu_set(chat_id, msg.message_id)
         except Exception as _e:
             logger.error("collector_batch send error: %s", _e)
+        return
+
+    if data == "collector_send_latest":
+        if user_role != "admin":
+            await q.answer("⛔ Доступ запрещён")
+            return
+        await q.answer("Открываю готовый список...")
+        try:
+            from collector.approval_flow import (
+                get_latest_send_ready_batch,
+                _format_admin_summary_text,
+                _admin_send_now_keyboard,
+            )
+            batch = get_latest_send_ready_batch()
+            if not batch:
+                await _send_auto(context, chat_id, "⚠️ Нет готового списка для отправки.")
+                return
+            batch_id = str(batch.get("batch_id") or "—")
+            text = (
+                f"📤 <b>Готовый список ждёт отправки</b>\n"
+                f"Batch: <code>{batch_id}</code>\n\n"
+                f"{_format_admin_summary_text(batch)}"
+            )
+            await _send_auto(
+                context,
+                chat_id,
+                text,
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup(_admin_send_now_keyboard(batch_id)["inline_keyboard"]),
+            )
+        except Exception as _e:
+            logger.error("collector_send_latest error: %s", _e, exc_info=True)
+            await _send_auto(context, chat_id, "❌ Не удалось открыть готовый список.")
         return
 
     if data == "collector_agreed_stats":

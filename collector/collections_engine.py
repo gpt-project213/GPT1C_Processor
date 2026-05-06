@@ -4,7 +4,12 @@
 collections/collections_engine.py
 Главный оркестратор AI-Коллектора долгов.
 
-Версия: 1.5.0 (2026-04-30)
+Версия: 1.5.1 (2026-05-06)
+
+v1.5.1 (2026-05-06): send-approved защищён batch-level lock с TTL,
+  чтобы повторные нажатия и параллельные вызовы не запускали дублирующую
+  WhatsApp-рассылку; stale lock после падения процесса может быть
+  безопасно перехвачен следующим запуском.
 
 v1.4.8 (2026-04-29): added debt freshness guardrails. Preview now carries
   debt snapshot date/age warnings, while live run and send-approved can be
@@ -103,6 +108,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 DUPLICATE_DIALOG_HOURS = float(os.getenv("COLLECTOR_DUPLICATE_DIALOG_HOURS", "24"))
+SEND_APPROVED_LOCK_MINUTES = int(os.getenv("COLLECTOR_SEND_LOCK_MINUTES", "15"))
 
 from collector.debt_monitor import (
     classify_debtors,
@@ -1494,12 +1500,77 @@ def preview_batch_changes(
 
 async def send_approved_batch(batch_id: str, single_client: Optional[str] = None) -> List[Dict[str, Any]]:
     """Sends WhatsApp only to clients stored in an admin-approved batch."""
-    from collector.approval_flow import get_approved_clients, is_ready_for_send, load_batch, record_send_results
+    from collector.approval_flow import (
+        get_approved_clients,
+        is_ready_for_send,
+        load_batch,
+        record_send_results,
+        save_batch,
+    )
+
+    def _release_send_lock(reason: str) -> None:
+        current_batch = load_batch(batch_id)
+        if not current_batch or not current_batch.get("send_in_progress"):
+            return
+        current_batch["send_in_progress"] = False
+        current_batch["send_lock_released_at"] = datetime.now(tz=TZ).isoformat()
+        current_batch["send_lock_release_reason"] = reason
+        save_batch(current_batch)
+
+    batch = load_batch(batch_id)
+    if not batch:
+        logger.error("send-approved blocked: batch %s not found", batch_id)
+        return []
+
+    if batch.get("send_in_progress"):
+        started_raw = str(batch.get("send_started_at") or "")
+        stale_lock = False
+        if started_raw:
+            try:
+                started_dt = datetime.fromisoformat(started_raw)
+                if started_dt.tzinfo is None:
+                    started_dt = started_dt.replace(tzinfo=TZ)
+                stale_lock = (
+                    (datetime.now(tz=TZ) - started_dt).total_seconds()
+                    > SEND_APPROVED_LOCK_MINUTES * 60
+                )
+            except ValueError:
+                stale_lock = True
+        else:
+            stale_lock = True
+
+        if not stale_lock:
+            logger.warning(
+                "send-approved blocked: batch=%s already in progress since %s",
+                batch_id,
+                started_raw or "unknown",
+            )
+            return [{
+                "name": "",
+                "manager": "",
+                "phone": "",
+                "status": "skipped",
+                "reason": "send already in progress",
+            }]
+
+        logger.warning(
+            "send-approved stale lock recovered: batch=%s started_at=%s ttl_min=%s",
+            batch_id,
+            started_raw or "unknown",
+            SEND_APPROVED_LOCK_MINUTES,
+        )
+
+    batch["send_in_progress"] = True
+    batch["send_started_at"] = datetime.now(tz=TZ).isoformat()
+    batch["send_lock_release_reason"] = ""
+    save_batch(batch)
 
     if not is_ready_for_send(batch_id):
+        _release_send_lock("not_ready_for_send")
         logger.error("send-approved blocked: batch %s is not admin-approved", batch_id)
         return []
     if not _live_send_allowed("SEND-APPROVED BLOCKED"):
+        _release_send_lock("live_send_not_allowed")
         return []
 
     clients = get_approved_clients(batch_id)
@@ -1515,6 +1586,7 @@ async def send_approved_batch(batch_id: str, single_client: Optional[str] = None
 
     refreshed_clients, pre_results, changes, blocked_reason = _refresh_approved_batch_clients(batch_id, clients)
     if blocked_reason:
+        _release_send_lock("freshness_check_failed")
         logger.error("send-approved blocked: batch=%s freshness check failed: %s", batch_id, blocked_reason)
         await notify_admin(
             f"⚠️ send-approved остановлен для batch <b>{batch_id}</b>.\n"
@@ -1538,13 +1610,16 @@ async def send_approved_batch(batch_id: str, single_client: Optional[str] = None
             lines.append(f"• ещё изменений: {len(changes) - 8}")
         await notify_admin("\n".join(lines))
 
-    results = list(pre_results)
-    for client in refreshed_clients:
-        results.append(await _send_approved_client(client))
+    try:
+        results = list(pre_results)
+        for client in refreshed_clients:
+            results.append(await _send_approved_client(client))
 
-    record_send_results(batch_id, results)
-    logger.info("send-approved: batch=%s results=%s", batch_id, results)
-    return results
+        record_send_results(batch_id, results)
+        logger.info("send-approved: batch=%s results=%s", batch_id, results)
+        return results
+    finally:
+        _release_send_lock("send_finished")
 
 
 async def run_approval_preview(single_client: Optional[str] = None) -> Optional[str]:

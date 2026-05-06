@@ -4,13 +4,19 @@
 collector/approval_flow.py
 UX согласования рассылки WhatsApp — менеджер → администратор.
 
-Версия: 1.1.3 (2026-05-06)
+Версия: 1.1.7 (2026-05-06)
 
-v1.1.3 (2026-05-06): добавлена read-only аналитика качества обещаний менеджеров
+v1.1.5 (2026-05-06): защита от клина admin approve/send: preview_batch_changes теперь
+  считается через asyncio.to_thread() с таймаутом, а Telegram editMessageText получил
+  wall-time timeout, retry и подробный лог. Это не даёт callback-ветке повесить весь bot polling
+  и scheduler при зависшем сетевом edit или медленном diff-расчёте. Также добавлен recovery-хелпер
+  для approved batch после рестарта.
+
+v1.1.4 (2026-05-06): добавлена read-only аналитика качества обещаний менеджеров
   по wa_agreed_promises.json: агрегированные счётчики, просроченные активные обещания,
   исполнено/сорвано по каждому менеджеру для директорской сводки.
 
-v1.1.2 (2026-05-06): директор получил отдельный B-lite review-контур для
+v1.1.3 (2026-05-06): директор получил отдельный B-lite review-контур для
   «Договорились»: можно принять или отклонить каждую договорённость менеджера
   без перегруза основной сводки. Решения сохраняются в батче и отражаются в
   wa_agreed_promises.json.
@@ -161,6 +167,22 @@ def load_latest_batch() -> Optional[Dict[str, Any]]:
     for bid in sorted(batches.keys(), reverse=True):
         b = batches[bid]
         if b.get("status") not in final_statuses:
+            return b
+    return None
+
+
+def get_latest_send_ready_batch() -> Optional[Dict[str, Any]]:
+    """Возвращает последний батч, уже утверждённый администратором, но ещё не отправленный."""
+    batches = _load_batches()
+    if not batches:
+        return None
+    for bid in sorted(batches.keys(), reverse=True):
+        b = batches[bid]
+        if (
+            b.get("status") == "admin_approved"
+            and b.get("admin_status") == "approved"
+            and not b.get("send_completed_at")
+        ):
             return b
     return None
 
@@ -475,10 +497,16 @@ async def _tg_send(chat_id: int, text: str, markup=None, _retries: int = 3) -> O
     return None
 
 
-async def _tg_edit(chat_id: int, message_id: int, text: str, markup=None) -> None:
-    """Редактирует существующее Telegram-сообщение."""
+async def _tg_edit(chat_id: int, message_id: int, text: str, markup=None, _retries: int = 3) -> None:
+    """Редактирует существующее Telegram-сообщение.
+
+    Важно: это вызывается прямо из callback-веток manager/admin approval. Поэтому
+    сетевой edit не должен иметь права повесить весь polling loop. Даём жёсткий
+    wall-time timeout и ограниченный retry.
+    """
     if not BOT_TOKEN:
         return
+    import asyncio
     import httpx
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/editMessageText"
     payload: Dict[str, Any] = {
@@ -489,11 +517,36 @@ async def _tg_edit(chat_id: int, message_id: int, text: str, markup=None) -> Non
     }
     if markup:
         payload["reply_markup"] = markup
-    try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            await client.post(url, json=payload)
-    except Exception as e:
-        logger.error("TG edit exception: %s", e)
+    timeout = httpx.Timeout(15.0, connect=10.0, read=10.0, write=10.0, pool=10.0)
+    for attempt in range(1, _retries + 1):
+        try:
+            logger.info(
+                "TG edit start: chat_id=%s message_id=%s attempt=%d/%d",
+                chat_id, message_id, attempt, _retries,
+            )
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                resp = await asyncio.wait_for(client.post(url, json=payload), timeout=20)
+            if resp.status_code == 200:
+                logger.info(
+                    "TG edit ok: chat_id=%s message_id=%s attempt=%d/%d",
+                    chat_id, message_id, attempt, _retries,
+                )
+                return
+            logger.warning(
+                "TG edit error %d: %s",
+                resp.status_code, resp.text[:200],
+            )
+            return
+        except Exception as e:
+            if attempt < _retries:
+                delay = 2 ** (attempt - 1)
+                logger.warning(
+                    "TG edit attempt %d/%d failed (%s), retry in %ds",
+                    attempt, _retries, e, delay,
+                )
+                await asyncio.sleep(delay)
+            else:
+                logger.error("TG edit exception (all %d attempts): %s", _retries, e)
 
 
 def _inline_kb(rows: List[List[Tuple[str, str]]]) -> Dict[str, Any]:
@@ -1729,10 +1782,22 @@ async def handle_admin_callback(
 
         _diff_block = ""
         try:
+            import asyncio
             from collector.collections_engine import preview_batch_changes as _preview_changes
-            _diff_text = _preview_changes(batch_id, approved_clients)
+            logger.info("[%s] admin approve: preview_batch_changes start", batch_id)
+            _diff_text = await asyncio.wait_for(
+                asyncio.to_thread(_preview_changes, batch_id, approved_clients),
+                timeout=10,
+            )
+            logger.info("[%s] admin approve: preview_batch_changes finish", batch_id)
             if _diff_text:
                 _diff_block = f"\n\n⚠️ <b>Данные обновились с момента формирования:</b>\n{_diff_text}"
+        except asyncio.TimeoutError:
+            logger.error("[%s] preview_batch_changes timeout during admin approve", batch_id)
+            _diff_block = (
+                "\n\n⚠️ <b>Проверка изменений заняла слишком много времени и была пропущена.</b>"
+                "\nОтправка не блокируется, но перед отправкой стоит открыть свежую сводку ещё раз."
+            )
         except Exception as _de:
             logger.warning("[%s] preview_batch_changes при утверждении: %s", batch_id, _de)
 
@@ -2021,6 +2086,9 @@ def record_send_results(batch_id: str, results: List[Dict[str, Any]]) -> Optiona
 
     batch["send_results"] = all_results
     batch["send_completed_at"] = now_iso
+    batch["send_in_progress"] = False
+    batch["send_lock_released_at"] = now_iso
+    batch["send_lock_release_reason"] = "record_send_results"
     batch["send_summary"] = {
         "sent": sent,
         "failed": failed,
