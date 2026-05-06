@@ -1,10 +1,10 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 collector/approval_flow.py
 UX согласования рассылки WhatsApp — менеджер → администратор.
 
-Версия: 1.1.7 (2026-05-06)
+Версия: 1.1.8 (2026-05-06)
 
 v1.1.5 (2026-05-06): защита от клина admin approve/send: preview_batch_changes теперь
   считается через asyncio.to_thread() с таймаутом, а Telegram editMessageText получил
@@ -1637,6 +1637,44 @@ def _format_send_results_text(batch_id: str, results: List[Dict[str, Any]]) -> s
     return "\n".join(lines)
 
 
+def _format_send_blocked_text(batch_id: str, batch: Dict[str, Any], results: Optional[List[Dict[str, Any]]] = None) -> str:
+    """Explain why send-now did not produce a real send result."""
+    status = str(batch.get("status") or "admin_approved")
+    summary = batch.get("send_summary") or {}
+    rows = list(results or [])
+    lines = [
+        "❌ <b>Отправка не выполнена</b>",
+        "",
+        f"Батч: <code>{batch_id}</code>",
+    ]
+    if batch.get("send_in_progress"):
+        lines.append("Статус: <b>отправка ещё выполняется</b>")
+        lines.extend(["", "Проверьте итог через несколько секунд."])
+        return "\n".join(lines)
+
+    status_map = {
+        "admin_approved": "отправка не стартовала",
+        "send_empty":     "нет клиентов к отправке",
+        "send_failed":    "отправка завершилась с ошибкой",
+    }
+    lines.append(f"Статус: <b>{status_map.get(status, status)}</b>")
+    if summary:
+        lines.append(
+            f"Результат: отправлено <b>{summary.get('sent', 0)}</b>, "
+            f"ошибок <b>{summary.get('failed', 0)}</b>, "
+            f"пропущено <b>{summary.get('skipped', 0)}</b>."
+        )
+    else:
+        lines.append("Итоговые send_results не записаны.")
+
+    reason = next((str(r.get("reason") or "").strip() for r in rows if str(r.get("reason") or "").strip()), "")
+    if reason:
+        lines.extend(["", f"Причина: <i>{reason}</i>"])
+    else:
+        lines.extend(["", "Проверьте collector.log и send_reports.log для подробностей."])
+    return "\n".join(lines)
+
+
 async def send_admin_summary(batch: Dict[str, Any], bot=None) -> None:
     """Отправляет итоговую сводку администратору для финального решения."""
     try:
@@ -1844,7 +1882,10 @@ async def handle_admin_callback(
             return True
         batch = load_batch(batch_id) or batch
         send_results = batch.get("send_results") or results
-        await _tg_edit(chat_id, message_id, _format_send_results_text(batch_id, send_results))
+        if batch.get("status") in ("sent", "partially_sent"):
+            await _tg_edit(chat_id, message_id, _format_send_results_text(batch_id, send_results))
+        else:
+            await _tg_edit(chat_id, message_id, _format_send_blocked_text(batch_id, batch, send_results))
         logger.info("[%s] Администратор запустил отправку из Telegram: %d результатов", batch_id, len(send_results))
 
     elif action == "wa_appr_adm_view":

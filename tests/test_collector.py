@@ -2840,9 +2840,57 @@ check(
 )
 
 # ═══════════════════════════════════════════════════════════════
-# 22. ИТОГ (бывший 20)
+# 22. _format_send_blocked_text: blocked/empty path shows ❌, not garbage
 # ═══════════════════════════════════════════════════════════════
-section("ИТОГ")  # секция 22
+section("22. _format_send_blocked_text correctness")
+
+import collector.approval_flow as _af_mod
+
+# send_empty → ❌ чёткий текст на русском
+_blk = _af_mod._format_send_blocked_text(
+    "test-batch-1",
+    {"status": "send_empty"},
+    [],
+)
+check("blocked text starts with ❌", _blk.startswith("❌"))
+check("blocked text contains Батч", "Батч" in _blk)
+check("blocked text contains нет клиентов", "нет клиентов" in _blk)
+check("blocked text has no mojibake", "Р" not in _blk and "вќ" not in _blk)
+
+# send_in_progress → отдельный короткий ответ
+_prg = _af_mod._format_send_blocked_text(
+    "test-batch-2",
+    {"status": "admin_approved", "send_in_progress": True},
+)
+check("in_progress text starts with ❌", _prg.startswith("❌"))
+check("in_progress text contains ещё выполняется", "ещё выполняется" in _prg)
+
+# reason из results пробрасывается в текст
+_rsn = _af_mod._format_send_blocked_text(
+    "test-batch-3",
+    {"status": "admin_approved"},
+    [{"reason": "outside allowed time window"}],
+)
+check("reason appears in blocked text", "outside allowed time window" in _rsn)
+
+# format_send_results_text: sent/skipped/failed считаются правильно
+_res = _af_mod._format_send_results_text(
+    "test-batch-4",
+    [
+        {"status": "sent"},
+        {"status": "sent"},
+        {"status": "skipped", "reason": "already_contacted"},
+        {"status": "failed",  "reason": "no_phone"},
+    ],
+)
+check("results text shows Отправлено: 2", "Отправлено: <b>2</b>" in _res)
+check("results text shows Ошибок: 1",    "Ошибок: <b>1</b>" in _res)
+check("results text shows Пропущено: 1", "Пропущено: <b>1</b>" in _res)
+
+# ═══════════════════════════════════════════════════════════════
+# 23. ИТОГ (бывший 22)
+# ═══════════════════════════════════════════════════════════════
+section("ИТОГ")  # секция 23
 total  = len(results)
 passed = sum(1 for _, ok in results if ok)
 failed = total - passed
