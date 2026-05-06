@@ -83,8 +83,9 @@ ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID", "")
 
 BATCH_EXPIRE_HOURS = int(os.getenv("WA_APPROVAL_EXPIRE_HOURS", "9"))
 MANAGER_SILENCE_TIMEOUT_HOURS = int(os.getenv("WA_MANAGER_SILENCE_HOURS", "1"))
-# До которого часа разрешено отправлять сводку администратору и делать рассылку (вкл.)
-SEND_WINDOW_CUTOFF_HOUR = int(os.getenv("WA_SEND_WINDOW_CUTOFF_HOUR", "19"))
+# До какого времени директор может нажать "Утвердить" (env: WA_SEND_WINDOW_CUTOFF_HOUR/MINUTE)
+SEND_WINDOW_CUTOFF_HOUR   = int(os.getenv("WA_SEND_WINDOW_CUTOFF_HOUR",   "19"))
+SEND_WINDOW_CUTOFF_MINUTE = int(os.getenv("WA_SEND_WINDOW_CUTOFF_MINUTE", "30"))
 
 logger = get_collector_logger(__name__)
 
@@ -156,17 +157,21 @@ def load_latest_batch() -> Optional[Dict[str, Any]]:
 
 # ─── Batch creation ───────────────────────────────────────────────────────────
 
-def _batch_expires_at(now: datetime) -> datetime:
-    """Срок жизни батча: min(TTL, конец окна отправки сегодня).
-
-    Если cutoff уже прошёл сегодня — берём завтрашний cutoff,
-    чтобы ночные батчи (edge case) не получали expires_at в прошлом.
-    """
-    natural = now + timedelta(hours=BATCH_EXPIRE_HOURS)
-    cutoff = now.replace(hour=SEND_WINDOW_CUTOFF_HOUR, minute=0, second=0, microsecond=0)
+def _send_window_cutoff(now: datetime) -> datetime:
+    """Дедлайн директора для текущего дня (или следующего если уже прошёл)."""
+    cutoff = now.replace(
+        hour=SEND_WINDOW_CUTOFF_HOUR,
+        minute=SEND_WINDOW_CUTOFF_MINUTE,
+        second=0, microsecond=0,
+    )
     if cutoff <= now:
         cutoff += timedelta(days=1)
-    return min(natural, cutoff)
+    return cutoff
+
+
+def _batch_expires_at(now: datetime) -> datetime:
+    """Срок жизни батча: min(TTL, дедлайн директора сегодня)."""
+    return min(now + timedelta(hours=BATCH_EXPIRE_HOURS), _send_window_cutoff(now))
 
 
 def create_batch(
@@ -1723,7 +1728,7 @@ async def promote_silent_batches_to_admin(bot=None) -> int:
     changed_ids: List[str] = []
     too_late_ids: List[str] = []
 
-    today_cutoff = now.replace(hour=SEND_WINDOW_CUTOFF_HOUR, minute=0, second=0, microsecond=0)
+    today_cutoff = _send_window_cutoff(now)
     hours_to_cutoff = (today_cutoff - now).total_seconds() / 3600
     tight_window = 0 < hours_to_cutoff < MANAGER_SILENCE_TIMEOUT_HOURS
 
@@ -1757,7 +1762,7 @@ async def promote_silent_batches_to_admin(bot=None) -> int:
             continue
 
         # Уже за окном отправки — закрываем батч без эскалации
-        if now.hour >= SEND_WINDOW_CUTOFF_HOUR:
+        if now >= today_cutoff:
             for mgr_state in (batch.get("managers") or {}).values():
                 if mgr_state.get("status") in ("pending", "manual_editing"):
                     mgr_state["status"] = "timeout"
@@ -1765,7 +1770,7 @@ async def promote_silent_batches_to_admin(bot=None) -> int:
             batch["closed_at"] = now.isoformat()
             batch["escalation_reason"] = "send_window_missed"
             too_late_ids.append(bid)
-            logger.info("[%s] батч закрыт: окно отправки %d:00 пропущено", bid, SEND_WINDOW_CUTOFF_HOUR)
+            logger.info("[%s] батч закрыт: окно отправки %d:%02d пропущено", bid, SEND_WINDOW_CUTOFF_HOUR, SEND_WINDOW_CUTOFF_MINUTE)
             continue
 
         pending_found = False
@@ -1793,7 +1798,7 @@ async def promote_silent_batches_to_admin(bot=None) -> int:
             await _tg_send(
                 admin_id,
                 "⏰ <b>Рассылка сегодня не состоится.</b>\n\n"
-                f"Батч <code>{bid}</code> создан, но менеджеры не ответили до {SEND_WINDOW_CUTOFF_HOUR}:00.\n"
+                f"Батч <code>{bid}</code> создан, но менеджеры не ответили до {SEND_WINDOW_CUTOFF_HOUR}:{SEND_WINDOW_CUTOFF_MINUTE:02d}.\n"
                 "Следующий батч будет создан автоматически при поступлении новой дебиторки.",
             )
         except (ValueError, TypeError):
