@@ -3026,6 +3026,8 @@ def kb_main(user_role: str, chat_id: int = 0) -> InlineKeyboardMarkup:
     my_name = get_my_manager_name(chat_id) if user_role == "manager" else None
     
     if user_role == "admin":
+        _n_amb = _crmdup_ambiguous_count()
+        _crm_label = f"🟡 CRM-конфликты ({_n_amb})" if _n_amb else "🟡 CRM-конфликты"
         rows = [
             [InlineKeyboardButton("📊 Дебиторка", callback_data="menu_debt")],
             [InlineKeyboardButton("📦 Остатки", callback_data="direct|INVENTORY_SIMPLE|general")],
@@ -3035,6 +3037,7 @@ def kb_main(user_role: str, chat_id: int = 0) -> InlineKeyboardMarkup:
             [InlineKeyboardButton("📈 АНАЛИТИКА", callback_data="menu_analytics")],
             [InlineKeyboardButton("🔔 Уведомления сейчас", callback_data="menu_notify")],
             [InlineKeyboardButton("🤖 Коллектор", callback_data="collector_batch")],
+            [InlineKeyboardButton(_crm_label, callback_data="crm_ambiguous_queue")],
             [InlineKeyboardButton("🗄️ Архив", callback_data="archive|root")],
             [InlineKeyboardButton("📈 Статистика", callback_data="show_stats")],
         ]
@@ -5892,6 +5895,8 @@ CRM_DUP_REVIEW_PATH = LOGS_DIR / "crm_duplicate_review_state.json"
 CRM_DUP_REVIEW_TTL_HOURS = int(os.getenv("CRM_DUP_REVIEW_TTL_HOURS", "336"))
 _CRM_DUP_REVIEW_PENDING: Dict[str, Dict[str, Any]] = {}
 _CRM_DUP_REVIEW_AWAITING_TEXT: Dict[int, str] = {}
+CRM_AMBIGUOUS_PATH = LOGS_DIR / "crm_ambiguous_conflicts.json"
+_CRM_AMBIGUOUS: Dict[str, Dict[str, Any]] = {}  # key = stable signature
 
 # Имя администратора — участвует в CRM наравне с менеджерами
 ADMIN_NAME = "Вадим"
@@ -5967,6 +5972,96 @@ def _crmdup_token() -> str:
     return f"dup_{stamp}_{uuid4().hex[:8]}"
 
 
+# ── Ambiguous (multi-manager) CRM conflicts ───────────────────────────────────
+
+def _ambiguous_signature(items: List[Dict[str, Any]]) -> str:
+    """Stable signature: sorted client_keys joined. Order-independent."""
+    return "|".join(sorted(item.get("client_key", "") for item in items[:4]))
+
+
+def _ambiguous_token() -> str:
+    from uuid import uuid4
+    return "a" + uuid4().hex[:12]
+
+
+def _crmdup_ambiguous_count() -> int:
+    return sum(1 for v in _CRM_AMBIGUOUS.values() if v.get("status") == "pending")
+
+
+def _crmdup_save_ambiguous() -> None:
+    CRM_AMBIGUOUS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp = CRM_AMBIGUOUS_PATH.with_suffix(".tmp")
+    tmp.write_text(json.dumps(_CRM_AMBIGUOUS, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, CRM_AMBIGUOUS_PATH)
+
+
+def _crmdup_load_ambiguous() -> None:
+    _CRM_AMBIGUOUS.clear()
+    if not CRM_AMBIGUOUS_PATH.exists():
+        return
+    try:
+        data = json.loads(CRM_AMBIGUOUS_PATH.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            _CRM_AMBIGUOUS.update(data)
+        state_logger.info("CRM ambiguous conflicts restored: %d records", len(_CRM_AMBIGUOUS))
+    except Exception as _e:
+        state_logger.warning("_crmdup_load_ambiguous error: %s", _e)
+
+
+def _crmdup_queue_ambiguous(conflict: Dict[str, Any]) -> None:
+    """Save multi-manager conflict to ambiguous queue. Idempotent: no duplicates."""
+    items = conflict.get("items", [])
+    if len(items) < 2:
+        return
+    sig = _ambiguous_signature(items)
+    existing = _CRM_AMBIGUOUS.get(sig)
+    if existing:
+        # Don't re-queue if pending or already resolved
+        return
+    managers = sorted({(item.get("manager") or "").strip() for item in items if (item.get("manager") or "").strip()})
+    _CRM_AMBIGUOUS[sig] = {
+        "token": _ambiguous_token(),
+        "signature": sig,
+        "group_key": conflict.get("group_key", ""),
+        "items": items[:4],
+        "managers": managers,
+        "added_at": datetime.now(TZ).isoformat(),
+        "status": "pending",
+    }
+    _crmdup_save_ambiguous()
+    crm_logger.info("CRM ambiguous queued: %s managers=%s", sig[:50], managers)
+
+
+def _format_ambiguous_text(entry: Dict[str, Any]) -> str:
+    items = entry.get("items", [])
+    n_pending = _crmdup_ambiguous_count()
+    lines = []
+    for i, item in enumerate(items[:4], 1):
+        mgr = item.get("manager") or "?"
+        phone = item.get("phone") or "—"
+        key = item.get("display_name") or item.get("client_key", "?")
+        lines.append(
+            f"{i}. <b>{_html.escape(key)}</b>  [{_html.escape(mgr)}]\n"
+            f"   тел. <code>{_html.escape(phone)}</code>"
+        )
+    return (
+        f"⚠️ <b>Спорный CRM-конфликт</b>  (в очереди: {n_pending})\n\n"
+        + "\n".join(lines)
+        + "\n\nЧья карточка правильная?"
+    )
+
+
+def _ambiguous_keyboard(entry: Dict[str, Any]) -> InlineKeyboardMarkup:
+    token = entry["token"]
+    managers = entry.get("managers", [])
+    rows = []
+    for idx, mgr in enumerate(managers):
+        rows.append([InlineKeyboardButton(f"👤 Это {mgr}", callback_data=f"crm_ambi|a|{token}|{idx}")])
+    rows.append([InlineKeyboardButton("🔀 Разные клиенты", callback_data=f"crm_ambi|d|{token}")])
+    rows.append([InlineKeyboardButton("⏭ Следующий", callback_data=f"crm_ambi|s|{token}")])
+    return InlineKeyboardMarkup(rows)
+
+
 def _crmdup_choice_kb(token: str, items: List[Dict[str, Any]]) -> InlineKeyboardMarkup:
     rows = []
     for idx, item in enumerate(items[:2]):
@@ -6005,6 +6100,7 @@ async def _crmdup_broadcast_once(context: ContextTypes.DEFAULT_TYPE, limit: int 
     for conflict in conflicts:
         manager = (conflict.get("manager") or "").strip()
         if not manager:
+            _crmdup_queue_ambiguous(conflict)
             skipped += 1
             continue
         chat_id = _all_crm_participants().get(manager)
@@ -6982,6 +7078,123 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.answer("Неизвестное действие CRM duplicate review.")
         return
 
+    # ── Ambiguous (multi-manager) CRM conflict queue ──────────────────────────
+    if data == "crm_ambiguous_queue":
+        if not is_admin(chat_id):
+            await q.answer("Только для администратора.")
+            return
+        pending = [v for v in _CRM_AMBIGUOUS.values() if v.get("status") == "pending"]
+        if not pending:
+            await q.answer("Спорных конфликтов нет.", show_alert=True)
+            return
+        entry = pending[0]
+        try:
+            await q.edit_message_text(
+                text=_format_ambiguous_text(entry),
+                parse_mode="HTML",
+                reply_markup=_ambiguous_keyboard(entry),
+            )
+        except Exception as _e:
+            crm_logger.error("crm_ambiguous_queue show error: %s", _e)
+            await q.answer("Ошибка показа очереди.")
+        return
+
+    if data.startswith("crm_ambi|"):
+        if not is_admin(chat_id):
+            await q.answer("Только для администратора.")
+            return
+        parts = data.split("|")
+        action = parts[1] if len(parts) > 1 else ""
+        token  = parts[2] if len(parts) > 2 else ""
+        entry  = next((v for v in _CRM_AMBIGUOUS.values() if v.get("token") == token), None)
+        if not entry:
+            await q.answer("Конфликт уже решён или не найден.")
+            return
+        sig   = entry["signature"]
+        items = entry.get("items", [])
+        client_keys = [item["client_key"] for item in items]
+        reviewer = ADMIN_NAME
+
+        result_text: Optional[str] = None
+
+        if action == "a":  # assign to manager by index
+            try:
+                mgr_idx = int(parts[3]) if len(parts) > 3 else 0
+            except ValueError:
+                mgr_idx = 0
+            managers = entry.get("managers", [])
+            chosen_manager = managers[mgr_idx] if mgr_idx < len(managers) else ""
+            chosen_item = next(
+                (it for it in items if (it.get("manager") or "").strip() == chosen_manager),
+                items[0],
+            )
+            try:
+                from bot.crm_clients import resolve_phone_conflict
+                ok = resolve_phone_conflict(
+                    client_keys=client_keys,
+                    chosen_phone=chosen_item.get("phone", ""),
+                    chosen_key=chosen_item.get("client_key", ""),
+                    reviewer=reviewer,
+                    phone_source="ambiguous_conflict_admin_resolve",
+                )
+            except Exception as _e:
+                crm_logger.error("crm_ambi assign error: %s", _e)
+                ok = False
+            _CRM_AMBIGUOUS[sig].update({
+                "status": "resolved", "resolved_at": datetime.now(TZ).isoformat(),
+                "resolved_by": reviewer, "resolution": f"assigned:{chosen_manager}",
+            })
+            _crmdup_save_ambiguous()
+            crm_audit("ambiguous_conflict_resolved", reviewer=reviewer,
+                      signature=sig, resolution=f"assigned:{chosen_manager}")
+            result_text = f"✅ Назначено: клиент {_html.escape(chosen_manager)}." if ok else "⚠️ Назначено (ошибка записи в CRM)."
+
+        elif action == "d":  # distinct
+            try:
+                from bot.crm_clients import mark_phone_conflict_distinct
+                ok = mark_phone_conflict_distinct(client_keys=client_keys, reviewer=reviewer)
+            except Exception as _e:
+                crm_logger.error("crm_ambi distinct error: %s", _e)
+                ok = False
+            _CRM_AMBIGUOUS[sig].update({
+                "status": "resolved", "resolved_at": datetime.now(TZ).isoformat(),
+                "resolved_by": reviewer, "resolution": "distinct",
+            })
+            _crmdup_save_ambiguous()
+            crm_audit("ambiguous_conflict_resolved", reviewer=reviewer,
+                      signature=sig, resolution="distinct")
+            result_text = "✅ Отмечены как разные клиенты."
+
+        elif action == "s":  # skip — просто перейти к следующему
+            result_text = None
+
+        else:
+            await q.answer("Неизвестное действие.")
+            return
+
+        pending = [v for v in _CRM_AMBIGUOUS.values() if v.get("status") == "pending"]
+        if not pending:
+            final = (result_text + "\n\n" if result_text else "") + "✅ <b>Очередь CRM-конфликтов пуста.</b>"
+            try:
+                await q.edit_message_text(final, parse_mode="HTML", reply_markup=None)
+            except Exception:
+                await q.answer("Очередь пуста.")
+            return
+
+        next_entry = pending[0]
+        prefix = result_text + "\n\n" if result_text else ""
+        try:
+            await q.edit_message_text(
+                text=prefix + _format_ambiguous_text(next_entry),
+                parse_mode="HTML",
+                reply_markup=_ambiguous_keyboard(next_entry),
+            )
+        except Exception as _e:
+            crm_logger.error("crm_ambi show next error: %s", _e)
+            await q.answer("Следующий конфликт.")
+        return
+    # ── end ambiguous queue ───────────────────────────────────────────────────
+
     if data == "crm_help":
         pending = _CRM_PHONE_PENDING.get(chat_id)
         if not pending or not str(pending.get("state", "")).startswith("clarify_"):
@@ -7629,6 +7842,7 @@ async def post_init(app: Application):
     _crm_load_pending()
     _crm_load_claim_pending()
     _crmdup_load_pending()
+    _crmdup_load_ambiguous()
 
     # v9.4.27: Уведомление о запуске — admin (техническое) + команда (мотивирующее)
     start_kb = InlineKeyboardMarkup([
