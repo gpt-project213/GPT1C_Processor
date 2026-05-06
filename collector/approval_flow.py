@@ -61,7 +61,7 @@ import os
 import re
 import secrets
 import tempfile
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -76,7 +76,8 @@ load_dotenv(
 
 TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 _ROOT = Path(__file__).resolve().parent.parent
-_BATCHES_PATH = _ROOT / "logs" / "wa_approval_batches.json"
+_BATCHES_PATH   = _ROOT / "logs" / "wa_approval_batches.json"
+_PROMISES_PATH  = _ROOT / "logs" / "wa_agreed_promises.json"   # обещания 🤝 по клиентам
 
 BOT_TOKEN = os.getenv("TG_BOT_TOKEN") or os.getenv("BOT_TOKEN", "")
 ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID", "")
@@ -190,6 +191,9 @@ def create_batch(
     now = datetime.now(tz=TZ)
     batch_id = f"{now.strftime('%Y%m%d-%H%M%S')}-{secrets.token_hex(2)}"
 
+    # Клиенты с сорванными обещаниями — 🤝 для них заблокировано в новом батче
+    broken_clients: List[str] = get_second_chance_blocked_clients()
+
     managers_state: Dict[str, Any] = {}
     for manager_name, clients in debtors_by_manager.items():
         # Пропускаем пустые списки и клиентов без менеджера
@@ -242,6 +246,9 @@ def create_batch(
                 "language":          c.get("language", "ru"),
             })
 
+        # Клиенты с сорванными обещаниями — для них 🤝 заблокировано
+        blocked = [c["name"] for c in normalized if c["name"] in broken_clients]
+
         managers_state[manager_name] = {
             "clients":              normalized,
             "status":               "pending",   # pending | approved_all | rejected_all | manual_editing | manual_done | timeout
@@ -250,10 +257,10 @@ def create_batch(
             "postponed_names":      [],          # legacy — оставляем для совместимости
             # новые поля с бизнес-семантикой
             "agreed_names":         [],          # 🤝 договорились (убраны из WA, детали обязательны)
-            "agreed_details":       {},          # {client_name: {date, amount, conditions, recorded_at}}
+            "agreed_details":       {},          # {client_name: {deadline, details, recorded_at}}
             "paid_with_doc_names":  [],          # 💰 оплатил + документ приложен
             "paid_no_doc_names":    [],          # 💰 оплатил, документа нет → Саиде
-            "second_chance_used":   [],          # клиенты, по которым уже использовали 🤝
+            "second_chance_used":   blocked,     # автозаполнение из сорванных обещаний
             "waiting_for_proof":    None,        # {client_name, batch_id} — ждём фото от менеджера
             "waiting_for_agreed":   None,        # {client_name, batch_id} — ждём детали договорённости
             "responded_at":         None,
@@ -1827,6 +1834,197 @@ def get_pending_managers(batch_id: str) -> List[str]:
     ]
 
 
+# ─── Обещания 🤝 Договорились — хранение и авто-возврат ──────────────────────
+
+_MONTH_RU = {
+    "января": 1, "февраля": 2, "марта": 3, "апреля": 4,
+    "мая": 5, "июня": 6, "июля": 7, "августа": 8,
+    "сентября": 9, "октября": 10, "ноября": 11, "декабря": 12,
+}
+_DEFAULT_PROMISE_DAYS = 3   # если дату не удалось извлечь из текста
+
+
+def _extract_deadline_from_text(text: str) -> date:
+    """Пытается извлечь дату обещания из свободного текста.
+
+    Поддерживает: "до 15 мая", "15.05", "15/05", "15.05.2026", "через 3 дня".
+    Если не нашёл — возвращает сегодня + _DEFAULT_PROMISE_DAYS.
+    """
+    now = datetime.now(tz=TZ)
+    # "15 мая", "до 15 мая", "к 15 мая"
+    pattern_ru = r'(\d{1,2})\s+(' + '|'.join(_MONTH_RU.keys()) + r')'
+    m = re.search(pattern_ru, text, re.IGNORECASE)
+    if m:
+        day   = int(m.group(1))
+        month = _MONTH_RU[m.group(2).lower()]
+        year  = now.year
+        try:
+            d = date(year, month, day)
+            if d < now.date():
+                d = date(year + 1, month, day)
+            return d
+        except ValueError:
+            pass
+    # "15.05" / "15/05" / "15.05.2026"
+    m = re.search(r'(\d{1,2})[./](\d{1,2})(?:[./](\d{4}))?', text)
+    if m:
+        try:
+            day, month = int(m.group(1)), int(m.group(2))
+            year = int(m.group(3)) if m.group(3) else now.year
+            d = date(year, month, day)
+            if d < now.date():
+                d = date(year + 1, month, day)
+            return d
+        except ValueError:
+            pass
+    # "через 3 дня"
+    m = re.search(r'через\s+(\d+)\s+дн', text, re.IGNORECASE)
+    if m:
+        return (now + timedelta(days=int(m.group(1)))).date()
+    return (now + timedelta(days=_DEFAULT_PROMISE_DAYS)).date()
+
+
+def _load_promises() -> Dict[str, Any]:
+    try:
+        return json.loads(_PROMISES_PATH.read_text(encoding="utf-8")) if _PROMISES_PATH.exists() else {}
+    except Exception:
+        return {}
+
+
+def _save_promises(data: Dict[str, Any]) -> None:
+    import tempfile
+    tmp = _PROMISES_PATH.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(_PROMISES_PATH)
+
+
+def save_agreed_promise(
+    client_name: str,
+    manager_name: str,
+    details: str,
+    batch_id: str,
+) -> date:
+    """Сохраняет обещание менеджера. Возвращает извлечённую дату дедлайна."""
+    deadline = _extract_deadline_from_text(details)
+    promises = _load_promises()
+    promises[client_name] = {
+        "manager":    manager_name,
+        "batch_id":   batch_id,
+        "details":    details,
+        "deadline":   deadline.isoformat(),
+        "set_at":     datetime.now(tz=TZ).isoformat(),
+        "status":     "active",   # active | broken | fulfilled
+    }
+    _save_promises(promises)
+    return deadline
+
+
+def get_second_chance_blocked_clients() -> List[str]:
+    """Клиенты у которых зафиксировано сорванное обещание — «Договорились» запрещено."""
+    promises = _load_promises()
+    return [name for name, p in promises.items() if p.get("status") == "broken"]
+
+
+async def check_broken_agreed_deadlines(bot=None) -> int:
+    """Ежедневная проверка: если дедлайн прошёл и долг остался — фиксируем нарушение.
+
+    Уведомляет менеджера и директора. Возвращает число зафиксированных нарушений.
+    """
+    promises = _load_promises()
+    today    = datetime.now(tz=TZ).date()
+    broken_count = 0
+    changed = False
+
+    # Загружаем актуальную дебиторку чтобы проверить остался ли долг
+    try:
+        from collector.debt_monitor import load_latest_debt_json
+        debt_data = load_latest_debt_json() or {}
+        debt_clients = {d.get("name", ""): d.get("debt", 0) for d in debt_data.get("clients", [])}
+    except Exception:
+        debt_clients = {}
+
+    try:
+        admin_id = int(ADMIN_CHAT_ID)
+    except (ValueError, TypeError):
+        admin_id = 0
+
+    managers_cfg = _load_managers_cfg()
+
+    for client_name, promise in promises.items():
+        if promise.get("status") != "active":
+            continue
+        try:
+            deadline = date.fromisoformat(promise["deadline"])
+        except (KeyError, ValueError):
+            continue
+        if today <= deadline:
+            continue  # срок ещё не прошёл
+
+        # Срок прошёл — проверяем долг
+        debt_remaining = debt_clients.get(client_name, -1)
+        if debt_remaining == -1:
+            continue  # клиента нет в актуальной дебиторке — возможно оплатил, пропускаем
+
+        if debt_remaining <= 0:
+            # Долг погашен — помечаем fulfilled
+            promise["status"] = "fulfilled"
+            promise["closed_at"] = datetime.now(tz=TZ).isoformat()
+            changed = True
+            continue
+
+        # Долг остался — обещание нарушено
+        promise["status"] = "broken"
+        promise["broken_at"] = datetime.now(tz=TZ).isoformat()
+        changed = True
+        broken_count += 1
+
+        manager_name = promise.get("manager", "")
+        details_text = promise.get("details", "—")
+        deadline_str = deadline.strftime("%d.%m")
+
+        # Уведомляем менеджера
+        mgr_chat = managers_cfg.get(manager_name)
+        if mgr_chat and bot:
+            try:
+                await bot.send_message(
+                    chat_id=int(mgr_chat),
+                    text=(
+                        f"⚠️ <b>Обещание нарушено.</b>\n\n"
+                        f"Клиент <b>{client_name}</b> не оплатил к {deadline_str}.\n"
+                        f"Твоя договорённость: <i>{details_text}</i>\n\n"
+                        f"Клиент вернётся в следующую рассылку автоматически.\n"
+                        f"Повторно использовать «Договорились» по нему — нельзя."
+                    ),
+                    parse_mode="HTML",
+                )
+            except Exception as e:
+                logger.warning("broken promise notify manager error: %s", e)
+
+        # Уведомляем директора
+        if admin_id and bot:
+            try:
+                await bot.send_message(
+                    chat_id=admin_id,
+                    text=(
+                        f"📌 <b>Нарушено обещание оплаты.</b>\n\n"
+                        f"Менеджер: <b>{manager_name}</b>\n"
+                        f"Клиент: <b>{client_name}</b>\n"
+                        f"Договорились: <i>{details_text}</i>\n"
+                        f"Срок был: {deadline_str}\n\n"
+                        f"Клиент возвращается в рассылку. «Договорились» для менеджера заблокировано."
+                    ),
+                    parse_mode="HTML",
+                )
+            except Exception as e:
+                logger.warning("broken promise notify admin error: %s", e)
+
+        logger.info("Нарушение обещания: %s (менеджер %s, срок %s)", client_name, manager_name, deadline_str)
+
+    if changed:
+        _save_promises(promises)
+    return broken_count
+
+
 # ─── Обработка входящих сообщений от менеджеров (фото/детали) ────────────────
 
 def find_manager_waiting_state(chat_id: int) -> Optional[Dict[str, Any]]:
@@ -1925,8 +2123,17 @@ async def handle_manager_agreed_details(chat_id: int, text: str) -> bool:
     client_name = state["wait_data"].get("client_name", "—")
     now_iso     = datetime.now(tz=TZ).isoformat()
 
+    deadline = save_agreed_promise(
+        client_name=client_name,
+        manager_name=mgr_name,
+        details=text,
+        batch_id=state["batch_id"],
+    )
+    deadline_str = deadline.strftime("%d.%m.%Y")
+
     mgr_state.setdefault("agreed_details", {})[client_name] = {
         "details":     text,
+        "deadline":    deadline.isoformat(),
         "recorded_at": now_iso,
     }
     if client_name not in mgr_state.get("agreed_names", []):
@@ -1936,11 +2143,13 @@ async def handle_manager_agreed_details(chat_id: int, text: str) -> bool:
     save_batch(batch)
     await _tg_send(
         chat_id,
-        f"🤝 Зафиксировано по <b>{client_name}</b>:\n<i>{text}</i>\n\n"
-        f"Клиент снят из сегодняшней рассылки. Если оплата не придёт в срок — "
-        f"вернётся в список автоматически и повторно снять через «Договорились» будет нельзя.",
+        f"🤝 Зафиксировано по <b>{client_name}</b>:\n"
+        f"<i>{text}</i>\n\n"
+        f"Срок оплаты: <b>{deadline_str}</b>\n\n"
+        f"Если оплата не придёт — клиент вернётся в рассылку автоматически.\n"
+        f"Повторно использовать «Договорились» по нему будет нельзя.",
     )
-    logger.info("[%s] %s зафиксировал договорённость по %s: %s", state["batch_id"], mgr_name, client_name, text[:80])
+    logger.info("[%s] %s договорённость по %s: %s (дедлайн %s)", state["batch_id"], mgr_name, client_name, text[:80], deadline_str)
     return True
 
 

@@ -8996,6 +8996,25 @@ def main():
         )
         sched_logger.info("💰 Настроена проверка обещаний: ежедневно 10:00")
 
+        async def _job_check_broken_agreed(ctx):
+            from bot.workday_checker import is_holiday_today
+            if is_holiday_today():
+                return
+            try:
+                from collector.approval_flow import check_broken_agreed_deadlines
+                broken = await check_broken_agreed_deadlines(bot=ctx.bot)
+                if broken:
+                    sched_logger.info("🤝 Нарушено обещаний: %d — менеджеры и директор уведомлены", broken)
+            except Exception as e:
+                sched_logger.error("check_broken_agreed_deadlines error: %s", e)
+
+        job_queue.run_daily(
+            _job_check_broken_agreed,
+            time=dt_time(10, 30, tzinfo=TZ),
+            name="wa_agreed_deadline_check",
+        )
+        sched_logger.info("🤝 Настроена проверка сорванных договорённостей: ежедневно 10:30")
+
         # Event-driven: --preview после появления свежих debt_ext файлов
         job_queue.run_repeating(
             debt_collector_trigger_check,
