@@ -618,9 +618,9 @@ async def handle_incoming(phone: str, text: str, attachment: Optional[Dict[str, 
 
     if dialog.get("state") not in _DIALOG_ACTIVE_STATES:
         _audit("incoming_ignored_inactive_state", name=dialog.get("client_name"), phone_masked=_mask_phone(phone_clean), state=dialog.get("state"))
-        logger.info(
-            "Диалог %s в состоянии %s — входящее игнорируется",
-            phone_clean, dialog.get("state"),
+        logger.warning(
+            "incoming from %s ignored: dialog '%s' in inactive state=%s (audit logged)",
+            _mask_phone(phone_clean), dialog.get("client_name", "?"), dialog.get("state"),
         )
         return
 

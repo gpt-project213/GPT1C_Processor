@@ -1530,10 +1530,9 @@ async def send_approved_batch(batch_id: str, single_client: Optional[str] = None
                 started_dt = datetime.fromisoformat(started_raw)
                 if started_dt.tzinfo is None:
                     started_dt = started_dt.replace(tzinfo=TZ)
-                stale_lock = (
-                    (datetime.now(tz=TZ) - started_dt).total_seconds()
-                    > SEND_APPROVED_LOCK_MINUTES * 60
-                )
+                age_sec = (datetime.now(tz=TZ) - started_dt).total_seconds()
+                # future timestamp (e.g. 2099) → always stale
+                stale_lock = age_sec > SEND_APPROVED_LOCK_MINUTES * 60 or age_sec < 0
             except ValueError:
                 stale_lock = True
         else:

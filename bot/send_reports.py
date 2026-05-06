@@ -6643,7 +6643,7 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 try:
                     await q.edit_message_text(result_text, parse_mode="HTML")
                 except Exception:
-                    pass
+                    await q.answer("Принято.", show_alert=True)
         except Exception as e:
             logger.error("dstop callback error: %s", e)
         return

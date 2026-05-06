@@ -1835,7 +1835,13 @@ async def handle_admin_callback(
 
         from collector.collections_engine import send_approved_batch
 
-        results = await send_approved_batch(batch_id)
+        await _tg_edit(chat_id, message_id, "⏳ <b>Запускаю отправку...</b>\n\nЭто займёт несколько секунд.")
+        try:
+            results = await send_approved_batch(batch_id)
+        except Exception as send_exc:
+            logger.error("[%s] send_approved_batch error: %s", batch_id, send_exc)
+            await _tg_edit(chat_id, message_id, f"❌ <b>Отправка не выполнена</b>\n\n{send_exc}")
+            return True
         batch = load_batch(batch_id) or batch
         send_results = batch.get("send_results") or results
         await _tg_edit(chat_id, message_id, _format_send_results_text(batch_id, send_results))
