@@ -9036,10 +9036,10 @@ def main():
 
             job_queue.run_daily(
                 _job_dstop_managers,
-                time=dt_time(17, 0, tzinfo=TZ),
+                time=dt_time(16, 30, tzinfo=TZ),
                 name="debt_stop_managers",
             )
-            sched_logger.info("🚫 Настроен запрос менеджерам по стоп-листу: ежедневно 17:00")
+            sched_logger.info("🚫 Настроен запрос менеджерам по стоп-листу: ежедневно 16:30 (до коллектора 17:00)")
 
             job_queue.run_repeating(
                 _job_dstop_manager_reminders,
@@ -9051,10 +9051,10 @@ def main():
 
             job_queue.run_daily(
                 _job_dstop_escalate,
-                time=dt_time(19, 0, tzinfo=TZ),
+                time=dt_time(18, 30, tzinfo=TZ),
                 name="debt_stop_escalate",
             )
-            sched_logger.info("🚫 Настроена эскалация к руководителю: ежедневно 19:00")
+            sched_logger.info("🚫 Настроена эскалация к руководителю: ежедневно 18:30 (до WA cutoff 19:30)")
 
             job_queue.run_daily(
                 _job_dstop_saida,
