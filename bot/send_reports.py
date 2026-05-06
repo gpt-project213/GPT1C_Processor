@@ -253,18 +253,19 @@ except ImportError as e:
 # debt_stop_control: контроль стоп-листа отгрузки (Саида, бухгалтер)
 try:
     from debt_stop_control import (
-        monitor_exceptions        as _dstop_monitor,
-        send_manager_requests     as _dstop_managers,
-        send_manager_reminders    as _dstop_manager_reminders,
-        escalate_unanswered       as _dstop_escalate,
-        send_saida_final          as _dstop_saida,
-        handle_dstop_callback     as _dstop_callback,
+        monitor_exceptions                  as _dstop_monitor,
+        send_manager_requests               as _dstop_managers,
+        send_manager_reminders              as _dstop_manager_reminders,
+        escalate_unanswered                 as _dstop_escalate,
+        send_saida_final                    as _dstop_saida,
+        handle_dstop_callback               as _dstop_callback,
+        send_saida_payment_hold_reminders   as _dstop_saida_hold_reminders,
     )
     _DEBT_STOP_AVAILABLE = True
 except ImportError as e:
     print(f"⚠️ [STARTUP] debt_stop_control не найден: {e}")
     _DEBT_STOP_AVAILABLE = False
-    _dstop_monitor = _dstop_managers = _dstop_manager_reminders = _dstop_escalate = _dstop_saida = _dstop_callback = None
+    _dstop_monitor = _dstop_managers = _dstop_manager_reminders = _dstop_escalate = _dstop_saida = _dstop_callback = _dstop_saida_hold_reminders = None
 
 # v9.4.26: Модуль упущенной прибыли
 try:
@@ -6525,6 +6526,37 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await q.answer("Запрос Саиде отправлен.")
                 return
 
+            # Директор решает за Саиду (байпас после SAIDA_BYPASS_HOURS)
+            if action in ("payhold_admin_full", "payhold_admin_none"):
+                if chat_id != admin_id:
+                    await q.answer("Только для директора.")
+                    return
+                status = "full" if action == "payhold_admin_full" else "none"
+                updated = confirm_by_saida(token, status)
+                if not updated:
+                    await q.answer("Запрос уже закрыт.")
+                    return
+                client = updated.get("client", "")
+                manager = updated.get("manager", "")
+                mgr_cid = int(updated.get("manager_chat_id") or 0)
+                result_label = "принял оплату" if status == "full" else "отклонил оплату"
+                if mgr_cid:
+                    try:
+                        await context.bot.send_message(
+                            chat_id=mgr_cid,
+                            text=f"✅ Директор {result_label} по клиенту <b>{client}</b>.",
+                            parse_mode="HTML",
+                        )
+                    except Exception:
+                        pass
+                try:
+                    await q.edit_message_text(
+                        f"Директор {result_label} по клиенту {client}. Менеджер уведомлён."
+                    )
+                except Exception:
+                    await q.answer("Сохранено.")
+                return
+
             if chat_id != saida_chat_id:
                 await q.answer("Подтверждать может только Саида.")
                 return
@@ -9030,6 +9062,24 @@ def main():
                 name="debt_stop_saida",
             )
             sched_logger.info("🚫 Настроено уведомление Саиды: ежедневно 22:15")
+
+            if _dstop_saida_hold_reminders:
+                async def _job_saida_hold_reminders(ctx):
+                    from bot.workday_checker import is_holiday_today
+                    if is_holiday_today():
+                        return
+                    try:
+                        await _dstop_saida_hold_reminders(ctx.bot)
+                    except Exception as e:
+                        sched_logger.error("saida_hold_reminders error: %s", e)
+
+                job_queue.run_repeating(
+                    _job_saida_hold_reminders,
+                    interval=3600,
+                    first=600,
+                    name="saida_hold_reminders",
+                )
+                sched_logger.info("🚫 Настроен SLA-контроль оплат Саиды: каждый час")
 
         sched_logger.info(f"🗑️ Автоудаление сообщений через {AUTO_DELETE_HOURS} часов")
     

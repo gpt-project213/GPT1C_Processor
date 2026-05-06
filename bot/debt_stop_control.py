@@ -81,6 +81,10 @@ AUTO_STOP_MIN = 15   # 15+ дней: авто-стоп даже для одоб�
 MIN_DEBT = 50_000.0
 STOP_PAID_THRESHOLD = float(os.getenv("STOP_PAID_THRESHOLD", "5000"))
 
+# SLA для подтверждения оплаты Саидой
+SAIDA_WARN_HOURS   = int(os.getenv("SAIDA_WARN_HOURS",   "4"))   # первое предупреждение
+SAIDA_BYPASS_HOURS = int(os.getenv("SAIDA_BYPASS_HOURS", "8"))   # байпас к директору
+
 SAIDA_KNOWN_FILE = ROOT / "logs" / "debt_stop_saida_known.json"
 
 
@@ -989,6 +993,129 @@ async def send_saida_final(bot) -> None:
     state["saida_sent"] = True
     save_state(state)
     LOG.info("Саиде дельта стоп-листа: %d новых позиций", total_new)
+
+
+async def send_saida_payment_hold_reminders(bot) -> None:
+    """SLA-контроль pending_saida: предупреждение → байпас директору.
+
+    SAIDA_WARN_HOURS   (дефолт 4ч): Саиде — предупреждение с дедлайном и угрозой огласки.
+    SAIDA_BYPASS_HOURS (дефолт 8ч): директору — список клиентов с кнопками решения;
+                                     менеджеру  — уведомление что Саида обойдена;
+                                     Саиде      — сообщение что решение принял директор.
+    """
+    from collector.payment_hold import _load, _save  # type: ignore
+    now = datetime.now(TZ)
+    if not (9 <= now.hour < 21):
+        return
+
+    try:
+        admin_id = int(os.getenv("ADMIN_CHAT_ID", "0"))
+    except (ValueError, TypeError):
+        admin_id = 0
+
+    data = _load()
+    changed = False
+
+    for token, rec in data.items():
+        if not isinstance(rec, dict):
+            continue
+        if rec.get("status") != "pending_saida":
+            continue
+
+        try:
+            created = datetime.fromisoformat(rec["created_at"])
+            if created.tzinfo is None:
+                created = created.replace(tzinfo=TZ)
+        except (KeyError, ValueError):
+            continue
+
+        age_h = (now - created).total_seconds() / 3600
+        client   = rec.get("client", "—")
+        manager  = rec.get("manager", "—")
+        debt_str = rec.get("debt_str") or rec.get("debt", "—")
+        mgr_chat = rec.get("manager_chat_id")
+
+        # ── Шаг 1: первое предупреждение Саиде ──────────────────────────
+        if age_h >= SAIDA_WARN_HOURS and not rec.get("saida_warned_at"):
+            remaining = max(0.0, SAIDA_BYPASS_HOURS - age_h)
+            from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Полная оплата",  callback_data=f"payhold_full|{token}")],
+                [InlineKeyboardButton("🔸 Частичная",     callback_data=f"payhold_partial|{token}")],
+                [InlineKeyboardButton("❌ Оплаты нет",    callback_data=f"payhold_none|{token}")],
+            ])
+            text = (
+                f"⚠️ Саида, ты не подтвердила оплату <b>{client}</b> уже <b>{age_h:.0f} ч</b>.\n\n"
+                f"Через <b>{remaining:.0f} ч</b> решение уйдёт автоматически. "
+                f"Менеджер <b>{manager}</b> и директор узнают о твоём молчании.\n\n"
+                f"Все последствия ошибки — на тебе."
+            )
+            try:
+                await bot.send_message(
+                    chat_id=SAIDA_CHAT_ID, text=text,
+                    parse_mode="HTML", reply_markup=kb,
+                )
+                rec["saida_warned_at"] = now.isoformat()
+                changed = True
+                LOG.info("Саиде предупреждение по %s (%.0fч)", client, age_h)
+            except Exception as e:
+                LOG.warning("send_saida warn error (%s): %s", client, e)
+
+        # ── Шаг 2: байпас — директор решает ────────────────────────────
+        if age_h >= SAIDA_BYPASS_HOURS and not rec.get("saida_escalated_at"):
+            from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+            # Директору — запрос с кнопками
+            if admin_id:
+                kb_admin = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("✅ Принять оплату",  callback_data=f"payhold_admin_full|{token}")],
+                    [InlineKeyboardButton("❌ Оплаты нет",      callback_data=f"payhold_admin_none|{token}")],
+                ])
+                admin_text = (
+                    f"⚠️ Саида не подтвердила оплату <b>{client}</b> за <b>{age_h:.0f} ч</b>.\n"
+                    f"Менеджер: <b>{manager}</b> | Долг: {debt_str}\n\n"
+                    f"Саида уведомлена о последствиях. Ваше решение:"
+                )
+                try:
+                    await bot.send_message(
+                        chat_id=admin_id, text=admin_text,
+                        parse_mode="HTML", reply_markup=kb_admin,
+                    )
+                except Exception as e:
+                    LOG.warning("send_saida bypass admin error: %s", e)
+
+            # Менеджеру — информация
+            if mgr_chat:
+                try:
+                    await bot.send_message(
+                        chat_id=int(mgr_chat),
+                        text=(
+                            f"ℹ️ Саида не ответила по клиенту <b>{client}</b> за {age_h:.0f} ч.\n"
+                            f"Вопрос передан директору для решения."
+                        ),
+                        parse_mode="HTML",
+                    )
+                except Exception as e:
+                    LOG.warning("send_saida bypass mgr error: %s", e)
+
+            # Саиде — последствия
+            try:
+                await bot.send_message(
+                    chat_id=SAIDA_CHAT_ID,
+                    text=(
+                        f"🚨 Саида, по клиенту <b>{client}</b> ты не дала ответ за {age_h:.0f} ч.\n"
+                        f"Решение принял директор. Все последствия ошибки — на тебе."
+                    ),
+                    parse_mode="HTML",
+                )
+            except Exception as e:
+                LOG.warning("send_saida bypass saida msg error: %s", e)
+
+            rec["saida_escalated_at"] = now.isoformat()
+            changed = True
+            LOG.info("Байпас Саиды по %s (%.0fч) → директор", client, age_h)
+
+    if changed:
+        _save(data)
 
 
 # ══════════════════════════════════════════════════════════════════════
