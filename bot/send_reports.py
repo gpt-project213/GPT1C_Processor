@@ -188,7 +188,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.66/06.05.2026"
+__VERSION__ = "v9.4.67/06.05.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
@@ -6032,6 +6032,26 @@ def _crmdup_queue_ambiguous(conflict: Dict[str, Any]) -> None:
     crm_logger.info("CRM ambiguous queued: %s managers=%s", sig[:50], managers)
 
 
+def _crmdup_try_finalize_ambiguous(sig: str, *, ok: bool, reviewer: str, resolution: str) -> bool:
+    """Mark ambiguous conflict resolved only after successful CRM write."""
+    if not ok:
+        return False
+    entry = _CRM_AMBIGUOUS.get(sig)
+    if not isinstance(entry, dict):
+        return False
+    entry.update(
+        {
+            "status": "resolved",
+            "resolved_at": datetime.now(TZ).isoformat(),
+            "resolved_by": reviewer,
+            "resolution": resolution,
+        }
+    )
+    _crmdup_save_ambiguous()
+    crm_audit("ambiguous_conflict_resolved", reviewer=reviewer, signature=sig, resolution=resolution)
+    return True
+
+
 def _format_ambiguous_text(entry: Dict[str, Any]) -> str:
     items = entry.get("items", [])
     n_pending = _crmdup_ambiguous_count()
@@ -7140,14 +7160,17 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception as _e:
                 crm_logger.error("crm_ambi assign error: %s", _e)
                 ok = False
-            _CRM_AMBIGUOUS[sig].update({
-                "status": "resolved", "resolved_at": datetime.now(TZ).isoformat(),
-                "resolved_by": reviewer, "resolution": f"assigned:{chosen_manager}",
-            })
-            _crmdup_save_ambiguous()
-            crm_audit("ambiguous_conflict_resolved", reviewer=reviewer,
-                      signature=sig, resolution=f"assigned:{chosen_manager}")
-            result_text = f"✅ Назначено: клиент {_html.escape(chosen_manager)}." if ok else "⚠️ Назначено (ошибка записи в CRM)."
+            _crmdup_try_finalize_ambiguous(
+                sig,
+                ok=ok,
+                reviewer=reviewer,
+                resolution=f"assigned:{chosen_manager}",
+            )
+            result_text = (
+                f"✅ Назначено: клиент {_html.escape(chosen_manager)}."
+                if ok else
+                "⚠️ Запись в CRM не удалась. Конфликт оставлен в очереди."
+            )
 
         elif action == "d":  # distinct
             try:
@@ -7156,14 +7179,13 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception as _e:
                 crm_logger.error("crm_ambi distinct error: %s", _e)
                 ok = False
-            _CRM_AMBIGUOUS[sig].update({
-                "status": "resolved", "resolved_at": datetime.now(TZ).isoformat(),
-                "resolved_by": reviewer, "resolution": "distinct",
-            })
-            _crmdup_save_ambiguous()
-            crm_audit("ambiguous_conflict_resolved", reviewer=reviewer,
-                      signature=sig, resolution="distinct")
-            result_text = "✅ Отмечены как разные клиенты."
+            _crmdup_try_finalize_ambiguous(
+                sig,
+                ok=ok,
+                reviewer=reviewer,
+                resolution="distinct",
+            )
+            result_text = "✅ Отмечены как разные клиенты." if ok else "⚠️ Запись в CRM не удалась. Конфликт оставлен в очереди."
 
         elif action == "s":  # skip — просто перейти к следующему
             result_text = None

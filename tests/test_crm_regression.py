@@ -458,6 +458,46 @@ class CRMRegressionTests(unittest.TestCase):
                 self.assertEqual(rec["event"], "claim_broadcast")
                 self.assertEqual(rec["client_key"], "ИП Тест")
 
+    def test_ambiguous_conflict_stays_pending_when_crm_write_fails(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "crm_ambiguous_conflicts.json"
+            sig = "A|B"
+            sr._CRM_AMBIGUOUS.clear()
+            sr._CRM_AMBIGUOUS[sig] = {
+                "token": "a123",
+                "signature": sig,
+                "group_key": "тоо альфа",
+                "items": [
+                    {"client_key": "A", "phone": "+7701", "manager": "Магира"},
+                    {"client_key": "B", "phone": "+7702", "manager": "Оксана"},
+                ],
+                "managers": ["Магира", "Оксана"],
+                "added_at": "2026-05-06T10:00:00+05:00",
+                "status": "pending",
+            }
+            with patch.object(sr, "CRM_AMBIGUOUS_PATH", path), patch.object(sr, "crm_audit") as audit_mock:
+                ok = sr._crmdup_try_finalize_ambiguous(
+                    sig,
+                    ok=False,
+                    reviewer="Вадим",
+                    resolution="assigned:Магира",
+                )
+                self.assertFalse(ok)
+                self.assertEqual(sr._CRM_AMBIGUOUS[sig]["status"], "pending")
+                audit_mock.assert_not_called()
+
+                ok = sr._crmdup_try_finalize_ambiguous(
+                    sig,
+                    ok=True,
+                    reviewer="Вадим",
+                    resolution="assigned:Магира",
+                )
+                self.assertTrue(ok)
+                self.assertEqual(sr._CRM_AMBIGUOUS[sig]["status"], "resolved")
+                self.assertEqual(sr._CRM_AMBIGUOUS[sig]["resolved_by"], "Вадим")
+                self.assertTrue(path.exists())
+                audit_mock.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
