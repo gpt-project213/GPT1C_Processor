@@ -156,6 +156,19 @@ def load_latest_batch() -> Optional[Dict[str, Any]]:
 
 # ─── Batch creation ───────────────────────────────────────────────────────────
 
+def _batch_expires_at(now: datetime) -> datetime:
+    """Срок жизни батча: min(TTL, конец окна отправки сегодня).
+
+    Если cutoff уже прошёл сегодня — берём завтрашний cutoff,
+    чтобы ночные батчи (edge case) не получали expires_at в прошлом.
+    """
+    natural = now + timedelta(hours=BATCH_EXPIRE_HOURS)
+    cutoff = now.replace(hour=SEND_WINDOW_CUTOFF_HOUR, minute=0, second=0, microsecond=0)
+    if cutoff <= now:
+        cutoff += timedelta(days=1)
+    return min(natural, cutoff)
+
+
 def create_batch(
     debtors_by_manager: Dict[str, List[Dict[str, Any]]],
 ) -> Dict[str, Any]:
@@ -236,7 +249,7 @@ def create_batch(
     batch: Dict[str, Any] = {
         "batch_id":        batch_id,
         "created_at":      now.isoformat(),
-        "expires_at":      (now + timedelta(hours=BATCH_EXPIRE_HOURS)).isoformat(),
+        "expires_at":      _batch_expires_at(now).isoformat(),
         "status":          "pending_managers",   # pending_managers | pending_admin | admin_approved | cancelled | expired
         "managers":        managers_state,
         "admin_status":    "pending",            # pending | approved | cancelled | postponed
@@ -1699,13 +1712,20 @@ def expire_old_batches() -> int:
 async def promote_silent_batches_to_admin(bot=None) -> int:
     """Через час молчания менеджеров переводит батч на этап решения администратора.
 
-    Если уже позже SEND_WINDOW_CUTOFF_HOUR — батч помечается как too_late,
-    администратор получает уведомление что сегодня рассылка не состоится.
+    Два пути эскалации:
+    - Штатный: прошёл MANAGER_SILENCE_TIMEOUT_HOURS → admin summary
+    - Узкое окно: до cutoff < MANAGER_SILENCE_TIMEOUT_HOURS → немедленная эскалация,
+      менеджеры обходятся, директор решает сам
+    - После cutoff → too_late, уведомление "сегодня не состоится"
     """
     batches = _load_batches()
     now = datetime.now(tz=TZ)
     changed_ids: List[str] = []
     too_late_ids: List[str] = []
+
+    today_cutoff = now.replace(hour=SEND_WINDOW_CUTOFF_HOUR, minute=0, second=0, microsecond=0)
+    hours_to_cutoff = (today_cutoff - now).total_seconds() / 3600
+    tight_window = 0 < hours_to_cutoff < MANAGER_SILENCE_TIMEOUT_HOURS
 
     for bid, batch in batches.items():
         if batch.get("status") != "pending_managers":
@@ -1715,7 +1735,25 @@ async def promote_silent_batches_to_admin(bot=None) -> int:
         created_at = _parse_batch_dt(batch.get("created_at"))
         if not created_at:
             continue
-        if now <= created_at + timedelta(hours=MANAGER_SILENCE_TIMEOUT_HOURS):
+
+        silence_elapsed = now > created_at + timedelta(hours=MANAGER_SILENCE_TIMEOUT_HOURS)
+
+        # Узкое окно — эскалируем немедленно, не ждём таймаута менеджеров
+        if tight_window and not silence_elapsed:
+            for mgr_state in (batch.get("managers") or {}).values():
+                if mgr_state.get("status") in ("pending", "manual_editing"):
+                    mgr_state["status"] = "timeout"
+            batch["status"] = "pending_admin"
+            batch["escalated_to_admin_at"] = now.isoformat()
+            batch["escalation_reason"] = "tight_send_window"
+            changed_ids.append(bid)
+            logger.info(
+                "[%s] узкое окно (до cutoff %.1f ч) — немедленная эскалация директору",
+                bid, hours_to_cutoff,
+            )
+            continue
+
+        if not silence_elapsed:
             continue
 
         # Уже за окном отправки — закрываем батч без эскалации
