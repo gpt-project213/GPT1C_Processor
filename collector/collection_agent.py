@@ -4,7 +4,16 @@
 collections/collection_agent.py
 AI-диалоговый агент взыскания долгов через DeepSeek.
 
-Версия: 1.0.7 (2026-04-13)
+Версия: 1.1.0 (2026-04-29)
+
+v1.1.0 (2026-04-29): добавлены fallback-шаблоны для старых хвостовых
+  долгов без торговли и для частично погашаемых старых хвостов, без фразы
+  про ограничение отгрузок.
+
+v1.0.8 (2026-04-22): analyze_response() теперь безопасно переживает пустой
+  или `None`-ответ от AI и уходит в fallback вместо падения на `.get`.
+v1.0.9 (2026-04-23): смягчены клиентские ответы, убраны цифровые команды,
+  добавлены intent-ветки soft_positive / promise_schedule / paid_claim.
 
 Функции:
   generate_message()  — генерирует текст сообщения должнику
@@ -24,6 +33,7 @@ OpenClaw:
 
 import json
 import logging
+from collector.logging_utils import get_collector_logger
 import os
 from datetime import datetime
 from pathlib import Path
@@ -46,7 +56,7 @@ OPENCLAW_ENABLED  = os.getenv("OPENCLAW_ENABLED", "false").lower() == "true"
 OPENCLAW_GATEWAY  = os.getenv("OPENCLAW_GATEWAY", "ws://127.0.0.1:18789")
 COMPANY_NAME      = os.getenv("COMPANY_NAME", "Минбаракат")
 
-logger = logging.getLogger(__name__)
+logger = get_collector_logger(__name__)
 
 _PROMPTS_PATH = Path(__file__).resolve().parent.parent / "config" / "collector_prompts.json"
 
@@ -101,12 +111,14 @@ def _get_fallback_template(msg_type: str, **kwargs) -> str:
     kwargs: client_name, manager_name, amount, days, company — для подстановки в шаблон.
     """
     ftpl = _PROMPTS.get("fallback_templates", {})
-    key = msg_type if msg_type in ftpl else "strict_reminder"
-    if key in ftpl:
-        template = ftpl[key]
+    if msg_type in ftpl:
+        template = ftpl[msg_type]
+    elif msg_type in _FALLBACK_TEMPLATES_DEFAULT:
+        template = _FALLBACK_TEMPLATES_DEFAULT[msg_type]
+    elif "strict_reminder" in ftpl:
+        template = ftpl["strict_reminder"]
     else:
-        # Аварийный fallback если файл отсутствует
-        template = _FALLBACK_TEMPLATES_DEFAULT.get(key, _FALLBACK_TEMPLATES_DEFAULT["strict_reminder"])
+        template = _FALLBACK_TEMPLATES_DEFAULT["strict_reminder"]
     if not kwargs:
         return template
     # Форматируем сумму с пробелами если передана
@@ -201,37 +213,61 @@ _FALLBACK_TEMPLATES_DEFAULT = {
         "Здравствуйте! Это {company}, отдел по работе с клиентами.\n\n"
         "Пишем по имеющейся задолженности: {client_name}.\n"
         "Ответственный менеджер: {manager_name}.\n\n"
-        "По нашим данным, остаток задолженности{report_date_part} составляет {amount} тг. "
-        "Остаток не закрыт уже {days_text}.\n"
-        "Подскажите, пожалуйста, когда планируете следующий платёж?\n\n"
-        "Если удобнее обсудить с менеджером — напишите 1, передадим {manager_name}."
+        "Остаток задолженности{report_date_part} составляет {amount} тг. "
+        "Он не закрыт уже {days_text}.\n"
+        "Подскажите, пожалуйста, когда планируете ближайший платёж?"
     ),
     "payment_plan_control": (
         "Здравствуйте! Это {company}, отдел по работе с клиентами.\n\n"
         "Пишем по имеющейся задолженности: {client_name}.\n"
         "Ответственный менеджер: {manager_name}.\n\n"
-        "Видим, что оплаты поступают, но остаток задолженности{report_date_part} составляет {amount} тг. "
-        "Остаток не закрыт уже {days_text}.\n"
-        "Подскажите, по какому графику планируете закрыть остаток?\n\n"
-        "Если удобнее — напишите 1, передадим {manager_name}."
+        "Видим, что оплаты поступают, но остаток задолженности{report_date_part} составляет {amount} тг.\n"
+        "Спасибо, что закрываете его частями. Когда планируете первый ближайший платёж и примерно какая будет сумма?"
     ),
     "strict_reminder": (
         "Здравствуйте! Это {company}, отдел по работе с клиентами.\n\n"
         "Пишем по имеющейся задолженности: {client_name}.\n"
         "Ответственный менеджер: {manager_name}.\n\n"
-        "По нашим данным, остаток задолженности{report_date_part} составляет {amount} тг. "
-        "Остаток не закрыт уже {days_text}.\n"
-        "Пожалуйста, сообщите, когда сможете оплатить остаток.\n\n"
-        "Если удобнее обсудить детали — напишите 1, передадим {manager_name}."
+        "Остаток задолженности{report_date_part} составляет {amount} тг и не закрыт уже {days_text}.\n"
+        "Подскажите, пожалуйста, когда сможете внести ближайший платёж."
     ),
     "stoplist_reminder": (
         "Здравствуйте! Это {company}, отдел по работе с клиентами.\n\n"
         "Пишем по имеющейся задолженности: {client_name}.\n"
         "Ответственный менеджер: {manager_name}.\n\n"
-        "По нашим данным, остаток задолженности{report_date_part} составляет {amount} тг. "
-        "Остаток не закрыт уже {days_text}, поэтому дальнейшие отгрузки ограничены до его закрытия.\n"
-        "Пожалуйста, сообщите, когда сможете оплатить остаток.\n\n"
-        "Если удобнее обсудить с менеджером — напишите 1, передадим {manager_name}."
+        "Остаток задолженности{report_date_part} составляет {amount} тг и не закрыт уже {days_text}, "
+        "поэтому дальнейшие отгрузки ограничены до его закрытия.\n"
+        "Подскажите, пожалуйста, когда сможете закрыть остаток или внести ближайший платёж."
+    ),
+    "legacy_tail_reminder": (
+        "Здравствуйте! Это {company}, отдел по работе с клиентами.\n\n"
+        "Пишем по имеющейся задолженности: {client_name}.\n"
+        "Ответственный менеджер: {manager_name}.\n\n"
+        "По нашим данным, задолженность{report_date_part} составляет {amount} тг и остаётся незакрытой уже {days_text}.\n"
+        "Подскажите, пожалуйста, когда ожидается ближайшая оплата по закрытию остатка."
+    ),
+    "partial_tail_reminder": (
+        "Здравствуйте! Это {company}, отдел по работе с клиентами.\n\n"
+        "Пишем по имеющейся задолженности: {client_name}.\n"
+        "Ответственный менеджер: {manager_name}.\n\n"
+        "Видим частичное погашение, однако задолженность{report_date_part} всё ещё составляет {amount} тг.\n"
+        "Подскажите, пожалуйста, когда планируете ближайший платёж и примерно какую сумму сможете внести."
+    ),
+    "no_movement_reminder": (
+        "Здравствуйте! Это {company}, отдел по работе с клиентами.\n\n"
+        "Обращаемся по задолженности: {client_name}.\n"
+        "Ответственный менеджер: {manager_name}.\n\n"
+        "Остаток задолженности{report_date_part} составляет {amount} тг и не закрыт уже {days_text}. "
+        "За этот период оплат и отгрузок не поступало.\n"
+        "Требуется незамедлительное подтверждение даты и суммы ближайшего платежа."
+    ),
+    "promise_broken_reminder": (
+        "Здравствуйте! Это {company}, отдел по работе с клиентами.\n\n"
+        "Обращаемся по задолженности: {client_name}.\n"
+        "Ответственный менеджер: {manager_name}.\n\n"
+        "Ранее вы обещали погасить задолженность, однако обещание не выполнено.\n"
+        "Текущий остаток{report_date_part} составляет {amount} тг, просрочка — {days_text}.\n"
+        "Укажите, пожалуйста, конкретную дату и сумму ближайшего платежа."
     ),
 }
 
@@ -304,7 +340,7 @@ def generate_message(
         # Аварийный fallback если файл не загружен
         system_prompt = (
             f"Ты — сотрудник отдела по работе с клиентами компании {company} "
-            f"(оптовые поставки продуктов питания, Алматы, Казахстан). "
+            f"(оптовые поставки продуктов питания, Астана, Казахстан). "
             f"Пишешь от имени компании, НЕ от имени ИИ или бота. "
             f"Первая строка: «Здравствуйте! Это {company}, отдел по работе с клиентами.» "
             f"НЕ используй слова «ИИ», «бот», «робот». {lang_inst}"
@@ -364,9 +400,16 @@ def analyze_response(
         "Формат ответа строго:\n"
         '{"intent":"...", "promise_date":"...", "promise_amount":..., '
         '"requires_human":..., "suggested_reply":"..."}\n'
-        "intent: одно из [promise, promise_without_date, refusal, delay_request, question, identity_question, unclear]\n"
-        "  - promise: клиент обещает оплатить — с конкретной датой ИЛИ с относительной "
+        "intent: одно из [promise, promise_without_date, promise_schedule, paid_claim, soft_positive, "
+        "refusal, delay_request, question, identity_question, unclear]\n"
+        "  - promise: клиент обещает оплатить и даёт конкретную дату или относительный срок "
         "('завтра', 'послезавтра', 'до пятницы', 'в пятницу', 'через 2 дня', 'на этой неделе', '17 числа' и т.д.).\n"
+        "  - promise_schedule: клиент описывает график частичных платежей: 'ежедневно', 'частями', "
+        "'по немного', 'по определённой сумме', 'буду закрывать постепенно'.\n"
+        "  - paid_claim: клиент говорит, что уже оплатил, QR/куар/киар прошёл, чек есть, "
+        "деньги скоро упадут или оплата ещё не разнесена.\n"
+        "  - soft_positive: клиент настроен положительно, но конкретики мало: "
+        "'оплачу', 'закрою', 'сегодня будет, сумма пока не знаю', 'постараюсь'.\n"
         "    Для относительных дат ВЫЧИСЛИ конкретную дату YYYY-MM-DD от сегодня:\n"
         "    завтра=+1д, послезавтра=+2д, через N дней=+Nд, 'до пятницы'/'в пятницу'=ближайшая пятница,\n"
         "    'на этой неделе'=пятница текущей недели, 'до конца недели'=пятница текущей недели,\n"
@@ -379,12 +422,15 @@ def analyze_response(
         "null только если дата вообще не упоминается\n"
         "promise_amount: число или null\n"
         "requires_human: true если агрессия, юридические угрозы или неоднозначность\n"
-        "suggested_reply при promise (с датой): подтверди дату — 'Принято, фиксируем оплату до ДД.ММ.ГГГГ. "
-        "Как оплатите — пришлите чек.'\n"
-        "Если клиент говорит, что уже оплатил, QR/куар/киар уже прошёл, деньги скоро упадут "
-        "или оплата ещё не разнесена: это promise_without_date, requires_human=false. "
-        "В suggested_reply обязательно укажи, что задолженность взята по данным отчёта 1С "
-        "на дату сообщения бота/отчёта, и попроси точную дату и сумму оплаты.\n"
+        "suggested_reply при promise с датой и суммой: коротко подтверди договорённость.\n"
+        "suggested_reply при promise с датой, но без суммы: подтверди срок без фразы 'фиксируем' "
+        "и попроси чек после оплаты.\n"
+        "suggested_reply при promise_schedule: признай график, зафиксируй частичные/ежедневные платежи "
+        "и попроси чек после первого платежа.\n"
+        "suggested_reply при paid_claim: поблагодари и попроси чек либо дату и сумму платежа. "
+        "Не повторяй ссылку на 1С.\n"
+        "suggested_reply при soft_positive: один мягкий короткий вопрос про первый платёж и примерную сумму.\n"
+        "Никогда не используй механические команды с цифрами. Не подтверждай договорённость, если клиент не дал достаточно конкретики.\n"
         "Не обсуждай темы не связанные с задолженностью. "
         "Если клиент уходит от темы — это off_topic, set requires_human=true "
         "после второго off_topic."
@@ -408,6 +454,9 @@ def analyze_response(
     user_prompt = f"{history_block}Ответ клиента:\n{response_text}"
 
     raw = _call_deepseek(system_prompt, user_prompt, max_tokens=300)
+    if not isinstance(raw, str):
+        logger.warning("analyze_response: DeepSeek вернул %s вместо строки", type(raw).__name__)
+        raw = ""
     try:
         # Извлекаем JSON из ответа (DeepSeek может добавить markdown)
         start = raw.find("{")
@@ -415,7 +464,11 @@ def analyze_response(
         if start >= 0 and end > start:
             data = json.loads(raw[start:end])
             # Валидируем поля
-            valid_intents = {"promise", "promise_without_date", "refusal", "delay_request", "question", "identity_question", "unclear"}
+            valid_intents = {
+                "promise", "promise_without_date", "promise_schedule", "paid_claim",
+                "soft_positive", "refusal", "delay_request", "question",
+                "identity_question", "unclear",
+            }
             if data.get("intent") not in valid_intents:
                 data["intent"] = "unclear"
             data.setdefault("promise_date", None)

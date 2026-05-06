@@ -13,6 +13,86 @@
 **TZ:** Asia/Almaty → `ZoneInfo(os.getenv("TZ", "Asia/Almaty"))` — всегда через env  
 **Venv:** `.venv/` | **Tests:** `python -X utf8 tests/test_project.py && python -X utf8 tests/test_collector.py`
 
+### Текущий статус collector на 2026-05-06
+
+- stale admin-approved batch перед `send-approved` закрыт: batch теперь пересверяется по свежей дебиторке перед фактической WhatsApp-отправкой;
+- debt snapshot freshness теперь явный runtime-фактор:
+  - `load_latest_debt_json()` возвращает `_freshness` metadata по менеджерам;
+  - preview/admin summary показывают дату и возраст debt-данных;
+  - live collector run и `send-approved` могут быть заблокированы, если snapshot устарел сверх SLA;
+- `paid_claim` (`оплатили`, `вчера была оплата`, `давно оплатили`) переведен в state `awaiting_payment_proof`, без повторных debt-дожимов;
+- входящие proof-вложения из WhatsApp теперь пробрасываются в dialog с `downloadUrl/fileName/caption` и могут быть сразу переданы менеджеру/наблюдателям;
+- для collector добавлен отдельный безсетевой регрессионный файл `tests/test_collector_regression_hermetic.py`;
+- trigger window для collector preview/check расширен с `09:00–18:00` до `09:00–22:00`, а TTL debt-trigger увеличен с `6ч` до `14ч`, потому что Саида временно разносит оплаты и после `20:00`;
+- после каждого `send_whatsapp()` администратор получает мгновенное notice, а `daily_summary()` показывает отдельный блок с фактическими WA-получателями;
+- CRM служебные/зарплатные записи теперь должны фильтроваться в двух местах: на входе `get_clients_without_phones()` и в cleanup pending state, иначе `clarify_phone` бесконечно загрязняется;
+- stop-клиенты теперь делятся на живой shipment-stop и старые хвостовые долги:
+  - `stoplist_reminder` — только для живых stop-кейсов;
+  - `legacy_tail_reminder` — старый хвост без движения;
+  - `partial_tail_reminder` — старый хвост с частичным погашением;
+- старые хвосты без новых отгрузок больше не получают бессмысленную фразу про ограничение отгрузок;
+- именно этот hermetic-suite сейчас считать основным доказательством по collector-правкам, а не полный `tests/test_collector.py`.
+
+### Дополнительные фазы сессии 2026-04-29 (сессии 2–3)
+
+**Фаза 2Б — wa_dialog_suppress** (коммиты сессии 2):
+- `collections_db.py`: поле `wa_dialog_suppress: {reason, set_at, until}` в state; API: set/get/clear
+- `client_dialog.py`: paid_claim → suppress +3д, attachment → suppress +2д
+- `collections_engine.run()`: проверяет suppress, пропускает клиента с аудитом `wa_skipped(reason=suppress)`
+- Тесты: `tests/test_wa_dialog_suppress.py` — 7/7
+
+**Фаза 2А — diff-notice при утверждении** (коммит сессии 2):
+- `collections_engine.py`: `preview_batch_changes(batch_id, approved_clients)` — публичная обёртка над `_refresh_approved_batch_clients`
+- `approval_flow.py` `wa_appr_adm_ok`: вызывает `preview_batch_changes`, вставляет блок "⚠️ Данные обновились" перед текстом утверждения
+- Тесты: `tests/test_diff_notice.py` — 6/6
+
+**UI — кнопка 🤖 Коллектор** (коммит сессии 2):
+- `bot/send_reports.py`: admin-кнопка в главном меню → показывает статус батча, список клиентов до 20 штук, кнопки Обновить/Главное меню
+
+**Фаза 3А — audit log** (коммит сессии 2):
+- `collector/audit_log.py`: append-only JSONL в `logs/collector_audit.jsonl`, thread-safe lock
+- Покрытые события: wa_sent, wa_skipped(4 причины), suppress_set/cleared, batch_created/approved/sent/failed
+- Тесты: `tests/test_audit_log.py` — 7/7
+
+**Фаза 3Б — log prefixes** (коммит сессии 2):
+- `collections_engine.py`: `[COLLECTOR]` префикс через `_PrefixAdapter(LoggerAdapter)`
+- `bot/debt_stop_control.py`: `[STOP]` префикс
+- Позволяет разделить контуры через `grep "[COLLECTOR]"` vs `grep "[STOP]"`
+
+**Фаза 4 — hard-ban отгрузок для хвостовых клиентов** (коммит `34ec994`, сессия 3):
+- Реальный риск: `promise_broken_reminder` содержал "Невыполнение повторного обещания влечёт ограничение отгрузок"
+- Этот шаблон назначается клиентам no_movement + broken promise, среди которых могут быть legacy_tail-клиенты без активных отгрузок
+- Фикс: убрана строка с угрозой отгрузок из `_FALLBACK_TEMPLATES_DEFAULT["promise_broken_reminder"]`
+- Безопасный шаблон добавлен в `config/collector_prompts.json`
+- Тесты: `tests/test_phase4_hard_ban.py` — 7/7 (включая проверку что stoplist_reminder НЕ тронут)
+
+**Незакрытые фазы в очереди:**
+- ~~Фаза 3В~~ — закрыто (все collector/*.py на get_collector_logger, коммит 85f1244)
+- ~~Фаза 5~~ — закрыто (CRM dedup guard + stale TTL, коммиты e45dde1, e4788e8)
+
+### Важное разграничение контуров
+
+- `collector/*` — отдельный контур AI debt collector:
+  - WhatsApp касания по дебиторке;
+  - `wa_approval_batches.json`;
+  - manager/admin approval на рассылку;
+  - stale batch, dialog UX, payment proof.
+- `bot/debt_stop_control.py` — отдельный stop/clearance контур:
+  - stop-лист по отгрузкам;
+  - Саида;
+  - руководитель;
+  - `reports/debt_stop_registry.json`;
+  - статусы `pending_clearance_mgr`, `pending_clearance_admin`, `clear/prepay/limit/blacklist`.
+- Ответ вида `✅ Утверждено — <клиент>. Менеджер и Саида уведомлены.` относится именно к `debt_stop_control`, а не к collector.
+- Кейс `Е ИП Реян (Жангали)` 29.04.2026:
+  - утреннее WhatsApp-сообщение про долг было collector-историей;
+  - дневное `Утверждено ... Менеджер и Саида уведомлены` было штатным stop-clearance workflow после полной оплаты и подтверждения предложения Ергали;
+  - это не запрос на новый лимит, если менеджер не выбирал ветку `📉 С лимитом`.
+- Кейс отсутствия Ергали в новых collector-batches `20260429-135316-54e7` и `20260429-140258-5881`:
+  - это не поломка routing;
+  - утром `29.04.2026` его клиенты уже ушли в старом admin-approved batch `20260428-170001-2bef`;
+  - после этого сработал дневной антидубль `already_contacted_today()`, поэтому новые preview не включили этих же клиентов повторно в тот же день.
+
 ---
 
 ## Архитектура (9 слоёв)
@@ -105,7 +185,6 @@ python -X utf8 tests/test_audit_reports_20260414.py
 - Не хардкодить пути — использовать `config.py`: `HTML_DIR`, `JSON_DIR`, `LOGS_DIR` и т.д.
 - Не использовать `timezone(timedelta(hours=5))` или `ZoneInfo("Asia/Almaty")` без env
 - Не использовать `logging.basicConfig()` на уровне модуля (использовать `setup_logging()`)
-- Не добавлять PDF вывод
 - Не использовать `--send` напрямую (отключён) — только `--send-approved`
 - Не упоминать Армана (уволен)
 
@@ -235,7 +314,6 @@ Get-Content logs\log_monitor_summary.log -Tail 50
 |---|------|---------|
 | 4 | `bot/send_reports.py` | Монолит ~7700 строк: scheduler, callbacks, ACL, reports, collector; менять только точечно |
 | 5 | `config/clients.json` | Данные контактов требуют отдельной сверки после перехода на CRM-only source |
-| 6 | `pdfkit` / docs | PDF-зависимость есть в requirements, активный PDF-контур не найден; не добавлять PDF |
 
 ### 🟢 OPEN — Аудит отчётов 14.04 (не баги, открытые вопросы)
 | # | Модуль | Описание |
@@ -275,7 +353,7 @@ Get-Content logs\log_monitor_summary.log -Tail 50
 
 ```
 Уровни: 0-9д→L0(skip), 10-14→L1, 15-19→L2, 20-24→L3, 25-29→L4, 30+→L5
-Отправка: только 09:00-18:00 Asia/Almaty, НЕ выходные
+Trigger-check/preview: 09:00-22:00 по текущему runtime-регламенту; live WhatsApp send отдельно проверять по guard-коду и не считать автоматически расширенным до 22:00
 Звонки: только 09:00-17:00, level>=4, do_not_call=false
 Макс: 1 сообщение на клиента в день
 
@@ -390,3 +468,51 @@ perf(<module>): <оптимизация>
 
 Jinja2 → `templates/base.html`. Layer 5 (f-strings) → фигурные скобки экранировать `{{`/`}}`.
 Footer: `"Сформировано: DD.MM.YYYY HH:MM (Asia/Almaty) | Версия: …"`
+
+
+- 2026-05-06 (HEAD `09f6531`): WA approval полный цикл — 12 коммитов:
+  - кнопки ✅/💰/🤝 — убрать без причины нельзя
+  - 💰 Оплатил: с документом (→директору) или без (→Саиде)
+  - 🤝 Договорились: детали + дата + одноразово + авто-возврат при срыве
+  - Б-lite: директор принимает/отклоняет договорённости
+  - auto-clear стопа после полной оплаты Саиды
+  - SLA Саиды: предупреждение 4ч, байпас 8ч
+  - аналитика обещаний + backlog Саиды в меню 🤖 Коллектор
+  - расписание без конфликтов: 16:30/17:00/18:30/19:30
+  - тесты: 330/330
+
+- 2026-05-06 (коммит `6f64d4d`): approval flow — таймаут менеджеров + cutoff 19:00:
+  - `SEND_WINDOW_CUTOFF_HOUR=19` (env `WA_SEND_WINDOW_CUTOFF_HOUR`)
+  - дедлайн в превью менеджерам: "⏰ Ответьте до HH:MM. Если не успеете — уведомления уйдут автоматически."
+  - `_build_admin_decisions`: timeout → keep (авто-включени��); явно отклонённые → skip
+  - сводка админу: `🔇 не ответил → авто (N кл.)` с перечнем авто-клиентов
+  - `promote_silent_batches_to_admin`: после 19:00 → статус `too_late`, уведомление "сегодня не состоится"
+  - `collector_reminders` окно: `< 18` → `< 19`
+  - тесты: 320/320 OK
+
+- 2026-04-29: working C project patched for CRM canonical duplicate merging, restart-safe crm_claim persistence, CRM audit log (logs/crm_audit.jsonl), and collector-wide shared [COLLECTOR] logger helper with end-to-end dialog/poller audit events.
+
+- 30.04.2026: в рабочую копию на `C:\GPT1C_Processor_analitica` доведены CRM и collector logging fixes:
+  - CRM canonical duplicate merge в `bot/crm_clients.py`
+  - restart-safe `crm_claim_pending_state.json`
+  - `bot/crm_audit_log.py` с `logs/crm_audit.jsonl`
+  - общий `collector/logging_utils.py`
+  - system audit events в `collector/client_dialog.py` и `collector/whatsapp_poller.py`
+  - исправлен сломанный callback range `weekly_deny/crm_claim` в `bot/send_reports.py`
+  - проверки: py_compile OK, `tests/test_crm_regression.py` 4/4 OK, `tests/test_collector_regression_hermetic.py` 15/15 OK, `tests/test_audit_log.py` 7/7 OK
+
+- 30.04.2026: поверх CRM/collector fixes выполнена унификация runtime logging:
+  - добавлен `bot/logging_utils.py`
+  - `bot/send_reports.py` переведен на доменные логгеры `BOT/CRM/PIPELINE/STATE/INTEGRATION`
+  - `collector/logging_utils.py` переведен на общий runtime-core
+  - `collector/collections_engine.py` переведен на общий rotating bootstrap
+  - `config.setup_logging()` теперь тоже использует unified module logger
+  - добавлен runtime Telegram alert handler для `ERROR/CRITICAL` с cooldown
+  - `bot/crm_clients.py` теперь логирует как `CRM/STORE`
+  - `bot/debt_stop_control.py` теперь логирует как `STOP_CONTROL/FLOW`
+  - проверки:
+    - `python -m py_compile bot/logging_utils.py bot/send_reports.py collector/logging_utils.py collector/collections_engine.py config.py` → OK
+    - `python -X utf8 tests/test_crm_regression.py` → 6/6 OK
+    - `python -X utf8 tests/test_collector_regression_hermetic.py` → 15/15 OK
+    - `python -X utf8 tests/test_logging_runtime.py` → OK
+

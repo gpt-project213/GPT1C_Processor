@@ -9,6 +9,7 @@ collector/registry_manager.py
 
 import json
 import logging
+from collector.logging_utils import get_collector_logger
 import os
 from datetime import datetime
 from pathlib import Path
@@ -27,7 +28,7 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 CONTACTS_PATH = ROOT_DIR / "config" / "debtors_contacts.json"
 REGISTRY_XLSX = ROOT_DIR / "config" / "debtors_registry.xlsx"
 
-logger = logging.getLogger(__name__)
+logger = get_collector_logger(__name__)
 
 
 def _load_contacts() -> Dict[str, Any]:

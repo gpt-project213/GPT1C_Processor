@@ -1,0 +1,17 @@
+{
+  "version": "1.0",
+  "codex": {
+    "enabled": false,
+    "role": "executor",
+    "command": "C:\\Users\\user\\AppData\\Roaming\\npm\\codex.cmd",
+    "args": ["exec", "-C", "E:\\GPT1C_Processor_analitica", "-m", "gpt-5.4", "--full-auto"],
+    "timeout_sec": 1800
+  },
+  "claude": {
+    "enabled": false,
+    "role": "reviewer",
+    "command": "C:\\Users\\user\\.local\\bin\\claude.exe",
+    "args": ["--print", "--output-format", "json", "--permission-mode", "dontAsk", "--model", "claude-sonnet-4-6"],
+    "timeout_sec": 1800
+  }
+}

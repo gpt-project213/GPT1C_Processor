@@ -4,7 +4,12 @@
 collections/debt_monitor.py
 Анализ дебиторки, классификация должников по уровням давления.
 
-Версия: 1.0.6 (2026-04-13)
+Версия: 1.0.8 (2026-04-29)
+
+v1.0.8 (2026-04-29): loader теперь возвращает freshness-метаданные по debt
+  snapshot: period_max/age/stale по менеджерам. Это нужно, чтобы preview
+  показывал возраст данных, а live-send мог блокироваться на устаревшей
+  дебиторке вместо отправки клиентам по старым цифрам.
 
 Уровни:
   0–9 дней   → level 0 (пропустить)
@@ -17,6 +22,7 @@ collections/debt_monitor.py
 
 import json
 import logging
+from collector.logging_utils import get_collector_logger
 import os
 import re
 from datetime import date, datetime, timedelta
@@ -36,7 +42,7 @@ JSON_DIR = ROOT_DIR / "reports" / "json"
 CONTACTS_PATH = ROOT_DIR / "config" / "debtors_contacts.json"
 LOGS_DIR = ROOT_DIR / "logs"
 
-logger = logging.getLogger(__name__)
+logger = get_collector_logger(__name__)
 
 
 def _safe_float(val: Any) -> float:
@@ -68,6 +74,8 @@ _LEVEL_THRESHOLDS = [
 _TECHNICAL_TAIL_MIN = 1000.0
 _TECHNICAL_TAIL_MAX = 5000.0
 _TECHNICAL_TAIL_SHARE = 0.01
+_FRESH_WARN_DAYS = max(0, int(os.getenv("COLLECTOR_DEBT_WARN_DAYS", "1") or "1"))
+_FRESH_BLOCK_DAYS = max(_FRESH_WARN_DAYS, int(os.getenv("COLLECTOR_DEBT_BLOCK_DAYS", "2") or "2"))
 
 
 def _level_for_days(days: int) -> int:
@@ -92,6 +100,9 @@ def load_latest_debt_json() -> Dict[str, Any]:
     Клиенты всех групп объединяются; при дублях берётся запись с большим days_silence.
     """
     candidates = list(JSON_DIR.glob("debt_ext_*.json"))
+    # v9.4.41: Ведомости взаиморасчётов порождают debt_ext_*json с period_max на день позади —
+    #   для коллектора не нужны, только INFO-шум "устаревший". Исключаем по имени файла.
+    candidates = [p for p in candidates if "взаиморасч" not in p.name.lower()]
     if not candidates:
         logger.warning("Нет debt_ext_*.json в %s", JSON_DIR)
         return {}
@@ -105,6 +116,7 @@ def load_latest_debt_json() -> Dict[str, Any]:
 
     latest_by_group = {base: max(paths, key=_safe_mtime) for base, paths in groups.items()}
     latest_period_by_manager: Dict[str, date] = {}
+    latest_file_by_manager: Dict[str, Path] = {}
     for latest in latest_by_group.values():
         try:
             with open(latest, encoding="utf-8") as f:
@@ -120,6 +132,7 @@ def load_latest_debt_json() -> Dict[str, Any]:
         current = latest_period_by_manager.get(file_mgr)
         if current is None or period_max > current:
             latest_period_by_manager[file_mgr] = period_max
+            latest_file_by_manager[file_mgr] = latest
 
     merged_clients: Dict[str, Dict[str, Any]] = {}
     loaded = 0
@@ -200,8 +213,12 @@ def load_latest_debt_json() -> Dict[str, Any]:
                     merged_clients[name] = c_stamped
         loaded += 1
 
+    freshness = _build_freshness_meta(latest_period_by_manager, latest_file_by_manager)
     logger.info("Загружено %d файлов, объединено %d клиентов", loaded, len(merged_clients))
-    return {"clients": list(merged_clients.values())}
+    return {
+        "clients": list(merged_clients.values()),
+        "_freshness": freshness,
+    }
 
 
 def _extract_days_silence(c: Dict[str, Any]) -> int:
@@ -259,6 +276,67 @@ def _parse_movement_date(value: Any) -> Optional[date]:
         except ValueError:
             continue
     return None
+
+
+def _fmt_ru(d: date) -> str:
+    return d.strftime("%d.%m.%Y")
+
+
+def _build_freshness_meta(
+    latest_period_by_manager: Dict[str, date],
+    latest_file_by_manager: Dict[str, Path],
+) -> Dict[str, Any]:
+    today = datetime.now(TZ).date()
+    managers: Dict[str, Any] = {}
+    dates: List[date] = []
+    stale_managers: List[str] = []
+    warning_managers: List[str] = []
+
+    for manager_name in sorted(latest_period_by_manager.keys()):
+        period_max = latest_period_by_manager.get(manager_name)
+        file_path = latest_file_by_manager.get(manager_name)
+        age_days = (today - period_max).days if period_max else None
+        warn = age_days is not None and age_days >= _FRESH_WARN_DAYS
+        stale = age_days is None or age_days >= _FRESH_BLOCK_DAYS
+        if period_max:
+            dates.append(period_max)
+        if warn:
+            warning_managers.append(manager_name)
+        if stale:
+            stale_managers.append(manager_name)
+        managers[manager_name] = {
+            "period_max": _fmt_iso(period_max) if period_max else "",
+            "period_max_ru": _fmt_ru(period_max) if period_max else "—",
+            "age_days": age_days,
+            "warn": warn,
+            "stale": stale,
+            "file": file_path.name if file_path else "",
+        }
+
+    if dates:
+        oldest = min(dates)
+        newest = max(dates)
+        snapshot_label_ru = _fmt_ru(newest) if oldest == newest else f"{_fmt_ru(oldest)} → {_fmt_ru(newest)}"
+    else:
+        oldest = newest = None
+        snapshot_label_ru = "—"
+
+    max_age_days = max((entry["age_days"] or 0) for entry in managers.values()) if managers else None
+    return {
+        "generated_at": datetime.now(TZ).isoformat(),
+        "today": _fmt_iso(today),
+        "warn_threshold_days": _FRESH_WARN_DAYS,
+        "block_threshold_days": _FRESH_BLOCK_DAYS,
+        "snapshot_date_min": _fmt_iso(oldest) if oldest else "",
+        "snapshot_date_max": _fmt_iso(newest) if newest else "",
+        "snapshot_label_ru": snapshot_label_ru,
+        "max_age_days": max_age_days,
+        "warning_managers": warning_managers,
+        "stale_managers": stale_managers,
+        "has_warning": bool(warning_managers),
+        "is_stale": bool(stale_managers),
+        "managers": managers,
+    }
 
 
 def _fmt_iso(d: Optional[date]) -> Optional[str]:
@@ -372,9 +450,9 @@ def compute_residual_debt_profile(
             unapplied_payment += remaining
 
     debt_amount = _safe_float(
-        client_data.get("amount")
+        client_data.get("debt")
+        or client_data.get("amount")
         or client_data.get("closing")
-        or client_data.get("debt")
         or client_data.get("balance")
         or 0
     )
@@ -498,7 +576,7 @@ def classify_debtors(debt_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         days = int(debt_age_profile.get("residual_debt_age_days", get_overdue_days(client)) or 0)
         payment_silence_days = int(debt_age_profile.get("payment_silence_days", get_overdue_days(client)) or 0)
         amount = 0.0
-        for field in ("amount", "closing", "debt", "balance", "сумма", "остаток"):
+        for field in ("debt", "amount", "closing", "balance", "сумма", "остаток"):
             val = client.get(field)
             if val is not None:
                 v = _safe_float(val)

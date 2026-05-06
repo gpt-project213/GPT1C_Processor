@@ -8,14 +8,16 @@ tests/test_collector.py — тесты модулей AI Debt Collector
 import sys
 import os
 import json
+import asyncio
 import tempfile
 import shutil
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from unittest.mock import patch, MagicMock, AsyncMock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+os.environ["COLLECTOR_TEST_MODE"] = "1"
 
 PASS = "✅"
 FAIL = "❌"
@@ -779,7 +781,8 @@ try:
             mock_rpwd.return_value = None
             asyncio.run(cd_mod.handle_incoming("77011234569", "Я оплачу"))
     d_pwd = cd_mod._get_client_dialog("77011234569")
-    check("promise_without_date 'Я оплачу': state=active", d_pwd.get("state") == "active")
+    # v1.1.0: краткое promise_without_date ("Я оплачу") → soft_positive → escalated
+    check("promise_without_date 'Я оплачу': state=escalated", d_pwd.get("state") == "escalated")
     bot_replies_pwd = [ex["text"] for ex in d_pwd.get("exchanges", []) if ex["role"] == "bot"]
     check("promise_without_date 'Я оплачу': ответ не пустой",
           bool(bot_replies_pwd[-1].strip() if bot_replies_pwd else ""))
@@ -801,6 +804,7 @@ try:
             mock_rpwd2.return_value = None
             asyncio.run(cd_mod.handle_incoming("77011234570", "Передам на оплату"))
     d_pwd2 = cd_mod._get_client_dialog("77011234570")
+    # fix: "Передам на оплату" — обещание, не факт оплаты → не срабатывает хеуристик → active
     check("promise_without_date 'Передам на оплату': state=active", d_pwd2.get("state") == "active")
     bot_replies_pwd2 = [ex["text"] for ex in d_pwd2.get("exchanges", []) if ex["role"] == "bot"]
     # Должен использоваться дефолтный текст с датой
@@ -827,14 +831,201 @@ try:
         ))
     d_qr = cd_mod._get_client_dialog("77011234572")
     qr_bot_replies = [ex["text"] for ex in d_qr.get("exchanges", []) if ex["role"] == "bot"]
-    check("recent payment: бот уточняет дату отчёта и сумму оплаты",
-          any("данным отчёта на 2026-04-11" in t.lower()
-              and "точную дату и сумму" in t.lower()
+    check("recent payment: бот просит чек или дату и сумму оплаты",
+          any("чек" in t.lower()
+              and "дату и сумму" in t.lower()
+              and "1С" not in t
               for t in qr_bot_replies),
           str(qr_bot_replies))
-    check("recent payment: диалог остаётся active, не эскалируется сразу",
-          d_qr.get("state") == "active",
+    # awaiting_payment_proof — промежуточный статус: бот ждёт чек, к менеджеру не эскалировано
+    check("recent payment: диалог в awaiting_payment_proof, не эскалирован к менеджеру",
+          d_qr.get("state") == "awaiting_payment_proof",
           str(d_qr.get("state")))
+
+    # ─── UX: promise с датой, но без суммы — без ложного "фиксируем" ───────────
+    asyncio.run(cd_mod.start_client_dialog(
+        phone="77011234573",
+        client_name="Кайрбек",
+        manager_name="Ергали",
+        manager_chat_id=123,
+        level=2,
+        days=12,
+        amount=25150.0,
+        message_text="Напоминание по задолженности.",
+    ))
+    with patch("collector.collection_agent._call_deepseek") as mock_prom_no_amount:
+        mock_prom_no_amount.return_value = '{"intent":"promise","promise_date":"2026-04-22","promise_amount":null,"requires_human":false,"suggested_reply":""}'
+        with patch("collector.client_dialog._reply_to_client") as mock_prom_reply:
+            mock_prom_reply.return_value = None
+            with patch("collector.client_dialog.escalate_to_manager"):
+                asyncio.run(cd_mod.handle_incoming("77011234573", "Сегодня будет, сумма пока не знаю"))
+    d_prom_no_amount = cd_mod._get_client_dialog("77011234573")
+    prom_replies = [ex["text"] for ex in d_prom_no_amount.get("exchanges", []) if ex["role"] == "bot"]
+    last_prom_reply = prom_replies[-1] if prom_replies else ""
+    check("UX promise date-only: state=escalated", d_prom_no_amount.get("state") == "escalated")
+    check("UX promise date-only: нет ложной фиксации",
+          "фиксируем" not in last_prom_reply.lower(), last_prom_reply)
+    check("UX promise date-only: просит чек",
+          "чек" in last_prom_reply.lower(), last_prom_reply)
+
+    # ─── UX: schedule — ежедневные/частичные платежи сохраняются ──────────────
+    asyncio.run(cd_mod.start_client_dialog(
+        phone="77011234574",
+        client_name="Кайрбек",
+        manager_name="Ергали",
+        manager_chat_id=123,
+        level=2,
+        days=12,
+        amount=25150.0,
+        message_text="Напоминание по задолженности.",
+    ))
+    with patch("collector.collection_agent._call_deepseek") as mock_sched:
+        mock_sched.return_value = '{"intent":"promise_schedule","promise_date":"2026-04-22","promise_amount":null,"payment_schedule":"daily","requires_human":false,"suggested_reply":""}'
+        with patch("collector.client_dialog._reply_to_client") as mock_sched_reply:
+            mock_sched_reply.return_value = None
+            with patch("collector.client_dialog.escalate_to_manager"):
+                asyncio.run(cd_mod.handle_incoming("77011234574", "На ежедневной основе, по определённой сумме"))
+    d_sched = cd_mod._get_client_dialog("77011234574")
+    sched_replies = [ex["text"] for ex in d_sched.get("exchanges", []) if ex["role"] == "bot"]
+    check("UX schedule: payment_schedule сохранён", d_sched.get("payment_schedule") == "daily")
+    check("UX schedule: state=escalated", d_sched.get("state") == "escalated")
+    check("UX schedule: ответ про график платежей",
+          any(("daily" in t.lower() or "част" in t.lower() or "ежеднев" in t.lower()) for t in sched_replies),
+          str(sched_replies))
+
+    # ─── UX: paid_claim — не спорит ссылкой на 1С, просит чек ─────────────────
+    asyncio.run(cd_mod.start_client_dialog(
+        phone="77011234575",
+        client_name="Кайрбек",
+        manager_name="Ергали",
+        manager_chat_id=123,
+        level=2,
+        days=12,
+        amount=25150.0,
+        message_text="Напоминание по задолженности.",
+    ))
+    with patch("collector.collection_agent._call_deepseek") as mock_paid:
+        mock_paid.return_value = '{"intent":"paid_claim","promise_date":null,"promise_amount":null,"requires_human":false,"suggested_reply":""}'
+        with patch("collector.client_dialog._reply_to_client") as mock_paid_reply:
+            mock_paid_reply.return_value = None
+            with patch("collector.client_dialog._notify_dialog_observers", new=AsyncMock()) as mock_paid_note:
+                asyncio.run(cd_mod.handle_incoming("77011234575", "Я уже оплатил"))
+    d_paid = cd_mod._get_client_dialog("77011234575")
+    paid_replies = [ex["text"] for ex in d_paid.get("exchanges", []) if ex["role"] == "bot"]
+    last_paid = paid_replies[-1] if paid_replies else ""
+    check("UX paid_claim: state=awaiting_payment_proof", d_paid.get("state") == "awaiting_payment_proof")
+    check("UX paid_claim: awaiting_payment_proof=True", d_paid.get("awaiting_payment_proof") is True)
+    check("UX paid_claim: нет повторной ссылки на 1С", "1С" not in last_paid, last_paid)
+    check("UX paid_claim: просит чек", "чек" in last_paid.lower(), last_paid)
+    check("UX paid_claim: manager/admin note отправлен", mock_paid_note.await_count == 1)
+
+    # ─── UX: soft_positive — один мягкий вопрос, без фиксации ─────────────────
+    asyncio.run(cd_mod.start_client_dialog(
+        phone="77011234576",
+        client_name="Кайрбек",
+        manager_name="Ергали",
+        manager_chat_id=123,
+        level=2,
+        days=12,
+        amount=25150.0,
+        message_text="Напоминание по задолженности.",
+    ))
+    with patch("collector.collection_agent._call_deepseek") as mock_soft:
+        mock_soft.return_value = '{"intent":"soft_positive","promise_date":null,"promise_amount":null,"requires_human":false,"suggested_reply":""}'
+        with patch("collector.client_dialog._reply_to_client") as mock_soft_reply:
+            mock_soft_reply.return_value = None
+            asyncio.run(cd_mod.handle_incoming("77011234576", "Закрою в ближайшее время"))
+    d_soft = cd_mod._get_client_dialog("77011234576")
+    soft_replies = [ex["text"] for ex in d_soft.get("exchanges", []) if ex["role"] == "bot"]
+    last_soft = soft_replies[-1] if soft_replies else ""
+    with patch("collector.client_dialog._reply_to_client") as mock_paid_ack_reply:
+        mock_paid_ack_reply.return_value = None
+        with patch("collector.collection_agent._call_deepseek") as mock_paid_ack_ai:
+            mock_paid_ack_ai.return_value = '{"intent":"unclear","promise_date":null,"promise_amount":null,"requires_human":false,"suggested_reply":""}'
+            asyncio.run(cd_mod.handle_incoming("77011234575", "Хорошо"))
+    d_paid_ack = cd_mod._get_client_dialog("77011234575")
+    paid_ack_replies = [ex["text"] for ex in d_paid_ack.get("exchanges", []) if ex["role"] == "bot"]
+    check("UX paid_claim ack: нет лишнего повторного ответа",
+          len(paid_ack_replies) == len(paid_replies),
+          str(paid_ack_replies))
+
+    with patch("collector.client_dialog._reply_to_client") as mock_paid_proof_reply:
+        mock_paid_proof_reply.return_value = None
+        with patch("collector.client_dialog._notify_dialog_observers", new=AsyncMock()) as mock_paid_proof_note:
+            asyncio.run(cd_mod.handle_incoming(
+                "77011234575",
+                "[клиент прислал documentMessage]",
+                attachment={
+                    "type": "documentMessage",
+                    "download_url": "https://example.test/receipt.pdf",
+                    "file_name": "receipt.pdf",
+                    "caption": "чек оплаты",
+                },
+            ))
+    d_paid_proof = cd_mod._get_client_dialog("77011234575")
+    paid_proof_replies = [ex["text"] for ex in d_paid_proof.get("exchanges", []) if ex["role"] == "bot"]
+    last_paid_proof = paid_proof_replies[-1] if paid_proof_replies else ""
+    proof_note_text = mock_paid_proof_note.await_args.args[1] if mock_paid_proof_note.await_args else ""
+    check("UX paid_claim proof: state=awaiting_manager", d_paid_proof.get("state") == "awaiting_manager")
+    check("UX paid_claim proof: awaiting_payment_proof reset", d_paid_proof.get("awaiting_payment_proof") is False)
+    check("UX paid_claim proof: reply confirms forwarding",
+          "передали менеджеру" in last_paid_proof.lower(), last_paid_proof)
+    check("UX paid_claim proof: note contains download url",
+          "https://example.test/receipt.pdf" in proof_note_text, proof_note_text)
+    check("UX paid_claim proof: note sent once", mock_paid_proof_note.await_count == 1)
+
+    asyncio.run(cd_mod.start_client_dialog(
+        phone="77011234577",
+        client_name="Ольга VED-STAR",
+        manager_name="Ергали",
+        manager_chat_id=123,
+        level=2,
+        days=10,
+        amount=1060103.0,
+        message_text="Напоминание по задолженности.",
+    ))
+    with patch("collector.collection_agent._call_deepseek") as mock_soft_commit:
+        mock_soft_commit.return_value = '{"intent":"soft_positive","promise_date":null,"promise_amount":null,"requires_human":false,"suggested_reply":""}'
+        with patch("collector.client_dialog._reply_to_client") as mock_soft_commit_reply:
+            mock_soft_commit_reply.return_value = None
+            with patch("collector.client_dialog.escalate_to_manager") as mock_soft_commit_escalate:
+                asyncio.run(cd_mod.handle_incoming("77011234577", "счс оплачу"))
+    d_soft_commit = cd_mod._get_client_dialog("77011234577")
+    soft_commit_replies = [ex["text"] for ex in d_soft_commit.get("exchanges", []) if ex["role"] == "bot"]
+    last_soft_commit = soft_commit_replies[-1] if soft_commit_replies else ""
+    check("UX soft_positive commitment: state=escalated", d_soft_commit.get("state") == "escalated")
+    check("UX soft_positive commitment: просит чек, а не первый платёж",
+          "чек" in last_soft_commit.lower() and "первый плат" not in last_soft_commit.lower(),
+          last_soft_commit)
+    check("UX soft_positive commitment: менеджер уведомляется", mock_soft_commit_escalate.called)
+
+    asyncio.run(cd_mod.start_client_dialog(
+        phone="77011234578",
+        client_name="Ольга VED-STAR",
+        manager_name="Ергали",
+        manager_chat_id=123,
+        level=2,
+        days=10,
+        amount=1060103.0,
+        message_text="Напоминание по задолженности.",
+    ))
+    with patch("collector.client_dialog._reply_to_client") as mock_service_reply:
+        mock_service_reply.return_value = None
+        with patch("collector.client_dialog.escalate_to_manager") as mock_service_escalate:
+            asyncio.run(cd_mod.handle_incoming("77011234578", "акт сверки сбросьте за апрель"))
+    d_service = cd_mod._get_client_dialog("77011234578")
+    service_replies = [ex["text"] for ex in d_service.get("exchanges", []) if ex["role"] == "bot"]
+    last_service = service_replies[-1] if service_replies else ""
+    check("UX service request: сразу передаёт менеджеру",
+          "передаю вас менеджеру" in last_service.lower(), last_service)
+    check("UX service request: не дожимает оплату",
+          "первый плат" not in last_service.lower(), last_service)
+    check("UX service request: есть эскалация", mock_service_escalate.called)
+    check("UX soft_positive: state=active", d_soft.get("state") == "active")
+    check("UX soft_positive: мягкий вопрос про первый платёж",
+          "первый плат" in last_soft.lower(), last_soft)
+    check("UX soft_positive: нет ложной фиксации",
+          "фиксируем" not in last_soft.lower(), last_soft)
 
     # ─── off_topic эскалация: пустой bot reply НЕ сохраняется ──────────────────
     asyncio.run(cd_mod.start_client_dialog(
@@ -1077,8 +1268,15 @@ try:
         get_pending_managers,
         _all_managers_responded,
         _build_decisions,
+        _build_admin_decisions,
+        _save_admin_decisions,
+        _admin_client_list_keyboard,
         _get_manager_by_idx,
         expire_old_batches,
+        handle_manager_callback,
+        handle_admin_callback,
+        promote_silent_batches_to_admin,
+        supersede_batch,
     )
     check("APPROVAL: импорт approval_flow.py успешен", True)
 except Exception as e:
@@ -1110,7 +1308,7 @@ check(
 
 # ── Тест 2: create_batch — пустой manager_name игнорируется ─────────────────
 _batch_noname = create_batch({
-    "":          [{"name": "Клиент без менеджера", "amount": 1, "days": 10, "level": 1}],
+    "":          [{"name": "TEST fixture: клиент без manager_name", "amount": 1, "days": 10, "level": 1}],
     "Оксана":    [{"name": "ТОО Дельта", "amount": 300_000, "days": 11, "level": 1}],
 })
 check(
@@ -1141,6 +1339,18 @@ try:
     check(
         "APPROVAL T3b: load_latest_batch возвращает pending батч",
         load_latest_batch() is not None,
+    )
+    _batch1["status"] = "sent"
+    save_batch(_batch1)
+    check(
+        "APPROVAL T3c: load_latest_batch не возвращает финальный sent батч",
+        load_latest_batch() is None,
+    )
+    _batch1["status"] = "superseded"
+    save_batch(_batch1)
+    check(
+        "APPROVAL T3d: load_latest_batch не возвращает superseded батч",
+        load_latest_batch() is None,
     )
 finally:
     _af_mod._BATCHES_PATH = _orig_path
@@ -1272,6 +1482,22 @@ try:
         and _after_second8.get("send_summary", {}).get("approved_total") == 3,
         str(_after_second8.get("send_summary")),
     )
+    _batch8_admin = load_batch(_batch8["batch_id"])
+    _admin_decisions8 = _build_admin_decisions(_batch8_admin)
+    _first_admin_key8 = sorted(_admin_decisions8.keys())[0]
+    _admin_decisions8[_first_admin_key8] = "skip"
+    _save_admin_decisions(_batch8_admin, _admin_decisions8)
+    save_batch(_batch8_admin)
+    _after_admin8 = load_batch(_batch8["batch_id"])
+    check(
+        "APPROVAL T8f: admin manual decisions сохраняются отдельно от manager approve",
+        len(_after_admin8.get("admin_keep_keys", [])) == 2
+        and len(_after_admin8.get("admin_skip_keys", [])) == 1,
+        str({
+            "admin_keep_keys": _after_admin8.get("admin_keep_keys"),
+            "admin_skip_keys": _after_admin8.get("admin_skip_keys"),
+        }),
+    )
 finally:
     _af_mod._BATCHES_PATH = _orig_path
     _shutil_t3.rmtree(_tmp_dir8, ignore_errors=True)
@@ -1308,7 +1534,199 @@ finally:
     _shutil_t3.rmtree(_tmp_dir10, ignore_errors=True)
 
 # ── Тест 11: run_approval_preview в коде ─────────────────────────────────────
+_batch10c = create_batch({"Алена": _batch1_clients, "Оксана": _batch7_data["Оксана"]})
+_batch10c["expires_at"] = "2000-01-01T00:00:00+05:00"
+_batch10c["managers"]["Алена"]["status"] = "pending"
+_batch10c["managers"]["Оксана"]["status"] = "manual_editing"
+_tmp_dir10c = _tempfile.mkdtemp()
+_af_mod._BATCHES_PATH = Path(_tmp_dir10c) / "wa_approval_batches.json"
+try:
+    save_batch(_batch10c)
+    _expired10c = expire_old_batches()
+    _after10c = load_batch(_batch10c["batch_id"])
+    check(
+        "APPROVAL T10c: expire_old_batches помечает батч как expired",
+        _expired10c == 1 and _after10c is not None and _after10c.get("status") == "expired",
+        str(_after10c.get("status") if _after10c else None),
+    )
+    check(
+        "APPROVAL T10d: молчавшие менеджеры переводятся в timeout",
+        _after10c is not None
+        and _after10c["managers"]["Алена"].get("status") == "timeout"
+        and _after10c["managers"]["Оксана"].get("status") == "timeout"
+        and bool(_after10c.get("expired_at")),
+        str(_after10c["managers"] if _after10c else None),
+    )
+finally:
+    _af_mod._BATCHES_PATH = _orig_path
+    _shutil_t3.rmtree(_tmp_dir10c, ignore_errors=True)
+
+_batch10e = create_batch({"Алена": _batch1_clients, "Оксана": _batch7_data["Оксана"]})
+_batch10e["created_at"] = "2000-01-01T00:00:00+05:00"
+_tmp_dir10e = _tempfile.mkdtemp()
+_af_mod._BATCHES_PATH = Path(_tmp_dir10e) / "wa_approval_batches.json"
+try:
+    save_batch(_batch10e)
+    with patch("collector.approval_flow.send_admin_summary", new=AsyncMock()) as _send_admin_mock:
+        _promoted10e = asyncio.run(promote_silent_batches_to_admin())
+    _after10e = load_batch(_batch10e["batch_id"])
+    check(
+        "APPROVAL T10e: после часа молчания батч переводится в pending_admin",
+        _promoted10e == 1 and _after10e is not None and _after10e.get("status") == "pending_admin",
+        str(_after10e.get("status") if _after10e else None),
+    )
+    check(
+        "APPROVAL T10f: молчавшие менеджеры получают timeout и админу уходит сводка",
+        _after10e is not None
+        and _after10e["managers"]["Алена"].get("status") == "timeout"
+        and _after10e["managers"]["Оксана"].get("status") == "timeout"
+        and bool(_after10e.get("escalated_to_admin_at"))
+        and _send_admin_mock.await_count == 1,
+        str(_after10e["managers"] if _after10e else None),
+    )
+finally:
+    _af_mod._BATCHES_PATH = _orig_path
+    _shutil_t3.rmtree(_tmp_dir10e, ignore_errors=True)
+
+_batch10g = create_batch({"Алена": _batch1_clients})
+_tmp_dir10g = _tempfile.mkdtemp()
+_af_mod._BATCHES_PATH = Path(_tmp_dir10g) / "wa_approval_batches.json"
+try:
+    save_batch(_batch10g)
+    supersede_batch(_batch10g, superseded_by="new-batch-1234")
+    _after10g = load_batch(_batch10g["batch_id"])
+    check(
+        "APPROVAL T10g: активный батч можно закрыть как superseded",
+        _after10g is not None
+        and _after10g.get("status") == "superseded"
+        and _after10g.get("superseded_by") == "new-batch-1234",
+        str(_after10g),
+    )
+finally:
+    _af_mod._BATCHES_PATH = _orig_path
+    _shutil_t3.rmtree(_tmp_dir10g, ignore_errors=True)
+
+_batch10h = create_batch({"Алена": _batch1_clients})
+_batch10h["status"] = "pending_admin"
+_tmp_dir10h = _tempfile.mkdtemp()
+_af_mod._BATCHES_PATH = Path(_tmp_dir10h) / "wa_approval_batches.json"
+try:
+    save_batch(_batch10h)
+    with patch("collector.approval_flow._tg_edit", new=AsyncMock()) as _edit10h:
+        _handled10h = asyncio.run(handle_manager_callback("wa_appr_mgr_ok|" + _batch10h["batch_id"] + "|0", 1, 2))
+    _after10h = load_batch(_batch10h["batch_id"])
+    check(
+        "APPROVAL T10h: manager-callback по pending_admin батчу блокируется",
+        _handled10h is True
+        and _after10h is not None
+        and _after10h["managers"]["Алена"].get("status") == "pending"
+        and _edit10h.await_count == 1,
+        str(_after10h["managers"]["Алена"] if _after10h else None),
+    )
+finally:
+    _af_mod._BATCHES_PATH = _orig_path
+    _shutil_t3.rmtree(_tmp_dir10h, ignore_errors=True)
+
+section("10i. agreed promise stats")
+_orig_promises_path = _af_mod._PROMISES_PATH
+_tmp_promises_dir = _tempfile.mkdtemp()
+_af_mod._PROMISES_PATH = Path(_tmp_promises_dir) / "wa_agreed_promises.json"
+try:
+    _af_mod.save_agreed_promise("ИП Исполнен", "Магира", "до 10.05, 50000 тг", "batch-a")
+    _af_mod.save_agreed_promise("ТОО Срыв", "Магира", "до 11.05, 80000 тг", "batch-a")
+    _af_mod.save_agreed_promise("ИП Отказ", "Ергали", "до 12.05, 30000 тг", "batch-b")
+    _af_mod.save_agreed_promise("ТОО Активный", "Ергали", "до 13.05, 40000 тг", "batch-b")
+    _promises10i = _af_mod._load_promises()
+    _promises10i["ИП Исполнен"]["status"] = "fulfilled"
+    _promises10i["ТОО Срыв"]["status"] = "broken"
+    _promises10i["ИП Отказ"]["status"] = "rejected"
+    _af_mod._save_promises(_promises10i)
+    _stats10i = _af_mod.get_agreed_promise_stats()
+    _mgr10i = {item["manager"]: item for item in _stats10i.get("managers", [])}
+    check(
+        "APPROVAL T10i: статистика обещаний считает общие статусы",
+        _stats10i["totals"]["total"] == 4
+        and _stats10i["totals"]["fulfilled"] == 1
+        and _stats10i["totals"]["broken"] == 1
+        and _stats10i["totals"]["rejected"] == 1
+        and _stats10i["totals"]["in_control"] == 1,
+        str(_stats10i["totals"]),
+    )
+    check(
+        "APPROVAL T10j: статистика обещаний агрегируется по менеджерам",
+        _mgr10i["Магира"]["fulfilled"] == 1
+        and _mgr10i["Магира"]["broken"] == 1
+        and _mgr10i["Ергали"]["rejected"] == 1
+        and _mgr10i["Ергали"]["in_control"] == 1,
+        str(_mgr10i),
+    )
+    _stats_text10i = _af_mod.format_agreed_promise_stats_text()
+    check(
+        "APPROVAL T10k: текстовая сводка обещаний содержит менеджеров и ключевые счётчики",
+        "Магира" in _stats_text10i
+        and "Ергали" in _stats_text10i
+        and "Сорвано: <b>1</b>" in _stats_text10i
+        and "Отклонено директором: <b>1</b>" in _stats_text10i,
+        _stats_text10i,
+    )
+finally:
+    _af_mod._PROMISES_PATH = _orig_promises_path
+    _shutil_t3.rmtree(_tmp_promises_dir, ignore_errors=True)
+
+_batch10i = create_batch({"Алена": _batch1_clients})
+_batch10i["status"] = "pending_admin"
+_batch10i["admin_status"] = "pending"
+_tmp_dir10i = _tempfile.mkdtemp()
+_af_mod._BATCHES_PATH = Path(_tmp_dir10i) / "wa_approval_batches.json"
+try:
+    save_batch(_batch10i)
+    _flat10i = _af_mod._iter_admin_clients(_batch10i)
+    _decisions10i = _build_admin_decisions(_batch10i)
+    _first_key10i = _flat10i[0]["_admin_key"]
+    _decisions10i[_first_key10i] = "skip"
+    _save_admin_decisions(_batch10i, _decisions10i)
+    _batch10i["admin_reviewed_keys"] = [_first_key10i]
+    save_batch(_batch10i)
+    _markup10i = _admin_client_list_keyboard(
+        _batch10i["batch_id"],
+        _flat10i,
+        _decisions10i,
+        {_first_key10i},
+    )
+    _markup10i_text = json.dumps(_markup10i, ensure_ascii=False)
+    check(
+        "APPROVAL T10i: обработанный админом клиент исчезает из ручного списка",
+        _flat10i[0]["name"] not in _markup10i_text and _flat10i[1]["name"] in _markup10i_text,
+        _markup10i_text,
+    )
+finally:
+    _af_mod._BATCHES_PATH = _orig_path
+    _shutil_t3.rmtree(_tmp_dir10i, ignore_errors=True)
+
+_batch10j = create_batch({"Алена": _batch1_clients})
+_batch10j["status"] = "superseded"
+_batch10j["superseded_by"] = "new-batch-9999"
+_tmp_dir10j = _tempfile.mkdtemp()
+_af_mod._BATCHES_PATH = Path(_tmp_dir10j) / "wa_approval_batches.json"
+try:
+    save_batch(_batch10j)
+    with patch("collector.approval_flow._tg_edit", new=AsyncMock()) as _edit10j:
+        _handled10j = asyncio.run(handle_admin_callback("wa_appr_adm_view|" + _batch10j["batch_id"], 1, 2))
+    _after10j = load_batch(_batch10j["batch_id"])
+    check(
+        "APPROVAL T10j: admin-callback по superseded запросу блокируется",
+        _handled10j is True
+        and _after10j is not None
+        and _after10j.get("status") == "superseded"
+        and _edit10j.await_count == 1,
+        str(_after10j),
+    )
+finally:
+    _af_mod._BATCHES_PATH = _orig_path
+    _shutil_t3.rmtree(_tmp_dir10j, ignore_errors=True)
+
 _engine_src_v2 = (Path(__file__).parent.parent / "collector" / "collections_engine.py").read_text(encoding="utf-8")
+_approval_src_v2 = (Path(__file__).parent.parent / "collector" / "approval_flow.py").read_text(encoding="utf-8")
 check(
     "APPROVAL T11: run_approval_preview присутствует в collections_engine.py",
     "run_approval_preview" in _engine_src_v2,
@@ -1316,6 +1734,14 @@ check(
 check(
     "APPROVAL T11b: --preview флаг добавлен в CLI",
     '"--preview"' in _engine_src_v2 or "'--preview'" in _engine_src_v2,
+)
+check(
+    "APPROVAL T11c: Telegram send-now callback присутствует в approval_flow.py",
+    "wa_appr_adm_send" in _approval_src_v2,
+)
+check(
+    "APPROVAL T11d: новый запрос закрывает и старые админские сообщения",
+    "close_admin_messages(" in _engine_src_v2,
 )
 
 # ── Тест 12: wa_appr_ callback зарегистрирован в send_reports.py ─────────────
@@ -1361,7 +1787,14 @@ check("PROMPTS T4e: тон level 5 есть", "5" in _tone_keys)
 
 # ── T5: все типы fallback_templates ─────────────────────────────────────────
 _fb = _loaded_prompts.get("fallback_templates", {})
-_required_fb = {"soft_reminder", "payment_plan_control", "strict_reminder", "stoplist_reminder"}
+_required_fb = {
+    "soft_reminder",
+    "payment_plan_control",
+    "strict_reminder",
+    "stoplist_reminder",
+    "legacy_tail_reminder",
+    "partial_tail_reminder",
+}
 _missing_fb = _required_fb - set(_fb.keys())
 check("PROMPTS T5: все типы fallback_templates присутствуют",
       len(_missing_fb) == 0,
@@ -1372,9 +1805,13 @@ _prompts_text = json.dumps(_loaded_prompts, ensure_ascii=False)
 check("PROMPTS T6: 'торговой точке' отсутствует (заменено на 'задолженности')",
       "торговой точке" not in _prompts_text)
 
-# ── T7: нет "ответьте «менеджер»" — заменено на "напишите 1" ────────────────
-check("PROMPTS T7: 'ответьте «менеджер»' отсутствует (заменено на напишите 1)",
+# ── T7: нет старых механических команд клиенту ───────────────────────────────
+check("PROMPTS T7: 'ответьте «менеджер»' отсутствует",
       "ответьте «менеджер»" not in _prompts_text)
+check("PROMPTS T7b: 'напишите 1' отсутствует",
+      "напишите 1" not in _prompts_text)
+check("PROMPTS T7c: промпт использует Астану, а не Алматы",
+      "Астана" in _prompts_text and "Алматы" not in _prompts_text)
 
 # ── T8: нет ИИ/бот слов в fallback_templates (как отдельные слова) ───────────
 import re as _re
@@ -1413,12 +1850,18 @@ check("PROMPTS T9b: тон L5 без юридических угроз",
 _stop_tpl = _loaded_prompts.get("fallback_templates", {}).get("stoplist_reminder", "")
 check("PROMPTS T9c: stoplist_reminder без слова 'критическая'",
       "критичес" not in _stop_tpl.lower(), _stop_tpl)
-check("PROMPTS T9d: stoplist_reminder использует 'Остаток не закрыт уже'",
-      "Остаток не закрыт уже {days_text}" in _stop_tpl, _stop_tpl)
+check("PROMPTS T9d: stoplist_reminder указывает срок незакрытого остатка",
+      "не закрыт уже {days_text}" in _stop_tpl, _stop_tpl)
 check("PROMPTS T9d2: stoplist_reminder указывает дату отчёта рядом с остатком",
-      "остаток задолженности{report_date_part} составляет" in _stop_tpl, _stop_tpl)
+      "остаток задолженности{report_date_part} составляет" in _stop_tpl.lower(), _stop_tpl)
 check("PROMPTS T9e: stoplist_reminder не пишет 'передан руководству'",
       "руководств" not in _stop_tpl.lower(), _stop_tpl)
+_legacy_tail_tpl = _loaded_prompts.get("fallback_templates", {}).get("legacy_tail_reminder", "")
+check("PROMPTS T9e2: legacy_tail_reminder без фразы про отгрузки",
+      "отгруз" not in _legacy_tail_tpl.lower(), _legacy_tail_tpl)
+_partial_tail_tpl = _loaded_prompts.get("fallback_templates", {}).get("partial_tail_reminder", "")
+check("PROMPTS T9e3: partial_tail_reminder без фразы про отгрузки",
+      "отгруз" not in _partial_tail_tpl.lower(), _partial_tail_tpl)
 check("PROMPTS T9f: тон L5 не содержит 'критическая'",
       "критичес" not in _tone5, _tone5)
 check("PROMPTS T9g: тон L5 не содержит 'передан руководству'",
@@ -1454,7 +1897,7 @@ check("PROMPTS T12d: fallback template не содержит ИИ/бот как 
           r'(?<![а-яёА-ЯЁa-zA-Z])бот(?![а-яёА-ЯЁa-zA-Z])',
           r'(?<![а-яёА-ЯЁa-zA-Z])робот(?![а-яёА-ЯЁa-zA-Z])',
       ]))
-check("PROMPTS T12e: fallback содержит 'напишите 1'", "напишите 1" in _tpl)
+check("PROMPTS T12e: fallback НЕ содержит 'напишите 1'", "напишите 1" not in _tpl)
 _typed_stop_msg = _ca_mod.generate_message(
     client_name="Е Олжас",
     debt_amount=830781.58,
@@ -1469,8 +1912,22 @@ check("PROMPTS T12f: msg_type=stoplist_reminder использует шабло�
       "критичес" not in _typed_stop_msg.lower()
       and "руководств" not in _typed_stop_msg.lower()
       and "остаток задолженности на 11.04.2026 составляет 830 782 тг" in _typed_stop_msg.lower()
-      and "Остаток не закрыт уже 31 день" in _typed_stop_msg,
+      and "не закрыт уже 31 день" in _typed_stop_msg,
       _typed_stop_msg)
+_typed_legacy_tail_msg = _ca_mod.generate_message(
+    client_name="Е ИП Шахин",
+    debt_amount=340000.0,
+    days_overdue=33,
+    level=5,
+    language="ru",
+    manager_name="Ергали",
+    msg_type="legacy_tail_reminder",
+    report_date="2026-04-27",
+)
+check("PROMPTS T12g: legacy_tail_reminder без упоминания отгрузок",
+      "отгруз" not in _typed_legacy_tail_msg.lower()
+      and "задолженность на 27.04.2026 составляет 340 000 тг" in _typed_legacy_tail_msg.lower(),
+      _typed_legacy_tail_msg)
 
 # ── T13: _get_tone возвращает строку для каждого уровня ──────────────────────
 for lvl in range(1, 6):
@@ -1486,6 +1943,17 @@ check("PROMPTS T14b: _get_lang_inst('kz') непустая",
       isinstance(_ca_mod._get_lang_inst("kz"), str) and len(_ca_mod._get_lang_inst("kz")) > 3)
 
 # ─────────────────────────────────────────────────────────────────────────────
+
+# T15: analyze_response должен переживать None от AI без падения на .get
+with patch("collector.collection_agent._call_deepseek", return_value=None):
+    _none_ai = _ca_mod.analyze_response("Оплачу позже", manager_name="Ергали")
+check(
+    "PROMPTS T15: analyze_response переживает None от AI и уходит в fallback",
+    isinstance(_none_ai, dict)
+    and _none_ai.get("intent") == "unclear"
+    and _none_ai.get("requires_human") is True,
+    str(_none_ai),
+)
 
 # ═══════════════════════════════════════════════════════════════
 # 14. PHASE 4 — DECOUPLE SHIPMENT STOP FROM COLLECTION ELIGIBILITY
@@ -1561,6 +2029,28 @@ check("P4 T8: auto_stopped + debit/credit > 0 → client_approval (active guard 
 check("P4 T8b: msg_type=stoplist_reminder при наличии debit/credit",
       _d8.get("msg_type") == "stoplist_reminder", str(_d8))
 
+# T9: stopped + старый хвост без движения -> legacy_tail_reminder
+_d9 = _collector_candidate_decision(
+    {"name": "Е ИП Шахин", "amount": 340000.0, "days": 33, "opening": 340000.0, "debit": 0.0, "credit": 0.0},
+    _p4_contact,
+    {"status": "stopped"},
+)
+check("P4 T9: stopped + старый хвост без движения -> client_approval",
+      _d9.get("action") == "client_approval", str(_d9))
+check("P4 T9b: stopped + старый хвост без движения -> legacy_tail_reminder",
+      _d9.get("msg_type") == "legacy_tail_reminder", str(_d9))
+
+# T10: stopped + старый хвост с частичной оплатой -> partial_tail_reminder
+_d10 = _collector_candidate_decision(
+    {"name": "Е Еркебулан", "amount": 739409.67, "days": 28, "opening": 767268.67, "debit": 0.0, "credit": 27859.0},
+    _p4_contact,
+    {"status": "stopped"},
+)
+check("P4 T10: stopped + старый хвост с частичной оплатой -> client_approval",
+      _d10.get("action") == "client_approval", str(_d10))
+check("P4 T10b: stopped + старый хвост с частичной оплатой -> partial_tail_reminder",
+      _d10.get("msg_type") == "partial_tail_reminder", str(_d10))
+
 
 # ═══════════════════════════════════════════════════════════════
 # 15. HIGH-3 — missing_manager_chat_id guard
@@ -1618,6 +2108,71 @@ except Exception as _e:
 # 16. HIGH-4 PROOF — msg_type preserved through preview → send-approved
 # ═══════════════════════════════════════════════════════════════
 section("HIGH-4 proof: msg_type preserved preview → batch → approved → send-approved")
+
+section("15.5 send-approved freshness gate")
+
+import collector.collections_engine as ce_mod
+
+_approved_batch_client = {
+    "name": "Е Еркебулан",
+    "manager": "Ергали",
+    "phone": "77087578717",
+    "amount": 767269.0,
+    "days": 28,
+    "level": 4,
+    "language": "ru",
+    "msg_type": "strict_reminder",
+    "report_date": "2026-04-27",
+    "reason": "old snapshot",
+}
+
+with patch("collector.approval_flow.is_ready_for_send", return_value=True), \
+     patch("collector.approval_flow.get_approved_clients", return_value=[dict(_approved_batch_client)]), \
+     patch("collector.approval_flow.load_batch", return_value={"batch_id": "batch-1", "created_at": "2026-04-28T13:00:00+05:00"}), \
+     patch("collector.approval_flow.record_send_results") as _record_send, \
+     patch("collector.collections_engine._live_send_allowed", return_value=True), \
+     patch("collector.collections_engine.load_latest_debt_json", return_value={"clients": [{"name": "Е Еркебулан"}]}), \
+     patch("collector.collections_engine.classify_debtors", return_value=[{
+         "name": "Е Еркебулан",
+         "amount": 120000.0,
+         "days": 12,
+         "level": 1,
+         "report_date": "2026-04-28",
+     }]), \
+     patch("collector.collections_engine._apply_collector_day_policy", side_effect=lambda c, name, use_first_seen: c), \
+     patch("collector.collections_engine.match_client", return_value={"manager": "Ергали", "whatsapp": "77087578717", "language": "ru"}), \
+     patch("collector.collections_engine._get_stop_record", return_value={}), \
+     patch("collector.collections_engine._collector_candidate_decision", return_value={"action": "client_approval", "msg_type": "soft_reminder", "reason": "fresh debt"}), \
+     patch("collector.collections_engine._send_approved_client", new=AsyncMock(return_value={"name": "Е Еркебулан", "status": "sent", "reason": "ok"})) as _send_refreshed, \
+     patch("collector.collections_engine.notify_admin", new=AsyncMock()) as _notify_refresh:
+    refreshed_results = asyncio.run(ce_mod.send_approved_batch("batch-1"))
+
+sent_payload = _send_refreshed.await_args.args[0] if _send_refreshed.await_args else {}
+check("freshness gate: send_approved_batch uses refreshed amount",
+      sent_payload.get("amount") == 120000.0, str(sent_payload))
+check("freshness gate: send_approved_batch uses refreshed msg_type",
+      sent_payload.get("msg_type") == "soft_reminder", str(sent_payload))
+check("freshness gate: admin notified about batch refresh", _notify_refresh.await_count == 1)
+check("freshness gate: record_send_results called", _record_send.called)
+check("freshness gate: returned sent result", any(r.get("status") == "sent" for r in refreshed_results), str(refreshed_results))
+
+with patch("collector.approval_flow.is_ready_for_send", return_value=True), \
+     patch("collector.approval_flow.get_approved_clients", return_value=[dict(_approved_batch_client)]), \
+     patch("collector.approval_flow.load_batch", return_value={"batch_id": "batch-2", "created_at": "2026-04-28T13:00:00+05:00"}), \
+     patch("collector.approval_flow.record_send_results") as _record_stale, \
+     patch("collector.collections_engine._live_send_allowed", return_value=True), \
+     patch("collector.collections_engine.load_latest_debt_json", return_value={"clients": []}), \
+     patch("collector.collections_engine.classify_debtors", return_value=[]), \
+     patch("collector.collections_engine._send_approved_client", new=AsyncMock()) as _send_stale, \
+     patch("collector.collections_engine.notify_admin", new=AsyncMock()) as _notify_stale:
+    stale_results = asyncio.run(ce_mod.send_approved_batch("batch-2"))
+
+check("freshness gate stale client: no send happens", _send_stale.await_count == 0)
+check("freshness gate stale client: skipped result returned",
+      any("stale approved batch" in str(r.get("reason", "")) for r in stale_results),
+      str(stale_results))
+check("freshness gate stale client: admin notified", _notify_stale.await_count == 1)
+check("freshness gate stale client: record_send_results called", _record_stale.called)
 
 import asyncio
 from unittest.mock import patch, MagicMock
@@ -1705,6 +2260,12 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as _td_wa:
           _wa_poller._has_active_collector_dialog("+77753306745") is True)
     check("WA STT T2: должник без активного диалога не проходит гейт",
           _wa_poller._has_active_collector_dialog("+77750000000") is False)
+    with patch.object(_wa_poller, "WA_REQUIRE_ACTIVE_DIALOG", False):
+        check("WA STT T2b: выделенный бот-номер пропускает входящие без active-dialog гейта",
+              _wa_poller._should_process_incoming("+77750000000") is True)
+    with patch.object(_wa_poller, "WA_REQUIRE_ACTIVE_DIALOG", True):
+        check("WA STT T2c: legacy privacy-гейт можно вернуть через WA_REQUIRE_ACTIVE_DIALOG=1",
+              _wa_poller._should_process_incoming("+77750000000") is False)
     _wa_poller._CLIENT_DIALOGS_PATH = _orig_dialogs_path
 
 with patch.object(_wa_poller, "ASSEMBLYAI_API_KEY", "aai-key"), \
@@ -1773,6 +2334,73 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as _td_hold:
 
 
 # ═══════════════════════════════════════════════════════════════
+with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as _td_hold_stats:
+    _payment_hold.PAYMENT_HOLD_PATH = Path(_td_hold_stats) / "saida_payment_holds.json"
+    _now_hold = _payment_hold._now()
+    _payment_hold._save({
+        "old-a": {
+            "token": "old-a",
+            "status": "pending_saida",
+            "manager": "Магира",
+            "client": "ТОО Старый",
+            "debt_str": "100 000,00",
+            "claimed_by_manager": True,
+            "created_at": (_now_hold - timedelta(hours=10)).isoformat(timespec="seconds"),
+            "updated_at": (_now_hold - timedelta(hours=10)).isoformat(timespec="seconds"),
+        },
+        "mid-b": {
+            "token": "mid-b",
+            "status": "pending_saida",
+            "manager": "Ергали",
+            "client": "ИП Средний",
+            "debt_str": "50 000,00",
+            "claimed_by_manager": False,
+            "created_at": (_now_hold - timedelta(hours=5)).isoformat(timespec="seconds"),
+            "updated_at": (_now_hold - timedelta(hours=5)).isoformat(timespec="seconds"),
+        },
+        "fresh-c": {
+            "token": "fresh-c",
+            "status": "pending_saida",
+            "manager": "Ергали",
+            "client": "ТОО Свежий",
+            "debt_str": "20 000,00",
+            "claimed_by_manager": False,
+            "created_at": (_now_hold - timedelta(hours=1)).isoformat(timespec="seconds"),
+            "updated_at": (_now_hold - timedelta(hours=1)).isoformat(timespec="seconds"),
+        },
+        "closed-d": {
+            "token": "closed-d",
+            "status": "confirmed_full",
+            "manager": "Алена",
+            "client": "ТОО Закрыт",
+            "created_at": (_now_hold - timedelta(days=1)).isoformat(timespec="seconds"),
+            "updated_at": _now_hold.isoformat(timespec="seconds"),
+        },
+    })
+    _hold_stats = _payment_hold.get_saida_hold_stats()
+    _hold_mgr = {item["manager"]: item for item in _hold_stats.get("managers", [])}
+    check("PAYHOLD T3: backlog Саиды считает pending/warn/bypass/closed_today",
+          _hold_stats["totals"]["pending_total"] == 3
+          and _hold_stats["totals"]["warn_total"] == 2
+          and _hold_stats["totals"]["bypass_total"] == 1
+          and _hold_stats["totals"]["closed_today"] == 1
+          and _hold_stats["totals"]["claimed_by_manager_total"] == 1,
+          str(_hold_stats["totals"]))
+    check("PAYHOLD T4: backlog Саиды агрегируется по менеджерам",
+          _hold_mgr["Магира"]["pending_total"] == 1
+          and _hold_mgr["Магира"]["bypass_total"] == 1
+          and _hold_mgr["Ергали"]["pending_total"] == 2
+          and _hold_mgr["Ергали"]["warn_total"] == 1,
+          str(_hold_mgr))
+    _hold_text = _payment_hold.format_saida_hold_stats_text()
+    check("PAYHOLD T5: текст backlog Саиды содержит ключевые метрики",
+          "Открыто: <b>3</b>" in _hold_text
+          and "Закрыто сегодня: <b>1</b>" in _hold_text
+          and "Магира" in _hold_text
+          and "Ергали" in _hold_text,
+          _hold_text)
+    _payment_hold.PAYMENT_HOLD_PATH = _orig_hold_path
+
 # 19. Debt stop admin shipment limit — после оплаты с лимитом
 # ═══════════════════════════════════════════════════════════════
 section("19. Debt stop admin shipment limit")
@@ -1855,9 +2483,9 @@ try:
                 "client": "ТОО Напоминание",
                 "manager": "Магира",
                 "manager_chat_id": 777,
-                "days_silence": 9,
+                "days_silence": 10,
                 "debt": 250_000,
-                "level": "7-9",
+                "level": "10+",
                 "manager_response": None,
                 "admin_approved": None,
             }
@@ -1885,8 +2513,158 @@ finally:
 
 
 # ═══════════════════════════════════════════════════════════════
+# 19b. Saida full payment auto-clears stop
+import collector.shipment_control as _ship_for_saida
+_orig_ship_for_saida = _ship_for_saida._DECISIONS_PATH
+_ship_for_saida._DECISIONS_PATH = Path(_dstop_tmpdir) / "collector_shipment_decisions_auto_clear.json"
+_ship_for_saida.set_decision("77011110000", "ТОО АвтоСнятие", "block_until", manager_name="Алена", manager_chat_id=111, amount=300_000)
+_dstop.save_registry({
+    "ТОО АвтоСнятие": {
+        "manager": "Алена",
+        "manager_chat_id": 111,
+        "approved_at": _today,
+        "days_at_approval": 18,
+        "debt_at_approval": 300_000,
+        "status": "block_until_payment",
+        "added_by": "admin_block_until_payment",
+        "discipline_violation": False,
+        "cleared_at": None,
+    }
+})
+_dstop.save_state({
+    "date": _today,
+    "next_id": 2,
+    "saida_sent": False,
+    "candidates": {
+        "1": {
+            "client": "ТОО АвтоСнятие",
+            "manager": "Алена",
+            "manager_chat_id": 111,
+            "days_silence": 18,
+            "debt": 300_000,
+            "saida_payment_confirmed": None,
+        }
+    },
+})
+_fake_dstop_bot.messages.clear()
+_full_result = asyncio.run(_dstop._handle_saida_confirm_full("1", 0, _fake_dstop_bot))
+_reg_after_full = _dstop.load_registry().get("ТОО АвтоСнятие", {})
+_ship_after_full = _ship_for_saida.get_decision("ТОО АвтоСнятие")
+check("DSTOP SAIDA FULL T1: полная оплата Саиды авто-снимает стоп",
+      _reg_after_full.get("status") == "cleared" and bool(_reg_after_full.get("cleared_at")),
+      str(_reg_after_full))
+check("DSTOP SAIDA FULL T2: manager notified after auto-clear",
+      any(m.get("chat_id") == 111 and "АвтоСнятие" in str(m.get("text", "")) for m in _fake_dstop_bot.messages),
+      str(_fake_dstop_bot.messages))
+check("DSTOP SAIDA FULL T3: shipment decision closed after auto-clear",
+      _ship_after_full is None,
+      str(_ship_after_full))
+check("DSTOP SAIDA FULL T4: callback returns auto-clear confirmation",
+      "автоматичес" in str(_full_result).lower(),
+      str(_full_result))
+_ship_for_saida._DECISIONS_PATH = _orig_ship_for_saida
+
 # 20. Shipment control — collector/shipment_control.py
 # ═══════════════════════════════════════════════════════════════
+_orig_dstop_json_dir = _dstop.JSON_DIR
+_orig_dstop_config_dir = _dstop.CONFIG_DIR
+try:
+    _dstop.JSON_DIR = Path(_dstop_tmpdir) / "json"
+    _dstop.CONFIG_DIR = Path(_dstop_tmpdir) / "config"
+    _dstop.JSON_DIR.mkdir(parents=True, exist_ok=True)
+    _dstop.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+
+    (_dstop.CONFIG_DIR / "managers.json").write_text(
+        json.dumps({"Алена": 188939016}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (_dstop.CONFIG_DIR / "clients.json").write_text(
+        json.dumps({"clients": {}}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (_dstop.CONFIG_DIR / "weekly_clients.json").write_text(
+        json.dumps({"clients": []}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    (_dstop.JSON_DIR / "debt_ext_Ведомость_по_взаиморасчетам_с_контрагентами_Алена (336).json").write_text(
+        json.dumps({
+            "clients": [{
+                "client": "А Фурманова Евгений (склад № 20)",
+                "days_silence": 7,
+                "debt": 285535.02,
+            }]
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (_dstop.JSON_DIR / "debt_ext_Детальный Дебиторы Алена (143).json").write_text(
+        json.dumps({
+            "clients": [{
+                "client": "А Фурманова Евгений (склад № 20)",
+                "days_silence": 2,
+                "debt": 36588.52,
+            }]
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    os.utime(_dstop.JSON_DIR / "debt_ext_Ведомость_по_взаиморасчетам_с_контрагентами_Алена (336).json", (1, 1))
+    os.utime(_dstop.JSON_DIR / "debt_ext_Детальный Дебиторы Алена (143).json", (2, 2))
+
+    _picked = _dstop._get_latest_debt_file("Алена")
+    check("DSTOP FILE T1: _get_latest_debt_file выбирает свежий detailed debt, а не старую ведомость с большим номером",
+          _picked is not None and "Детальный Дебиторы Алена (143)" in _picked.name,
+          str(_picked))
+
+    _dstop.save_registry({})
+    _dstop.save_state({"date": _today, "candidates": {}, "next_id": 1, "saida_sent": False})
+    _rebuilt = _dstop._build_candidates()
+    _cand_values = list(_rebuilt.get("candidates", {}).values())
+    check("DSTOP FILE T2: _build_candidates не поднимает клиента из свежего файла, если он уже не проходит пороги",
+          len(_cand_values) == 0,
+          str(_cand_values))
+
+    (_dstop.JSON_DIR / "debt_ext_Детальный Дебиторы Алена (144).json").write_text(
+        json.dumps({
+            "clients": [ {
+                "client": "А Фурманова Евгений (склад № 20)",
+                "days_silence": 10,
+                "debt": 36588.52,
+            } ]
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    os.utime(_dstop.JSON_DIR / "debt_ext_Детальный Дебиторы Алена (144).json", (3, 3))
+
+    (_dstop.JSON_DIR / "debt_ext_Детальный Дебиторы Алена (145).json").write_text(
+        json.dumps({
+            "clients": [ {
+                "client": "А Тестовый стоп-клиент",
+                "days_silence": 9,
+                "debt": 150000.0,
+            }, {
+                "client": "А Тестовый стоп-клиент 10д",
+                "days_silence": 10,
+                "debt": 150000.0,
+            } ]
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    os.utime(_dstop.JSON_DIR / "debt_ext_Детальный Дебиторы Алена (145).json", (4, 4))
+
+    _dstop.save_registry({})
+    _dstop.save_state({"date": _today, "candidates": {}, "next_id": 1, "saida_sent": False})
+    _rebuilt10 = _dstop._build_candidates()
+    _cand_names10 = {item.get("client") for item in _rebuilt10.get("candidates", {}).values()}
+    check("DSTOP FILE T3: клиент с 9 днями молчания больше не попадает в stop-flow",
+          "А Тестовый стоп-клиент" not in _cand_names10,
+          str(_cand_names10))
+    check("DSTOP FILE T4: клиент с 10 днями молчания уже попадает в stop-flow",
+          "А Тестовый стоп-клиент 10д" in _cand_names10,
+          str(_cand_names10))
+finally:
+    _dstop.JSON_DIR = _orig_dstop_json_dir
+    _dstop.CONFIG_DIR = _orig_dstop_config_dir
+
 section("20. Shipment control (условная отгрузка)")
 
 import tempfile as _tmpmod

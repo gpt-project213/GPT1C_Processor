@@ -4,7 +4,24 @@
 collector/whatsapp_poller.py
 Green API polling — получает входящие сообщения WhatsApp каждые 30 секунд.
 
-Версия: 1.1.2 (2026-04-19)
+Версия: 1.1.7 (2026-04-29)
+
+v1.1.6 (2026-04-29): входящие document/image/video сообщения теперь
+  передают в client_dialog метаданные вложения и downloadUrl, чтобы чек
+  или иное доказательство оплаты можно было сразу переслать менеджеру.
+
+v1.1.5 (2026-04-23): номер WhatsApp теперь выделен только под бота,
+  поэтому старый privacy-гейт "только активный диалог" стал опциональным
+  через WA_REQUIRE_ACTIVE_DIALOG=1. По умолчанию входящие аудио доходят до
+  транскрипции; неизвестные номера всё равно безопасно игнорируются в
+  client_dialog.handle_incoming().
+
+v1.1.4 (2026-04-22): AssemblyAI теперь требует `speech_models` как непустой
+  список. Контракт запроса обновлён, чтобы входящие голосовые снова
+  распознавались.
+
+v1.1.3 (2026-04-22): убран устаревший параметр `speech_model` из запроса
+  AssemblyAI transcript; из-за него входящие голосовые сообщения падали с 400.
 
 Endpoints (используется instance-specific URL, напр. https://7107.api.greenapi.com):
   GET  https://{ID[:4]}.api.greenapi.com/waInstance{ID}/receiveNotification/{TOKEN}
@@ -14,11 +31,12 @@ Endpoints (используется instance-specific URL, напр. https://710
 import asyncio
 import json
 import logging
+from collector.logging_utils import get_collector_logger
 import os
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import httpx
 from dotenv import load_dotenv
@@ -36,13 +54,11 @@ GREENAPI_ID    = os.getenv("GREENAPI_ID", "")
 GREENAPI_TOKEN = os.getenv("GREENAPI_TOKEN", "")
 ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY", "")
 ASSEMBLYAI_POLL_SECONDS = int(os.getenv("ASSEMBLYAI_POLL_SECONDS", "18"))
-# AssemblyAI v2 API: speech_model — одиночная строка (не список).
-# "best" автоматически выбирает лучшую модель для языка при language_detection=True
-# (включая ru и kk).
-_ASSEMBLYAI_SPEECH_MODEL = "best"
+ASSEMBLYAI_SPEECH_MODELS = ["universal-2"]
 SAVE_WA_AUDIO = os.getenv("SAVE_WA_AUDIO", "1").lower() in ("1", "true", "yes")
 TEST_MODE      = os.getenv("TEST_MODE", "0") == "1"
 TEST_WA_PHONE  = os.getenv("TEST_WA_PHONE", "")
+WA_REQUIRE_ACTIVE_DIALOG = os.getenv("WA_REQUIRE_ACTIVE_DIALOG", "0").lower() in ("1", "true", "yes")
 
 # Каждый инстанс имеет свой поддомен: первые 4 цифры ID → 7107.api.greenapi.com
 # Может быть переопределён через GREENAPI_URL в .env
@@ -51,7 +67,22 @@ _GREENAPI_BASE = os.getenv(
     f"https://{GREENAPI_ID[:4]}.api.greenapi.com" if GREENAPI_ID else "https://api.green-api.com"
 )
 
-logger = logging.getLogger(__name__)
+logger = get_collector_logger(__name__)
+
+
+def _mask_phone(phone: str) -> str:
+    digits = "".join(c for c in str(phone or "") if c.isdigit())
+    if len(digits) <= 4:
+        return digits
+    return f"{digits[:4]}***{digits[-2:]}"
+
+
+def _audit(event: str, **kwargs: Any) -> None:
+    try:
+        from collector.audit_log import audit as _collector_audit
+        _collector_audit(event, **kwargs)
+    except Exception as exc:
+        logger.debug("audit skipped %s: %s", event, exc)
 
 
 def _extract_phone(sender: str) -> str:
@@ -81,6 +112,44 @@ def _has_active_collector_dialog(phone: str) -> bool:
     except Exception:
         pass
     return False
+
+
+def _should_process_incoming(phone: str) -> bool:
+    """Гейт входящих WhatsApp-сообщений.
+
+    Старый режим для личного номера Саиды включается через
+    WA_REQUIRE_ACTIVE_DIALOG=1. Для выделенного бот-номера по умолчанию
+    пропускаем входящие дальше: неизвестные номера безопасно отсекает
+    client_dialog.handle_incoming().
+    """
+    return True if not WA_REQUIRE_ACTIVE_DIALOG else _has_active_collector_dialog(phone)
+
+
+def _extract_attachment(message_data: Dict[str, Any], msg_type: str) -> Dict[str, str]:
+    candidates = [
+        message_data.get("fileMessageData", {}) or {},
+        message_data.get("documentMessageData", {}) or {},
+        message_data.get("imageMessageData", {}) or {},
+        message_data.get("videoMessageData", {}) or {},
+    ]
+    download_url = ""
+    caption = ""
+    file_name = ""
+    mime_type = ""
+    for block in candidates:
+        if not isinstance(block, dict):
+            continue
+        download_url = download_url or str(block.get("downloadUrl") or "")
+        caption = caption or str(block.get("caption") or "")
+        file_name = file_name or str(block.get("fileName") or block.get("file_name") or "")
+        mime_type = mime_type or str(block.get("mimeType") or block.get("mime_type") or "")
+    return {
+        "type": msg_type,
+        "download_url": download_url,
+        "caption": caption,
+        "file_name": file_name,
+        "mime_type": mime_type,
+    }
 
 
 async def _download_audio_to_temp(audio_url: str, archive_label: str = "") -> tuple[Optional[str], str]:
@@ -160,7 +229,7 @@ async def _transcribe_with_assemblyai_file(tmp_path: str) -> str:
                 headers=headers,
                 json={
                     "audio_url": upload_url,
-                    "speech_model": _ASSEMBLYAI_SPEECH_MODEL,
+                    "speech_models": ASSEMBLYAI_SPEECH_MODELS,
                     "language_detection": True,
                 },
             )
@@ -297,18 +366,19 @@ async def poll_once() -> None:
                     await _delete_notification(receipt_id)
                     return
 
-            # Саида использует личный номер для Green API — все её входящие сообщения
-            # (личные контакты, должники пишущие ей напрямую) проходят через бота.
-            # Пропускаем всё, у чего нет активного диалога коллектора — бот мог отправить
-            # сообщение только тем, кому сам написал первым. Это защищает личную переписку
-            # Саиды от перехвата и не тратит квоту Whisper на чужие аудио.
-            if not _has_active_collector_dialog(phone):
+            # Для личного номера старый privacy-гейт можно вернуть через
+            # WA_REQUIRE_ACTIVE_DIALOG=1. Для выделенного бот-номера входящие
+            # пропускаются до handle_incoming(), где неизвестные номера
+            # безопасно игнорируются без ответа клиенту.
+            if not _should_process_incoming(phone):
+                _audit("wa_incoming_skipped", phone_masked=_mask_phone(phone), reason="no_active_dialog", receipt_id=receipt_id)
                 logger.info("Нет активного диалога коллектора для номера — пропуск")
                 return
 
             message_data = body.get("messageData", {})
             msg_type = message_data.get("typeMessage", "")
             text = ""
+            attachment = None
 
             if msg_type == "textMessage":
                 text = message_data.get("textMessageData", {}).get("textMessage", "")
@@ -332,13 +402,16 @@ async def poll_once() -> None:
 
             else:
                 # Изображения, документы и т.д.
-                text = f"[клиент прислал {msg_type}]"
+                attachment = _extract_attachment(message_data, msg_type)
+                caption = str((attachment or {}).get("caption") or "").strip()
+                text = caption if caption else f"[клиент прислал {msg_type}]"
                 logger.info("Входящий %s от %s", msg_type, phone)
 
             if phone and text:
+                _audit("wa_incoming_received", phone_masked=_mask_phone(phone), msg_type=msg_type, receipt_id=receipt_id, has_attachment=bool(attachment), text_preview=text[:160])
                 try:
                     from collector.client_dialog import handle_incoming
-                    await handle_incoming(phone, text)
+                    await handle_incoming(phone, text, attachment=attachment)
                 except Exception as e:
                     logger.error("handle_incoming ошибка для %s: %s", phone, e)
 
@@ -367,6 +440,7 @@ async def _delete_notification(receipt_id: int) -> None:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.delete(delete_url)
         if resp.status_code == 200:
+            _audit("wa_notification_deleted", receipt_id=receipt_id)
             logger.debug("Уведомление %s удалено", receipt_id)
         else:
             logger.warning(

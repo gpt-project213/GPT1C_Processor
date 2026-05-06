@@ -77,6 +77,20 @@ with tempfile.TemporaryDirectory() as td:
     )
     check("[TEST] lines ignored", fourth["errors_found"] == 0)
 
+    with open(log_file, "a", encoding="utf-8") as f:
+        f.write(
+            '2026-04-24 09:00:51, INFO HTTP Request: GET https://example/receive '
+            '"HTTP/1.1 500 Internal Server Error"\n'
+        )
+        f.write("2026-04-24 09:00:51, WARNING Green API receiveNotification warning 500\n")
+    fifth = run_log_monitor(
+        logs,
+        state,
+        summary,
+        now=datetime(2026, 4, 19, 18, 0, tzinfo=timezone.utc),
+    )
+    check("INFO http 500 line does not trigger alert", fifth["errors_found"] == 0, str(fifth))
+
 passed = sum(1 for ok in results if ok)
 failed = len(results) - passed
 print(f"\nИТОГ: {passed}/{len(results)} прошло, {failed} упало")

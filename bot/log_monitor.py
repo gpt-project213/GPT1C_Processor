@@ -21,7 +21,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
-__VERSION__ = "v1.0.0/19.04.2026"
+__VERSION__ = "v1.0.2/24.04.2026"
 
 DEFAULT_PATTERNS = (
     re.compile(r"\bERROR\b", re.IGNORECASE),
@@ -34,6 +34,10 @@ DEFAULT_PATTERNS = (
 
 DEFAULT_IGNORE_PATTERNS = (
     re.compile(r"\[TEST\]", re.IGNORECASE),
+)
+
+_LEVEL_PREFIX_RE = re.compile(
+    r"^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:,\d+)?\s*,\s*(INFO|WARNING|ERROR|CRITICAL|DEBUG)\b"
 )
 
 
@@ -100,6 +104,11 @@ def _scan_text(
         matched = next((p.pattern for p in patterns if p.search(line)), "")
         if not matched:
             continue
+        level_match = _LEVEL_PREFIX_RE.match(line)
+        if level_match and matched in (r"\bERROR\b", r"\bCRITICAL\b"):
+            actual_level = level_match.group(1).upper()
+            if actual_level not in ("ERROR", "CRITICAL"):
+                continue
         findings.append(LogFinding(file=file_name, line=line[-500:], pattern=matched))
         if len(findings) >= max_findings:
             break
@@ -210,6 +219,11 @@ def format_alert(result: Dict[str, Any]) -> str:
         lines.append(f"• {item.get('file', '?')}: {item.get('line', '')[:350]}")
     if len(findings) > 10:
         lines.append(f"… ещё {len(findings) - 10}")
+    # v1.0.1 (F-004): подсказка для типовых Telegram-ошибок доставки
+    _joined_lines = " ".join(str(item.get("line", "")) for item in findings)
+    if "Chat not found" in _joined_lines:
+        lines.append("")
+        lines.append("⚠ Chat not found: проверьте chat_id в config/managers.json.")
     lines.append("")
     lines.append("Сводка: logs/log_monitor_summary.log")
     lines.append("State: logs/log_monitor_state.json")

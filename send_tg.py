@@ -1,11 +1,17 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-send_tg.py · v2.4 (2025-09-05, Asia/Almaty)
+send_tg.py · v2.4.2 (2026-04-22, Asia/Almaty)
 
 Назначение:
 - Низкоуровневая отправка в Telegram: длинный текст (с разбиением) и файлы
 - Поддержка inline-меню под документом: [Детальный] [Анализ ИИ] [Архив]
+
+Изменения v2.4.2:
+- Fix F-TG-001: send_file читает файл в bytes и передаёт в _post_tg как
+  tuple (name, bytes, mime). Без этого на 5xx/Timeout retry отправил бы 0 байт
+  (file-handle уже прочитан первой попыткой).
+- Fix F-TG-002: CLI ветка --file печатает "TG: file OK" для симметрии с --text.
 
 Окружение (.env):
 - TG_BOT_TOKEN, ADMIN_CHAT_ID
@@ -33,10 +39,10 @@ except Exception:
     pass
 
 import requests
+from requests import Response
 
 TG_BOT_TOKEN = os.getenv("TG_BOT_TOKEN", "").strip()
 ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID", "").strip()
-API = f"https://api.telegram.org/bot{TG_BOT_TOKEN}"
 
 def _assert_ready():
     if not TG_BOT_TOKEN:
@@ -60,6 +66,39 @@ AI_TG_SPLIT   = _bool_env("AI_TG_SPLIT", True)
 AI_TG_CHUNK   = _int_env("AI_TG_CHUNK", 3500)
 AI_TG_SLEEPMS = _int_env("AI_TG_SLEEP_MS", 400)
 AI_TG_PRE     = _bool_env("AI_TG_PRE", False)
+
+def _api_base() -> str:
+    return f"https://api.telegram.org/bot{TG_BOT_TOKEN}"
+
+def _post_tg(method: str, *, data=None, files=None, timeout: int = 60, retries: int = 3) -> Response:
+    url = f"{_api_base()}/{method}"
+    last_exc: Optional[Exception] = None
+
+    for attempt in range(1, retries + 1):
+        try:
+            r = requests.post(url, data=data, files=files, timeout=timeout)
+            if r.status_code == 429 and attempt < retries:
+                retry_after = 1
+                try:
+                    retry_after = int((r.json().get("parameters") or {}).get("retry_after") or 1)
+                except (ValueError, TypeError, AttributeError):
+                    retry_after = 1
+                time.sleep(max(1, retry_after))
+                continue
+            if 500 <= r.status_code < 600 and attempt < retries:
+                time.sleep(attempt)
+                continue
+            r.raise_for_status()
+            return r
+        except (requests.Timeout, requests.ConnectionError) as e:
+            last_exc = e
+            if attempt >= retries:
+                raise
+            time.sleep(attempt)
+
+    if last_exc:
+        raise last_exc
+    raise RuntimeError(f"Telegram request failed after retries: {method}")
 
 # ──────────────────────────────────────────────────────────────────
 # Вспомогательное: аккуратное разбиение текста
@@ -102,6 +141,11 @@ def send_long_text(text: str, chat_id: Optional[str] = None, parse_html: bool = 
     """
     _assert_ready()
     chat = chat_id or ADMIN_CHAT_ID
+    if parse_html and not AI_TG_PRE and len(text) > AI_TG_CHUNK:
+        raise ValueError(
+            "send_long_text: long HTML text cannot be safely split; "
+            "use AI_TG_PRE=1 or parse_html=False"
+        )
     chunks = _chunk_text(text, AI_TG_CHUNK) if (AI_TG_SPLIT or len(text) > AI_TG_CHUNK) else [text]
 
     for idx, part in enumerate(chunks, 1):
@@ -119,8 +163,7 @@ def send_long_text(text: str, chat_id: Optional[str] = None, parse_html: bool = 
         else:
             data["text"] = part
 
-        r = requests.post(f"{API}/sendMessage", data=data, timeout=90)
-        r.raise_for_status()
+        _post_tg("sendMessage", data=data, timeout=90)
 
         if idx < len(chunks):
             time.sleep(max(0, AI_TG_SLEEPMS) / 1000.0)
@@ -139,8 +182,7 @@ def send_text(text: str, chat_id: Optional[str] = None, parse_html: bool = True)
     }
     if parse_html:
         data["parse_mode"] = "HTML"
-    r = requests.post(f"{API}/sendMessage", data=data, timeout=60)
-    r.raise_for_status()
+    _post_tg("sendMessage", data=data, timeout=60)
     return True
 
 def send_file(file_path: str | Path, chat_id: Optional[str] = None, caption: Optional[str] = None, with_menu: bool = False) -> bool:
@@ -155,15 +197,22 @@ def send_file(file_path: str | Path, chat_id: Optional[str] = None, caption: Opt
 
     data = {
         "chat_id": chat_id or ADMIN_CHAT_ID,
-        "caption": caption or "",
-        "parse_mode": "HTML"
     }
+    if caption:
+        data["caption"] = caption
+        data["parse_mode"] = "HTML"
     if with_menu:
         data["reply_markup"] = json.dumps(_build_menu(), ensure_ascii=False)
 
-    with p.open("rb") as f:
-        r = requests.post(f"{API}/sendDocument", data=data, files={"document": f}, timeout=180)
-        r.raise_for_status()
+    # Fix F-TG-001: читаем файл в память — при retry в _post_tg file-handle
+    # иначе остался бы прочитанным, и вторая попытка отправила бы 0 байт.
+    file_bytes = p.read_bytes()
+    _post_tg(
+        "sendDocument",
+        data=data,
+        files={"document": (p.name, file_bytes, "application/octet-stream")},
+        timeout=180,
+    )
     logging.getLogger(__name__).info("TG: file OK → %s", p)
     return True
 
@@ -184,5 +233,6 @@ if __name__ == "__main__":
         print("TG: text OK")
     elif args.file:
         send_file(args.file, chat_id=args.chat_id, caption=args.caption, with_menu=args.with_menu)
+        print("TG: file OK")  # Fix F-TG-002: UX-сигнал после успешной отправки
     else:
         ap.print_help()

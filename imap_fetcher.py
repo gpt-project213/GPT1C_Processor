@@ -2,7 +2,14 @@
 # coding: utf-8
 """
 imap_fetcher.py
-Version: v4.4.4 (2026-03-10, Asia/Almaty) - ИСПРАВЛЕН ВЫЗОВ utils_excel
+Version: v4.4.8 (2026-04-22, Asia/Almaty) - F-IMAP-002 усилен: PureWindowsPath для кросс-платформенной защиты
+v4.4.7 (2026-04-22, Asia/Almaty) - F-IMAP-001..003 audit fixes:
+    * F-IMAP-001: WARNING при пустом whitelist (не менять поведение, только лог)
+    * F-IMAP-002: защита от path traversal — PureWindowsPath(fname).name перед записью
+                  (трактует '/' и '\\' как разделители на любой ОС)
+    * F-IMAP-003: закрывать TCP-сокет (M.shutdown) при ошибке login
+    * F-IMAP-004: комментарий у load_dotenv (строка 72) про BUG-H3 adc61bc
+v4.4.6 (2026-04-21, Asia/Almaty) - mark balance/cashflow attachments as by-design ignore
 
 Назначение:
 - Разовый цикл IMAP: скачать вложения .xlsx/.xls из белого списка отправителей,
@@ -43,7 +50,7 @@ import sys
 import time
 from datetime import datetime
 from email.header import decode_header
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Dict, List, Optional
 from zoneinfo import ZoneInfo
 
@@ -52,7 +59,7 @@ from dotenv import load_dotenv, dotenv_values
 # Импорт для XML-очистки битых файлов 1С
 import utils_excel
 
-__version__ = "v4.4.5"
+__version__ = "v4.4.8"
 
 # ─────────────────────────────────────────────────────────────────────
 # Пути/каталоги
@@ -69,6 +76,8 @@ for p in (REPORTS, QUEUE, CLEAN):
     p.mkdir(parents=True, exist_ok=True)
 
 # Ранняя загрузка .env — чтобы TZ из .env был доступен до вызова _load_env_and_cfg()
+# Fix BUG-H3 (adc61bc): load_dotenv ДО module-level TZ — не удалять и не «оптимизировать» обратно.
+# Второй вызов load_dotenv в _load_env_and_cfg() — не дубль, а обновление на случай override.
 load_dotenv(dotenv_path=ROOT / ".env", encoding="utf-8-sig", override=True)
 
 # TZ из .env (если нет — дефолт Asia/Almaty)
@@ -407,6 +416,19 @@ def _filename_has_manager(name: str, managers: List[str]) -> bool:
             return True
     return False
 
+
+def _intentional_ignore_reason(name: str) -> str:
+    """
+    Возвращает причину intentional ignore для вложений,
+    которые по бизнес-правилу не должны попадать в pipeline.
+    """
+    base = (name or "").lower()
+    if "баланс" in base:
+        return "balance-report"
+    if "ведомость денежных средств" in base:
+        return "cashflow-statement"
+    return ""
+
 def _imap_connect(cfg: Dict, max_retries: int = 5, login_timeout: int = 15) -> imaplib.IMAP4:
     """
     Подключаемся с ретраями и LOGIN. Возвращаем IMAP4/IMAP4_SSL.
@@ -433,6 +455,11 @@ def _imap_connect(cfg: Dict, max_retries: int = 5, login_timeout: int = 15) -> i
         except (imaplib.IMAP4.error, OSError) as e:
             last_exc = e
             logger.error("IMAP connect/login failed (attempt %s/%s): %s", attempt, max_retries, e)
+            # Fix F-IMAP-003: не утекать TCP-сокет, если IMAP4_SSL поднялся, а M.login() упал.
+            try:
+                M.shutdown()
+            except (imaplib.IMAP4.error, OSError, UnboundLocalError, NameError, AttributeError):
+                pass
             time.sleep(min(2 * attempt, 5))
     raise last_exc or RuntimeError("IMAP connect/login failed")
 
@@ -485,6 +512,14 @@ def run_once(since: Optional[str] = None, debug: int = 1) -> None:
     whitelist = set(cfg.get("whitelist") or [])
     trash_list = cfg.get("trash_mailboxes") or []
 
+    # Fix F-IMAP-001: при пустом whitelist фильтр по отправителю не применяется (см. строку с `if whitelist and ...`).
+    # Это by-design для устойчивости прода, но админ должен об этом знать → WARNING в лог.
+    if not whitelist:
+        logger.warning(
+            "IMAP whitelist empty — ALL senders accepted "
+            "(check config/imap.json:whitelist and .env:IMAP_WHITELIST)"
+        )
+
     # Подключение
     try:
         M = _imap_connect(cfg)
@@ -527,14 +562,32 @@ def run_once(since: Optional[str] = None, debug: int = 1) -> None:
                     if not fname_raw:
                         continue
                     fname = _decode_h(fname_raw).strip()  # Только декод, без нормализации!
+                    # Fix F-IMAP-002: защита от path traversal — отрезаем любые пути/бэкслэши,
+                    # берём только basename. QUEUE / "../evil.xlsx" иначе вышел бы из QUEUE.
+                    # PureWindowsPath — платформенно-независимо: трактует и '/', и '\\' как разделители
+                    # (обычный Path на Linux не видит '\\' как разделитель).
+                    safe_name = PureWindowsPath(fname).name
+                    if not safe_name or safe_name in (".", ".."):
+                        logger.warning("SKIP invalid filename (path traversal?): %r", fname)
+                        continue
+                    fname = safe_name
                     low = fname.lower()
                     if not (low.endswith(".xlsx") or low.endswith(".xls")):
                         continue
 
                     # ★ ИСПРАВЛЕНО: фильтр по имени менеджера в названии файла с исключением для сводных отчетов
+                    ignore_reason = _intentional_ignore_reason(fname)
+                    if ignore_reason:
+                        logger.info("IGNORE by-design non-pipeline attachment (%s): %s", ignore_reason, fname)
+                        try:
+                            M.store(num, "+FLAGS", "\\Seen")
+                        except (imaplib.IMAP4.error, OSError):
+                            pass
+                        continue
+
                     if (cfg.get("require_manager_in_name") and cfg.get("manager_names")):
                         if not _filename_has_manager(fname, cfg["manager_names"]):
-                            logger.debug("SKIP no-manager-in-name: %s", fname)
+                            logger.info("SKIP no-manager-in-name: %s", fname)
                             try:
                                 M.store(num, "+FLAGS", "\\Seen")
                             except (imaplib.IMAP4.error, OSError):

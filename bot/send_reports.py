@@ -1,3 +1,8 @@
+﻿# v. 9.4.41 / 2026-05-05 - fix(pipeline): Ведомость взаиморасчётов не тригерит silence_alerts (только Детальный)
+# v. 9.4.40 / 2026-05-05 - feat(silence): удаление предыдущего уведомления если пришло повторно в тот же день
+# v. 9.4.39 / 2026-05-05 - feat(pipeline): silence_alerts по приходу долговых файлов, не по расписанию
+# v. 9.4.38 / 2026-05-05 - fix(pipeline): именные Ведомости взаиморасчётов → debt_auto_report вместо rejected
+# v. 9.4.37 / 2026-04-22 - fix: approval-batch silence escalates to admin hourly; stale manager previews are closed server-side
 # v. 9.4.35 / 2026-04-13 - feat: event-driven collector trigger после обработки debt_ext файлов
 # v. 9.4.34 / 2026-03-16 - Fix: p.stat().st_mtime в _extract_date обёрнут в try/except (audit fix)
 # v. 9.4.33 / 2026-03-10 - Fix: bare except: → except (ValueError, OverflowError) в _parse_period_date (Bug S5)
@@ -22,6 +27,8 @@
 # - ИЗМЕНЕНО: пороги зон в opportunity_loss.py: ⚡7-15д / 🔴15-30д / ☠️30+д
 # v. 9.4.26 / 27.02.2026 - Упущенная прибыль (opportunity_loss) + alert чистой прибыли
 # ИЗМЕНЕНИЯ v9.4.26:
+# - ИСПРАВЛЕНО: уведомление по молчунам/просрочке снова только один раз в день
+#   в 14:00; вечерний дубль 21:00 удалён из расписания и из стартовой сводки.
 # - ДОБАВЛЕНО: opportunity_loss.py — расчёт упущенной прибыли по молчащим должникам
 #   Формула: долг × маржа%; зоны: ⚡15-60д / 🔴60-120д / ☠️120+д
 #   Джобы: 14:05 и 21:05 (через 5 мин после silence_alerts)
@@ -167,6 +174,7 @@ import sys
 import re
 import json
 import time
+import ssl
 import html as _html
 import asyncio
 import logging
@@ -180,29 +188,47 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.55/19.04.2026"
+__VERSION__ = "v9.4.66/06.05.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
 from typing import Dict, List, Optional, Any, Tuple
+import certifi
+import httpx
 from dotenv import load_dotenv
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile, ReplyKeyboardMarkup, KeyboardButton
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile, ReplyKeyboardRemove
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+from telegram.request import HTTPXRequest
+from bot.logging_utils import (
+    configure_runtime_logging,
+    get_log_retention_days,
+    get_runtime_logger,
+    has_dead_letters,
+    install_filter_on_root_handlers,
+    new_trace_id,
+    pop_dead_letters,
+    push_dead_letter,
+    set_telegram_alert_sender,
+)
 
 # ──────────────────────────────────────────────────────────────────
-# Persistent Menu (v9.4.12)
-def kb_persistent() -> ReplyKeyboardMarkup:
-    """Постоянное меню внизу (всегда видимое)"""
-    return ReplyKeyboardMarkup([
-        [KeyboardButton("📊 Дебиторка"), KeyboardButton("🛒 Продажи")],
-        [KeyboardButton("💰 Валовая"), KeyboardButton("💸 Затраты")],
-        [KeyboardButton("📦 Остатки"), KeyboardButton("📈 Аналитика")],
-        [KeyboardButton("🗄️ Архив")]
-    ], resize_keyboard=True)
+# Legacy reply-keyboard cleanup (v9.4.57)
+# kb_persistent() (v9.4.12) удалена — функция никогда не вызывалась
+# (мёртвый код). У части пользователей в клиенте Telegram остался
+# "призрак" ещё более старого reply-меню с ярлыками
+# "Статус / Отчёты / Последний debt/sales/gross / Архив / Меню".
+# Автоочистка реализована в handle_persistent_menu().
 from telegram.error import BadRequest, RetryAfter, TimedOut, NetworkError
 from silence_alerts import SilenceAlert
 from bot.log_monitor import format_alert as _format_log_monitor_alert
 from bot.log_monitor import run_log_monitor as _run_log_monitor
+from bot.crm_audit_log import audit as crm_audit
+from bot.log_insights import (
+    format_client_timeline,
+    format_error_digest,
+    read_client_timeline,
+    summarize_errors_by_system,
+)
 # v2.0: Мобильная адаптивность и аналитика
 try:
     from user_tracker import track_user, track_action, get_stats, format_stats_message
@@ -227,18 +253,19 @@ except ImportError as e:
 # debt_stop_control: контроль стоп-листа отгрузки (Саида, бухгалтер)
 try:
     from debt_stop_control import (
-        monitor_exceptions        as _dstop_monitor,
-        send_manager_requests     as _dstop_managers,
-        send_manager_reminders    as _dstop_manager_reminders,
-        escalate_unanswered       as _dstop_escalate,
-        send_saida_final          as _dstop_saida,
-        handle_dstop_callback     as _dstop_callback,
+        monitor_exceptions                  as _dstop_monitor,
+        send_manager_requests               as _dstop_managers,
+        send_manager_reminders              as _dstop_manager_reminders,
+        escalate_unanswered                 as _dstop_escalate,
+        send_saida_final                    as _dstop_saida,
+        handle_dstop_callback               as _dstop_callback,
+        send_saida_payment_hold_reminders   as _dstop_saida_hold_reminders,
     )
     _DEBT_STOP_AVAILABLE = True
 except ImportError as e:
     print(f"⚠️ [STARTUP] debt_stop_control не найден: {e}")
     _DEBT_STOP_AVAILABLE = False
-    _dstop_monitor = _dstop_managers = _dstop_manager_reminders = _dstop_escalate = _dstop_saida = _dstop_callback = None
+    _dstop_monitor = _dstop_managers = _dstop_manager_reminders = _dstop_escalate = _dstop_saida = _dstop_callback = _dstop_saida_hold_reminders = None
 
 # v9.4.26: Модуль упущенной прибыли
 try:
@@ -280,6 +307,26 @@ NOTIFY_STATE_PATH = LOGS_DIR / "notify_state.json"
 SALES_NOTIFY_DECADE_PATH = LOGS_DIR / "sales_notify_decade.json"  # v9.4.25: подекадные уведомления
 PID_FILE = LOGS_DIR / "bot.pid"
 STOP_FILE = LOGS_DIR / "bot.stop"
+SILENCE_SENT_PATH = LOGS_DIR / "silence_last_sent.json"  # v9.4.40: track sent silence msg_ids per manager
+
+
+def _silence_load() -> dict:
+    """Загружает state последних silence-сообщений: {key: {chat_id, ids, date}}."""
+    try:
+        if SILENCE_SENT_PATH.exists():
+            import json as _j
+            return _j.loads(SILENCE_SENT_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return {}
+
+
+def _silence_save(state: dict) -> None:
+    try:
+        import json as _j
+        SILENCE_SENT_PATH.write_text(_j.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as e:
+        logger.warning("_silence_save: %s", e)
 
 
 # ── Защита от нескольких экземпляров (pid-файл) ───────────────────────────────
@@ -319,11 +366,11 @@ def _check_single_instance() -> None:
         except (ValueError, OSError):
             old_pid = None
         if old_pid and old_pid != os.getpid() and _is_pid_running(old_pid):
-            logger.critical("Бот уже запущен (PID=%s). Завершение. Убейте старый процесс или удалите %s",
+            sched_logger.critical("Бот уже запущен (PID=%s). Завершение. Убейте старый процесс или удалите %s",
                             old_pid, PID_FILE)
             sys.exit(1)
         else:
-            logger.warning("Устаревший PID-файл (PID=%s), продолжаем.", old_pid)
+            sched_logger.warning("Устаревший PID-файл (PID=%s), продолжаем.", old_pid)
     _write_pid()
     import atexit
     atexit.register(_clear_pid)
@@ -370,7 +417,14 @@ def html_to_path(txt_path: Path) -> Path:
     return txt_path.with_suffix('.html')
 
 def txt_to_html(txt_path: Path, html_path: Path):
-    """Конвертирует txt в html с правильной кодировкой для мобильных устройств"""
+    """Конвертирует txt в html с правильной кодировкой для мобильных устройств.
+
+    ARCH-1 (CLAUDE.md): это локальная реализация для бота. Отдельная
+    реализация есть в tools/txt_to_html.py — у неё другой интерфейс
+    (CLI-утилита для ручной конвертации). Унифицировать НЕЛЬЗЯ
+    без переработки всех call sites — это сломает telegram-доставку
+    AI-отчётов. См. CLAUDE.md → Known Open Issues → ARCH-1.
+    """
     try:
         content = txt_path.read_text(encoding='utf-8')
         html_content = f"""<!DOCTYPE html>
@@ -411,24 +465,20 @@ def txt_to_html(txt_path: Path, html_path: Path):
     except Exception as e:
         raise Exception(f"Ошибка конвертации TXT в HTML: {e}")
 # Блок 3_______________Логирование (Asia/Almaty)_____________________________
-class _TzFormatter(logging.Formatter):
-    def formatTime(self, record, datefmt=None):
-        dt = datetime.fromtimestamp(record.created, TZ)
-        return dt.strftime(datefmt or "%Y-%m-%d %H:%M:%S")
-
-LOG_FILE = LOGS_DIR / f"send_reports_{datetime.now(TZ).strftime('%Y%m%d')}.log"
-_log_fmt = _TzFormatter("%(asctime)s, %(levelname)s %(message)s")
-_fh = logging.FileHandler(LOG_FILE, encoding='utf-8')
-_fh.setFormatter(_log_fmt)
-_sh = logging.StreamHandler(
-    io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
+configure_runtime_logging(
+    logs_dir=LOGS_DIR,
+    tz=TZ,
+    app_name="send_reports",
+    retention_days=get_log_retention_days(),
+    error_alert_level=logging.ERROR,
+    alert_cooldown_sec=int(os.getenv("LOG_ALERT_COOLDOWN_SEC", "300")),
 )
-_sh.setFormatter(_log_fmt)
-logging.basicConfig(
-    level=logging.INFO,
-    handlers=[_fh, _sh]
-)
-logger = logging.getLogger(__name__)
+logger = get_runtime_logger(__name__, system="BOT", component="CORE")
+crm_logger = get_runtime_logger(__name__, system="CRM", component="FLOW")
+sched_logger = get_runtime_logger(__name__, system="BOT", component="SCHED")
+pipeline_logger = get_runtime_logger(__name__, system="PIPELINE", component="FLOW")
+state_logger = get_runtime_logger(__name__, system="STATE", component="STORE")
+integration_logger = get_runtime_logger(__name__, system="INTEGRATION", component="API")
 
 # ──────────────────────────────────────────────────────────────
 # Константа лимита Telegram и async-хелпер для длинных сообщений
@@ -445,7 +495,7 @@ async def _send_auto(context, chat_id: int, text: str,
         schedule_message_deletion(chat_id, msg.message_id,
                                   msg.date.timestamp(), delay_hours=delay_hours)
     except Exception as e:
-        logger.error("_send_auto chat_id=%s: %s", chat_id, e)
+        integration_logger.error("_send_auto chat_id=%s: %s", chat_id, e)
 
 
 async def _doc_auto(context, chat_id: int, document, caption: str = "",
@@ -457,15 +507,17 @@ async def _doc_auto(context, chat_id: int, document, caption: str = "",
         schedule_message_deletion(chat_id, msg.message_id,
                                   msg.date.timestamp(), delay_hours=delay_hours)
     except Exception as e:
-        logger.error("_doc_auto chat_id=%s: %s", chat_id, e)
+        integration_logger.error("_doc_auto chat_id=%s: %s", chat_id, e)
 
 
 async def _tg_send_long(context, chat_id: int, text: str,
-                        parse_mode=None, delay_hours: int = 24) -> None:
+                        parse_mode=None, delay_hours: int = 24,
+                        _collect_ids: "list[int] | None" = None) -> None:
     """
     Отправляет текст в Telegram, разбивая его на части <= TG_MAX_MSG символов.
     Разбивка выполняется по строкам (\\n), чтобы не рвать слова.
     Каждое сообщение ставится в очередь на автоудаление (delay_hours).
+    _collect_ids: если передан список, в него добавляются message_id отправленных сообщений.
     """
     if not text:
         return
@@ -492,11 +544,13 @@ async def _tg_send_long(context, chat_id: int, text: str,
             msg = await context.bot.send_message(
                 chat_id=chat_id, text=chunk, parse_mode=parse_mode
             )
+            if _collect_ids is not None:
+                _collect_ids.append(msg.message_id)
             schedule_message_deletion(
                 chat_id, msg.message_id, msg.date.timestamp(), delay_hours=delay_hours
             )
         except Exception as e:
-            logger.error("_tg_send_long: chunk %d/%d chat_id=%s: %s", i, len(chunks), chat_id, e)
+            integration_logger.error("_tg_send_long: chunk %d/%d chat_id=%s: %s", i, len(chunks), chat_id, e)
 
 
 # ──────────────────────────────────────────────────────────────
@@ -706,8 +760,7 @@ class SensitiveDataFilter(logging.Filter):
         return text
 
 _sensitive_filter = SensitiveDataFilter()
-for _h in logging.root.handlers:
-    _h.addFilter(_sensitive_filter)
+install_filter_on_root_handlers(_sensitive_filter)
 # ────────────────────────────────────────────────────────────────────────────
 EMOJI_LOG_MAP = {
     "bot_starting": "🤖", "bot_polling_started": "📡", "bot_shutdown_requested": "⏹️",
@@ -752,18 +805,65 @@ EMOJI_LOG_MAP = {
     "cleanup_error": "❌",
 }
 def log_event(event: str, emoji: str | None = None, **kw):
+    level_name = str(kw.pop("level", "INFO")).upper()
+    level = getattr(logging, level_name, logging.INFO)
+    domain_logger = _logger_for_event(event)
+    payload = {"event": event, **kw}
     if emoji is None:
         emoji = EMOJI_LOG_MAP.get(event)
     if emoji:
         try:
             flat = "; ".join(f"{k}={v}" for k, v in kw.items())
-            logger.info(f"{emoji} {event}" + (f" · {flat}" if flat else ""))
+            domain_logger.log(level, f"{emoji} {event}" + (f" · {flat}" if flat else ""), extra={"event": event})
         except Exception:
             pass
     try:
-        logger.info(json.dumps({"event": event, **kw}, ensure_ascii=False))
+        domain_logger.log(level, json.dumps(payload, ensure_ascii=False), extra={"event": event})
     except Exception:
-        logger.info("%s %s", event, kw)
+        domain_logger.log(level, "%s %s", event, kw, extra={"event": event})
+
+
+def _logger_for_event(event: str):
+    e = (event or "").lower()
+    if e.startswith("crm_") or e.startswith("claim_"):
+        return crm_logger
+    if e.startswith("collector_") or e.startswith("wa_"):
+        return get_runtime_logger(__name__, system="COLLECTOR", component="FLOW")
+    if (
+        e.startswith("pipeline_")
+        or e.startswith("imap_")
+        or e.startswith("inventory_")
+        or e.startswith("sales_")
+        or e.startswith("gross_")
+        or e.startswith("expenses_")
+        or e.startswith("analytics_")
+        or e.startswith("archive_")
+        or e.startswith("cash_")
+        or e.startswith("file_")
+        or e.startswith("report_")
+        or e.startswith("ai_")
+        or e.startswith("net_profit_")
+        or e in {"queue_empty", "queue_found_files"}
+    ):
+        return pipeline_logger
+    if (
+        e.startswith("deletion_")
+        or e.endswith("_state_reset")
+        or e.endswith("_state_load_error")
+        or e.endswith("_state_save_error")
+        or e.startswith("save_state_")
+        or e.startswith("atomic_save_")
+        or e.startswith("json_")
+        or e == "managers_normalized"
+        or e == "config_load_error"
+        or e == "manager_invalid_chat_id"
+    ):
+        return state_logger
+    if e.startswith("tg_") or e.startswith("notification_"):
+        return integration_logger
+    if e.endswith("_start") or e.endswith("_finish") or e.endswith("_done"):
+        return sched_logger
+    return logger
 
 # Блок 4_______________Роли и доступ_________________________________________
 def _load_json_safe(p: Path) -> dict:
@@ -1127,9 +1227,10 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
     3. Каждому менеджеру — точечный запрос данных для ОДНОГО клиента без телефона:
        бот называет имя из 1С и просит по шагам: как обращаться → телефон → адрес.
     """
+    new_trace_id()  # новый trace_id для всей CRM daily цепочки
     from bot.workday_checker import is_holiday_today
     if is_holiday_today():
-        logger.info("crm_daily_task: выходной — пропуск")
+        crm_logger.info("crm_daily_task: выходной — пропуск")
         return
     from bot.crm_clients import (
         update_from_reports as _crm_update,
@@ -1157,7 +1258,7 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
                     parse_mode="HTML",
                 )
             except Exception as _e:
-                logger.warning("crm_daily_task: уведомление %s: %s", manager, _e)
+                crm_logger.warning("crm_daily_task: уведомление %s: %s", manager, _e)
 
         # 3. Точечный запрос — первый клиент из очереди, остальные 9 идут цепочкой
         #    после каждого сохранения (один заполнил → сразу следующий).
@@ -1196,17 +1297,16 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
             except Exception as _e:
                 _CRM_PHONE_PENDING.pop(chat_id, None)
                 _crm_save_pending()
-                logger.warning("crm_daily_task: запрос данных %s: %s", manager, _e)
+                crm_logger.warning("crm_daily_task: запрос данных %s: %s", manager, _e)
 
         # 4. Бесхозные клиенты — рассылаем всем участникам CRM: "чей клиент?"
         #    До 3 штук в день чтобы не перегружать.
-        from bot.crm_clients import load_clients as _crm_load
-        _crm_data = _crm_load()
-        _unowned = [
-            k for k, v in _crm_data.get("clients", {}).items()
-            if not v.get("manager") or v.get("manager") in ("", "Не определён", "?")
-            and k != "Без клиента"
-        ][:3]
+        #    Исключаем служебные записи: "Без клиента", "Недостача", зарплатные авансы (*ЗП*/*зп*)
+        _unowned = _crm_collect_unowned_claim_clients(limit=3)
+        _active_claim_keys = {
+            v["client_key"] for v in _CRM_CLAIM_PENDING.values() if not v.get("claimed")
+        }
+        _unowned = [k for k in _unowned if k not in _active_claim_keys]
         _participants = _all_crm_participants()
         for _client_key in _unowned:
             _token = _crm_claim_token()
@@ -1228,19 +1328,22 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
                     )
                     _notified.append(_mgr_chat)
                 except Exception as _ce:
-                    logger.warning("crm_claim broadcast %s → %s: %s", _client_key, _mgr_name, _ce)
+                    crm_logger.warning("crm_claim broadcast %s → %s: %s", _client_key, _mgr_name, _ce)
             _CRM_CLAIM_PENDING[_token] = {
                 "client_key": _client_key,
                 "notified": _notified,
                 "claimed": False,
+                "created_at": datetime.now(TZ).isoformat(),
             }
-            logger.info("CRM claim: разослано по %d участникам для «%s»", len(_notified), _client_key)
+            _crm_save_claim_pending()
+            crm_audit("claim_broadcast", client_key=_client_key, notified_count=len(_notified), token=_token)
+            crm_logger.info("CRM claim: разослано по %d участникам для «%s»", len(_notified), _client_key)
 
         log_event("crm_daily_done",
                   new_total=sum(len(v) for v in new_by_manager.values()))
     except Exception as e:
         log_event("crm_daily_error", error=str(e), level="ERROR")
-        logger.error("crm_daily_task error: %s", e)
+        crm_logger.error("crm_daily_task error: %s", e)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1307,7 +1410,7 @@ async def debt_collector_daily(context: ContextTypes.DEFAULT_TYPE):
     mode_flag = "--dry-run" if dry_run else "--preview"
     try:
         rc, stdout, stderr = await run_script_async(
-            "collector/collections_engine.py",
+            "module:collector.collections_engine",
             mode_flag,
             timeout=900,
         )
@@ -1326,7 +1429,7 @@ async def debt_collector_promises(context: ContextTypes.DEFAULT_TYPE):
     log_event("collector_promises_start")
     try:
         rc, stdout, stderr = await run_script_async(
-            "collector/collections_engine.py",
+            "module:collector.collections_engine",
             "--check-promises",
             timeout=120,
         )
@@ -1341,7 +1444,8 @@ _COLLECTOR_TRIGGER_LAST_RUN_PATH = LOGS_DIR / "collector_trigger_last_run.json"
 # Не запускать повторно если коллектор уже сработал по триггеру в последние N часов
 _COLLECTOR_TRIGGER_COOLDOWN_HOURS = 4
 # Триггер считается устаревшим если флаг старше N часов (pipeline завис, не надо реагировать)
-_COLLECTOR_TRIGGER_MAX_AGE_HOURS = 6
+# 14ч — покрывает ночной разрыв: Саида разносит в 20:00, триггер подхватит до 22:00 следующего утра
+_COLLECTOR_TRIGGER_MAX_AGE_HOURS = 14
 
 
 async def debt_collector_trigger_check(context: ContextTypes.DEFAULT_TYPE):
@@ -1361,7 +1465,7 @@ async def debt_collector_trigger_check(context: ContextTypes.DEFAULT_TYPE):
 
     if is_holiday_today():
         return
-    if not (9 <= now.hour < 18):
+    if not (9 <= now.hour < 22):
         return
     if not _COLLECTOR_TRIGGER_PATH.exists():
         return
@@ -1442,7 +1546,7 @@ async def debt_collector_trigger_check(context: ContextTypes.DEFAULT_TYPE):
 
     try:
         rc, stdout, stderr = await run_script_async(
-            "collector/collections_engine.py",
+            "module:collector.collections_engine",
             "--preview",
             timeout=600,
         )
@@ -1643,7 +1747,7 @@ async def log_monitor_task(context: ContextTypes.DEFAULT_TYPE):
     try:
         result = _run_log_monitor(LOGS_DIR, state_path, summary_path)
         if result.get("errors_found", 0) > 0:
-            logger.warning(
+            state_logger.warning(
                 "log_monitor: found %s new issue(s) across %s log files",
                 result.get("errors_found", 0),
                 result.get("files_checked", 0),
@@ -1655,13 +1759,13 @@ async def log_monitor_task(context: ContextTypes.DEFAULT_TYPE):
                     parse_mode=None,
                 )
         else:
-            logger.info(
+            state_logger.info(
                 "log_monitor: OK checked=%s initialized=%s",
                 result.get("files_checked", 0),
                 result.get("initialized", False),
             )
     except Exception as e:
-        logger.error("log_monitor_task error: %s", e)
+        state_logger.error("log_monitor_task error: %s", e)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1731,7 +1835,7 @@ def schedule_ai_generation(manager: str):
             return
         
         # Проверка 2: Есть ли свежий JSON (не старше 24 часов)?
-        json_file = find_recent_json_for_manager(manager, hours=24)  # ← БЫЛО 48!
+        json_file = find_recent_json_for_manager(manager, hours=24, report_type="DEBT")  # ← БЫЛО 48!
         if not json_file:
             log_event("ai_auto_skipped_old_file", manager=manager, reason="no_recent_file_24h")
             return
@@ -1838,7 +1942,7 @@ async def auto_generate_and_send_ai(manager: str, context: ContextTypes.DEFAULT_
             log_event("ai_auto_no_chat_id", manager=manager)
             return
         
-        json_file = find_recent_json_for_manager(manager, hours=48)
+        json_file = find_recent_json_for_manager(manager, hours=48, report_type="DEBT")
         if not json_file:
             log_event("ai_auto_no_json", manager=manager)
             return
@@ -1882,9 +1986,9 @@ async def auto_generate_and_send_ai(manager: str, context: ContextTypes.DEFAULT_
                 ai_file = html_path
         # ✅ НОВЫЙ КОД ЗАКАНЧИВАЕТСЯ ТУТ ↑↑↑
         
-        await send_ai_file(ai_file, manager, manager_chat_id, context)
-        log_event("ai_auto_sent_to_manager", manager=manager, chat_id=manager_chat_id)
-        
+        # Менеджеру НЕ отправляем: AI-анализ содержит "косяки" — только для руководителя
+        log_event("ai_auto_skip_manager_send", manager=manager, reason="ai_for_admin_only")
+
         for subadmin_chat_id_str, subordinates in ROLES.get("subadmin_scopes", {}).items():
             if manager in subordinates:
                 subadmin_chat_id = int(subadmin_chat_id_str)
@@ -1913,14 +2017,14 @@ async def auto_generate_and_send_ai(manager: str, context: ContextTypes.DEFAULT_
 
 async def weekly_ai_generation(context: ContextTypes.DEFAULT_TYPE):
     """
-    v9.4.8: Еженедельная AI генерация (понедельник 10:00)
+    v9.4.8: Еженедельная AI генерация (вторник 10:00)
     Генерирует для всех менеджеров, отправляет:
     - Каждому менеджеру его AI
     - Алене (subadmin) её + подшефных
     - Админу все
     """
-    # Проверка: запускаем только в понедельник
-    if datetime.now(TZ).weekday() != 0:  # 0 = понедельник
+    # Проверка: запускаем только во вторник
+    if datetime.now(TZ).weekday() != 1:  # 1 = вторник
         return
     from bot.workday_checker import is_holiday_today
     if is_holiday_today():
@@ -1936,7 +2040,7 @@ async def weekly_ai_generation(context: ContextTypes.DEFAULT_TYPE):
             # Найти последний JSON (<7 дней)
             json_file = None
             for hours in [24, 48, 72, 168]:
-                json_file = find_recent_json_for_manager(manager, hours=hours)
+                json_file = find_recent_json_for_manager(manager, hours=hours, report_type="DEBT")
                 if json_file:
                     break
             
@@ -2015,33 +2119,14 @@ h1 {{color:#2563eb}}
 
 
 async def send_weekly_ai_to_recipients(results: list, context):
-    """Отправляет AI файлы каждому + Алене подшефных + админу все"""
+    """Отправляет AI файлы только админу и субадминам (не менеджерам).
+    AI-анализ содержит "ТОП-3 КОСЯКА" и оценку работы — не для менеджеров."""
     from telegram import InputFile
-    
+
     admin_chat_id = int(os.getenv("ADMIN_CHAT_ID", "0"))
 
-    # 1. Каждому менеджеру его AI
-    for r in results:
-        manager = r['manager']
-        chat_id = MANAGERS_MAP.get(manager)
-        
-        if not chat_id:
-            log_event("weekly_ai_no_chat_id", manager=manager)
-            continue
-        
-        try:
-            caption = f"🤖 Еженедельный AI анализ дебиторки"
-            
-            with open(r['file'], 'rb') as f:
-                await _doc_auto(context, chat_id,
-                    InputFile(f, filename=r['file'].name), caption=caption)
+    # УБРАНО: отправка менеджерам (AI-анализ с "косяками" только для руководителя)
 
-            log_event("weekly_ai_sent_to_manager", manager=manager)
-            await asyncio.sleep(1)
-            
-        except Exception as e:
-            log_event("weekly_ai_send_error", manager=manager, error=str(e))
-    
     # 2. Субадминам — подшефные (из roles.json)
     subadmin_scopes = ROLES.get("subadmin_scopes", {})
     for sa_chat_str, scope_list in subadmin_scopes.items():
@@ -2949,6 +3034,7 @@ def kb_main(user_role: str, chat_id: int = 0) -> InlineKeyboardMarkup:
             [InlineKeyboardButton("💸 Затраты", callback_data="menu_expenses")],
             [InlineKeyboardButton("📈 АНАЛИТИКА", callback_data="menu_analytics")],
             [InlineKeyboardButton("🔔 Уведомления сейчас", callback_data="menu_notify")],
+            [InlineKeyboardButton("🤖 Коллектор", callback_data="collector_batch")],
             [InlineKeyboardButton("🗄️ Архив", callback_data="archive|root")],
             [InlineKeyboardButton("📈 Статистика", callback_data="show_stats")],
         ]
@@ -2974,6 +3060,133 @@ def kb_main(user_role: str, chat_id: int = 0) -> InlineKeyboardMarkup:
     else:
         rows = []
     return InlineKeyboardMarkup(rows)
+
+
+# ── Коллектор: статус активного батча ────────────────────────────────────────
+
+_BATCH_STATUS_RU = {
+    "pending_managers":  "⏳ Ожидание менеджеров",
+    "pending_admin":     "📋 Ожидание администратора",
+    "admin_approved":    "✅ Утверждён администратором",
+    "sent":              "📤 Отправлен",
+    "partially_sent":    "📤 Отправлен частично",
+    "send_failed":       "❌ Ошибка отправки",
+    "send_empty":        "⚠️ Нет клиентов к отправке",
+    "expired":           "⌛ Истёк",
+    "cancelled":         "🚫 Отменён",
+    "superseded":        "🔄 Заменён новым",
+}
+
+
+def _format_collector_batch_text() -> str:
+    """Формирует сообщение о последнем батче коллектора для admin."""
+    try:
+        from collector.approval_flow import _load_batches
+        batches = _load_batches()
+    except Exception as exc:
+        return f"⚠️ Не удалось загрузить батчи: {exc}"
+
+    if not batches:
+        return "🤖 <b>Коллектор</b>\n\nАктивных батчей нет."
+
+    # Последний батч по created_at (независимо от статуса)
+    try:
+        latest_id = max(batches.keys())
+        batch = batches[latest_id]
+    except Exception:
+        return "⚠️ Ошибка чтения батча."
+
+    batch_id   = batch.get("batch_id", latest_id)
+    status     = batch.get("status", "—")
+    status_ru  = _BATCH_STATUS_RU.get(status, status)
+    created_at = str(batch.get("created_at") or "—")[:16].replace("T", " ")
+
+    lines = [
+        "🤖 <b>Коллектор — текущий батч</b>",
+        "",
+        f"ID: <code>{batch_id}</code>",
+        f"Статус: <b>{status_ru}</b>",
+        f"Создан: <b>{created_at}</b>",
+    ]
+
+    # Свежесть дебиторки
+    snap = batch.get("debt_snapshot")
+    if isinstance(snap, dict):
+        snap_date = str(snap.get("snapshot_date") or snap.get("max_date") or "")[:10]
+        age_h = snap.get("max_age_hours")
+        if snap_date:
+            age_str = f" ({age_h:.0f}ч)" if age_h is not None else ""
+            lines.append(f"Данные дебиторки: <b>{snap_date}</b>{age_str}")
+
+    # Менеджеры
+    managers = batch.get("managers") or {}
+    if managers:
+        lines.append("")
+        lines.append("<b>Менеджеры:</b>")
+        for mgr_name, mgr_data in managers.items():
+            mgr_status = mgr_data.get("status", "—")
+            clients_count = len(mgr_data.get("clients") or [])
+            status_icon = {
+                "approved": "✅", "rejected": "❌",
+                "partial": "🔸", "timeout": "⌛",
+            }.get(mgr_status, "⏳")
+            lines.append(f"  {status_icon} {mgr_name}: {mgr_status} ({clients_count} кл.)")
+
+    # Список клиентов — одобренные или из pending
+    client_list: list = []
+    approved_clients = batch.get("approved_clients")
+    if approved_clients:
+        client_list = approved_clients
+        lines.append("")
+        lines.append(f"<b>Одобрено к отправке ({len(client_list)}):</b>")
+    else:
+        all_clients = [
+            c for mgr_data in managers.values()
+            for c in (mgr_data.get("clients") or [])
+        ]
+        if all_clients:
+            client_list = all_clients
+            lines.append("")
+            lines.append(f"<b>Клиентов в батче ({len(client_list)}):</b>")
+
+    for c in client_list[:20]:
+        name    = c.get("name", "—")
+        amount  = c.get("amount", 0)
+        days    = c.get("days", 0)
+        manager = c.get("manager", "")
+        amount_str = f"{amount:,.0f} ₸".replace(",", " ") if amount else "—"
+        lines.append(f"  • {name} — {amount_str} / {days} дн. ({manager})")
+    if len(client_list) > 20:
+        lines.append(f"  ... ещё {len(client_list) - 20}")
+
+    # Send results если уже отправлено
+    send_results = batch.get("send_results")
+    if send_results:
+        sent_ok    = sum(1 for r in send_results if r.get("sent"))
+        sent_total = len(send_results)
+        lines.append("")
+        lines.append(f"<b>Результат отправки:</b> {sent_ok}/{sent_total} доставлено")
+
+    return "\n".join(lines)
+
+
+def _format_collector_agreed_stats_text() -> str:
+    """Формирует read-only сводку качества обещаний менеджеров."""
+    try:
+        from collector.approval_flow import format_agreed_promise_stats_text
+        return format_agreed_promise_stats_text()
+    except Exception as exc:
+        return f"⚠️ Не удалось загрузить статистику обещаний: {exc}"
+
+
+def _format_collector_saida_stats_text() -> str:
+    """Формирует read-only сводку backlog Саиды."""
+    try:
+        from collector.payment_hold import format_saida_hold_stats_text
+        return format_saida_hold_stats_text()
+    except Exception as exc:
+        return f"⚠️ Не удалось загрузить backlog Саиды: {exc}"
+
 
 def kb_debt_menu(user_role: str) -> InlineKeyboardMarkup:
     rows = [
@@ -3156,6 +3369,33 @@ def _caption(section_rus: str, mgr: str, date_str: str) -> str:
     who = f"{gender_emoji(mgr)} {mgr}" if mgr and mgr != "Сводный отчёт" else "🏢 Сводный отчёт"
     return f"{emoji} {section_rus}\n{who}\n{date_str}"
 
+def _debt_simple_is_live_fresh(simple_path: Path, manager_name: str) -> bool:
+    if not simple_path or not simple_path.exists():
+        return False
+    detailed_path = find_report("DEBT_EXTENDED", manager_name)
+    if not detailed_path or not detailed_path.exists():
+        return True
+    simple_text = _read_full(simple_path)
+    detailed_text = _read_full(detailed_path)
+    simple_period = _parse_period_to_date(_extract_date(simple_text, simple_path.name, simple_path))
+    detailed_period = _parse_period_to_date(_extract_date(detailed_text, detailed_path.name, detailed_path))
+    min_dt = datetime.min.replace(tzinfo=TZ)
+    if simple_period == min_dt or detailed_period == min_dt:
+        return True
+    if detailed_period > simple_period:
+        log_event(
+            "stale_simple_debt_blocked",
+            manager=normalize_manager_name(manager_name),
+            simple_file=simple_path.name,
+            simple_period=simple_period.strftime("%Y-%m-%d"),
+            detailed_file=detailed_path.name,
+            detailed_period=detailed_period.strftime("%Y-%m-%d"),
+            level="WARNING",
+        )
+        return False
+    return True
+
+
 async def send_with_acl(section: str, intended_mgr: str,
                         chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     user_role = get_user_role(chat_id)
@@ -3180,6 +3420,13 @@ async def send_with_acl(section: str, intended_mgr: str,
     # v9.4.15 Bug #11: Для SALES fallback на Сводный отчёт —
     # sales_report.py генерирует один общий файл без имени менеджера в названии,
     # поэтому per-manager файлы в индексе отсутствуют. Сводный содержит всех клиентов.
+    if (
+        p and p.exists()
+        and section == "DEBT_SIMPLE"
+        and intended_mgr != "Сводный отчёт"
+        and not _debt_simple_is_live_fresh(p, intended_mgr)
+    ):
+        p = None
     sales_summary_fallback = False
     if (not p or not p.exists()) and section in ("SALES_SIMPLE", "SALES_EXTENDED") and intended_mgr != "Сводный отчёт":
         if user_role == "admin":
@@ -3305,14 +3552,21 @@ async def send_with_acl(section: str, intended_mgr: str,
 
 # Блок 8_______________Фоновые задачи (pipeline + скрипты)__________________
 async def run_script_async(script_name: str, *args: str, timeout: int = 600) -> Tuple[int, str, str]:
-    script_path = ROOT_DIR / script_name
-    if not script_path.exists():
-        script_path_tool = ROOT_DIR / "tools" / script_name
-        if not script_path_tool.exists():
+    if script_name.startswith("module:"):
+        module_name = script_name.split(":", 1)[1].strip()
+        if not module_name:
             log_event("script_not_found", script=script_name, level="ERROR")
-            return -1, "", f"Script not found: {script_path}"
-        script_path = script_path_tool
-    command = [sys.executable, str(script_path), *args]
+            return -1, "", f"Module name not provided: {script_name}"
+        command = [sys.executable, "-m", module_name, *args]
+    else:
+        script_path = ROOT_DIR / script_name
+        if not script_path.exists():
+            script_path_tool = ROOT_DIR / "tools" / script_name
+            if not script_path_tool.exists():
+                log_event("script_not_found", script=script_name, level="ERROR")
+                return -1, "", f"Script not found: {script_path}"
+            script_path = script_path_tool
+        command = [sys.executable, str(script_path), *args]
     log_event("run_script_start", script=script_name, args=args)
     try:
         process = await asyncio.create_subprocess_exec(
@@ -3439,6 +3693,201 @@ def _should_notify_manager_today(manager_name: str, period_str: str) -> bool:
 
 
 
+async def _validate_daily_reports_saida(context) -> None:
+    """21:00 — проверить все ожидаемые ежедневные отчёты и напомнить Саиде о пропущенных.
+
+    Ожидаемые отчёты:
+      DAY (сегодня): Валовая прибыль, Затраты, Продажи × 4 менеджера, Дебиторка × 4 менеджера
+      MTD (вчера):   Валовая прибыль нарастающим, Затраты нарастающим
+    """
+    from bot.workday_checker import is_holiday_today as _is_holiday
+    if _is_holiday():
+        return
+
+    import json as _json
+    from datetime import date as _date, timedelta as _td
+
+    _today: _date  = datetime.now(TZ).date()
+    _yesterday: _date = _today - _td(days=1)
+    _month_start: _date = _today.replace(day=1)
+    _today_str    = _today.strftime("%d.%m.%Y")
+    _yest_str     = _yesterday.strftime("%d.%m.%Y")
+    _mstart_str   = _month_start.strftime("%d.%m.%Y")
+
+    missing: list[str] = []
+
+    try:
+        import net_profit_report as _np
+
+        all_gross = _np.load_summary_gross_jsons()
+        all_exp   = _np.load_all_jsons("expenses_*.json")
+
+        def _has_day(items, target: _date) -> bool:
+            for item in items:
+                s, e = _np.extract_period_dates(_np.extract_period_from_json(item))
+                if s and e and s == e == target:
+                    return True
+            return False
+
+        def _has_mtd(items, month_start: _date, end: _date) -> bool:
+            for item in items:
+                s, e = _np.extract_period_dates(_np.extract_period_from_json(item))
+                if s and e and s == month_start and e == end and s != e:
+                    return True
+            return False
+
+        if not _has_day(all_gross, _today):
+            missing.append(f"❌ Валовая прибыль за день ({_today_str})")
+        if not _has_day(all_exp, _today):
+            missing.append(f"❌ Затраты за день ({_today_str})")
+        if not _has_mtd(all_gross, _month_start, _yesterday):
+            missing.append(f"❌ Валовая прибыль нарастающим ({_mstart_str}–{_yest_str})")
+        if not _has_mtd(all_exp, _month_start, _yesterday):
+            missing.append(f"❌ Затраты нарастающим ({_mstart_str}–{_yest_str})")
+
+    except Exception as _e:
+        logger.debug("validate_reports gross/exp error: %s", _e)
+
+    # Продажи и Дебиторка — по менеджерам
+    try:
+        _mgrs = list((MANAGERS_MAP or {}).keys())
+        if not _mgrs:
+            import json as _jj
+            _mgrs = list(_jj.loads((CONFIG_DIR / "managers.json").read_text(encoding="utf-8")).keys())
+
+        # Продажи: sales_*.json → period_end == today ISO
+        _today_iso = _today.isoformat()
+        _sales_today: set[str] = set()
+        for _sf in JSON_DIR.glob("sales_*.json"):
+            try:
+                _sd = _json.loads(_sf.read_text(encoding="utf-8"))
+                if str(_sd.get("period_end", "")).startswith(_today_iso):
+                    _period_str = str(_sd.get("period", ""))
+                    _fname = _sf.stem.lower()
+                    for _m in _mgrs:
+                        if _m.lower() in _fname or _m.lower() in _period_str.lower():
+                            _sales_today.add(_m)
+            except Exception:
+                pass
+
+        for _m in _mgrs:
+            if _m not in _sales_today:
+                missing.append(f"❌ Продажи — {_m} ({_today_str})")
+
+        # Дебиторка: debt_ext_*.json → period_max == today DD.MM.YYYY
+        _debt_today: set[str] = set()
+        for _df in JSON_DIR.glob("debt_ext_*.json"):
+            try:
+                _dd = _json.loads(_df.read_text(encoding="utf-8"))
+                _pm = str(_dd.get("period_max", ""))
+                if _pm == _today_str:
+                    _mgr_in_file = str(_dd.get("manager", ""))
+                    _fname_low = _df.stem.lower()
+                    for _m in _mgrs:
+                        if _m.lower() in _mgr_in_file.lower() or _m.lower() in _fname_low:
+                            _debt_today.add(_m)
+            except Exception:
+                pass
+
+        for _m in _mgrs:
+            if _m not in _debt_today:
+                missing.append(f"❌ Дебиторка — {_m} ({_today_str})")
+
+    except Exception as _e:
+        logger.debug("validate_reports sales/debt error: %s", _e)
+
+    if not missing:
+        log_event("daily_reports_validation_ok", date=_today_str)
+        return
+
+    _bullets = "\n".join(missing)
+    text = (
+        f"⚠️ Проверка отчётов за {_today_str}\n\n"
+        f"Не хватает:\n{_bullets}\n\n"
+        f"Пришли, пожалуйста."
+    )
+    _saida_cid = int(os.getenv("SAIDA_CHAT_ID", "920236287"))
+    try:
+        await context.bot.send_message(chat_id=_saida_cid, text=text)
+        log_event("daily_reports_validation_sent", date=_today_str, missing_count=len(missing))
+    except Exception as _e:
+        logger.error("validate_daily_reports send error: %s", _e)
+
+
+async def _remind_saida_mtd_if_missing(context) -> None:
+    """После pipeline: если пришёл DAY gross/expenses, но MTD-пара не полная — напомнить Саиде.
+    Срабатывает не чаще 1 раза в день (logs/saida_mtd_reminder.json).
+    """
+    import json as _json
+    _remind_file = LOGS_DIR / "saida_mtd_reminder.json"
+    _today = datetime.now(TZ).strftime("%Y-%m-%d")
+
+    try:
+        _rstate = _json.loads(_remind_file.read_text(encoding="utf-8")) if _remind_file.exists() else {}
+    except Exception:
+        _rstate = {}
+    if _rstate.get("date") == _today:
+        return  # уже напомнили сегодня
+
+    try:
+        import net_profit_report as _np
+        from datetime import date as _date
+
+        all_gross = _np.load_summary_gross_jsons()
+        all_exp   = _np.load_all_jsons("expenses_*.json")
+
+        # Ищем последний DAY gross
+        latest_day: Optional[Any] = None
+        for _g in all_gross:
+            _gs, _ge = _np.extract_period_dates(_np.extract_period_from_json(_g))
+            if _gs and _ge and _gs == _ge:
+                latest_day = _gs
+                break
+
+        if not latest_day:
+            return
+
+        _month_start = latest_day.replace(day=1)
+        _day_str     = latest_day.strftime("%d.%m.%Y")
+        _start_str   = _month_start.strftime("%d.%m.%Y")
+
+        def _has_mtd(items):
+            for _item in items:
+                _s, _e = _np.extract_period_dates(_np.extract_period_from_json(_item))
+                if _s and _e and _s == _month_start and _e >= latest_day and _s != _e:
+                    return True
+            return False
+
+        missing = []
+        if not _has_mtd(all_gross):
+            missing.append("Валовая прибыль (нарастающим)")
+        if not _has_mtd(all_exp):
+            missing.append("Затраты (нарастающим)")
+
+        if not missing:
+            return
+
+        _bullets = "\n".join(f"• {m}" for m in missing)
+        text = (
+            f"📊 Получены дневные отчёты за {_day_str}.\n\n"
+            f"Пришли, пожалуйста, ещё нарастающим за период {_start_str}–{_day_str}:\n"
+            f"{_bullets}\n\n"
+            f"Без них отчёт «Чистая прибыль за период» не обновится."
+        )
+
+        _saida_cid = int(os.getenv("SAIDA_CHAT_ID", "920236287"))
+        await context.bot.send_message(chat_id=_saida_cid, text=text)
+
+        _remind_file.write_text(
+            _json.dumps({"date": _today, "day": _day_str, "missing": missing}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        log_event("saida_mtd_reminder_sent", day=_day_str, missing=missing)
+
+    except Exception as _e:
+        logger.debug("_remind_saida_mtd_if_missing inner error: %s", _e)
+
+
 async def pipeline_task(context: ContextTypes.DEFAULT_TYPE):
     log_event("pipeline_cycle_start")
     _imap_rc, _imap_out, _imap_err = await run_script_async("imap_fetcher.py", "--once")
@@ -3468,6 +3917,8 @@ async def pipeline_task(context: ContextTypes.DEFAULT_TYPE):
     
     # v9.4.7.5: Batch-логирование cash-отчётов (экономия ~240 строк логов/час)
     skipped_cash = []
+    # v9.4.39: счётчик долговых файлов — silence_alerts запускается только по ним
+    debt_files_processed = 0
     
     if not queue_files:
         log_event("queue_empty")
@@ -3498,7 +3949,8 @@ async def pipeline_task(context: ContextTypes.DEFAULT_TYPE):
                 
                 script_executed = False
                 script_rc = -1
-                
+                _this_file_is_debt = False  # v9.4.39
+
                 if RE_INV.search(fname_lower):
                     script_rc, _, _ = await run_script_async("inventory.py", str(file_path))
                     script_executed = True
@@ -3641,16 +4093,27 @@ async def pipeline_task(context: ContextTypes.DEFAULT_TYPE):
                         script_executed = True
                         log_event("expenses_report_error", file=file_path.name, error=str(e), level="ERROR")
                 elif "взаиморасч" in fname_lower:
-                    # Взаиморасчёты — нет обработчика; перемещаем в rejected/unknown
-                    timestamp = datetime.now(TZ).strftime('%Y%m%d_%H%M%S')
-                    rejected_path = REJECTED_UNKNOWN_DIR / f"{timestamp}_{file_path.name}"
-                    shutil.move(file_path, rejected_path)
-                    log_event("unknown_file_rejected", original=file_path.name,
-                              moved_to=rejected_path.name, reason="взаиморасчёты")
-                    continue
+                    # Именная Ведомость (Ергали/Алена/Магира/Оксана в имени) → debt_auto_report
+                    # Сводная (без имени менеджера) → rejected/unknown
+                    # v9.4.41: _this_file_is_debt НЕ устанавливаем — silence_alerts
+                    #   использует только Детальный Дебиторы, Ведомость не тригерит silence.
+                    _known = set(m.lower() for m in get_managers_list())
+                    _is_named = any(m in fname_lower for m in _known)
+                    if _is_named:
+                        script_rc, _, _ = await run_script_async("debt_auto_report.py", str(file_path))
+                        script_executed = True
+                        # _this_file_is_debt остаётся False: не тригерит silence_alerts
+                    else:
+                        timestamp = datetime.now(TZ).strftime('%Y%m%d_%H%M%S')
+                        rejected_path = REJECTED_UNKNOWN_DIR / f"{timestamp}_{file_path.name}"
+                        shutil.move(file_path, rejected_path)
+                        log_event("unknown_file_rejected", original=file_path.name,
+                                  moved_to=rejected_path.name, reason="взаиморасчёты-сводный")
+                        continue
                 else:
                     script_rc, _, _ = await run_script_async("debt_auto_report.py", str(file_path))
                     script_executed = True
+                    _this_file_is_debt = True  # v9.4.39
 
                 # v9.4.8: AI генерация отключена (теперь еженедельная)
                 if script_executed and script_rc == 0:
@@ -3672,6 +4135,8 @@ async def pipeline_task(context: ContextTypes.DEFAULT_TYPE):
                 
                 if script_executed and script_rc == 0:
                     processed_files += 1
+                    if _this_file_is_debt:  # v9.4.39
+                        debt_files_processed += 1
                 
                 if script_executed and script_rc == 0 and file_path.exists():
                     processed_path = PROCESSED_DIR / f"{datetime.now(TZ).strftime('%Y%m%d%H%M%S')}_{file_path.name}"
@@ -3695,7 +4160,9 @@ async def pipeline_task(context: ContextTypes.DEFAULT_TYPE):
         await _build_index(force=True)
         log_event("index_rebuilt_after_generation", files_processed=len(queue_files))
     
-    if processed_files > 0:
+    # v9.4.39: silence_alerts только по долговым файлам (не продажи/затраты/остатки)
+    if debt_files_processed > 0:
+        logger.info("🔔 Обработано долговых файлов: %d — запускаю проверку молчания", debt_files_processed)
         try:
             await check_and_send_silence_alerts(context)
         except Exception as e:
@@ -3833,6 +4300,13 @@ async def pipeline_task(context: ContextTypes.DEFAULT_TYPE):
         except Exception as _crm_e:
             logger.warning("CRM pipeline update error: %s", _crm_e)
 
+    # Если обработаны новые файлы — проверяем нет ли пропущенного MTD, напоминаем Саиде
+    if processed_files > 0:
+        try:
+            await _remind_saida_mtd_if_missing(context)
+        except Exception as _ms_e:
+            logger.debug("mtd_remind_saida error: %s", _ms_e)
+
     log_event("pipeline_cycle_finish")
 
 async def _suggest_weekly_clients(context, chat_id: int, categorized: dict, weekly_clients: list) -> None:
@@ -3935,6 +4409,30 @@ async def _send_payment_check_buttons(context, chat_id: int, manager: str, categ
         logger.warning("payment check buttons send error manager=%s: %s", manager, exc)
 
 
+async def _silence_delete_prev(context, key: str, state: dict) -> None:
+    """v9.4.40: Удаляет предыдущее silence-сообщение если оно отправлено сегодня."""
+    entry = state.get(key)
+    if not entry:
+        return
+    today = datetime.now(TZ).strftime("%Y-%m-%d")
+    if entry.get("date") != today:
+        return  # старое (вчера и раньше) — не трогаем, auto-delete сам уберёт
+    chat_id = entry.get("chat_id")
+    ids = entry.get("ids", [])
+    if not chat_id or not ids:
+        return
+    deleted = 0
+    for mid in ids:
+        try:
+            await context.bot.delete_message(chat_id=chat_id, message_id=mid)
+            deleted += 1
+        except Exception:
+            pass  # уже удалено или истёк срок
+    if deleted:
+        log_event("silence_outdated_deleted", key=key, chat_id=chat_id, deleted=deleted)
+        logger.info("🗑️ Удалено %d устаревших silence-сообщений для %s", deleted, key)
+
+
 async def check_and_send_silence_alerts(context=None):
     """Проверяет дни молчания у всех менеджеров и отправляет уведомления"""
     from bot.workday_checker import is_holiday_today
@@ -3946,6 +4444,8 @@ async def check_and_send_silence_alerts(context=None):
     reports_dir = HTML_DIR
     all_managers_data = {}
     manager_dates = {}  # v9.4.23: дата отчёта по каждому менеджеру
+    _silence_state = _silence_load()       # v9.4.40
+    _today = datetime.now(TZ).strftime("%Y-%m-%d")  # v9.4.40
     
     for manager in get_managers_list():
         try:
@@ -4046,7 +4546,12 @@ async def check_and_send_silence_alerts(context=None):
             
             if context:
                 try:
-                    await _tg_send_long(context, chat_id, message, parse_mode=None, delay_hours=24)
+                    _key_sub = f"subadmin_{manager}"
+                    await _silence_delete_prev(context, _key_sub, _silence_state)  # v9.4.40
+                    _ids_sub: list[int] = []
+                    await _tg_send_long(context, chat_id, message, parse_mode=None, delay_hours=24,
+                                        _collect_ids=_ids_sub)
+                    _silence_state[_key_sub] = {"chat_id": chat_id, "ids": _ids_sub, "date": _today}
                     await _send_payment_check_buttons(context, chat_id, manager, categorized)
                     logger.info(f"✅ Уведомление отправлено субадмину {manager} (свои: {total_silent}, подшефные: {'есть' if has_subordinate_alerts else 'нет'})")
                     await send_main_menu(context, chat_id, get_user_role(chat_id))  # Fix #MENU-SILENCE
@@ -4056,7 +4561,11 @@ async def check_and_send_silence_alerts(context=None):
             message = alert.format_manager_alert(manager, categorized, report_date=report_date)
             if message and context:
                 try:
-                    await _tg_send_long(context, chat_id, message, parse_mode=None, delay_hours=24)
+                    await _silence_delete_prev(context, manager, _silence_state)  # v9.4.40
+                    _ids_mgr: list[int] = []
+                    await _tg_send_long(context, chat_id, message, parse_mode=None, delay_hours=24,
+                                        _collect_ids=_ids_mgr)
+                    _silence_state[manager] = {"chat_id": chat_id, "ids": _ids_mgr, "date": _today}
                     await _send_payment_check_buttons(context, chat_id, manager, categorized)
                     logger.info(f"✅ Уведомление отправлено: {manager} ({total_silent} клиентов)")
                     await send_main_menu(context, chat_id, get_user_role(chat_id))  # Fix #MENU-SILENCE
@@ -4072,13 +4581,18 @@ async def check_and_send_silence_alerts(context=None):
             # Детальная сводка для админа (с именами клиентов)
             admin_summary = alert.format_admin_detailed(all_managers_data, manager_dates=manager_dates)  # v9.4.23
             if ADMIN_CHAT_ID:
-                await _tg_send_long(context, ADMIN_CHAT_ID, admin_summary, parse_mode=None, delay_hours=24)
+                await _silence_delete_prev(context, "admin", _silence_state)  # v9.4.40
+                _ids_admin: list[int] = []
+                await _tg_send_long(context, ADMIN_CHAT_ID, admin_summary, parse_mode=None, delay_hours=24,
+                                    _collect_ids=_ids_admin)
+                _silence_state["admin"] = {"chat_id": ADMIN_CHAT_ID, "ids": _ids_admin, "date": _today}
                 logger.info(f"✅ Детальная сводка отправлена админу")
                 await send_main_menu(context, ADMIN_CHAT_ID, "admin")  # Fix #MENU-SILENCE
             else:
                 logger.warning("⚠️ ADMIN_CHAT_ID не установлен")
         except Exception as e:
             logger.error(f"❌ Ошибка отправки сводки админу: {e}", exc_info=True)
+    _silence_save(_silence_state)  # v9.4.40: сохранить все id после полного прохода
     logger.info(f"🔔 Проверка дней молчания завершена")
 
 # ─────────────────────────────────────────────────────────────────
@@ -4205,6 +4719,43 @@ FORCE_REPORT_TYPES = {
     "net_profit": "💰 Чистая прибыль",
     "ranking":    "📊 Рейтинг менеджеров",  # C9
 }
+
+def _net_profit_mtd_is_deliverable(candidate: Optional[Path]) -> bool:
+    if not candidate or not candidate.exists():
+        return False
+    try:
+        import net_profit_report as _np
+
+        all_gross = _np.load_summary_gross_jsons()
+        all_expenses = _np.load_all_jsons("expenses_*.json")
+        best_range = None
+        seen = set()
+        for gross in all_gross:
+            period = _np.extract_period_from_json(gross)
+            start, end = _np.extract_period_dates(period)
+            if start is None or start == end:
+                continue
+            key = (start, end)
+            if key in seen:
+                continue
+            seen.add(key)
+            best_range = (start, end, period)
+            break
+        if not best_range:
+            return False
+        start, _, period = best_range
+        if not _np.find_matching_expenses_strict(period, all_expenses):
+            log_event("stale_net_profit_mtd_blocked", file=candidate.name, reason="no_exact_expenses", level="WARNING")
+            return False
+        expected_name = f"net_profit_mtd_{start.strftime('%Y%m%d')}.html"
+        if candidate.name != expected_name:
+            log_event("stale_net_profit_mtd_blocked", file=candidate.name, expected=expected_name, level="WARNING")
+            return False
+        return True
+    except Exception as e:
+        log_event("net_profit_mtd_freshness_error", error=str(e), level="WARNING")
+        return False
+
 
 async def force_report_to_user(report_type: str, chat_id: int, context) -> str:
     """
@@ -4434,6 +4985,8 @@ async def force_report_to_user(report_type: str, chat_id: int, context) -> str:
                 files = sorted(search.glob("net_profit*.html"),
                                key=lambda p: p.stat().st_mtime, reverse=True)
                 if files:
+                    if subdir == "net_profit_mtd" and not _net_profit_mtd_is_deliverable(files[0]):
+                        continue
                     parsed = _parse_np_html(files[0])
                     if parsed:
                         parts.append(parsed)
@@ -4690,6 +5243,21 @@ def find_recent_json_for_manager(manager: str, hours: int = 48, report_type: str
     """
     if not JSON_DIR.exists():
         return None
+    cutoff_time = time.time() - (hours * 3600)
+    if report_type == "DEBT":
+        detailed = [
+            p for p in JSON_DIR.glob(f"debt_ext_*Детальный Дебиторы {manager}*.json")
+            if p.stat().st_mtime >= cutoff_time
+        ]
+        if detailed:
+            return max(detailed, key=lambda p: p.stat().st_mtime)
+        fallback = [
+            p for p in JSON_DIR.glob(f"debt_ext_*{manager}*.json")
+            if p.stat().st_mtime >= cutoff_time
+        ]
+        if fallback:
+            return max(fallback, key=lambda p: p.stat().st_mtime)
+        return None
     # Префиксы файлов по типу отчёта
     TYPE_PREFIXES = {
         "DEBT":      ("debt_ext_", "debt_"),
@@ -4699,7 +5267,6 @@ def find_recent_json_for_manager(manager: str, hours: int = 48, report_type: str
         "EXPENSES":  ("expenses_",),
     }
     allowed_prefixes = TYPE_PREFIXES.get(report_type, ())
-    cutoff_time = time.time() - (hours * 3600)
     candidates = []
     for json_file in JSON_DIR.glob("*.json"):
         try:
@@ -4720,6 +5287,57 @@ def find_recent_json_for_manager(manager: str, hours: int = 48, report_type: str
     if candidates:
         return max(candidates, key=lambda p: p.stat().st_mtime)
     return None
+
+
+def _load_fresh_debt_totals_by_manager(json_dir: Path) -> tuple[dict, str]:
+    """
+    Для рейтинга менеджеров используем только актуальные manager-specific detailed debt JSON.
+    Старые "Ведомость ..." не должны подменять свежие долги.
+    """
+    debt_by_mgr: dict = {}
+    debt_date = ""
+    best_debt_date = None
+    manager_candidates: dict = {}
+
+    for path in json_dir.glob("debt_ext_*.json"):
+        if "детальный дебиторы" not in path.name.lower():
+            continue
+        try:
+            with open(path, encoding="utf-8") as fh:
+                data = json.load(fh)
+        except Exception:
+            continue
+        mgr = (data.get("manager") or "").strip()
+        if not mgr or mgr in ("Не определён", "Неизвестно", "?", "-", "—") or len(mgr) < 2:
+            continue
+        prev = manager_candidates.get(mgr)
+        if prev is None or path.stat().st_mtime > prev.stat().st_mtime:
+            manager_candidates[mgr] = path
+
+    for mgr, path in manager_candidates.items():
+        try:
+            with open(path, encoding="utf-8") as fh:
+                data = json.load(fh)
+        except Exception:
+            continue
+        agg_close = float((data.get("aggregates") or {}).get("close", 0) or 0)
+        if agg_close <= 0:
+            continue
+        debt_by_mgr[mgr] = agg_close
+        pmax = (data.get("period_max") or "").strip()
+        dm2 = re.findall(r'(\d{1,2})[./](\d{1,2})[./](\d{4})', pmax)
+        if dm2:
+            dd, mm, yyyy = dm2[-1]
+            try:
+                from datetime import date as _date2
+                pd = _date2(int(yyyy), int(mm), int(dd))
+                if best_debt_date is None or pd > best_debt_date:
+                    best_debt_date = pd
+                    debt_date = pmax
+            except Exception:
+                pass
+
+    return debt_by_mgr, debt_date
 
 def find_newest_ai_file_for_manager(manager: str, after_time: float, report_type: str = "") -> Optional[Path]:
     """
@@ -4871,6 +5489,83 @@ async def cmd_health(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🗑️ Pending deletions: {pending_deletions}"
     )
     await _send_auto(context, update.effective_chat.id, text)
+
+async def cmd_logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показывает последние ERROR/CRITICAL из runtime-лога. Только для admin."""
+    chat_id = update.effective_chat.id
+    if not is_admin(chat_id):
+        await _send_auto(context, chat_id, "⛔ Доступ запрещён.")
+        return
+
+    args = (context.args or [])
+    try:
+        n = max(5, min(50, int(args[0]))) if args else 20
+    except (ValueError, IndexError):
+        n = 20
+
+    log_path = LOGS_DIR / "send_reports.log"
+    if not log_path.exists():
+        await _send_auto(context, chat_id, "📭 Лог-файл не найден.")
+        return
+
+    try:
+        all_lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except Exception as e:
+        await _send_auto(context, chat_id, f"❌ Ошибка чтения лога: {e}")
+        return
+
+    error_lines = [l for l in all_lines if " ERROR " in l or " CRITICAL " in l][-n:]
+
+    if not error_lines:
+        await _send_auto(context, chat_id, "✅ ERROR/CRITICAL записей не найдено.")
+        return
+
+    block = "\n".join(error_lines)
+    # Telegram code-block лимит ~4096 символов, оставляем запас на обёртку
+    if len(block) > 3800:
+        block = "…\n" + block[-3800:]
+
+    await _send_auto(
+        context,
+        chat_id,
+        f"🔍 <b>Последние {len(error_lines)} ERROR/CRITICAL:</b>\n<code>{_html.escape(block)}</code>",
+    )
+
+
+async def cmd_timeline(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показывает единую CRM+Collector timeline по клиенту. Только для admin."""
+    chat_id = update.effective_chat.id
+    if not is_admin(chat_id):
+        await _send_auto(context, chat_id, "⛔ Доступ запрещён.")
+        return
+
+    client_key = " ".join(context.args or []).strip()
+    if not client_key:
+        await _send_auto(context, chat_id, "Использование: /timeline <название клиента>")
+        return
+
+    records = read_client_timeline(
+        client_key,
+        crm_path=LOGS_DIR / "crm_audit.jsonl",
+        collector_path=LOGS_DIR / "collector_audit.jsonl",
+        limit=60,
+    )
+    await _send_auto(context, chat_id, format_client_timeline(client_key, records))
+
+
+async def morning_error_digest_task(context: ContextTypes.DEFAULT_TYPE):
+    """Отправляет админу краткий digest WARNING/ERROR/CRITICAL по доменам за ночь."""
+    if not ADMIN_CHAT_ID:
+        return
+    try:
+        now = datetime.now(TZ).replace(tzinfo=None)
+        counts = summarize_errors_by_system(LOGS_DIR, now=now, hours=12)
+        message = format_error_digest(counts, now=now, hours=12)
+        await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=message, parse_mode="HTML")
+        sched_logger.info("morning_error_digest: delivered to admin")
+    except Exception as e:
+        sched_logger.error("morning_error_digest failed: %s", e, exc_info=True)
+
 
 async def _exit_after_reply(delay_sec: float = 1.0) -> None:
     await asyncio.sleep(delay_sec)
@@ -5026,9 +5721,9 @@ def _crm_name_prompt_text(
         f"<b>{client_key}</b>\n\n"
         f"Как к нему обращаться?\n"
         f"Можно ввести удобное имя, оставить как в системе или вернуться к имени позже.\n\n"
-        f"<i>Запрос будет повторяться, пока данные не будут заполнены. "
-        f"Статистика игнора ведётся по каждому менеджеру, видна руководителю "
-        f"и может повлиять на отношения с руководителем.</i>"
+        f"<i>Я вижу игнор. Каждый день без ответа фиксируется — "
+        f"руководитель получит рекомендацию задержать зарплату на столько же дней. "
+        f"Запрос повторяется каждые 30 минут.</i>"
     )
 
 
@@ -5093,26 +5788,32 @@ def _crm_cleanup_pending() -> None:
     now = datetime.now(TZ)
     stale_chat_ids: List[int] = []
     for chat_id, pending in list(_CRM_PHONE_PENDING.items()):
+        # Служебные записи (зарплатные авансы и т.п.) — убираем из памяти
+        ck = (pending.get("client_key") or "").lower()
+        if "зп" in ck or ck in ("без клиента", "недостача"):
+            state_logger.info("CRM cleanup: removing service entry '%s' (chat_id=%s)", ck, chat_id)
+            stale_chat_ids.append(chat_id)
+            continue
         ts_raw = pending.get("last_sent") or pending.get("created_at")
         if not ts_raw:
             continue
         try:
             ts = datetime.fromisoformat(ts_raw)
         except (TypeError, ValueError):
-            logger.warning("CRM pending invalid timestamp: chat_id=%s raw=%r", chat_id, ts_raw)
+            state_logger.warning("CRM pending invalid timestamp: chat_id=%s raw=%r", chat_id, ts_raw)
             stale_chat_ids.append(chat_id)
             continue
         age_hours = (now - ts).total_seconds() / 3600
         if age_hours <= CRM_PENDING_TTL_HOURS:
             continue
-        logger.warning(
-            "CRM pending stale but kept active: chat_id=%s client=%s state=%s age_hours=%.1f",
+        state_logger.warning(
+            "CRM pending expired, removing: chat_id=%s client=%s state=%s age_hours=%.1f",
             chat_id,
             pending.get("client_key"),
             pending.get("state"),
             age_hours,
         )
-        pending["stale_logged_at"] = now.isoformat()
+        stale_chat_ids.append(chat_id)
     for chat_id in stale_chat_ids:
         _CRM_PHONE_PENDING.pop(chat_id, None)
 
@@ -5132,7 +5833,7 @@ def _cleanup_legacy_collector_pending_state() -> None:
         if not (key.startswith("__phone_pending__") or key.startswith("__name_pending__")):
             continue
         if not isinstance(value, dict):
-            logger.warning("legacy pending malformed: %s=%r", key, value)
+            state_logger.warning("legacy pending malformed: %s=%r", key, value)
             del state[key]
             changed = True
             continue
@@ -5140,14 +5841,14 @@ def _cleanup_legacy_collector_pending_state() -> None:
         try:
             record_date = datetime.fromisoformat(raw_date).date()
         except (TypeError, ValueError):
-            logger.warning("legacy pending invalid date: %s=%r", key, raw_date)
+            state_logger.warning("legacy pending invalid date: %s=%r", key, raw_date)
             del state[key]
             changed = True
             continue
         age_days = (today - record_date).days
         if age_days < COLLECTOR_PENDING_TTL_DAYS:
             continue
-        logger.warning("legacy pending expired: %s client=%s age_days=%d", key, value.get("client"), age_days)
+        state_logger.warning("legacy pending expired: %s client=%s age_days=%d", key, value.get("client"), age_days)
         del state[key]
         changed = True
     if changed:
@@ -5163,9 +5864,9 @@ def _crm_save_pending() -> None:
             json.dump({str(k): v for k, v in _CRM_PHONE_PENDING.items()},
                       _f, ensure_ascii=False, indent=2)
         tmp.replace(CRM_PENDING_PATH)
-        logger.debug("CRM pending saved: %d", len(_CRM_PHONE_PENDING))
+        state_logger.debug("CRM pending saved: %d", len(_CRM_PHONE_PENDING))
     except Exception as _e:
-        logger.warning("_crm_save_pending error: %s", _e)
+        state_logger.warning("_crm_save_pending error: %s", _e)
 
 
 def _crm_load_pending() -> None:
@@ -5178,14 +5879,19 @@ def _crm_load_pending() -> None:
             data = json.load(_f)
         _CRM_PHONE_PENDING.update({int(k): v for k, v in data.items()})
         _crm_cleanup_pending()
-        logger.info("CRM pending restored: %d managers", len(_CRM_PHONE_PENDING))
+        state_logger.info("CRM pending restored: %d managers", len(_CRM_PHONE_PENDING))
     except Exception as _e:
-        logger.warning("_crm_load_pending error: %s", _e)
+        state_logger.warning("_crm_load_pending error: %s", _e)
     _cleanup_legacy_collector_pending_state()
 
 # Рассылка "чей клиент": token → {client_key, notified_chat_ids, claimed}
+CRM_CLAIM_PENDING_PATH = LOGS_DIR / "crm_claim_pending_state.json"
+CRM_CLAIM_TTL_HOURS = int(os.getenv("CRM_CLAIM_TTL_HOURS", "72"))
 _CRM_CLAIM_PENDING: Dict[str, Dict[str, Any]] = {}
-_CRM_CLAIM_COUNTER = 0  # монотонный счётчик токенов
+CRM_DUP_REVIEW_PATH = LOGS_DIR / "crm_duplicate_review_state.json"
+CRM_DUP_REVIEW_TTL_HOURS = int(os.getenv("CRM_DUP_REVIEW_TTL_HOURS", "336"))
+_CRM_DUP_REVIEW_PENDING: Dict[str, Dict[str, Any]] = {}
+_CRM_DUP_REVIEW_AWAITING_TEXT: Dict[int, str] = {}
 
 # Имя администратора — участвует в CRM наравне с менеджерами
 ADMIN_NAME = "Вадим"
@@ -5199,10 +5905,213 @@ def _all_crm_participants() -> Dict[str, int]:
     return result
 
 
+def _crmdup_cleanup_pending(now_dt: Optional[datetime] = None) -> None:
+    now_dt = now_dt or datetime.now(TZ)
+    stale_tokens = []
+    stale_chats = []
+    for token, review in list(_CRM_DUP_REVIEW_PENDING.items()):
+        created_raw = review.get("created_at")
+        if not created_raw:
+            stale_tokens.append(token)
+            continue
+        try:
+            created_dt = datetime.fromisoformat(created_raw)
+        except (TypeError, ValueError):
+            stale_tokens.append(token)
+            continue
+        if (now_dt - created_dt).total_seconds() > CRM_DUP_REVIEW_TTL_HOURS * 3600:
+            stale_tokens.append(token)
+    for token in stale_tokens:
+        _CRM_DUP_REVIEW_PENDING.pop(token, None)
+    for chat_id, token in list(_CRM_DUP_REVIEW_AWAITING_TEXT.items()):
+        if token not in _CRM_DUP_REVIEW_PENDING:
+            stale_chats.append(chat_id)
+    for chat_id in stale_chats:
+        _CRM_DUP_REVIEW_AWAITING_TEXT.pop(chat_id, None)
+
+
+def _crmdup_save_pending() -> None:
+    CRM_DUP_REVIEW_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _crmdup_cleanup_pending()
+    tmp = CRM_DUP_REVIEW_PATH.with_suffix(".tmp")
+    payload = {
+        "reviews": _CRM_DUP_REVIEW_PENDING,
+        "awaiting_text": {str(k): v for k, v in _CRM_DUP_REVIEW_AWAITING_TEXT.items()},
+    }
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, CRM_DUP_REVIEW_PATH)
+
+
+def _crmdup_load_pending() -> None:
+    _CRM_DUP_REVIEW_PENDING.clear()
+    _CRM_DUP_REVIEW_AWAITING_TEXT.clear()
+    if not CRM_DUP_REVIEW_PATH.exists():
+        return
+    try:
+        payload = json.loads(CRM_DUP_REVIEW_PATH.read_text(encoding="utf-8"))
+        reviews = payload.get("reviews", {}) if isinstance(payload, dict) else {}
+        awaiting_text = payload.get("awaiting_text", {}) if isinstance(payload, dict) else {}
+        if isinstance(reviews, dict):
+            _CRM_DUP_REVIEW_PENDING.update(reviews)
+        if isinstance(awaiting_text, dict):
+            _CRM_DUP_REVIEW_AWAITING_TEXT.update({int(k): v for k, v in awaiting_text.items()})
+        _crmdup_cleanup_pending()
+        state_logger.info("CRM duplicate review restored: %d records", len(_CRM_DUP_REVIEW_PENDING))
+    except Exception as _e:
+        state_logger.warning("_crmdup_load_pending error: %s", _e)
+
+
+def _crmdup_token() -> str:
+    from uuid import uuid4
+    stamp = datetime.now(TZ).strftime("%Y%m%d%H%M%S")
+    return f"dup_{stamp}_{uuid4().hex[:8]}"
+
+
+def _crmdup_choice_kb(token: str, items: List[Dict[str, Any]]) -> InlineKeyboardMarkup:
+    rows = []
+    for idx, item in enumerate(items[:2]):
+        label = item.get("phone") or f"Вариант {idx + 1}"
+        rows.append([InlineKeyboardButton(f"✅ Оставить {label}", callback_data=f"crmdup|pick|{token}|{idx}")])
+    rows.append([InlineKeyboardButton("✏️ Ввести другой номер", callback_data=f"crmdup|custom|{token}")])
+    rows.append([InlineKeyboardButton("↔️ Это разные клиенты", callback_data=f"crmdup|distinct|{token}")])
+    return InlineKeyboardMarkup(rows)
+
+
+def _crmdup_prompt_text(review: Dict[str, Any]) -> str:
+    items = review.get("items", [])
+    lines = []
+    for idx, item in enumerate(items[:2], start=1):
+        lines.append(
+            f"{idx}. <b>{_html.escape(item.get('client_key', '?'))}</b>\n"
+            f"Телефон: <code>{_html.escape(item.get('phone', '-'))}</code>\n"
+            f"Источник: <code>{_html.escape(','.join(item.get('sources', [])) or '-')}</code>"
+        )
+    manager = review.get("manager") or "не назначен"
+    return (
+        f"📞 <b>Разовая CRM-сверка дублей</b>\n\n"
+        f"Менеджер: <b>{_html.escape(manager)}</b>\n"
+        f"Ниже две карточки, которые похожи на одного клиента, но в CRM у них разные номера.\n\n"
+        f"{chr(10).join(lines)}\n\n"
+        f"Выберите действующий номер, введите новый или отметьте, что это разные клиенты."
+    )
+
+
+async def _crmdup_broadcast_once(context: ContextTypes.DEFAULT_TYPE, limit: int = 100) -> Dict[str, int]:
+    from bot.crm_clients import get_phone_conflict_groups
+
+    conflicts = get_phone_conflict_groups(limit=limit)
+    sent = 0
+    skipped = 0
+    for conflict in conflicts:
+        manager = (conflict.get("manager") or "").strip()
+        if not manager:
+            skipped += 1
+            continue
+        chat_id = _all_crm_participants().get(manager)
+        items = conflict.get("items", [])
+        if not chat_id or len(items) < 2:
+            skipped += 1
+            continue
+        signature = "|".join(sorted(item.get("client_key", "") for item in items[:2]))
+        if any(review.get("signature") == signature and not review.get("resolved_at") for review in _CRM_DUP_REVIEW_PENDING.values()):
+            skipped += 1
+            continue
+        token = _crmdup_token()
+        review = {
+            "token": token,
+            "signature": signature,
+            "manager": manager,
+            "chat_id": chat_id,
+            "items": items[:2],
+            "created_at": datetime.now(TZ).isoformat(),
+        }
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=_crmdup_prompt_text(review),
+            parse_mode="HTML",
+            reply_markup=_crmdup_choice_kb(token, review["items"]),
+        )
+        _CRM_DUP_REVIEW_PENDING[token] = review
+        crm_audit("duplicate_phone_conflict_sent", manager=manager, token=token, client_keys=[item.get("client_key", "") for item in review["items"]])
+        sent += 1
+    _crmdup_save_pending()
+    crm_logger.info("CRM duplicate review broadcast: sent=%d skipped=%d", sent, skipped)
+    return {"sent": sent, "skipped": skipped, "total": len(conflicts)}
+
+
+def _crm_cleanup_claim_pending(now_dt: Optional[datetime] = None) -> None:
+    now_dt = now_dt or datetime.now(TZ)
+    stale_tokens = []
+    for token, claim in list(_CRM_CLAIM_PENDING.items()):
+        created_raw = claim.get("created_at")
+        if not created_raw:
+            continue
+        try:
+            created_dt = datetime.fromisoformat(created_raw)
+        except Exception:
+            stale_tokens.append(token)
+            continue
+        if (now_dt - created_dt).total_seconds() > CRM_CLAIM_TTL_HOURS * 3600:
+            stale_tokens.append(token)
+    for token in stale_tokens:
+        _CRM_CLAIM_PENDING.pop(token, None)
+
+
+def _crm_save_claim_pending() -> None:
+    CRM_CLAIM_PENDING_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _crm_cleanup_claim_pending()
+    tmp = CRM_CLAIM_PENDING_PATH.with_suffix(".tmp")
+    payload = {k: v for k, v in _CRM_CLAIM_PENDING.items()}
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, CRM_CLAIM_PENDING_PATH)
+
+
+def _crm_load_claim_pending() -> None:
+    _CRM_CLAIM_PENDING.clear()
+    if not CRM_CLAIM_PENDING_PATH.exists():
+        return
+    try:
+        data = json.loads(CRM_CLAIM_PENDING_PATH.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            _CRM_CLAIM_PENDING.update(data)
+        _crm_cleanup_claim_pending()
+        state_logger.info("CRM claim pending restored: %d records", len(_CRM_CLAIM_PENDING))
+    except Exception as _e:
+        state_logger.warning("_crm_load_claim_pending error: %s", _e)
+
+
 def _crm_claim_token() -> str:
-    global _CRM_CLAIM_COUNTER
-    _CRM_CLAIM_COUNTER += 1
-    return f"claim_{_CRM_CLAIM_COUNTER}"
+    from uuid import uuid4
+    stamp = datetime.now(TZ).strftime("%Y%m%d%H%M%S")
+    return f"claim_{stamp}_{uuid4().hex[:8]}"
+
+
+def _crm_collect_unowned_claim_clients(limit: int = 3) -> List[str]:
+    _CRM_CLAIM_EXCLUDED = {"Без клиента", "Недостача"}
+
+    def _is_service_entry(name: str) -> bool:
+        nl = name.lower()
+        return nl in {s.lower() for s in _CRM_CLAIM_EXCLUDED} or "зп" in nl
+
+    from bot.crm_clients import load_clients as _crm_load, canonicalize_client_key
+    _crm_data = _crm_load()
+    grouped: Dict[str, List[Tuple[str, Dict[str, Any]]]] = {}
+    for key, value in _crm_data.get("clients", {}).items():
+        if not isinstance(value, dict):
+            continue
+        grouped.setdefault(canonicalize_client_key(key), []).append((key, value))
+
+    result: List[str] = []
+    for _canon, items in grouped.items():
+        owned = any((item.get("manager") or "") not in ("", "Не определён", "?", "-", "—") for _, item in items)
+        if owned:
+            continue
+        candidate = next((k for k, _ in items if not _is_service_entry(k)), None)
+        if candidate:
+            result.append(candidate)
+        if len(result) >= limit:
+            break
+    return result
 
 
 async def cmd_guide(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -5287,6 +6196,30 @@ def _set_client_phone_wrapper(client_name: str, phone: str, manager: str,
     """Обёртка для set_client_phone без async."""
     from bot.crm_clients import set_client_phone as _set_phone
     return _set_phone(client_name, phone, manager, alias=alias, phone_source="manager_manual")
+
+
+async def cmd_crmdupsend(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin-only: one-off broadcast of CRM duplicate phone conflicts to managers."""
+    chat_id = update.effective_chat.id
+    if not is_admin(chat_id):
+        await _send_auto(context, chat_id, "⛔ Доступно только администратору.")
+        return
+    try:
+        result = await _crmdup_broadcast_once(context, limit=100)
+        await _send_auto(
+            context,
+            chat_id,
+            (
+                "📞 Разовая CRM-сверка дублей запущена.\n\n"
+                f"Отправлено менеджерам: <b>{result['sent']}</b>\n"
+                f"Пропущено: <b>{result['skipped']}</b>\n"
+                f"Всего конфликтов найдено: <b>{result['total']}</b>"
+            ),
+            parse_mode="HTML",
+        )
+    except Exception as e:
+        crm_logger.error("cmd_crmdupsend error: %s", e)
+        await _send_auto(context, chat_id, "❌ Не удалось запустить разовую CRM-сверку.")
 
 
 def _chat_to_manager(chat_id: int) -> str:
@@ -5448,7 +6381,7 @@ async def handle_extended_with_ai(
         status_msg_id = status_message.message_id
     except Exception as e:
         log_event("ai_status_msg_fail", error=str(e), manager=manager)
-    json_file = find_recent_json_for_manager(manager)
+    json_file = find_recent_json_for_manager(manager, report_type="DEBT")
     if not json_file:
         if status_msg_id:
             try:
@@ -5521,6 +6454,7 @@ async def handle_ai_only(
     await process_and_send_ai_analysis(manager, chat_id, context, json_file, start_time, status_msg_id, report_type)
 
 async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    new_trace_id()  # каждый callback получает свой trace_id для корреляции логов
     q = update.callback_query
     try:
         await q.answer()
@@ -5610,6 +6544,37 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await q.answer("Запрос Саиде отправлен.")
                 return
 
+            # Директор решает за Саиду (байпас после SAIDA_BYPASS_HOURS)
+            if action in ("payhold_admin_full", "payhold_admin_none"):
+                if chat_id != admin_id:
+                    await q.answer("Только для директора.")
+                    return
+                status = "full" if action == "payhold_admin_full" else "none"
+                updated = confirm_by_saida(token, status)
+                if not updated:
+                    await q.answer("Запрос уже закрыт.")
+                    return
+                client = updated.get("client", "")
+                manager = updated.get("manager", "")
+                mgr_cid = int(updated.get("manager_chat_id") or 0)
+                result_label = "принял оплату" if status == "full" else "отклонил оплату"
+                if mgr_cid:
+                    try:
+                        await context.bot.send_message(
+                            chat_id=mgr_cid,
+                            text=f"✅ Директор {result_label} по клиенту <b>{client}</b>.",
+                            parse_mode="HTML",
+                        )
+                    except Exception:
+                        pass
+                try:
+                    await q.edit_message_text(
+                        f"Директор {result_label} по клиенту {client}. Менеджер уведомлён."
+                    )
+                except Exception:
+                    await q.answer("Сохранено.")
+                return
+
             if chat_id != saida_chat_id:
                 await q.answer("Подтверждать может только Саида.")
                 return
@@ -5683,9 +6648,50 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             from collector.approval_flow import handle_callback as _wa_appr_cb
             handled = await _wa_appr_cb(data, chat_id, q.message.message_id)
             if handled:
+                # Если менеджер выбрал "оплатил без документа" → создаём payment hold для Саиды
+                if "wa_appr_cli_paid_nodoc" in data:
+                    try:
+                        from collector.approval_flow import find_manager_waiting_state
+                        from collector.payment_hold import create_manager_payment_request
+                        parts = data.split("|")
+                        if len(parts) >= 4:
+                            batch_id_cb = parts[1]
+                            cli_idx_cb  = int(parts[3])
+                            from collector.approval_flow import _load_batches
+                            batch_cb = (_load_batches() or {}).get(batch_id_cb)
+                            if batch_cb:
+                                for mgr_n, mgr_s in batch_cb.get("managers", {}).items():
+                                    if mgr_s.get("chat_id") == chat_id:
+                                        clients_cb = mgr_s.get("clients", [])
+                                        if cli_idx_cb < len(clients_cb):
+                                            cl = clients_cb[cli_idx_cb]
+                                            create_manager_payment_request(
+                                                manager=mgr_n,
+                                                manager_chat_id=chat_id,
+                                                client=cl.get("name", ""),
+                                                debt=cl.get("amount", 0),
+                                                claimed_by_manager=True,
+                                            )
+                    except Exception as _ph_e:
+                        logger.warning("payment hold create error: %s", _ph_e)
                 return
         except Exception as e:
             logger.error("wa_appr callback error: %s", e)
+        return
+
+    # No-movement Saida-first check callbacks (nm_paid/nm_nopay/nm_adm_send/nm_adm_skip)
+    if data.startswith("nm_"):
+        try:
+            from collector.no_movement import handle_nm_callback as _nm_cb
+            handled = await _nm_cb(data, chat_id)
+            if handled:
+                try:
+                    await q.answer()
+                except Exception:
+                    pass
+                return
+        except Exception as e:
+            logger.error("nm callback error: %s", e)
         return
 
     # [DISABLED v9.4.39] Старый flow: коллектор → reg_lang/reg_name/reg_phone.
@@ -5778,9 +6784,176 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.answer(f"❌ Ошибка: {e}")
         return
 
+    # Коллектор: статус активного батча
+    if data == "collector_batch":
+        if user_role != "admin":
+            await q.answer("⛔ Доступ запрещён")
+            return
+        await q.answer()
+        text = _format_collector_batch_text()
+        kb_back = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔄 Обновить", callback_data="collector_batch")],
+            [InlineKeyboardButton("🤝 Обещания менеджеров", callback_data="collector_agreed_stats")],
+            [InlineKeyboardButton("📋 Саида backlog", callback_data="collector_saida_stats")],
+            [InlineKeyboardButton("🔙 Главное меню", callback_data="back_main")],
+        ])
+        await hide_main_menu(context, chat_id)
+        try:
+            msg = await context.bot.send_message(
+                chat_id=chat_id, text=text, reply_markup=kb_back, parse_mode="HTML"
+            )
+            _menu_set(chat_id, msg.message_id)
+        except Exception as _e:
+            logger.error("collector_batch send error: %s", _e)
+        return
+
+    if data == "collector_agreed_stats":
+        if user_role != "admin":
+            await q.answer("⛔ Доступ запрещён")
+            return
+        await q.answer()
+        text = _format_collector_agreed_stats_text()
+        kb_back = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔄 Обновить", callback_data="collector_agreed_stats")],
+            [InlineKeyboardButton("↩️ К батчу", callback_data="collector_batch")],
+            [InlineKeyboardButton("🔙 Главное меню", callback_data="back_main")],
+        ])
+        await hide_main_menu(context, chat_id)
+        try:
+            msg = await context.bot.send_message(
+                chat_id=chat_id, text=text, reply_markup=kb_back, parse_mode="HTML"
+            )
+            _menu_set(chat_id, msg.message_id)
+        except Exception as _e:
+            logger.error("collector_agreed_stats send error: %s", _e)
+        return
+
+    if data == "collector_saida_stats":
+        if user_role != "admin":
+            await q.answer("⛔ Доступ запрещён")
+            return
+        await q.answer()
+        text = _format_collector_saida_stats_text()
+        kb_back = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔄 Обновить", callback_data="collector_saida_stats")],
+            [InlineKeyboardButton("↩️ К батчу", callback_data="collector_batch")],
+            [InlineKeyboardButton("🔙 Главное меню", callback_data="back_main")],
+        ])
+        await hide_main_menu(context, chat_id)
+        try:
+            msg = await context.bot.send_message(
+                chat_id=chat_id, text=text, reply_markup=kb_back, parse_mode="HTML"
+            )
+            _menu_set(chat_id, msg.message_id)
+        except Exception as _e:
+            logger.error("collector_saida_stats send error: %s", _e)
+        return
+
     # 🆕 v9.4.9: Аналитика
     if data.startswith("analytics|"):
         await handle_analytics(update, context, data)
+        return
+
+    if data.startswith("crmdup|"):
+        parts = data.split("|")
+        action = parts[1] if len(parts) > 1 else ""
+        token = parts[2] if len(parts) > 2 else ""
+        review = _CRM_DUP_REVIEW_PENDING.get(token)
+        if not review:
+            await q.answer("Запрос сверки устарел.")
+            return
+        if review.get("chat_id") != chat_id and not is_admin(chat_id):
+            await q.answer("Это не ваш запрос.")
+            return
+
+        items = review.get("items", [])
+        client_keys = [item.get("client_key", "") for item in items]
+        reviewer = _chat_to_manager(chat_id) or ("Вадим" if is_admin(chat_id) else "")
+
+        if action == "pick":
+            try:
+                idx = int(parts[3]) if len(parts) > 3 else -1
+            except ValueError:
+                idx = -1
+            if idx < 0 or idx >= len(items):
+                await q.answer("Вариант уже недоступен.")
+                return
+            chosen = items[idx]
+            try:
+                from bot.crm_clients import resolve_phone_conflict
+                ok = resolve_phone_conflict(
+                    client_keys=client_keys,
+                    chosen_phone=chosen.get("phone", ""),
+                    chosen_key=chosen.get("client_key", ""),
+                    reviewer=reviewer,
+                )
+            except Exception as e:
+                crm_logger.error("crmdup pick resolve error: %s", e)
+                ok = False
+            if not ok:
+                await q.answer("Не удалось сохранить решение.")
+                return
+            review["resolved_at"] = datetime.now(TZ).isoformat()
+            review["resolution"] = "pick"
+            review["chosen_phone"] = chosen.get("phone", "")
+            _CRM_DUP_REVIEW_AWAITING_TEXT.pop(chat_id, None)
+            _crmdup_save_pending()
+            await q.answer("Сохранено.")
+            try:
+                await q.message.edit_text(
+                    (
+                        "✅ <b>CRM-сверка закрыта</b>\n\n"
+                        f"Выбран номер: <code>{_html.escape(chosen.get('phone', ''))}</code>\n"
+                        f"Карточки объединены в CRM, alias сохранены."
+                    ),
+                    parse_mode="HTML",
+                    reply_markup=None,
+                )
+            except Exception:
+                pass
+            return
+
+        if action == "custom":
+            _CRM_DUP_REVIEW_AWAITING_TEXT[chat_id] = token
+            _crmdup_save_pending()
+            await q.answer("Жду новый номер.")
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text="Введите действующий номер WhatsApp:\n<code>+7XXXXXXXXXX</code>",
+                parse_mode="HTML",
+            )
+            return
+
+        if action == "distinct":
+            try:
+                from bot.crm_clients import mark_phone_conflict_distinct
+                ok = mark_phone_conflict_distinct(client_keys=client_keys, reviewer=reviewer)
+            except Exception as e:
+                crm_logger.error("crmdup distinct error: %s", e)
+                ok = False
+            if not ok:
+                await q.answer("Не удалось отметить различие.")
+                return
+            review["resolved_at"] = datetime.now(TZ).isoformat()
+            review["resolution"] = "distinct"
+            _CRM_DUP_REVIEW_AWAITING_TEXT.pop(chat_id, None)
+            _crmdup_save_pending()
+            await q.answer("Отмечено.")
+            try:
+                await q.message.edit_text(
+                    (
+                        "↔️ <b>CRM-сверка закрыта</b>\n\n"
+                        "Пара отмечена как разные клиенты. "
+                        "Автосверка больше не будет поднимать этот конфликт."
+                    ),
+                    parse_mode="HTML",
+                    reply_markup=None,
+                )
+            except Exception:
+                pass
+            return
+
+        await q.answer("Неизвестное действие CRM duplicate review.")
         return
 
     if data == "crm_help":
@@ -5815,9 +6988,9 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.warning("crm_help error: %s", e)
             help_text = _html.escape(
                 "Нужно закрыть текущий CRM-запрос. Если не ответить, бот будет "
-                "напоминать каждые 30 минут и передаст игнор руководителю. "
-                "Статистика игнора ведётся по каждому менеджеру и может повлиять "
-                "на отношения с руководителем."
+                "напоминать каждые 30 минут и передаст руководителю. "
+                "Я вижу игнор. Каждый день без ответа фиксируется — "
+                "руководитель получит рекомендацию задержать зарплату на столько же дней."
             )
         await context.bot.send_message(
             chat_id=chat_id,
@@ -6288,38 +7461,38 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data.startswith("weekly_deny|"):
         if user_role != "admin":
-            await q.answer("Только администратор может отклонять")
+            await q.answer("?????? ????????????? ????? ?????????")
             return
         token = data.split("|", 1)[1]
         client_name = _weekly_token_get(token)
         if not client_name:
-            await q.answer("Запрос устарел — перезапустите бот")
+            await q.answer("?????? ??????? ? ????????????? ???")
             return
-        await q.answer("Отклонено")
+        await q.answer("?????????")
         try:
             await q.message.edit_text(
-                f"❌ Запрос на исключение <b>{client_name}</b> отклонён.",
+                f"? ?????? ?? ?????????? <b>{client_name}</b> ????????.",
                 parse_mode="HTML",
             )
         except Exception:
             pass
         return
-    # ── CRM: "Мой клиент" — менеджер/admin забирает бесхозного клиента ──────
+
+    # ?? CRM: "??? ??????" ? ????????/admin ???????? ?????????? ??????? ??????
     if data.startswith("crm_claim|"):
         token = data.split("|", 1)[1]
         claim = _CRM_CLAIM_PENDING.get(token)
         if not claim:
-            await q.answer("Запрос устарел или уже обработан.")
+            await q.answer("?????? ??????? ??? ??? ?????????.")
             return
         if claim.get("claimed"):
-            await q.answer("Этот клиент уже взят другим менеджером.")
+            await q.answer("???? ?????? ??? ???? ?????? ??????????.")
             try:
                 await q.message.edit_reply_markup(reply_markup=None)
             except Exception:
                 pass
             return
 
-        # Определяем имя менеджера/admin по chat_id
         claimer_chat_id = q.message.chat.id
         claimer_name = None
         for mgr, mid in _all_crm_participants().items():
@@ -6327,49 +7500,59 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 claimer_name = mgr
                 break
         if not claimer_name:
-            await q.answer("Не удалось определить менеджера.")
+            await q.answer("?? ??????? ?????????? ?????????.")
             return
 
         client_key = claim["client_key"]
         claim["claimed"] = True
+        claim["claimed_by"] = claimer_name
+        claim["claimed_at"] = datetime.now(TZ).isoformat()
+        _crm_save_claim_pending()
 
-        # Назначаем менеджера в clients.json
         try:
-            from bot.crm_clients import load_clients as _cc_load, save_clients as _cc_save
+            from bot.crm_clients import load_clients as _cc_load, save_clients as _cc_save, canonicalize_client_key
             _cc_data = _cc_load()
             _cc_clients = _cc_data.get("clients", {})
-            if client_key in _cc_clients:
-                _cc_clients[client_key]["manager"] = claimer_name
-                _cc_data["clients"] = _cc_clients
-                _cc_save(_cc_data)
-                logger.info("CRM claim: %s → менеджер %s", client_key, claimer_name)
+            _claim_canon = canonicalize_client_key(client_key)
+            _updated_keys = []
+            for _existing_key, _existing_value in list(_cc_clients.items()):
+                if canonicalize_client_key(_existing_key) != _claim_canon:
+                    continue
+                if not isinstance(_existing_value, dict):
+                    _existing_value = {}
+                _existing_value["manager"] = claimer_name
+                _existing_value["claimed_at"] = datetime.now(TZ).isoformat()
+                _cc_clients[_existing_key] = _existing_value
+                _updated_keys.append(_existing_key)
+            _cc_data["clients"] = _cc_clients
+            _cc_save(_cc_data)
+            crm_logger.info("CRM claim: %s -> manager %s (aliases=%d)", client_key, claimer_name, len(_updated_keys))
+            crm_audit("claim_taken", client_key=client_key, claimer=claimer_name, aliases=_updated_keys, token=token)
         except Exception as _e:
-            logger.error("crm_claim save error: %s", _e)
+            crm_logger.error("crm_claim save error: %s", _e)
 
-        await q.answer(f"✅ Назначено!")
+        await q.answer("? ?????????!")
         try:
             await q.message.edit_text(
-                f"✅ <b>{client_key}</b>\nВзял: <b>{claimer_name}</b>",
+                f"? <b>{client_key}</b>\n????: <b>{claimer_name}</b>",
                 parse_mode="HTML",
                 reply_markup=None,
             )
         except Exception:
             pass
 
-        # Остальным участникам — убираем кнопку
         for other_chat_id in claim.get("notified", []):
             if other_chat_id == claimer_chat_id:
                 continue
             try:
                 await context.bot.send_message(
                     chat_id=other_chat_id,
-                    text=f"ℹ️ <b>{client_key}</b> — взял {claimer_name}.",
+                    text=f"?? <b>{client_key}</b> ? ???? {claimer_name}.",
                     parse_mode="HTML",
                 )
             except Exception:
                 pass
 
-        # Сразу запускаем цепочку внесения телефона для того кто взял
         try:
             from bot.crm_clients import get_clients_without_phones as _crm_next2
             remaining = len(_crm_next2(claimer_name, limit=500))
@@ -6378,12 +7561,13 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "client_key": client_key,
                 "original_name": client_key,
                 "done_today": 0,
-                "daily_limit": 1,  # один клиент — тот что только что взял
+                "daily_limit": 1,
                 "manager": claimer_name,
                 "total_no_phone": remaining,
                 "last_sent": datetime.now(TZ).isoformat(),
             }
             _crm_save_pending()
+            crm_audit("claim_phone_chain_started", client_key=client_key, claimer=claimer_name, remaining=remaining)
             await context.bot.send_message(
                 chat_id=claimer_chat_id,
                 text=_crm_name_prompt_text(
@@ -6396,9 +7580,8 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=_crm_name_choice_kb(),
             )
         except Exception as _e:
-            logger.warning("crm_claim → phone chain error: %s", _e)
+            crm_logger.warning("crm_claim -> phone chain error: %s", _e)
         return
-
     # ─────────────────────────────────────────────────────────────────────────
 
     await q.answer("Неизвестная команда")
@@ -6418,6 +7601,8 @@ async def post_init(app: Application):
 
     # Восстанавливаем CRM-очередь сбора телефонов
     _crm_load_pending()
+    _crm_load_claim_pending()
+    _crmdup_load_pending()
 
     # v9.4.27: Уведомление о запуске — admin (техническое) + команда (мотивирующее)
     start_kb = InlineKeyboardMarkup([
@@ -6448,7 +7633,7 @@ async def post_init(app: Application):
                 f"· 18:00 — база клиентов (CRM)\n"
                 f"· 17:00 — коллектор\n"
                 f"· 20:00 — валовая\n"
-                f"· 21:00 — продажи + молчание\n"
+                f"· 21:00 — продажи\n"
                 f"· 22:00 — аналитика\n"
                 f"· 23:00 — сводка дня\n"
             )
@@ -6491,7 +7676,7 @@ async def post_init(app: Application):
             for f in analytics_files
         )
         if not has_fresh:
-            log_event("analytics_startup_trigger", reason="Monday, no fresh analytics found")
+            log_event("analytics_startup_trigger", reason="Tuesday, no fresh analytics found")
             await weekly_analytics_job(app)
 
 
@@ -6612,9 +7797,13 @@ def _build_manager_ranking(json_dir: Path, analytics_dir: Path) -> Optional[str]
     # ── 2. Дебиторка по менеджерам ────────────────────────────────────────────
     debt_by_mgr: dict = {}   # name → closing debt
     debt_date = ""
+    debt_by_mgr, debt_date = _load_fresh_debt_totals_by_manager(json_dir)
     try:
-        dfiles = sorted(json_dir.glob("debt_ext_*.json"),
-                        key=lambda p: p.stat().st_mtime, reverse=True)
+        if debt_by_mgr:
+            dfiles = []
+        else:
+            dfiles = sorted(json_dir.glob("debt_ext_*.json"),
+                            key=lambda p: p.stat().st_mtime, reverse=True)
         # Находим свежий period_max
         best_d = None
         best_dstr = ""
@@ -7051,6 +8240,8 @@ async def handle_analytics(update: Update, context: ContextTypes.DEFAULT_TYPE, d
         key=lambda p: p.stat().st_mtime, reverse=True
     )
 
+    if report_type == "net_profit_mtd":
+        all_files = [p for p in all_files if _net_profit_mtd_is_deliverable(p)]
     if not all_files:
         await context.bot.send_message(chat_id, "❌ Отчёт не найден")
         return
@@ -7109,7 +8300,7 @@ async def crm_phone_reminder_task(context: ContextTypes.DEFAULT_TYPE):
     """
     from bot.workday_checker import is_holiday_today
     if is_holiday_today():
-        logger.info("crm_phone_reminder_task: выходной день — пропуск")
+        crm_logger.info("crm_phone_reminder_task: выходной день — пропуск")
         return
     _crm_cleanup_pending()
     if not _CRM_PHONE_PENDING:
@@ -7179,28 +8370,35 @@ async def crm_phone_reminder_task(context: ContextTypes.DEFAULT_TYPE):
             pending["last_sent"] = now.isoformat()
             await _crm_notify_admin_unresolved(context, chat_id, pending, remind_count)
             _crm_save_pending()
-            logger.info("CRM escalating reminder → chat_id=%s client=%s count=%d", chat_id, client_key, remind_count)
+            crm_logger.info("CRM escalating reminder → chat_id=%s client=%s count=%d", chat_id, client_key, remind_count)
         except Exception as e:
-            logger.warning("crm_phone_reminder_task chat_id=%s: %s", chat_id, e)
+            crm_logger.warning("crm_phone_reminder_task chat_id=%s: %s", chat_id, e)
 
 
 async def collector_reminder_task(context: ContextTypes.DEFAULT_TYPE):
     """Hourly: send reminders to managers with pending collector dialogs.
-    Работает только в рабочие часы 09–18, пропускает выходные.
+    Работает 09–19 (включительно): нужно успеть перевести батч к 19:00.
     """
     from bot.workday_checker import is_holiday_today
     if is_holiday_today():
-        logger.info("collector_reminder_task: выходной — пропуск")
+        sched_logger.info("collector_reminder_task: выходной — пропуск")
         return
     now = datetime.now(TZ)
-    if not (9 <= now.hour < 18):
-        logger.debug("collector_reminder_task: вне рабочих часов (%d:xx) — пропуск", now.hour)
+    if not (9 <= now.hour < 19):
+        sched_logger.debug("collector_reminder_task: вне рабочих часов (%d:xx) — пропуск", now.hour)
         return
     try:
         from collector.manager_dialog import send_reminders as _collector_reminders
         await _collector_reminders()
     except Exception as e:
-        logger.error("collector_reminder_task error: %s", e)
+        sched_logger.error("collector_reminder_task error: %s", e)
+    try:
+        from collector.approval_flow import promote_silent_batches_to_admin
+        promoted = await promote_silent_batches_to_admin()
+        if promoted:
+            sched_logger.info("collector_reminder_task: %d approval-батч(ей) передано администратору по таймауту", promoted)
+    except Exception as e:
+        sched_logger.error("collector approval escalation error: %s", e)
 
 
 
@@ -7212,9 +8410,9 @@ async def whatsapp_poller_task(context: ContextTypes.DEFAULT_TYPE):
         # Жёсткий таймаут 25 сек — не даём задержать следующие джобы.
         await asyncio.wait_for(poll_once(), timeout=25)
     except asyncio.TimeoutError:
-        logger.warning("whatsapp_poller_task: poll_once timeout (>25s) — пропуск итерации")
+        integration_logger.warning("whatsapp_poller_task: poll_once timeout (>25s) — пропуск итерации")
     except Exception as e:
-        logger.error("whatsapp_poller_task error: %s", e)
+        integration_logger.error("whatsapp_poller_task error: %s", e)
 
 
 async def handle_voice_message_tg(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -7232,13 +8430,127 @@ async def handle_voice_message_tg(update: Update, context: ContextTypes.DEFAULT_
             logger.error("voice handler error: %s", e)
 
 
+async def handle_proof_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Перехватывает фото/документ от менеджера ожидающего подтверждения оплаты."""
+    chat_id = update.effective_chat.id
+    if get_user_role(chat_id) == "unknown":
+        return
+    try:
+        from collector.approval_flow import handle_manager_proof
+        msg = update.message
+        if msg.photo:
+            file_id   = msg.photo[-1].file_id
+            file_type = "photo"
+        elif msg.document:
+            file_id   = msg.document.file_id
+            file_type = "document"
+        else:
+            return
+        handled = await handle_manager_proof(
+            chat_id=chat_id,
+            file_id=file_id,
+            file_type=file_type,
+            admin_chat_id=ADMIN_CHAT_ID,
+            bot=context.bot,
+        )
+        if handled:
+            return
+    except Exception as e:
+        logger.error("handle_proof_document error: %s", e)
+
+
+async def handle_agreed_details_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Перехватывает текст с деталями договорённости от менеджера."""
+    chat_id = update.effective_chat.id
+    if get_user_role(chat_id) == "unknown":
+        return
+    text = update.message.text or ""
+    if not text.strip():
+        return
+    try:
+        from collector.approval_flow import handle_manager_agreed_details
+        handled = await handle_manager_agreed_details(chat_id=chat_id, text=text.strip())
+        if handled:
+            return
+    except Exception as e:
+        logger.error("handle_agreed_details_text error: %s", e)
+
+
 async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик команд от постоянного меню (v9.4.12)"""
+    """Обработчик текстовых сообщений (v9.4.12, cleanup v9.4.57)."""
     text = update.message.text
     chat_id = update.effective_chat.id
 
     if not await _acl_gate(chat_id, context):
         return
+
+    # v9.4.57 (legacy reply-menu cleanup): снять "призрак" старой
+    # reply-клавиатуры. Срабатывает при нажатии пользователем на любую
+    # из устаревших кнопок — бот отправляет ReplyKeyboardRemove и
+    # клавиатура исчезает у пользователя без необходимости /start.
+    _LEGACY_REPLY_LABELS = {
+        "Статус", "Отчёты", "Отчеты",
+        "Последний debt", "Последний sales", "Последний gross",
+        "Архив", "Меню",
+    }
+    if text and text.strip() in _LEGACY_REPLY_LABELS:
+        try:
+            await update.message.reply_text(
+                "Меню обновлено. Откройте основное меню: /start",
+                reply_markup=ReplyKeyboardRemove(),
+            )
+        except Exception as e:
+            logger.warning("legacy reply-menu cleanup failed: %s", e)
+        return
+
+    dup_token = _CRM_DUP_REVIEW_AWAITING_TEXT.get(chat_id)
+    if dup_token:
+        review = _CRM_DUP_REVIEW_PENDING.get(dup_token)
+        if not review:
+            _CRM_DUP_REVIEW_AWAITING_TEXT.pop(chat_id, None)
+            _crmdup_save_pending()
+        else:
+            import re as _re
+            phone_digits = _re.sub(r"\D", "", text.strip())
+            if _re.fullmatch(r"8\d{10}", phone_digits):
+                phone_digits = "7" + phone_digits[1:]
+            if not _re.fullmatch(r"7\d{10}", phone_digits):
+                await update.message.reply_text(
+                    "❌ Неверный формат.\nВведите: <code>+7XXXXXXXXXX</code>",
+                    parse_mode="HTML",
+                )
+                return
+            reviewer = _chat_to_manager(chat_id) or ("Вадим" if is_admin(chat_id) else "")
+            client_keys = [item.get("client_key", "") for item in review.get("items", [])]
+            try:
+                from bot.crm_clients import resolve_phone_conflict
+                ok = resolve_phone_conflict(
+                    client_keys=client_keys,
+                    chosen_phone="+" + phone_digits,
+                    chosen_key=client_keys[0] if client_keys else "",
+                    reviewer=reviewer,
+                    phone_source="manager_duplicate_review_manual",
+                )
+            except Exception as e:
+                crm_logger.error("crmdup manual resolve error: %s", e)
+                ok = False
+            if not ok:
+                await update.message.reply_text("⚠️ Не удалось сохранить решение по дублю.")
+                return
+            review["resolved_at"] = datetime.now(TZ).isoformat()
+            review["resolution"] = "custom"
+            review["chosen_phone"] = "+" + phone_digits
+            _CRM_DUP_REVIEW_AWAITING_TEXT.pop(chat_id, None)
+            _crmdup_save_pending()
+            await update.message.reply_text(
+                (
+                    "✅ Сохранено.\n\n"
+                    f"Новый номер: <code>+{phone_digits}</code>\n"
+                    "Карточки объединены в CRM, alias сохранены."
+                ),
+                parse_mode="HTML",
+            )
+            return
 
     # CRM: уточняющий диалог по шагам (clarify_name → clarify_phone → clarify_address)
     _crm_cleanup_pending()
@@ -7442,78 +8754,133 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
     except Exception as e:
         logger.error("collector text handler error: %s", e)
 
-    user_role = get_user_role(chat_id)
-    
-    if text == "📊 Дебиторка":
-        kb = kb_debt_menu(user_role)
-        msg = "📊 *Дебиторка*" + "\n\n" + "Выберите тип отчёта:"
-        await update.message.reply_text(msg, reply_markup=kb, parse_mode="Markdown")
-    
-    elif text == "🛒 Продажи":
-        if user_role == "manager":
-            my_name = get_my_manager_name(chat_id)
-            if my_name:
-                scopes = user_scopes(chat_id)
-                await handle_report_request("SALES_SIMPLE", my_name, chat_id, context, user_role, scopes)
-            else:
-                await update.message.reply_text("⛔ Менеджер не найден")
-        else:
-            kb = kb_sales_menu(user_role)
-            msg = "🛒 *Продажи*" + "\n\n" + "Выберите тип отчёта:"
-            await update.message.reply_text(msg, reply_markup=kb, parse_mode="Markdown")
-    
-    elif text == "💰 Валовая":
-        kb = kb_gross_menu(user_role)
-        msg = "💰 *Валовая*" + "\n\n" + "Выберите тип отчёта:"
-        await update.message.reply_text(msg, reply_markup=kb, parse_mode="Markdown")
-    
-    elif text == "💸 Затраты":
-        if user_role in ("admin", "subadmin"):
-            await cmd_expenses(update, context)
-        else:
-            await update.message.reply_text("⛔ Доступ запрещён")
-    
-    elif text == "📦 Остатки":
-        scopes = user_scopes(chat_id)
-        await handle_report_request("INVENTORY_SIMPLE", "Сводный отчёт", chat_id, context, user_role, scopes)
-    
-    elif text == "📈 Аналитика":
-        if user_role in ("admin", "subadmin"):
-            await cmd_analytics(update, context)
-        else:
-            await update.message.reply_text("⛔ Доступ запрещён")
-    
-    elif text == "🗄️ Архив":
-        scopes = user_scopes(chat_id)
-        await update.message.reply_text(
-            "🗄️ **Архив отчётов**\n\nВыберите менеджера:",
-            reply_markup=kb_archive_managers(scopes),
-            parse_mode="Markdown"
+    # v9.4.57: elif-блок для мёртвых ярлыков kb_persistent()
+    # (📊 Дебиторка / 🛒 Продажи / 💰 Валовая / 💸 Затраты / 📦 Остатки /
+    # 📈 Аналитика / 🗄️ Архив) удалён. Функция kb_persistent() была
+    # определена в v9.4.12, но никогда не подключалась как reply_markup,
+    # поэтому эти ярлыки не мог прислать ни один пользователь. Основное
+    # меню работает через inline-клавиатуру /start → callback_data.
+
+
+class _PinnedTelegramRequest(HTTPXRequest):
+    """
+    PTB/httpx transport с явным public CA bundle и trust_env=False.
+    Это не отключает TLS-проверку, а убирает скрытое влияние
+    proxy/SSL env и фиксирует верификацию на certifi.
+    """
+
+    def __init__(self, *, client_label: str, **kwargs):
+        self._client_label = client_label
+        self._ca_bundle = certifi.where()
+        super().__init__(**kwargs)
+
+    def _build_client(self) -> httpx.AsyncClient:
+        ssl_ctx = ssl.create_default_context(cafile=self._ca_bundle)
+        return httpx.AsyncClient(
+            verify=ssl_ctx,
+            trust_env=False,
+            **self._client_kwargs,
         )
+
+
+def _build_telegram_requests() -> tuple[HTTPXRequest, HTTPXRequest]:
+    main_request = _PinnedTelegramRequest(
+        client_label="bot_api",
+        connection_pool_size=8,
+        read_timeout=20.0,
+        write_timeout=20.0,
+        connect_timeout=15.0,
+        pool_timeout=5.0,
+    )
+    updates_request = _PinnedTelegramRequest(
+        client_label="get_updates",
+        connection_pool_size=2,
+        read_timeout=35.0,
+        write_timeout=20.0,
+        connect_timeout=15.0,
+        pool_timeout=5.0,
+    )
+    return main_request, updates_request
+
+
+def _log_telegram_transport_settings() -> None:
+    logger.info(
+        "telegram_transport_tls: ca_bundle=%s trust_env=%s main_pool=%s updates_pool=%s",
+        certifi.where(),
+        False,
+        8,
+        2,
+    )
 
 
 def main():
     if STOP_FILE.exists():
-        logger.info("Stop file found: %s. Bot startup cancelled.", STOP_FILE)
+        sched_logger.info("Stop file found: %s. Bot startup cancelled.", STOP_FILE)
         sys.exit(0)
     _check_single_instance()  # завершаем если уже запущен другой экземпляр
     if not BOT_TOKEN:
-        logger.critical("TG_BOT_TOKEN не найден в .env! Запуск невозможен.")
+        integration_logger.critical("TG_BOT_TOKEN не найден в .env! Запуск невозможен.")
         sys.exit(1)
 
     # v9.4.6.2: Версия в логе
     log_event("bot_starting", version = __VERSION__)
+    main_request, updates_request = _build_telegram_requests()
+    _log_telegram_transport_settings()
     
     # v9.4.6.1: ПАТЧ - Правильная регистрация post_init через builder
-    application = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
+    application = (
+        Application.builder()
+        .token(BOT_TOKEN)
+        .request(main_request)
+        .get_updates_request(updates_request)
+        .post_init(post_init)
+        .build()
+    )
+
+    async def _runtime_alert_sender(text: str) -> None:
+        if not ADMIN_CHAT_ID:
+            return
+        # Дренируем dead letters накопленные пока Telegram был недоступен
+        if has_dead_letters():
+            drained = pop_dead_letters()
+            for dead_text in drained:
+                try:
+                    await application.bot.send_message(
+                        chat_id=ADMIN_CHAT_ID,
+                        text=dead_text,
+                        parse_mode="HTML",
+                        disable_web_page_preview=True,
+                    )
+                except Exception:
+                    push_dead_letter(dead_text)
+                    break  # Telegram всё ещё недоступен — прекращаем дрейн
+        try:
+            await application.bot.send_message(
+                chat_id=ADMIN_CHAT_ID,
+                text=text,
+                parse_mode="HTML",
+                disable_web_page_preview=True,
+            )
+        except Exception as exc:
+            integration_logger.warning("runtime alert send failed: %s", exc)
+            push_dead_letter(text)
+
+    set_telegram_alert_sender(_runtime_alert_sender)
 
     # BUG FIX: глушим "No error handlers are registered" для сетевых ошибок Telegram
     async def _tg_error_handler(update: object, context) -> None:
         err = context.error
         if isinstance(err, NetworkError):
-            logger.warning("Telegram NetworkError (transient): %s", err)
+            if "CERTIFICATE_VERIFY_FAILED" in str(err):
+                integration_logger.error(
+                    "Telegram TLS verify failed: %s | ca_bundle=%s | trust_env=%s",
+                    err,
+                    certifi.where(),
+                    False,
+                )
+            integration_logger.warning("Telegram NetworkError (transient): %s", err)
         else:
-            logger.error("Telegram error: %s", err, exc_info=err)
+            integration_logger.error("Telegram error: %s", err, exc_info=err)
     application.add_error_handler(_tg_error_handler)
 
     application.add_handler(CommandHandler("start", cmd_start))
@@ -7521,33 +8888,28 @@ def main():
     from telegram.ext import MessageHandler, filters
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_persistent_menu))
     application.add_handler(MessageHandler(filters.VOICE, handle_voice_message_tg))
+    application.add_handler(MessageHandler(filters.PHOTO | filters.Document.ALL, handle_proof_document))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_agreed_details_text), group=1)
     application.add_handler(CommandHandler("health", cmd_health))
     application.add_handler(CommandHandler("restart", cmd_restart))
     application.add_handler(CommandHandler("shutdown", cmd_shutdown))
     application.add_handler(CommandHandler("stats", cmd_stats))
     application.add_handler(CommandHandler("analytics", cmd_analytics))  # 🆕 v9.4.9  # v2.0
     application.add_handler(CommandHandler("phone", cmd_phone))  # CRM: внести телефон клиента
+    application.add_handler(CommandHandler("crmdupsend", cmd_crmdupsend))  # CRM: разовая сверка конфликтных дублей
     application.add_handler(CommandHandler("guide", cmd_guide))  # Инструкция для менеджеров
+    application.add_handler(CommandHandler("logs", cmd_logs))    # Последние ERROR/CRITICAL
+    application.add_handler(CommandHandler("timeline", cmd_timeline))  # Единая timeline по клиенту
     application.add_handler(CallbackQueryHandler(cb_data))
     job_queue = application.job_queue
     if job_queue:
         job_queue.run_repeating(pipeline_task, interval=PIPELINE_INTERVAL_MIN * 60, first=60, name="pipeline")
         job_queue.run_repeating(new_reports_notifier, interval=SCAN_INTERVAL_MIN * 60, first=180, name="new_reports")
         
-        job_queue.run_daily(
-            check_and_send_silence_alerts,
-            time=dt_time(14, 0, tzinfo=TZ),
-            name="silence_alerts_14h"
-        )
-        logger.info("⏰ Настроен ежедневный джоб: проверка дней молчания в 14:00")
+        # v9.4.39: silence_alerts убран из расписания — теперь только event-driven
+        # (запускается после каждого пайплайн-цикла где обработаны долговые файлы)
+        sched_logger.info("🔔 silence_alerts: event-driven по приходу долговых отчётов (без 14:00)")
         
-        job_queue.run_daily(
-            check_and_send_silence_alerts,
-            time=dt_time(21, 0, tzinfo=TZ),
-            name="silence_alerts_21h"
-        )
-        logger.info("⏰ Настроен ежедневный джоб: проверка дней молчания в 21:00")
-
         # v9.4.32: Упущенная прибыль — еженедельно в пятницу 14:05 (было: ежедневно 14:05 и 21:05)
         if _OPPORTUNITY_LOSS_AVAILABLE:
             job_queue.run_daily(
@@ -7555,9 +8917,9 @@ def main():
                 time=dt_time(14, 5, tzinfo=TZ),
                 name="opportunity_loss_weekly"
             )
-            logger.info("💸 Настроен еженедельный джоб: упущенная прибыль по пятницам 14:05")
+            sched_logger.info("💸 Настроен еженедельный джоб: упущенная прибыль по пятницам 14:05")
         else:
-            logger.warning("⚠️ opportunity_loss не загружен — джобы 14:05/21:05 не запущены")
+            sched_logger.warning("⚠️ opportunity_loss не загружен — джобы 14:05/21:05 не запущены")
         
         # v9.4.6.1: Janitor каждые 60 минут (было 60 сек)
         job_queue.run_repeating(
@@ -7566,7 +8928,7 @@ def main():
             first=120,
             name="janitor"
         )
-        logger.info(f"🧹 Настроен janitor: проверка очереди удаления каждые {JANITOR_INTERVAL_SEC} сек ({JANITOR_INTERVAL_SEC//60} мин)")
+        sched_logger.info(f"🧹 Настроен janitor: проверка очереди удаления каждые {JANITOR_INTERVAL_SEC} сек ({JANITOR_INTERVAL_SEC//60} мин)")
 
         # v9.4.7: Обработка очереди автогенерации ИИ
         if AI_AUTO_GENERATION:
@@ -7576,7 +8938,7 @@ def main():
                 first=300,
                 name="ai_queue_processor"
             )
-            logger.info(f"🤖 Настроен обработчик очереди ИИ: интервал {AI_GENERATION_INTERVAL_SEC} сек")
+            sched_logger.info(f"🤖 Настроен обработчик очереди ИИ: интервал {AI_GENERATION_INTERVAL_SEC} сек")
         
         # v9.4.7: Ежедневная сводка админу
         if ADMIN_ACTIVITY_LOG and ADMIN_CHAT_ID:
@@ -7585,7 +8947,7 @@ def main():
                 time=ADMIN_SUMMARY_TIME,
                 name="daily_summary"
             )
-            logger.info(f"📊 Настроена ежедневная сводка админу в {ADMIN_SUMMARY_TIME_STR}")
+            sched_logger.info(f"📊 Настроена ежедневная сводка админу в {ADMIN_SUMMARY_TIME_STR}")
         
         # v9.4.7: Сброс счётчика генераций в полночь
         job_queue.run_daily(
@@ -7593,17 +8955,17 @@ def main():
             time=dt_time(0, 1, tzinfo=TZ),
             name="reset_ai_state"
         )
-        logger.info("🔄 Настроен сброс счётчика ИИ-генераций в 00:01")
+        sched_logger.info("🔄 Настроен сброс счётчика ИИ-генераций в 00:01")
 
         # ═══ v9.4.8: ЕЖЕНЕДЕЛЬНАЯ AI + КРАТКИЕ СВОДКИ ═══
         
-        # Еженедельная AI генерация (понедельник через run_daily)
+        # Еженедельная AI генерация (вторник через run_daily + weekday guard)
         job_queue.run_daily(
             weekly_ai_generation,
             time=dt_time(10, 0, tzinfo=TZ),
             name="weekly_ai_generation"
         )
-        logger.info("🤖 Настроена еженедельная AI генерация: понедельник 10:00")
+        sched_logger.info("🤖 Настроена еженедельная AI генерация: вторник 10:00")
         
         # v9.4.16: Ежедневная аналитика в 22:00 (было: только понедельник 10:00)
         job_queue.run_daily(
@@ -7611,7 +8973,7 @@ def main():
             time=dt_time(22, 0, tzinfo=TZ),
             name="daily_analytics"
         )
-        logger.info("📊 Настроена ежедневная аналитика: каждый день 22:00")
+        sched_logger.info("📊 Настроена ежедневная аналитика: каждый день 22:00")
         
         # Краткие сводки
         job_queue.run_daily(
@@ -7619,21 +8981,35 @@ def main():
             time=dt_time(9, 0, tzinfo=TZ),
             name="inventory_summary"
         )
-        logger.info("📦 Настроена краткая сводка остатков: ежедневно 09:00")
+        sched_logger.info("📦 Настроена краткая сводка остатков: ежедневно 09:00")
+
+        job_queue.run_daily(
+            morning_error_digest_task,
+            time=dt_time(9, 5, tzinfo=TZ),
+            name="morning_error_digest",
+        )
+        sched_logger.info("🌅 Настроен утренний digest ошибок: ежедневно 09:05")
         
         job_queue.run_daily(
             send_gross_summary,
             time=dt_time(20, 0, tzinfo=TZ),
             name="gross_summary"
         )
-        logger.info("💰 Настроена краткая сводка валовой: ежедневно 20:00")
+        sched_logger.info("💰 Настроена краткая сводка валовой: ежедневно 20:00")
         
         job_queue.run_daily(
             send_sales_summary,
             time=dt_time(21, 0, tzinfo=TZ),
             name="sales_summary"
         )
-        logger.info("🛒 Настроена краткая сводка продаж: ежедневно 21:00")
+        sched_logger.info("🛒 Настроена краткая сводка продаж: ежедневно 21:00")
+
+        job_queue.run_daily(
+            _validate_daily_reports_saida,
+            time=dt_time(21, 0, tzinfo=TZ),
+            name="validate_daily_reports",
+        )
+        sched_logger.info("📋 Настроена проверка отчётов Саиды: ежедневно 21:00")
         
         # v9.4.7.5: Автоочистка старых файлов в 03:00
         job_queue.run_daily(
@@ -7641,7 +9017,7 @@ def main():
             time=dt_time(3, 0, tzinfo=TZ),
             name="cleanup_old_files"
         )
-        logger.info("🧹 Настроена автоочистка файлов: логи 2д, AI 7д, HTML 30д, JSON 7д, Excel 14д | Запуск в 03:00")
+        sched_logger.info("🧹 Настроена автоочистка файлов: логи 2д, AI 7д, HTML 30д, JSON 7д, Excel 14д | Запуск в 03:00")
 
         job_queue.run_repeating(
             log_monitor_task,
@@ -7649,7 +9025,7 @@ def main():
             first=10 * 60,
             name="log_monitor",
         )
-        logger.info("🩺 Настроен мониторинг логов: каждые 2 часа")
+        sched_logger.info("🩺 Настроен мониторинг логов: каждые 2 часа")
 
         # Проверка рабочего дня в 10:00 (если нет xlsx — спросить админа)
         job_queue.run_daily(
@@ -7657,7 +9033,7 @@ def main():
             time=dt_time(10, 0, tzinfo=TZ),
             name="check_workday",
         )
-        logger.info("📅 Настроена проверка рабочего дня: ежедневно 10:00 (отчёты приходят 09:07–09:38)")
+        sched_logger.info("📅 Настроена проверка рабочего дня: ежедневно 10:00 (отчёты приходят 09:07–09:38)")
 
         # CRM: обновление базы клиентов + запрос телефонов в 18:00
         job_queue.run_daily(
@@ -7665,7 +9041,7 @@ def main():
             time=dt_time(18, 0, tzinfo=TZ),
             name="crm_daily",
         )
-        logger.info("👥 Настроена CRM: обновление базы + запрос телефонов ежедневно 18:00")
+        sched_logger.info("👥 Настроена CRM: обновление базы + запрос телефонов ежедневно 18:00")
 
         # AI Debt Collector (17:00 — резервный запуск, если триггер не сработал)
         job_queue.run_daily(
@@ -7673,14 +9049,33 @@ def main():
             time=dt_time(17, 0, tzinfo=TZ),
             name="debt_collector_daily",
         )
-        logger.info("💰 Настроен AI Debt Collector: ежедневно 17:00 (резервный)")
+        sched_logger.info("💰 Настроен AI Debt Collector: ежедневно 17:00 (резервный)")
 
         job_queue.run_daily(
             debt_collector_promises,
             time=dt_time(10, 0, tzinfo=TZ),
             name="debt_collector_promises",
         )
-        logger.info("💰 Настроена проверка обещаний: ежедневно 10:00")
+        sched_logger.info("💰 Настроена проверка обещаний: ежедневно 10:00")
+
+        async def _job_check_broken_agreed(ctx):
+            from bot.workday_checker import is_holiday_today
+            if is_holiday_today():
+                return
+            try:
+                from collector.approval_flow import check_broken_agreed_deadlines
+                broken = await check_broken_agreed_deadlines(bot=ctx.bot)
+                if broken:
+                    sched_logger.info("🤝 Нарушено обещаний: %d — менеджеры и директор уведомлены", broken)
+            except Exception as e:
+                sched_logger.error("check_broken_agreed_deadlines error: %s", e)
+
+        job_queue.run_daily(
+            _job_check_broken_agreed,
+            time=dt_time(10, 30, tzinfo=TZ),
+            name="wa_agreed_deadline_check",
+        )
+        sched_logger.info("🤝 Настроена проверка сорванных договорённостей: ежедневно 10:30")
 
         # Event-driven: --preview после появления свежих debt_ext файлов
         job_queue.run_repeating(
@@ -7689,7 +9084,7 @@ def main():
             first=120,       # первый check через 2 мин после старта
             name="collector_trigger_check",
         )
-        logger.info("⚡ Настроен event-driven триггер коллектора: проверка каждые 30 мин")
+        sched_logger.info("⚡ Настроен event-driven триггер коллектора: проверка каждые 30 мин")
 
         # Контроль отгрузки: проверка allow_after / block_until после разноски оплат
         async def _job_shipment_check(ctx):
@@ -7700,16 +9095,16 @@ def main():
                 from collector.shipment_control import check_pending_decisions
                 resolved = await check_pending_decisions(ctx.bot)
                 if resolved:
-                    logger.info("shipment_check: закрыто %d решений об отгрузке", resolved)
+                    sched_logger.info("shipment_check: закрыто %d решений об отгрузке", resolved)
             except Exception as e:
-                logger.error("shipment_check job error: %s", e)
+                sched_logger.error("shipment_check job error: %s", e)
 
         job_queue.run_daily(
             _job_shipment_check,
             time=dt_time(14, 0, tzinfo=TZ),
             name="shipment_check",
         )
-        logger.info("🚚 Настроен контроль отгрузки: проверка allow_after/block_until ежедневно 14:00")
+        sched_logger.info("🚚 Настроен контроль отгрузки: проверка allow_after/block_until ежедневно 14:00")
 
         job_queue.run_repeating(
             crm_phone_reminder_task,
@@ -7717,7 +9112,7 @@ def main():
             first=600,
             name="crm_phone_reminders",
         )
-        logger.info("📋 Настроены CRM-напоминания о телефонах: каждые 30 мин (09–19)")
+        sched_logger.info("📋 Настроены CRM-напоминания о телефонах: каждые 30 мин (09–19)")
 
         job_queue.run_repeating(
             collector_reminder_task,
@@ -7725,7 +9120,7 @@ def main():
             first=300,
             name="collector_reminders",
         )
-        logger.info("📨 Настроен AI Коллектор: напоминания менеджерам каждые 30 мин")
+        sched_logger.info("📨 Настроен AI Коллектор: напоминания менеджерам каждые 30 мин")
 
         job_queue.run_repeating(
             whatsapp_poller_task,
@@ -7733,73 +9128,73 @@ def main():
             first=60,
             name="whatsapp_poller",
         )
-        logger.info("📱 Настроен Green API поллер: каждые 30 сек")
+        sched_logger.info("📱 Настроен Green API поллер: каждые 30 сек")
 
         # ── Стоп-лист отгрузки (Саида) ─────────────────────────────
         if _DEBT_STOP_AVAILABLE:
             async def _job_dstop_monitor(ctx):
                 from bot.workday_checker import is_holiday_today
                 if is_holiday_today():
-                    logger.info("_job_dstop_monitor: выходной — пропуск")
+                    sched_logger.info("_job_dstop_monitor: выходной — пропуск")
                     return
                 try:
                     await _dstop_monitor(ctx.bot)
                 except Exception as e:
-                    logger.error("debt_stop monitor error: %s", e)
+                    sched_logger.error("debt_stop monitor error: %s", e)
 
             async def _job_dstop_managers(ctx):
                 from bot.workday_checker import is_holiday_today
                 if is_holiday_today():
-                    logger.info("_job_dstop_managers: выходной — пропуск")
+                    sched_logger.info("_job_dstop_managers: выходной — пропуск")
                     return
                 try:
                     await _dstop_managers(ctx.bot)
                 except Exception as e:
-                    logger.error("debt_stop managers error: %s", e)
+                    sched_logger.error("debt_stop managers error: %s", e)
 
             async def _job_dstop_manager_reminders(ctx):
                 from bot.workday_checker import is_holiday_today
                 if is_holiday_today():
-                    logger.info("_job_dstop_manager_reminders: выходной — пропуск")
+                    sched_logger.info("_job_dstop_manager_reminders: выходной — пропуск")
                     return
                 try:
                     await _dstop_manager_reminders(ctx.bot)
                 except Exception as e:
-                    logger.error("debt_stop manager reminders error: %s", e)
+                    sched_logger.error("debt_stop manager reminders error: %s", e)
 
             async def _job_dstop_escalate(ctx):
                 from bot.workday_checker import is_holiday_today
                 if is_holiday_today():
-                    logger.info("_job_dstop_escalate: выходной — пропуск")
+                    sched_logger.info("_job_dstop_escalate: выходной — пропуск")
                     return
                 try:
                     await _dstop_escalate(ctx.bot)
                 except Exception as e:
-                    logger.error("debt_stop escalate error: %s", e)
+                    sched_logger.error("debt_stop escalate error: %s", e)
 
             async def _job_dstop_saida(ctx):
                 from bot.workday_checker import is_holiday_today
                 if is_holiday_today():
-                    logger.info("_job_dstop_saida: выходной — пропуск")
+                    sched_logger.info("_job_dstop_saida: выходной — пропуск")
                     return
                 try:
                     await _dstop_saida(ctx.bot)
                 except Exception as e:
-                    logger.error("debt_stop saida error: %s", e)
+                    sched_logger.error("debt_stop saida error: %s", e)
 
             job_queue.run_daily(
                 _job_dstop_monitor,
                 time=dt_time(14, 0, tzinfo=TZ),
                 name="debt_stop_monitor",
             )
-            logger.info("🚫 Настроен мониторинг авто-стопа: ежедневно 14:00")
+            sched_logger.info("🚫 Настроен мониторинг авто-стопа: ежедневно 14:00")
 
             job_queue.run_daily(
                 _job_dstop_managers,
-                time=dt_time(17, 0, tzinfo=TZ),
+                time=dt_time(16, 30, tzinfo=TZ),
                 name="debt_stop_managers",
             )
-            logger.info("🚫 Настроен запрос менеджерам по стоп-листу: ежедневно 17:00")
+            sched_logger.info("🚫 Настроен запрос менеджерам по стоп-листу: ежедневно 16:30 (до коллектора 17:00)")
 
             job_queue.run_repeating(
                 _job_dstop_manager_reminders,
@@ -7807,23 +9202,41 @@ def main():
                 first=1800,
                 name="debt_stop_manager_reminders",
             )
-            logger.info("🚫 Настроены напоминания менеджерам по стоп-листу: каждые 30 мин")
+            sched_logger.info("🚫 Настроены напоминания менеджерам по стоп-листу: каждые 30 мин")
 
             job_queue.run_daily(
                 _job_dstop_escalate,
-                time=dt_time(19, 0, tzinfo=TZ),
+                time=dt_time(18, 30, tzinfo=TZ),
                 name="debt_stop_escalate",
             )
-            logger.info("🚫 Настроена эскалация к руководителю: ежедневно 19:00")
+            sched_logger.info("🚫 Настроена эскалация к руководителю: ежедневно 18:30 (до WA cutoff 19:30)")
 
             job_queue.run_daily(
                 _job_dstop_saida,
                 time=dt_time(22, 15, tzinfo=TZ),
                 name="debt_stop_saida",
             )
-            logger.info("🚫 Настроено уведомление Саиды: ежедневно 22:15")
+            sched_logger.info("🚫 Настроено уведомление Саиды: ежедневно 22:15")
 
-        logger.info(f"🗑️ Автоудаление сообщений через {AUTO_DELETE_HOURS} часов")
+            if _dstop_saida_hold_reminders:
+                async def _job_saida_hold_reminders(ctx):
+                    from bot.workday_checker import is_holiday_today
+                    if is_holiday_today():
+                        return
+                    try:
+                        await _dstop_saida_hold_reminders(ctx.bot)
+                    except Exception as e:
+                        sched_logger.error("saida_hold_reminders error: %s", e)
+
+                job_queue.run_repeating(
+                    _job_saida_hold_reminders,
+                    interval=3600,
+                    first=600,
+                    name="saida_hold_reminders",
+                )
+                sched_logger.info("🚫 Настроен SLA-контроль оплат Саиды: каждый час")
+
+        sched_logger.info(f"🗑️ Автоудаление сообщений через {AUTO_DELETE_HOURS} часов")
     
     log_event("bot_polling_started")
     try:
@@ -7845,3 +9258,4 @@ def rebuild_index_sync() -> None:
 
 if __name__ == "__main__":
     main()
+

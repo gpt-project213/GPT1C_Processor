@@ -1,6 +1,7 @@
 # ARCHITECTURE
 
 Дата: 2026-04-09
+Последнее обновление: 2026-04-29
 Проект: `GPT1C_ProAnalytic`
 
 ## 1. Цель архитектуры
@@ -360,6 +361,16 @@ Jobs не имеют права:
 
 - взыскание как конвейер, а не как fragile-диалог.
 
+Операционные уточнения по текущему production-поведению:
+
+- collector runtime нельзя воспринимать как один поток: это связка `collector/*`, `approval_flow`, `no_movement`, `payment_hold`;
+- trigger window для запуска preview/check сейчас расширен до `09:00–22:00`, потому что бухгалтерская разноска оплат может происходить после `20:00`;
+- TTL флага свежей дебиторки расширен с `6ч` до `14ч`, чтобы вечерняя разноска не превращалась в ложный stale-gap;
+- после каждого live `send_whatsapp()` администратор получает мгновенное notice;
+- daily collector summary обязан показывать отдельный блок с перечнем фактических WhatsApp-получателей;
+- CRM/clarify-phone очередь должна фильтровать служебные/зарплатные записи как на входе, так и при cleanup pending state;
+- отдельный stop/clearance контур (`bot/debt_stop_control.py`) не является частью collector send-pipeline и не должен смешиваться с WhatsApp debt flow.
+
 ## 6.4. Debt Stop
 
 Состав:
@@ -421,6 +432,15 @@ Jobs не имеют права:
 - media handling
 - delivery result normalization
 
+Операционное правило правдивости:
+
+- live-send не должен проходить без отдельного observable-следа;
+- минимумом считаются:
+  - событие факта отправки;
+  - мгновенное admin-notice;
+  - попадание клиента в daily WA summary;
+  - возможность доказать, какой batch и какая версия debt snapshot породили конкретное сообщение.
+
 ## 8.3. IMAP
 
 Через отдельный ingest adapter.
@@ -444,6 +464,14 @@ Jobs не имеют права:
 - event log по state transitions;
 - daily health summary;
 - warnings по stale/pending/escalation/send failures.
+
+Дополнительно для collector важны:
+
+- явная видимость всех live WhatsApp-касаний для админа;
+- отдельные warnings по stale approved batches;
+- наблюдаемость no-movement/payment-hold развилок;
+- контроль загрязнения CRM pending state служебными/зарплатными клиентами;
+- возможность отличить collector-event от stop-control event без чтения кода.
 
 Минимальные health domains:
 

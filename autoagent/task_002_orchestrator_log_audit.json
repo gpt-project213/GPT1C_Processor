@@ -1,0 +1,68 @@
+{
+  "task_id": "TASK-002-ORCH-AUDIT",
+  "title": "Orchestrator log/state audit and minimal fix",
+  "project_root": ".",
+  "status": "new",
+  "stage": "analysis",
+  "created_at": "",
+  "updated_at": "",
+  "requested_by": "user",
+  "goal": "Проверить актуальные логи и состояние локального оркестратора, найти только реальные баги в контуре worker-once/review-once/complete/cooldown, исправить минимально только разрешённые файлы или честно зафиксировать отсутствие новых багов.",
+  "constraints": [
+    "Работа только локально",
+    "Не трогать бизнес-логику основного проекта",
+    "Не трогать audit/* и ORCHESTRATOR_CONTEXT_*",
+    "Исправлять только подтверждённые баги",
+    "Если багов нет — не менять код",
+    "После правок запустить py_compile и узкие smoke-проверки",
+    "Не делать push"
+  ],
+  "inputs": {
+    "files": [
+      "AGENTS.md",
+      "SESSION_CONTEXT.md",
+      "repo_map.json",
+      "ORCHESTRATOR_CONTEXT_2026-04-23_v2.md",
+      "orchestrator.py",
+      "orchestrator_agents.json",
+      "orchestrator_queue.json",
+      "orchestrator_state.json",
+      "orchestrator_task_template.json",
+      "task_001.json",
+      "task_002_orchestrator_log_audit.json"
+    ],
+    "logs": [
+      ".ai_logs/",
+      ".ai_reviews/",
+      "Новый текстовый документ.txt"
+    ],
+    "notes": [
+      "Запуск должен идти через orchestrator.py worker-once, не напрямую через codex exec.",
+      "Claude может быть на лимите; это не должно ломать active_task.",
+      "Проверить именно актуальный контур оркестратора и текущие артефакты."
+    ]
+  },
+  "allowed_files": [
+    "orchestrator.py",
+    "orchestrator_agents.json",
+    "orchestrator_queue.json",
+    "orchestrator_state.json",
+    "orchestrator_task_template.json",
+    "task_*.json",
+    ".ai_reviews/*"
+  ],
+  "codex_output_file": ".ai_logs/TASK-002-ORCH-AUDIT_codex_result.json",
+  "claude_output_file": ".ai_reviews/TASK-002-ORCH-AUDIT_claude_review.json",
+  "last_codex_attempt_at": null,
+  "last_claude_attempt_at": null,
+  "next_codex_retry_after": null,
+  "next_claude_retry_after": null,
+  "codex_rate_limited": false,
+  "claude_rate_limited": false,
+  "last_codex_error": null,
+  "last_claude_error": null,
+  "review_attempts": 0,
+  "codex_result": null,
+  "claude_result": null,
+  "final_status": null
+}

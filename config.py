@@ -1,7 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-config.py · v3.6.2 · 2026-04-13
+config.py · v3.6.5 · 2026-04-22
+Изменения v3.6.5:
+- Fix F-CFG-001: _read_yaml ловит узкий набор исключений
+  (yaml.YAMLError, OSError, UnicodeDecodeError) вместо широкого Exception.
 
 Совместимость с вашим кодом:
 • utils_excel.py → EXCEL_CLEAN_DIR, QUEUE_DIR, setup_logging
@@ -27,6 +30,7 @@ import os, json
 
 from dotenv import load_dotenv
 from zoneinfo import ZoneInfo
+from bot.logging_utils import configure_module_logger, get_log_retention_days
 
 # ── .env ──────────────────────────────────────────────────────
 ROOT: Path = Path(__file__).resolve().parent
@@ -56,6 +60,10 @@ PATTERN_YAML: Path      = CONFIG_DIR / "pattern_config.yaml"     # опцион�
 
 
 def ensure_dirs() -> None:
+    """
+    Создаёт базовый набор директорий config-layer.
+    Полное runtime-дерево проекта может дополняться профильными модулями.
+    """
     for p in (REPORTS_DIR, HTML_DIR, JSON_DIR, EXCEL_CLEAN_DIR, QUEUE_DIR, LOGS_DIR, CACHE_DIR, CONFIG_DIR):
         p.mkdir(parents=True, exist_ok=True)
 
@@ -76,38 +84,17 @@ def generated_at_tz(version: Optional[str] = None) -> str:
     base = f"Сформировано: {now} ({TZ.key})"
     return f"{base} | Версия: {ver}" if ver else base
 
-# ── Логирование (файл+консоль) ────────────────────────────────
-class _TzFormatter(logging.Formatter):
-    def __init__(self, fmt: str, datefmt: str, tz: ZoneInfo):
-        super().__init__(fmt=fmt, datefmt=datefmt); self._tz = tz
-    def formatTime(self, record, datefmt=None):
-        dt = datetime.fromtimestamp(record.created, self._tz)
-        return dt.strftime(datefmt) if datefmt else dt.isoformat()
-
-_LOG_FORMAT = "%(asctime)s, %(levelname)s %(message)s"
-_LOG_DATEFMT = "%Y-%m-%d %H:%M:%S"
-
 def setup_logging(module_name: str, level: int = logging.INFO) -> Logger:
     """
-    Логгер: logs/<module>_YYYYMMDD_HHMMSS.log + stdout. Формат из ТЗ. TZ из .env.
+    Unified module logger with daily rotation + stdout.
     """
-    logger = logging.getLogger(module_name)
-    logger.setLevel(level)
-    if logger.handlers:
-        return logger
-
-    ts = datetime.now(TZ).strftime("%Y%m%d_%H%M%S")
-    log_path = LOGS_DIR / f"{module_name}_{ts}.log"
-
-    fh = logging.FileHandler(log_path, encoding="utf-8", delay=True)
-    sh = logging.StreamHandler()
-
-    fmt = _TzFormatter(_LOG_FORMAT, _LOG_DATEFMT, TZ)
-    fh.setFormatter(fmt); sh.setFormatter(fmt)
-
-    logger.addHandler(fh); logger.addHandler(sh)
-    logger.propagate = False
-    return logger
+    return configure_module_logger(
+        module_name,
+        logs_dir=LOGS_DIR,
+        tz=TZ,
+        level=level,
+        retention_days=get_log_retention_days(),
+    )
 
 # ── YAML (опционально) ────────────────────────────────────────
 try:
@@ -121,7 +108,8 @@ def _read_yaml(p: Path) -> Dict[str, Any]:
     try:
         data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
         return data if isinstance(data, dict) else {}
-    except Exception:
+    except (yaml.YAMLError, OSError, UnicodeDecodeError) as e:
+        logging.getLogger("config").warning("yaml read error: %s (%s)", p, e)
         return {}
 
 # ── Менеджеры и синонимы ──────────────────────────────────────
@@ -136,13 +124,19 @@ def _load_managers_json() -> Dict[str, Optional[int]]:
         import logging as _log
         _log.getLogger("config").error("managers.json read error: %s", e)
         return {}
+    if not isinstance(raw, dict):
+        import logging as _log
+        _log.getLogger("config").error(
+            "managers.json invalid root type: expected dict, got %s",
+            type(raw).__name__,
+        )
+        return {}
     result: Dict[str, Optional[int]] = {}
-    if isinstance(raw, dict):
-        for name, val in raw.items():
-            try:
-                result[str(name)] = int(val)
-            except (TypeError, ValueError):
-                result[str(name)] = None
+    for name, val in raw.items():
+        try:
+            result[str(name)] = int(val)
+        except (TypeError, ValueError):
+            result[str(name)] = None
     return result
 
 def _load_yaml_overrides() -> Dict[str, Any]:
@@ -203,7 +197,7 @@ def load_pattern_config() -> Dict[str, Any]:
     cfg.setdefault("regex", {})
     return cfg
 
-# ── AI / PDF (если нужны) ─────────────────────────────────────
+# ── AI ────────────────────────────────────────────────────────
 AI_PROVIDER: str       = os.getenv("AI_PROVIDER", "deepseek")
 AI_MODEL: str          = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 DEEPSEEK_API_KEY: str  = os.getenv("DEEPSEEK_API_KEY", "") or ""

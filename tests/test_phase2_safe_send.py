@@ -3,6 +3,7 @@
 """Phase 2 safe live send checks."""
 
 import asyncio
+import os
 import re
 import subprocess
 import sys
@@ -12,6 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+os.environ["COLLECTOR_TEST_MODE"] = "1"
 BOT_DIR = ROOT / "bot"
 if str(BOT_DIR) not in sys.path:
     sys.path.insert(0, str(BOT_DIR))
@@ -72,6 +74,8 @@ def test_send_approved_uses_only_approved_clients() -> None:
         ce.update_after_contact = lambda *args, **kwargs: None
         ce._get_manager_chat_id = lambda manager_name: 0
         ce.send_whatsapp = lambda phone, text: sent.append((phone, text)) or True
+        # Мокаем пересверку по свежей дебиторке: тест не должен ходить в боевые JSON
+        ce._refresh_approved_batch_clients = lambda batch_id, clients: (clients, [], [], None)
 
         import collector.client_dialog as cd
 

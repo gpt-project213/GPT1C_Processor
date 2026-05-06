@@ -1,7 +1,832 @@
 # SESSION CONTEXT — АРХИВ
 
-> **ВНИМАНИЕ:** Этот файл содержит исторические сессии (2026-04-09, 2026-04-13, 2026-04-14).
+> **ВНИМАНИЕ:** Этот файл содержит исторические сессии (2026-04-09, 2026-04-13, 2026-04-14, 2026-04-29, 2026-04-30, 2026-05-06).
 > Многие "OPEN" пункты уже закрыты коммитами. **Актуальный статус → `gpt1c.md`.**
+
+---
+
+## HANDOFF 2026-05-06 (финал) — WA approval полный цикл + SLA Саиды + аналитика
+
+### Что сделано (ветка `fix/log-noise-by-design-markers`, HEAD `09f6531`)
+
+**12 коммитов за день. Тесты: 330/330.**
+
+| Коммит | Что |
+|--------|-----|
+| `6f64d4d` | Таймаут менеджеров + дедлайн в превью + cutoff 19:30 |
+| `4d81ce7` | Немедленная эскалация при узком окне + честный expires_at |
+| `aa552ba` | Немедленная проверка при создании батча |
+| `0fbc8a4` | Минутная точность дедлайна директора |
+| `2a0ce6a` | SLA Саиды: предупреждение 4ч + байпас 8ч |
+| `7a5ec3b` | Расписание: 16:30 стоп-лист, 18:30 эскалация |
+| `f83cb8e` | Кнопки: ✅/💰/🤝 — без причины убрать нельзя |
+| `c6f01d5` | Авто-возврат при сорванном обещании |
+| `285db0a` | Б-lite: директор проверяет договорённости |
+| `202e677` | Auto-clear стопа после полной оплаты Саиды |
+| `be6dac3` | Аналитика качества обещаний менеджеров |
+| `09f6531` | Саида backlog analytics |
+
+### Следующий безопасный шаг
+
+- Боевой тест при поступлении дебиторки от Саиды (event-driven)
+- Операционная задача: разобрать backlog Саиды (51 запрос, старейший 9 дней)
+- Боевой тест новой approval flow при поступлении дебиторки
+- Операционно: разобрать backlog Саиды (51 запрос)
+
+---
+
+## HANDOFF 2026-05-06 — Таймаут менеджеров + cutoff 19:00 для WA-рассылки
+
+### Что сделано (ветка `fix/log-noise-by-design-markers`, коммит `6f64d4d`)
+
+**Задача:** устранить структурный блокер: WhatsApp-уведомления не уходили должникам, потому что
+батч создавался в 17:00, менеджеры не реагировали, а `collector_reminders` закрывался в 18:00 —
+ровно в момент когда должен был сработать 1-часовой таймаут.
+
+**Root cause:**
+- `collector_reminders` окно: `9 <= hour < 18` — при батче созданном в 17:00 таймаут бил в 18:xx,
+  но джоб уже не запускался
+- При `timeout`-статусе менеджера `_build_admin_decisions` отдавал клиентов в `skip` (пустой
+  `approved_names`), а не в авто-включение
+- Нет жёсткого cutoff: батч висел до 02:00 ночи без пользы
+- Менеджеры не видели дедлайн в превью — не понимали что молчание что-то означает
+
+**Фикс в коде:**
+
+- `collector/approval_flow.py`:
+  - новая константа `SEND_WINDOW_CUTOFF_HOUR = 19` (env `WA_SEND_WINDOW_CUTOFF_HOUR`)
+  - `_format_manager_preview_text`: добавлена строка дедлайна
+    `"⏰ Ответьте до HH:MM. Если не успеете — уведомления уйдут автоматически."`
+  - `_build_admin_decisions`: `status == "timeout"` → клиенты в `keep` (авто-включение),
+    кроме явно отклонённых
+  - `_format_admin_summary_text`: для timeout-менеджеров статус `🔇 не ответил → авто (N кл.)`,
+    список авто-клиентов в сводке; `total_ok` учитывает авто-включённых
+  - `promote_silent_batches_to_admin`: после 19:00 → статус `too_late`, уведомление админу
+    "Сегодня не состоится. Следующий батч — при поступлении новой дебиторки."
+
+- `bot/send_reports.py`:
+  - `collector_reminders` окно расширено: `< 18` → `< 19`
+
+**Доказательства:**
+- `python -m py_compile collector/approval_flow.py bot/send_reports.py` → OK
+- `python -X utf8 tests/test_collector.py` (с `WHATSAPP_ENABLED=0; LIVE_SEND_ALLOWED=0`) → 320/320 OK
+
+### Что не трогать
+
+- `autoagent/orchestrator_agents.json`, `autoagent/task_prompt.txt` — пользовательские/служебные
+- `audit/` черновики
+- `bot/debt_stop_control.py` — изменён в предыдущей сессии, не трогать
+
+### Следующий безопасный шаг
+
+Сегодня во второй половине дня Саида скинет свежую дебиторку.
+Проверить в `logs/collector.log`:
+1. создался батч при поступлении debt_ext файлов
+2. менеджеры получили превью с дедлайном
+3. через 1 час — сводка ушла директору с `🔇 Авто` статусами молчавших
+4. после нажатия "Утвердить" директором — сообщения ушли в WhatsApp до 19:00
+
+---
+
+## HANDOFF 2026-04-30 — CRM duplicate phone review + cleanup
+
+### Что сделано (ветка `fix/log-noise-by-design-markers`)
+
+**Задача:** убрать CRM phone-queue шум от legacy-дублей, исключить служебные строки из phone queue, провести разовую сверку конфликтных телефонов через живого Telegram-бота и зафиксировать выбор менеджеров.
+
+**Root cause:**
+- `get_clients_without_phones()` поднимал legacy-дубли отдельно, даже если sibling-карточка уже имела телефон
+- loose duplicate matching был недостаточно управляем для CRM cleanup
+- служебные строки (`... под ЗП`, `Недостача`, `Без клиента`, `Водитель ...`) попадали в CRM-очереди как обычные клиенты
+- в `config/clients.json` накопились runtime-дубли: часть с пустым sibling, часть с разными телефонами
+
+**Фикс в коде:**
+- `bot/crm_clients.py` v1.1.0
+  - `canonicalize_client_key_loose()` ограничен legacy-паттерном хвостового дубля
+  - `is_service_client_name()` централизует фильтр служебных строк
+  - merge legacy duplicate -> preferred card с сохранением `aliases`
+  - `get_clients_without_phones()` пропускает legacy-дубли, если sibling уже имеет контакт
+  - добавлены `get_phone_conflict_groups()`, `resolve_phone_conflict()`, `mark_phone_conflict_distinct()`
+- `bot/send_reports.py` v9.4.63/30.04.2026
+  - добавлен разовый manager-review flow по конфликтным телефонам через Telegram inline-кнопки
+  - persisted state: `logs/crm_duplicate_review_state.json`
+  - admin command: `/crmdupsend`
+  - обработка custom phone text и варианта `это разные клиенты`
+- `tests/test_crm_regression.py`
+  - регрессии на legacy sibling skip
+  - регрессии на service-row filtering
+  - защита от ложного merge реальных адресов
+  - conflict-review API tests
+
+**Live-операция:**
+- очищены 6 safe data-дублей в локальном `config/clients.json` там, где был empty sibling при наличии карточки с телефоном
+- создан backup: `config/clients.json.bak-20260430-crm-dedup`
+- через живой бот разослано 13 review-case менеджерам по конфликтным дублям с разными телефонами
+- все 13 кейсов закрыты менеджерами в тот же день
+- выборы зафиксированы в CRM, состояние и audit сохранены в:
+  - `logs/crm_duplicate_review_state.json`
+  - `logs/crm_audit.jsonl`
+
+**Итог после manager review и cleanup:**
+- конфликтных duplicate groups с разными телефонами: `0`
+- safe duplicate groups с одинаковым телефоном: `17` -> авто-схлопнуты локальным data cleanup
+- ambiguous/no-phone duplicate groups: `1` -> закрыта вручную
+  - оставлена карточка `М Плов центр ЕСБОЛОВА  Дукенулы 22 87055791444`
+  - manager = `Магира`
+  - номер подтверждён из имени клиента: `+77055791444`
+  - sibling `manager=Не определён` схлопнут в `alias`
+- итоговый локальный статус `config/clients.json`: `duplicate_groups=0`
+
+**Доказательства / проверки:**
+- `python -m py_compile bot/crm_clients.py bot/send_reports.py` -> OK
+- `python -X utf8 tests/test_session_20260428.py` -> 15/15 OK
+- `python -X utf8 tests/test_crm_regression.py` -> 13/13 OK
+- runtime evidence:
+  - `logs/send_reports.log` содержит `CRM duplicate review restored: 13 records`
+  - `logs/crm_audit.jsonl` содержит 13 `duplicate_phone_conflict_sent` и 13 resolved events
+
+### Что не трогать
+
+- `autoagent/orchestrator_agents.json`, `autoagent/task_prompt.txt` — пользовательские/служебные
+- audit-черновики в `audit/`
+- `config/clients.json` не коммитится; cleanup остался локальным operational change
+- backups локального cleanup:
+  - `config/clients.json.bak-20260430-crm-dedup`
+  - `config/clients.json.bak-20260430-053134-safe-merge`
+
+### Следующий безопасный шаг
+
+- если понадобится, вынести local data-cleanup в отдельный воспроизводимый admin-скрипт/команду
+- держать `/crmdupsend` как разовый инструмент для будущих конфликтов телефонов
+
+---
+
+## HANDOFF 2026-04-30 — test log isolation fix
+
+### Что сделано (ветка `fix/log-noise-by-design-markers`)
+
+**Баг:** `test_collector_regression_hermetic.py` загрязнял боевой `logs/collector.log` тестовыми строками (`batch-stale`, `Task-31`, `[Тест Клиент]`).
+
+**Root cause:** после logging-унификации 30.04 `configure_runtime_logging()` в `bot/logging_utils.py` всегда открывает `TimedRotatingFileHandler` на `logs/collector.log`. `COLLECTOR_TEST_MODE=1` читался в `_TEST_MODE`, но в вызов `configure_runtime_logging()` не передавался — файловый хэндлер открывался в любом случае.
+
+**Фикс (коммит `522df85`):**
+- `bot/logging_utils.py` v1.1.1 — параметр `test_mode: bool = False`; при `True` `TimedRotatingFileHandler` не создаётся
+- `collector/collections_engine.py` v1.5.0 — передаёт `test_mode=_TEST_MODE`
+
+**Доказательства:**
+- `python -m py_compile bot/logging_utils.py collector/collections_engine.py` → OK
+- `python -X utf8 tests/test_collector_regression_hermetic.py -v` → 15/15 OK
+- хвост `logs/collector.log` остался на `03:37` после тестового прогона в `04:17`
+- бот перезапущен в `04:18`, стартовал чисто, все 30+ джобов зарегистрированы, ошибок нет
+
+### Состояние git
+
+- Ветка: `fix/log-noise-by-design-markers`
+- HEAD: `522df85`
+- Незакоммиченное: `autoagent/orchestrator_agents.json`, `autoagent/task_prompt.txt` (не трогать)
+
+### Что не трогать
+
+- `audit/AUDIT_TZ_20260422_DATA_DISTORTION.md`, `audit/D_AUDIT_REPORT_20260422.md`, `audit/E_PATCH_PLAN_20260422.md`, `audit/run_20260422_data/` — untracked черновики
+- `Новый текстовый документ.txt` — пользовательский файл
+
+### Следующий безопасный шаг
+
+- При следующем прогоне тестов убедиться, что `logs/collector.log` больше не получает тестовый шум
+- Открытых P1/P2 на момент закрытия сессии нет
+
+---
+
+## HANDOFF 2026-04-29 (сессии 2–3) — Коллектор Фазы 2–4
+
+### Что сделано (ветка `fix/log-noise-by-design-markers`)
+
+**Фаза 2Б — wa_dialog_suppress** (коммит ~`wa_dialog_suppress`):
+- `collector/collections_db.py`: поле `wa_dialog_suppress: {reason, set_at, until}` + set/get/clear API
+- `collector/client_dialog.py`: paid_claim → suppress +3д, attachment → suppress +2д
+- `collector/collections_engine.py` `run()`: проверка suppress после payment_hold, аудит `wa_skipped`
+- Тест: `tests/test_wa_dialog_suppress.py` — 7/7
+
+**Фаза 2А — diff-notice при admin approve** (коммит ~`diff-notice`):
+- `collector/collections_engine.py`: публичная `preview_batch_changes(batch_id, approved_clients) → Optional[str]`
+- `collector/approval_flow.py` `wa_appr_adm_ok`: вставляет diff-блок перед текстом кнопки "Отправить"
+- Тест: `tests/test_diff_notice.py` — 6/6
+
+**UI — кнопка 🤖 Коллектор в главном меню** (коммит ~`collector batch menu`):
+- `bot/send_reports.py`: `kb_main()` admin получил кнопку → `_format_collector_batch_text()` → статус + список клиентов
+
+**Фаза 3А — audit log** (коммит ~`audit_log Phase 3A`):
+- `collector/audit_log.py`: append-only JSONL `logs/collector_audit.jsonl`, thread-safe через `threading.Lock`
+- События: wa_sent, wa_skipped(4 причины), suppress_set/cleared, batch_created/approved/sent/failed
+- Тест: `tests/test_audit_log.py` — 7/7
+
+**Фаза 3Б — log prefixes** (коммит ~`log prefixes Phase 3B`):
+- `collector/collections_engine.py`: `_PrefixAdapter` + `[COLLECTOR]`
+- `bot/debt_stop_control.py`: `_PrefixAdapter` + `[STOP]`
+- Разделяет контуры в grep: `grep "[COLLECTOR]"` vs `grep "[STOP]"`
+
+**Фаза 4 — hard-ban отгрузок** (коммит `34ec994`):
+- Найден реальный риск: `promise_broken_reminder` содержал "влечёт ограничение отгрузок"
+- Этот шаблон назначается via `no_movement + promise_broken` — может достичь legacy_tail-клиентов
+- Фикс: фраза удалена из `_FALLBACK_TEMPLATES_DEFAULT["promise_broken_reminder"]` в `collection_agent.py`
+- Безопасный шаблон добавлен в `config/collector_prompts.json`
+- Тест: `tests/test_phase4_hard_ban.py` — 7/7
+
+### Что проверено
+
+- `python tests/test_wa_dialog_suppress.py` → 7/7
+- `python tests/test_diff_notice.py` → 6/6
+- `python tests/test_audit_log.py` → 7/7
+- `python tests/test_phase4_hard_ban.py` → 7/7
+- Все тесты прогнаны вместе: 27/27
+
+### Что осталось в очереди
+
+- Фаза 3В — единое логирование `collector/*.py` через `get_collector_logger(__name__)`
+- Фаза 5 — CRM аудит: баг повторного "Чей клиент?" (6 точек проверки: get_clients_without_phones, _crm_cleanup_pending, attribution persistence, crm_daily_task, дубли в crm_pending_state.json, TTL)
+
+---
+
+## HANDOFF 2026-04-30 Asia/Qyzylorda — Unified runtime logging
+
+### Что сделано
+
+- Добавлен общий runtime logging core:
+  - `bot/logging_utils.py`
+  - domain-aware formatter
+  - rotating daily logs + retention
+  - Telegram runtime alert handler с cooldown
+- `bot/send_reports.py` переведен на доменные логгеры:
+  - `BOT/CORE`
+  - `BOT/SCHED`
+  - `CRM/FLOW`
+  - `PIPELINE/FLOW`
+  - `STATE/STORE`
+  - `INTEGRATION/API`
+- `log_event()` теперь маршрутизирует события по доменам через `_logger_for_event()`
+- `collector/logging_utils.py` больше не живет отдельной prefix-only схемой:
+  - `get_collector_logger()` → `COLLECTOR/FLOW`
+  - `get_stop_logger()` → `STOP_CONTROL/FLOW`
+- `collector/collections_engine.py` переведен на тот же runtime bootstrap
+- `config.setup_logging()` унифицирован через `configure_module_logger()`:
+  - модули отчетов/парсеров теперь получают общий formatter + rotation + доменную классификацию
+- `bot/crm_clients.py` переведен на `CRM/STORE`
+- `bot/debt_stop_control.py` переведен на `STOP_CONTROL/FLOW`
+
+### Доказательства
+
+- `python -m py_compile bot/logging_utils.py bot/send_reports.py collector/logging_utils.py collector/collections_engine.py config.py` → OK
+- `python -X utf8 tests/test_crm_regression.py` → 6/6 OK
+- `python -X utf8 tests/test_collector_regression_hermetic.py` → 15/15 OK
+- `python -X utf8 tests/test_logging_runtime.py` → OK
+
+### Что это дало
+
+- домен проблемы теперь виден сразу по строке лога:
+  - `CRM`
+  - `STATE`
+  - `PIPELINE`
+  - `INTEGRATION`
+  - `COLLECTOR`
+  - `STOP_CONTROL`
+  - `BOT`
+- unified runtime logging теперь покрывает:
+  - bot orchestration
+  - collector
+  - standalone модульные логгеры через `config.setup_logging()`
+
+### Что осталось
+
+- не все исторические direct `logger.*(...)` внутри `bot/send_reports.py` доменно размечены вручную;
+- основной routing уже закрыт через `log_event()`, но часть старого кода пока остается под `BOT/CORE`;
+- если продолжать, следующий этап — точечная доменная разметка remaining direct logs в крупных старых ветках монолита.
+
+---
+
+## HANDOFF 2026-04-29 Asia/Qyzylorda
+
+### Что исправлено
+
+- `collector/collections_engine.py` v`1.4.5` -> v`1.4.6`
+  - перед `send-approved` добавлена обязательная пересверка admin-approved batch по свежей дебиторке;
+  - если клиент уже выпал из актуального shortlist, он не уходит в WhatsApp;
+  - если по клиенту изменились сумма/дни/телефон/тип сообщения, в отправку идет уже обновленная версия;
+  - если свежая дебиторка недоступна, отправка блокируется, а администратор получает notice.
+- `collector/client_dialog.py` v`1.0.9` -> v`1.1.0`
+  - `paid_claim` (`оплатили`, `вчера была оплата`, `давно оплатили`) больше не остается в обычной debt-ветке;
+  - введен state `awaiting_payment_proof`: бот один раз просит чек/дату/сумму и дальше не дожимает клиента повторными debt-фразами;
+  - при входящем доказательстве оплаты диалог переводится в `awaiting_manager`, а наблюдателям уходит note со ссылкой на вложение;
+  - короткие реплики вроде `хорошо` после `paid_claim` больше не вызывают второй автоответ;
+  - сервисные запросы вида `акт сверки` сразу эскалируются менеджеру.
+- `collector/whatsapp_poller.py` v`1.1.5` -> v`1.1.6`
+  - входящие `document/image/video` теперь пробрасывают в `handle_incoming()` метаданные вложения (`downloadUrl`, `fileName`, `caption`, `mimeType`);
+  - это нужно, чтобы доказательство оплаты можно было сразу передать менеджеру/наблюдателям без повторного запроса к клиенту.
+- добавлен герметичный regression-suite `tests/test_collector_regression_hermetic.py`
+  - без реальных отправок в WhatsApp/Telegram;
+  - без Green API/Telegram сети;
+  - покрывает именно спорные collector-сценарии этой сессии.
+- `collector/collections_engine.py` v`1.4.6` -> v`1.4.7`
+  - stop-клиенты разделены на живой shipment-stop и старые хвостовые долги;
+  - если клиент долго висит в долге, новых отгрузок нет и он не выглядит как живой торговый stop-case, используется отдельный `msg_type` без текста про ограничение отгрузок;
+  - введены `legacy_tail_reminder` и `partial_tail_reminder`.
+- `collector/approval_flow.py` v`1.0.9` -> v`1.1.0`
+  - в согласовании WhatsApp теперь явно различаются:
+    - `stoplist_reminder` — живой stop-кейс;
+    - `legacy_tail_reminder` — старый хвост без движения;
+    - `partial_tail_reminder` — старый хвост с частичным погашением.
+- `collector/collection_agent.py` v`1.0.9` -> v`1.1.0`
+  - добавлены fallback-шаблоны для старых хвостов без слова `отгрузки`.
+- `config/collector_prompts.json`
+  - добавлены `legacy_tail_reminder` и `partial_tail_reminder`;
+  - фраза про ограничение отгрузок оставлена только для настоящего `stoplist_reminder`.
+- `collector/debt_monitor.py` v`1.0.7` -> v`1.0.8`
+  - loader теперь возвращает `_freshness` metadata по debt snapshot: `period_max`, `age_days`, `warn/stale`, `file` по каждому менеджеру;
+  - это стало базой для блокировки live-send по старой дебиторке и для показа даты данных в preview.
+- `collector/collections_engine.py` v`1.4.7` -> v`1.4.8`
+  - live `run()` теперь блокируется, если debt snapshot устарел сверх SLA;
+  - `send-approved` тоже блокируется по stale debt snapshot выбранных менеджеров;
+  - `run_approval_preview()` сохраняет в batch `debt_snapshot` summary, чтобы preview/admin summary показывали дату и возраст данных.
+- `collector/approval_flow.py` v`1.1.0` -> v`1.1.1`
+  - manager preview, admin preview notice и admin summary теперь показывают `Данные дебиторки` и `Возраст данных`;
+  - при stale-warning это видно ещё до финального утверждения отправки.
+- операционный регламент collector уточнен:
+  - trigger/check окно расширено до `09:00–22:00`;
+  - TTL флага свежей debt-trigger логики расширен до `14ч`;
+  - причина: Саида временно может разносить оплаты после `20:00`.
+- усилена наблюдаемость live WhatsApp:
+  - после каждого `send_whatsapp()` администратор получает мгновенный notice;
+  - `daily_summary()` включает отдельный блок с перечнем фактических WA-получателей.
+- CRM clarify-phone hygiene уточнена:
+  - служебные/зарплатные записи должны фильтроваться и на входе `get_clients_without_phones()`, и в `send_reports._crm_cleanup_pending()`;
+  - иначе queue `clarify_phone` бесконечно загрязняется ЗП/служебными хвостами.
+
+### Что доказано
+
+- stale debt инцидент утром `2026-04-29` был вызван нераскрытым вчерашним batch, а не ошибкой клиента:
+  - старый batch был собран `2026-04-28`, но отправлен только утром `2026-04-29`;
+  - свежая дебиторка после вечерней разноски оплат в 1С подхватилась позже;
+  - значит корень был в frozen snapshot approved batch перед send.
+- важно не смешивать два разных контура:
+  - `collector/*` и `logs/wa_approval_batches.json` — это WhatsApp debt collector и его manager/admin approval batch;
+  - `bot/debt_stop_control.py` и `reports/debt_stop_registry.json` — это отдельный stop/clearance workflow по отгрузкам, Саиде и руководителю.
+- кейс `Е ИП Реян (Жангали)` с ответом `✅ Утверждено — ... Менеджер и Саида уведомлены` был штатным `debt_stop_control` сценарием:
+  - в `14:00:56` stop-monitor увидел, что `current["debt"] <= STOP_PAID_THRESHOLD(5000)`;
+  - Ергали получил запрос выбрать дальнейший режим работы с клиентом после полной оплаты;
+  - руководитель подтвердил предложение менеджера через `dstop_adm_cl_confirm`;
+  - это не было подтверждением нового лимита и не было bug-сигналом collector.
+- WhatsApp voice recognition на текущем HEAD работает:
+  - в runtime-логах есть успешное распознавание входящего `.ogg` через AssemblyAI;
+  - проблема этой сессии была не в STT, а в freshness debt и UX client dialog.
+- текущий источник истины по collector regression теперь не legacy `tests/test_collector.py`, а отдельный hermetic-suite.
+- архив `archive/` подтверждает отдельный класс старых хвостовых должников, которым фраза про ограничение отгрузок не подходит:
+  - `Е ИП Шахин`
+  - `Е Еркебулан`
+  - `Е ТД Саянур Леонид`
+  - `Е ТОО ГудФуд № 1 ул Досмухамедулы 48(Аида)`
+  - `М Ресторан Шама ИП Тян ул Мустафина 12`
+- по текущей логике эти клиенты теперь не получают `stoplist_reminder`, если в текущем срезе нет новых отгрузок и долг выглядит как старый хвост.
+- отсутствие Ергали в новых collector-batches `20260429-135316-54e7` и `20260429-140258-5881` не было bug-сигналом routing:
+  - утром `29.04.2026` его клиенты уже были отправлены из старого admin-approved batch `20260428-170001-2bef`;
+  - после этого дневной guard `already_contacted_today()` корректно не дал включить их в новые preview повторно;
+  - отдельные stop-control уведомления Ергали в этот день были штатным другим контуром и не относятся к collector approval batch.
+
+### Проверки
+
+- `python -m py_compile collector\client_dialog.py` — OK
+- `python -m py_compile collector\collections_engine.py` — OK
+- `python -m py_compile collector\whatsapp_poller.py` — OK
+- `python -X utf8 tests\test_collector_regression_hermetic.py -v` — **7/7 OK**, `Ran 7 tests in 3.151s`
+- `python -m py_compile collector\approval_flow.py` — OK
+- `python -X pycache_prefix=C:\Users\user\.codex\memories\pycache_tmp -m py_compile collector\collection_agent.py` — OK
+- `python -X utf8 tests\test_collector_regression_hermetic.py -v` — **11/11 OK**, `Ran 11 tests in 3.020s`
+- `python -X utf8 -m unittest tests.test_collector_regression_hermetic.LegacyTailClassificationHermeticTests -v` — **4/4 OK**
+- `python -X pycache_prefix=C:\Users\user\.codex\memories\pycache_tmp -m py_compile collector\debt_monitor.py` — OK
+- `python -X pycache_prefix=C:\Users\user\.codex\memories\pycache_tmp -m py_compile collector\collections_engine.py` — OK
+- `python -X pycache_prefix=C:\Users\user\.codex\memories\pycache_tmp -m py_compile collector\approval_flow.py` — OK
+- `python -X utf8 tests\test_collector_regression_hermetic.py -v` — **15/15 OK**, включая freshness metadata, stale live-send block и preview snapshot warning
+- документальные уточнения collector knowledge base внесены в:
+  - `SESSION_CONTEXT.md`
+  - `gpt1c.md`
+  - `audit/ARCHITECTURE.md`
+
+### Что именно покрывает hermetic-suite
+
+- stale batch refresh перед `send-approved`;
+- пропуск уже неактуального клиента из batch;
+- `paid_claim` -> `awaiting_payment_proof`;
+- отсутствие второго автоответа после короткого подтверждения клиента;
+- forwarding входящего чека/доказательства менеджеру/наблюдателям;
+- мгновенная эскалация сервисного запроса;
+- проброс attachment metadata из `whatsapp_poller` в `client_dialog`.
+- отдельная классификация старых хвостов:
+  - stopped + нет новых отгрузок + нет оплат -> `legacy_tail_reminder`;
+  - stopped + нет новых отгрузок + есть частичная оплата -> `partial_tail_reminder`;
+  - живой stop-case с `debit > 0` -> остаётся `stoplist_reminder`.
+
+### Что осталось открытым
+
+- `tests/test_collector.py` остается legacy-интеграционным файлом:
+  - полный прогон в этом окружении не является надежным критерием;
+  - в нем остается старый baseline-failure `send_whatsapp returns False when disabled`;
+  - его нельзя использовать как единственное доказательство качества collector-правок.
+- import-time logging/file locks на Windows никуда не делись как класс риска; для спорных collector-правок сначала запускать hermetic-suite.
+
+### Что не трогать
+
+- untracked audit-черновики:
+  - `audit/AUDIT_TZ_20260422_DATA_DISTORTION.md`
+  - `audit/D_AUDIT_REPORT_20260422.md`
+  - `audit/E_PATCH_PLAN_20260422.md`
+  - `audit/run_20260422_data/`
+- пользовательский untracked файл:
+  - `Новый текстовый документ.txt`
+
+### Следующий безопасный шаг
+
+- перед любыми следующими правками collector-контура сначала прогонять:
+  - `python -X utf8 tests\test_collector_regression_hermetic.py -v`
+- если нужен дальнейший UX-тюнинг, менять только state-driven ветки в `collector/client_dialog.py`, не возвращаясь к свободным повторяющимся reply templates.
+
+---
+
+## HANDOFF 2026-04-23 09:00 Asia/Almaty
+
+### Что исправлено
+
+- Telegram polling/runtime hardened без отключения TLS:
+  - `bot/send_reports.py` v`v9.4.59/23.04.2026` → `v9.4.60/23.04.2026`
+  - добавлен `_PinnedTelegramRequest(HTTPXRequest)`:
+    - явный `certifi.where()` как CA bundle
+    - `trust_env=False`
+    - отдельные request-объекты для bot API и `getUpdates`
+  - `Application.builder()` теперь использует:
+    - `.request(main_request)`
+    - `.get_updates_request(updates_request)`
+  - при TLS verify failure лог теперь явно пишет:
+    - `ca_bundle`
+    - `trust_env=False`
+
+### Что доказано
+
+- текущий открытый Telegram TLS-контур был не в данных, а в polling transport.
+- blind-fix вида `verify=False` не применялся.
+- теперь bot polling не зависит от скрытых proxy/SSL env и использует явный публичный CA bundle.
+
+### Проверки
+
+- `python -m py_compile bot/send_reports.py` — OK
+- `python -X utf8 tests/test_project.py` — `110/110`
+- в `tests/test_project.py` добавлены проверки:
+  - `_PinnedTelegramRequest` строит `httpx.AsyncClient` с `trust_env=False`
+  - `verify` — это `ssl.SSLContext`
+  - `getUpdates` request имеет более длинный `read_timeout`, чем обычный bot API request
+
+### Что осталось
+
+- чтобы фикс начал работать в бою, нужен перезапуск бота.
+- если после этого `CERTIFICATE_VERIFY_FAILED` повторится, это уже будет сильное доказательство внешней TLS/MITM/сети проблемы, а не скрытого env/request-контура внутри процесса.
+
+---
+
+## HANDOFF 2026-04-23 08:45 Asia/Almaty
+
+### Что исправлено
+
+- `b3ce7ab` — `fix(data): enforce excel-truth for net profit and debt delivery`
+  - `net_profit_report.py` v`1.2.7` → v`1.2.8`
+    - admin `net_profit` теперь берёт только сводные `gross_*.json`
+    - manager gross больше не может подмешаться в admin MTD
+    - для MTD отключён mixed-source fallback на "ближайшие" expenses
+    - если exact expenses за тот же период нет, MTD не генерируется
+  - `bot/send_reports.py` v`v9.4.58/22.04.2026` → `v9.4.59/23.04.2026`
+    - live `DEBT_SIMPLE` блокируется, если для того же менеджера уже есть более свежий `DEBT_EXTENDED`
+    - `force|net_profit` и меню аналитики больше не отдают stale `net_profit_mtd`, если current summary gross не имеет exact expenses
+  - `tests/test_report_freshness.py`
+    - добавлены регрессии `FRESH T5..T10`
+
+### Что доказано
+
+- Ложный `net_profit_mtd_20260411.html` строился не из сводного gross Excel, а из manager gross + чужих expenses.
+- Простая дебиторка могла live-выдаваться за `18.04`, хотя detailed debt уже был свежий за `22.04`.
+- После фикса:
+  - manager gross отфильтровывается из admin gross-источников;
+  - stale simple debt не проходит live-route;
+  - stale MTD HTML не проходит `force|net_profit` и analytics-route.
+
+### Проверки
+
+- `python -m py_compile bot/send_reports.py` — OK
+- `python -X utf8 tests/test_report_freshness.py` — `10/10`
+- `python -X utf8 tests/test_project.py` — `105/105`
+- `python -c "import ast, pathlib; ast.parse(pathlib.Path('net_profit_report.py').read_text(encoding='utf-8'))"` — `net_profit_report.py AST OK`
+
+### Что осталось открытым
+
+- `NET-SSL-TELEGRAM-01` остаётся открытым как внешний TLS/runtime incident:
+  - burst `CERTIFICATE_VERIFY_FAILED / self-signed certificate in certificate chain`
+  - кодовый дефект пока не доказан
+  - `verify=False` не применялся и не должен применяться без отдельного технического доказательства
+
+### Что не трогать
+
+- untracked audit-черновики:
+  - `audit/AUDIT_TZ_20260422_DATA_DISTORTION.md`
+  - `audit/D_AUDIT_REPORT_20260422.md`
+  - `audit/E_PATCH_PLAN_20260422.md`
+  - `audit/run_20260422_data/`
+
+---
+
+## HANDOFF 2026-04-22 19:30 Asia/Almaty (audit session continuation)
+
+### Что сделано после handoff 16:40
+
+**Phase 3 — глубокий аудит + точечные фиксы (5 файлов, все закоммичены):**
+
+| Файл | Версия | Fix |
+|------|--------|-----|
+| `imap_fetcher.py` | v4.4.6 → v4.4.7 | F-IMAP-001 (WARNING при пустом whitelist), F-IMAP-002 (`Path(fname).name` + reject "." ".." "" — path-traversal guard), F-IMAP-003 (try/except `M.shutdown()` в except-ветке `_imap_connect`), F-IMAP-004 (комментарий-охрана `load_dotenv()` перед TZ — защита BUG-H3 adc61bc) |
+| `send_tg.py` | v2.4.1 → v2.4.2 | F-TG-001 (`send_file` читает bytes в память перед `_post_tg` — при retry на 5xx/timeout file-handle иначе прочитан, вторая попытка отправила бы 0 байт), F-TG-002 (`print("TG: file OK")` в CLI `--file` ветке для симметрии с `--text`) |
+| `config.py` | v3.6.4 → v3.6.5 | F-CFG-001 (`_read_yaml` ловит `(yaml.YAMLError, OSError, UnicodeDecodeError)` вместо широкого `Exception`) |
+| `bot/inventory_summary.py` | v1.6 → v1.7 | S2 (regex `[Р°-СЏС‘]+` — CP1251-в-UTF-8 mojibake → корректный `[а-яё]+`), S3 (docstring синхронизирован с v1.7 стратегией) |
+| `bot/crm_clients.py` | v1.0.4 → v1.0.5 | S1 (хардкод `("Алена","Ергали","Магира","Оксана")` → `_load_known_managers()` из `config/managers.json` с fallback; соблюдение single-source-of-truth по CLAUDE.md) |
+
+**Phase 4 — быстрый скан остальных модулей (все чисты, правок не требовалось):**
+
+- `utils_common.py` v1.1.0 — pure функции, чист
+- `utils_excel.py` v2.3.4 — 3 широких except в utility-guard паттернах (REFACTOR-класс, не-баги)
+- `bot/silence_alerts.py` v1.7 — защитные широкие except в parser-entry функциях (приемлемо)
+- `bot/opportunity_loss.py` v1.5.2 — чист, fix #OPLOSS-1 на месте
+- `bot/user_tracker.py` v1.0.2 — чист, BUG-H4 (threading.Lock) + BUG-L7 (narrow except) уже закрыты
+- `bot/log_monitor.py` v1.0.1 — чист, атомарная запись tmp+replace
+
+**Аудит freshness-фикса b5fb564 (работа другого ИИ):**
+- Подтверждён живой проверкой: оба JSON-семейства (`debt_ext_Ведомость_…` и `debt_ext_Детальный_Дебиторы_…`) коэкзистируют в `reports/json/`, приоритет отдаётся «Детальный» через glob-фильтр + mtime
+- Логи `logs/collector_20260422.log` показывают работу фильтра свежести: `"Пропускаем устаревший debt JSON"`
+
+### Коммиты этого блока
+
+- `b8a0d2f` — `fix: аудит 22.04.2026 - narrow except, retry-safe send, CRM source of truth`
+  - `config.py`, `send_tg.py`, `bot/inventory_summary.py`, `bot/crm_clients.py`
+  - (`imap_fetcher.py` был закоммичен ранее в этой же сессии — до контекстного разрыва)
+- `2969640` — `docs: session context 22.04.2026` (handoff 16:40)
+
+### Что проверено
+
+- `python -m py_compile config.py` — OK
+- `python -m py_compile imap_fetcher.py` — OK
+- `send_tg.py`, `bot/inventory_summary.py`, `bot/crm_clients.py` — синтаксис подтверждён через `ast.parse(open(...).read())`, т.к. Windows держал lock на `__pycache__/*.pyc` от работающего бота (не синтаксическая ошибка)
+- `tests/test_project.py` — **105/105**
+- `tests/test_report_freshness.py` — **4/4** (регрессия b5fb564 зафиксирована тестом)
+- `tests/test_collector.py` — прогон прерван по таймауту времени выполнения, НО: падений/traceback нет, дошедшие секции зелёные
+
+### Что осталось untracked
+
+- `debt_stop_state.json` — runtime-артефакт, обновляется ботом автоматически, в коммиты не включается
+
+### В работе (передано в Codex)
+
+Codex пишет регрессионные тесты по ТЗ от 2026-04-22 (см. чат Claude):
+
+- `tests/test_silence_alerts.py` — 8 кейсов, главный — T6 freshness-regression (`_get_all_debt_reports` + `get_latest_debt_report` не даёт «Ведомости» побеждать «Детальный»)
+- `tests/test_opportunity_loss.py` — 6 кейсов, главный — T1 OPLOSS-1 regression (`_find_latest_gross_html` не подсовывает чужой gross)
+
+Назначение: закрыть тест-дыру в модулях, затронутых b5fb564, до следующей регрессии.
+
+### Открытые OPEN-пункты (не критично, не-баги)
+
+- REFACTOR ~30+ широких `except Exception` в utility-guard паттернах — требуют бизнес-решений по каждому случаю
+- ARCH-1: `txt_to_html` в двух местах (`tools/txt_to_html.py` + `bot/send_reports.py`) — унификация рискованная, ломает call sites
+- ARCH-3: inline HTML в `expenses_parser.py` — изолировано, работает корректно
+
+### Что читать новому ИИ в первую очередь
+
+1. `CLAUDE.md` (project overview + rules + fixed bugs history)
+2. Этот handoff (19:30)
+3. Handoff 16:40 ниже
+4. `gpt1c.md` (актуальный статус)
+5. Последние коммиты через `git log --oneline -20`
+
+### Открытые задачи по TaskList (закрытые, для контекста)
+
+```
+#1 [completed] Аудит freshness-фикса b5fb564
+#2 [completed] Phase 3 subtask: send_tg.py audit
+#3 [completed] S2: inventory_summary regex mojibake
+#4 [completed] S1: crm_clients hardcoded managers
+#5 [completed] Phase 3: config.py audit + fixes
+#6 [completed] Phase 4: quick scan + report
+```
+
+Все 6 задач этой сессии закрыты.
+
+---
+
+## HANDOFF 2026-04-22 16:40 Asia/Almaty
+
+### Что зафиксировано в репозитории после предыдущих handoff
+
+- `65d2164` — `docs(audit): map audit corpus and fix path anomaly`
+  - добавлена карта содержимого `audit/AUDIT_CONTENT_MAP_20260422.md`
+  - исправлена git-анomaly по старому пути `аудит/` без потери содержимого
+- `8171b4a` — `docs(audit): clarify 2026-04-21 draft status`
+  - `audit/AUDIT_20260421.md` помечен как незавершённый audit draft, а не финальный вердикт
+- `863ad80` — `chore(project): remove obsolete pdf traces`
+  - удалён пустой каталог `reports/pdf`
+  - удалён `pdfkit` из `requirements.txt`
+  - убраны оставшиеся project-side PDF-следы вне `audit/`
+
+### Что проверено
+
+- `python -m py_compile config.py` — OK
+- поиск по проекту вне `audit/`, `.venv`, `__pycache__` на:
+  - `pdf`
+  - `PDF`
+  - `pdfkit`
+  - `reports/pdf`
+  - `*.pdf`
+  дал `0` совпадений
+
+### Что читать новому ИИ в первую очередь
+
+Чтобы быстро и без фантазий восстановить реальную картину проекта, достаточно прочитать с начала до конца:
+
+1. `AGENTS.md`
+2. `CLAUDE.md`
+3. `gpt1c.md`
+4. `SESSION_CONTEXT.md`
+5. `audit/AUDIT_CONTENT_MAP_20260422.md`
+6. `audit/AUDIT_COLLECTOR_20260422.md`
+
+А затем посмотреть ключевые коммиты этой ветки:
+
+- `67f8e0f` — log-noise cleanup
+- `3695405` — collector state hardening
+- `6f7c6bf` — stale admin requests + voice STT repair
+- `da5486d` — voice STT + guard empty AI analysis
+- `48017d0` — silence alerts once daily
+- `ea74457` — grouped 1C sales + manager top3
+- `65d2164` — audit map + path anomaly fix
+- `8171b4a` — audit draft clarification
+- `863ad80` — PDF traces removed
+
+### Текущее состояние дерева
+
+- после этого handoff в рабочем дереве не должно оставаться незакоммиченного `SESSION_CONTEXT.md`
+- если появятся новые локальные правки, сначала смотреть `git status --short`, затем читать этот файл сверху вниз
+
+---
+
+## HANDOFF 2026-04-22 11:22 Asia/Almaty
+
+### Что доделано после предыдущего handoff
+
+- В `collector/approval_flow.py` и `collector/collections_engine.py` добавлена защита от конфликта старого и нового approval-запроса:
+  - новый актуальный preview-запрос вытесняет предыдущий активный;
+  - старый запрос получает статус `superseded`;
+  - старые manager-preview сообщения закрываются, кнопки снимаются;
+  - старые manager-callback больше не принимаются сервером.
+- В `collector/approval_flow.py` добавлена эскалация при молчании менеджеров:
+  - через `1` час молчания запрос автоматически переводится на решение администратора;
+  - молчавшие менеджеры получают `timeout`;
+  - администратору отправляется итоговая сводка без ожидания всех ответов.
+- В `bot/send_reports.py` hourly `collector_reminder_task()` теперь дополнительно запускает проверку эскалации молчавших approval-запросов.
+- Для менеджеров тексты сделаны без техтерминов:
+  - `Запрос устарел`
+  - `Исходный список уже закрыт`
+  - `Сформирован новый список`
+
+### Проверки
+
+- `python -m py_compile collector/approval_flow.py` — OK
+- `python -m py_compile collector/collections_engine.py` — OK
+- `python -m py_compile bot/send_reports.py` — OK
+- `$env:WHATSAPP_ENABLED='0'; $env:LIVE_SEND_ALLOWED='0'; python -X utf8 tests\test_collector.py` — `266/266`
+- `python -X utf8 tests\test_phase2_safe_send.py` — PASS
+
+### Что изменилось в тестах
+
+- Добавлены регрессии:
+  - `APPROVAL T3d` — `superseded` не считается активным
+  - `APPROVAL T10e` — после 1 часа молчания запрос переходит в `pending_admin`
+  - `APPROVAL T10f` — молчавшие менеджеры получают `timeout`, админу уходит сводка
+  - `APPROVAL T10g` — активный запрос можно закрыть как `superseded`
+  - `APPROVAL T10h` — manager-callback по уже закрытому запросу блокируется
+
+### Разбор LOG MONITOR по ошибке `--send disabled`
+
+- Уведомление `collector_20260422.log: ERROR --send disabled for Phase 2 controlled live` не указывает на боевой scheduler.
+- По самому `logs/collector_20260422.log` перед этой строкой идут тестовые записи:
+  - `send-approved: batch=20260412-120000-ab12 ...`
+  - `[TEST] legacy manager_dialog live send blocked ...`
+- Вывод: это след тестового прогона в рабочем лог-файле коллектора, а не продовая попытка scheduler вызвать `--send`.
+- Отдельный операционный хвост:
+  - был закрыт в этой же итерации:
+    - добавлен `COLLECTOR_TEST_MODE=1`
+    - `collector/collections_engine.py` в тестовом режиме больше не пишет в боевой `collector_YYYYMMDD.log`
+    - `tests/test_collector.py` и `tests/test_phase2_safe_send.py` выставляют этот флаг до импорта модуля
+  - проверено фактом: после повторного тестового прогона в `06:23` хвост `logs/collector_20260422.log` не изменился
+
+### Актуальные файлы этой итерации
+
+- `collector/approval_flow.py`
+- `collector/collections_engine.py`
+- `bot/send_reports.py`
+- `tests/test_collector.py`
+- `tests/test_phase2_safe_send.py`
+- `audit/AUDIT_COLLECTOR_20260422.md`
+
+### Не смешивать с collector-коммитом
+
+- `bot/sales_summary.py`
+- `sales_parser.py`
+- `tests/test_parsers.py`
+- `SESSION_CONTEXT.md`
+- `audit/AUDIT_20260421.md`
+
+### Следующий безопасный шаг
+
+1. Сделать изолированный collector-коммит без sales/parser-правок.
+2. Затем пуш.
+
+## HANDOFF 2026-04-22 10:58 Asia/Almaty
+
+### Что сделано в этой сессии
+
+- Проведён целевой аудит коллектора по цепочке:
+  - `scheduler -> preview -> manager approvals -> admin approve -> send-approved -> batch state`
+- Подтверждены и исправлены 2 state-багa в `collector/approval_flow.py`:
+  1. `load_latest_batch()` больше не считает финальными "активными" батчи со статусами:
+     - `sent`
+     - `partially_sent`
+     - `send_failed`
+     - `send_empty`
+  2. `expire_old_batches()` теперь:
+     - ставит `expired_at`
+     - переводит молчавших менеджеров из `pending` / `manual_editing` в `timeout`
+
+### Что уже было в рабочем дереве и дополнительно верифицировано
+
+- раннее уведомление администратору о создании approval-батча
+- ручной выбор клиентов администратором перед отправкой
+- кнопка `Отправить сейчас` после admin approve
+- safe-send path отправляет только `approved_clients`
+
+### Тесты и проверки
+
+- `python -m py_compile collector\\approval_flow.py` — OK
+- `python -m py_compile collector/collections_engine.py` — OK
+- `$env:WHATSAPP_ENABLED='0'; $env:LIVE_SEND_ALLOWED='0'; python -X utf8 tests\\test_collector.py` — `261/261`
+- `python -X utf8 tests\\test_phase2_safe_send.py` — PASS
+
+Примечание по окружению:
+- первый запуск `tests/test_phase2_safe_send.py` в песочнице упал на `PermissionError` по `logs/collector_20260422.log`
+- повторный запуск вне песочницы прошёл успешно; это был lock лог-файла, не поломка бизнес-логики
+
+### Новые/обновлённые файлы этой сессии
+
+- `collector/approval_flow.py`
+- `tests/test_collector.py`
+- `audit/AUDIT_COLLECTOR_20260422.md`
+
+### Состояние аудита
+
+- старый файл `audit/AUDIT_20260421.md` остаётся как черновик/рабочий draft, не перезаписывался
+- новый актуальный файл по этой сессии:
+  - `audit/AUDIT_COLLECTOR_20260422.md`
+
+### Состояние git на момент handoff
+
+- Ветка: `fix/log-noise-by-design-markers`
+- `HEAD`: `67f8e0f`
+- Коммит по коллектору ЕЩЁ НЕ создан
+
+Причина остановки:
+- попытка выполнить `git add ... && git commit ...` через PowerShell сорвалась не по git-логике, а из-за синтаксиса:
+  - `&&` не поддержан как разделитель в данной версии PowerShell
+
+### Что готово к коммиту
+
+Логически готово коммитить только эти файлы:
+- `collector/approval_flow.py`
+- `collector/collections_engine.py`
+- `tests/test_collector.py`
+- `audit/AUDIT_COLLECTOR_20260422.md`
+
+Не брать в этот коммит:
+- `bot/sales_summary.py`
+- `sales_parser.py`
+- `tests/test_parsers.py`
+- `SESSION_CONTEXT.md`
+- `audit/AUDIT_20260421.md`
+
+### Следующий безопасный шаг
+
+Выполнить по отдельности, без `&&`:
+
+1. `git add collector/approval_flow.py collector/collections_engine.py tests/test_collector.py audit/AUDIT_COLLECTOR_20260422.md`
+2. `git commit -m "fix(collector): harden approval batch states and save audit"`
+3. `git push`
 
 Дата последней фиксации: 2026-04-14
 Проект: `GPT1C_Processor_analitica`
@@ -318,3 +1143,744 @@
 3. очистка test-like записей из runtime-state;
 4. финальная приёмка по боевым сценариям;
 5. только затем закрытие ТЗ.
+
+---
+
+## Session Handoff - 2026-04-22 08:53 +05:00
+
+### What was done
+
+- Checked unattended health logs on `2026-04-21`.
+- Confirmed `balance Excel` attachments are by-design non-pipeline inputs and should be ignored.
+- Confirmed repeated `create_batch ... without manager_name` log line came from a test fixture, not a production client.
+- Implemented explicit log markers to prevent both cases from being misread as bugs:
+  - `imap_fetcher.py`:
+    - version `v4.4.5 -> v4.4.6`
+    - added explicit `IGNORE by-design non-pipeline attachment (...)` for:
+      - files containing `баланс`
+      - files containing `ведомость денежных средств`
+  - `collector/approval_flow.py`:
+    - version `1.0.3 -> 1.0.4`
+    - test fixtures without `manager_name` now log at `INFO`
+    - real data without `manager_name` still logs at `WARNING`
+  - `tests/test_collector.py`:
+    - renamed fixture to `TEST fixture: клиент без manager_name`
+
+### Commit / branch
+
+- Branch created: `fix/log-noise-by-design-markers`
+- Commit created: `67f8e0f fix(logs): mark by-design IMAP ignores and collector test-noise explicitly`
+
+### Verification completed
+
+- `python -m py_compile imap_fetcher.py collector\approval_flow.py` -> OK
+- `python -X utf8 tests\test_project.py` -> `101/101`
+- `WHATSAPP_ENABLED=0 LIVE_SEND_ALLOWED=0 python -X utf8 tests\test_collector.py` -> `256/256`
+- Additional local check requested by user:
+  - `python -m py_compile bot\sales_summary.py` -> OK
+
+### Important working tree state left untouched
+
+At the time of context save, working tree is NOT clean. These files were intentionally left alone:
+
+- modified:
+  - `bot/sales_summary.py`
+  - `collector/approval_flow.py`
+  - `collector/collections_engine.py`
+- untracked:
+  - `audit/AUDIT_20260421.md`
+
+Notes:
+
+- `audit/AUDIT_20260421.md` is Claude's unfinished audit draft from `2026-04-21`; user explicitly asked to leave it untouched for later continuation.
+- Do not delete, stage, or commit that audit draft unless user explicitly asks.
+- Current modified state of `bot/sales_summary.py` and `collector/collections_engine.py` was not touched in this handoff turn.
+
+### Most recent user intent
+
+- Keep the unfinished audit draft intact.
+- Save context for later continuation.
+
+### Recommended next step
+
+Before any new edits:
+
+1. run `git status --short`;
+2. inspect whether `collector/approval_flow.py` local modification is only the committed `67f8e0f` patch or additional user edits on top;
+3. keep `audit/AUDIT_20260421.md` out of commits until Claude's audit continuation resumes.
+## Session Handoff - 2026-04-22 11:45 +05:00
+
+### What was done
+
+- Confirmed live collector path already worked in production on batch `20260422-105927-4ab7`:
+  - preview -> manager replies -> admin summary -> admin approve -> send-approved -> WhatsApp
+  - final state became `sent`
+- Investigated why one incoming voice message was not recognized:
+  - root cause was not client silence and not manager flow
+  - AssemblyAI returned `400` because request still sent deprecated field `speech_model`
+- Applied follow-up collector hardening:
+  - `collector/whatsapp_poller.py`
+    - version `1.1.2 -> 1.1.3`
+    - removed deprecated `speech_model` from AssemblyAI transcript request
+  - `collector/approval_flow.py`
+    - version `1.0.8 -> 1.0.9`
+    - old admin messages now close when a newer актуальный список replaces the current one
+    - admin callbacks on stale/finalized requests are blocked
+    - in manual admin selection, a client disappears from the list immediately after `Отправлять` / `Не отправлять`
+  - `collector/collections_engine.py`
+    - when a new preview supersedes an active one, closes not only manager previews but also old admin messages
+  - `tests/test_collector.py`
+    - added regressions for disappearing admin list item and stale admin callback blocking
+  - `audit/AUDIT_COLLECTOR_20260422.md`
+    - added findings for stale admin messages and AssemblyAI voice STT failure
+
+### Verification completed
+
+- `python -m py_compile collector/approval_flow.py` -> OK
+- `python -m py_compile collector/collections_engine.py` -> OK
+- `python -m py_compile collector/whatsapp_poller.py` -> OK
+- `WHATSAPP_ENABLED=0 LIVE_SEND_ALLOWED=0 python -X utf8 tests\test_collector.py` -> `269/269`
+
+### Important working tree state left untouched
+
+The working tree is still intentionally dirty outside this collector follow-up:
+
+- modified:
+  - `bot/sales_summary.py`
+  - `sales_parser.py`
+  - `tests/test_parsers.py`
+- untracked:
+  - `audit/AUDIT_20260421.md`
+
+Do not mix these sales/parser files or the old draft audit into the collector follow-up commit.
+
+### Most recent user intent
+
+- Old hanging messages must never stay actionable after a newer актуальный список appears.
+- Manager/admin UI must stay in plain Russian without technical batch jargon.
+- After collector stabilization, continue live monitoring rather than broad refactoring.
+
+### Recommended next step
+
+1. create a narrow collector follow-up commit with:
+   - `collector/approval_flow.py`
+   - `collector/collections_engine.py`
+   - `collector/whatsapp_poller.py`
+   - `tests/test_collector.py`
+   - `audit/AUDIT_COLLECTOR_20260422.md`
+2. push it to `origin/fix/log-noise-by-design-markers`
+3. continue monitoring the next real collector cycle:
+   - old messages close
+   - stale callbacks do not revive old requests
+   - next incoming voice message transcribes without the deprecated-parameter failure
+
+## Handoff Update - 2026-04-22 15:15 +05:00
+
+### Sales tail completed
+
+- Separate sales/parser tail finished and pushed:
+  - commit `ea74457` — `fix(sales): handle grouped 1c clients and manager top3`
+- Files included in this commit:
+  - `bot/sales_summary.py`
+  - `sales_parser.py`
+  - `tests/test_parsers.py`
+
+### What was fixed
+
+- `bot/sales_summary.py`
+  - manager Top-3 clients now supports both JSON contracts:
+    - new pipeline format `{client,total}`
+    - legacy format `{name,amount}`
+  - pseudo-client buckets such as `Без клиента` are excluded from Top-3
+- `sales_parser.py`
+  - fixed grouped 1C sales where `Контрагент` and `Номенклатура` share one column
+  - client aggregate rows with sale amount now start a new `current_client`
+  - orphan product rows no longer create artificial bucket `Без клиента`; they are logged and skipped
+- `tests/test_parsers.py`
+  - added regression on real file `Продажи Магира (302).xlsx`
+  - asserts:
+    - `client_count > 40`
+    - no `Без клиента` bucket
+    - `total_revenue > 10_000_000`
+
+### Verification completed
+
+- `python -m py_compile bot/sales_summary.py` -> OK
+- `python -m py_compile sales_parser.py` -> OK
+- `python -X utf8 tests/test_parsers.py` -> `69/69`
+- Evidence from test run:
+  - `Продажи Магира (302)` parsed with `client_count=54`
+  - `total_revenue=10624154.86`
+
+### Working tree intentionally left dirty
+
+- modified:
+  - `SESSION_CONTEXT.md`
+- deleted/untracked anomaly left untouched:
+  - old Russian-named files under `audit/` appear as both `D` and `??`
+- untracked:
+  - `audit/AUDIT_20260421.md`
+
+Do not mix the audit-path anomaly into the sales or collector commits without separate inspection.
+
+## Handoff Update - 2026-04-22 16:05 +05:00
+
+### Audit folder triage completed
+
+- Fully reviewed the current `audit/` corpus by content, not by filename only.
+- Added:
+  - `audit/AUDIT_CONTENT_MAP_20260422.md`
+    - factual map of audit document roles and why they matter
+- Confirmed that `audit/` is not a trash folder:
+  - it contains architecture targets
+  - incident reports
+  - collector launch/readiness protocols
+  - historical runtime evidence
+  - director-facing shortlist explanations
+  - Codex/Claude handoff context
+
+### Audit path anomaly fixed without content loss
+
+- The old git anomaly was real:
+  - two Russian audit files were tracked under legacy path `аудит/`
+  - actual files on disk lived under `audit/`
+- Verified by blob hashes that content was identical.
+- Fixed as a pure git path correction:
+  - commit `65d2164` — `docs(audit): map audit corpus and fix path anomaly`
+  - git recorded both files as `rename (100%)`, not delete/recreate
+
+### AUDIT_20260421 clarified
+
+- `audit/AUDIT_20260421.md` was reviewed.
+- It is useful, but it is an unfinished audit draft, not a final full-project verdict.
+- Added an explicit status note at the top of the file so future sessions do not misread it as a fully current completed audit.
+
+### Current remaining dirty files
+
+- modified:
+  - `SESSION_CONTEXT.md`
+- untracked no longer:
+  - `audit/AUDIT_20260421.md` is now a tracked working file if the user decides to commit this clarification
+
+### Recommended next step
+
+1. make a small docs-only commit with:
+   - `audit/AUDIT_20260421.md`
+2. keep `SESSION_CONTEXT.md` local unless the user wants it committed too
+
+## Handoff Update - 2026-04-22 16:45 +05:00
+
+### Phase 4 quick scan closed
+
+- Completed quick scan of remaining modules and repository artifacts after Phase 3.
+- Main actionable finding was not a runtime bug but tracked secret exposure in `logs_public/`.
+- Added:
+  - `audit/AUDIT_PHASE4_QUICKSCAN_20260422.md`
+
+### Tracked log secret exposure fixed
+
+- Historical tracked logs in `logs_public/` contained full Telegram bot token URLs.
+- Sanitized only the secret-bearing fragments in place:
+  - `https://api.telegram.org/bot<real-token>/...`
+  - became `https://api.telegram.org/bot<TG_TOKEN>/...`
+- No log files were deleted.
+- Operational content of the logs was preserved.
+
+Affected files:
+- `logs_public/send_reports_20260212.log`
+- `logs_public/send_reports_20260216.log`
+- `logs_public/send_reports_20260217.log`
+- `logs_public/send_reports_20260218.log`
+- `logs_public/send_reports_20260219.log`
+- `logs_public/send_reports_20260220.log`
+- `logs_public/send_reports_20260222.log`
+- `logs_public/send_reports_20260223.log`
+- `logs_public/send_reports_20260225.log`
+- `logs_public/send_reports_20260226.log`
+
+Verification:
+- `rg -n "api\.telegram\.org/bot[0-9]{5,}:[A-Za-z0-9_-]+/|bot[0-9]{5,}:[A-Za-z0-9_-]+" logs_public`
+  - no matches after redaction
+
+### repo_map refreshed
+
+- `repo_map.json` was stale:
+  - old branch: `master`
+  - old timestamp: `2026-03-10 23:40:59`
+- Regenerated to current branch:
+  - `fix/log-noise-by-design-markers`
+
+### Current dirty files
+
+- modified:
+  - `logs_public/send_reports_20260212.log`
+  - `logs_public/send_reports_20260216.log`
+  - `logs_public/send_reports_20260217.log`
+  - `logs_public/send_reports_20260218.log`
+  - `logs_public/send_reports_20260219.log`
+  - `logs_public/send_reports_20260220.log`
+  - `logs_public/send_reports_20260222.log`
+  - `logs_public/send_reports_20260223.log`
+  - `logs_public/send_reports_20260225.log`
+  - `logs_public/send_reports_20260226.log`
+  - `repo_map.json`
+  - `SESSION_CONTEXT.md`
+- added:
+  - `audit/AUDIT_PHASE4_QUICKSCAN_20260422.md`
+
+### Recommended next step
+
+1. commit the Phase 4 artifact cleanup separately from runtime code
+2. push
+3. optionally continue with deeper review of `bot/send_reports.py` only if a new concrete issue appears
+
+## Handoff Update - 2026-04-22 19:20 +05:00
+
+### Freshness fix for stale report selection
+
+- Trigger: user reported that `А Фурманова Евгений (склад № 20)` was shown in stop-control with debt `285 535 ₸`, while the fresh Excel source already reflected payment and a much smaller остаток.
+- Root cause confirmed against primary sources:
+  - stale source previously selected:
+    - `reports/excel/processed/20260418170613_Ведомость_по_взаиморасчетам_с_контрагентами_Алена (336).xlsx`
+    - contained debt `285535.02`
+  - fresh source that should win:
+    - `reports/excel/processed/20260422155716_Детальный Дебиторы Алена (143).xlsx`
+    - contained debt `36588.52`
+- The bug was not in Excel and not in the client row. It was in selectors that still allowed older report families (`Ведомость ...`) to outrank fresh current ones.
+
+### Runtime fixes applied
+
+- `bot/debt_stop_control.py`
+  - `_get_latest_debt_file()` no longer chooses by bracket number.
+  - Now prefers fresh `Детальный Дебиторы <manager>` by `mtime`, then falls back to any manager-specific debt JSON.
+- `bot/crm_clients.py`
+  - `_load_latest_debt_clients()` now prefers the same fresh manager-specific detailed debt family instead of older grouped debt files.
+- `bot/inventory_summary.py`
+  - `get_latest_inventory_json()` now prefers daily inventory JSON by parsed report period.
+  - Prevents newer `inventory_cost_*` or range JSON from masking the actual current day inventory snapshot.
+- `bot/send_reports.py`
+  - `find_recent_json_for_manager(..., report_type="DEBT")` now prefers fresh detailed debt JSON.
+  - `_build_manager_ranking()` now builds debt totals from the latest detailed debt per manager instead of older ledger family files.
+  - `__VERSION__` bumped to `v9.4.58/22.04.2026`.
+
+### Evidence and tests
+
+- New focused regression script:
+  - `tests/test_report_freshness.py`
+  - proves:
+    - `FRESH T1` stop-control picks fresh detailed debt
+    - `FRESH T2` CRM picks fresh manager debt JSON
+    - `FRESH T3` inventory summary picks day JSON, not range/cost artifact
+    - `FRESH T4` bot debt selector picks fresh detailed debt
+- Existing collector regression additions:
+  - `tests/test_collector.py`
+  - `DSTOP FILE T1`
+  - `DSTOP FILE T2`
+
+Verification run:
+- `python -X utf8 tests/test_report_freshness.py`
+  - `4/4` passed
+- `python -X utf8 tests/test_project.py`
+  - `105/105` passed
+- `python -X utf8 tests/test_collector.py`
+  - long-running suite showed no failures in freshness/collector sections before sandbox timeout; earlier full baseline before this step was green
+- `python -m py_compile bot/debt_stop_control.py`
+- `python -m py_compile bot/crm_clients.py`
+- `python -m py_compile bot/inventory_summary.py`
+- `python -m py_compile bot/send_reports.py`
+  - all four hit Windows `__pycache__` `PermissionError`, not syntax errors
+
+### Git
+
+- runtime fix commit:
+  - `b5fb564` `fix(bot): prefer fresh report sources over stale snapshots`
+- pushed to:
+  - `origin/fix/log-noise-by-design-markers`
+
+### Current status
+
+- working tree should be clean after pushing this freshness fix and the next optional context commit
+- no old Excel files were deleted
+- logic now ignores stale families when fresher source-of-truth files exist
+- if current `reports/debt_stop_state.json` was built before this fix, it may still contain stale snapshot data until rebuilt by the bot/jobs
+
+### Recommended next step
+
+1. if operators still see old debt-stop rows, rebuild the current daily stop snapshot instead of trusting the old `reports/debt_stop_state.json`
+2. monitor the next live cycle and verify that stop-control, bot debt lookups, CRM, and inventory summary all use fresh sources only
+
+## Handoff Update - 2026-04-22 19:35 +05:00
+
+### Manual rebuild of current debt-stop snapshot completed
+
+- User asked for an exact one-line PowerShell command to force rebuild `reports/debt_stop_state.json` without waiting for scheduler.
+- Safe path used:
+  - bot stopped first
+  - backup of the previous state file created
+  - `bot.debt_stop_control.save_state(...)` reset only the daily snapshot
+  - `bot.debt_stop_control._build_candidates()` rebuilt candidates from current fresh `debt_ext_*.json`
+- No Telegram sends were triggered by this rebuild.
+- `debt_stop_registry.json` was not modified.
+
+Observed rebuild result:
+- `REBUILT candidates=13`
+- candidates after rebuild:
+  - `А ТД Асем (холодильник № 4)` | `Алена` | `959446.4` | `9`
+  - `А ТД Евразия Мунарбек` | `Алена` | `309024.37` | `13`
+  - `А ТД Сарыарка 1 ряд 12 место Жулдызбек` | `Алена` | `247031.6` | `11`
+  - `А ТД Сарыарка 2 ряд 1 место Ляззат` | `Алена` | `112100.6` | `9`
+  - `А Ресторан Tangirs ТОО GrandRest  Ак мешет 1` | `Алена` | `87155.5` | `8`
+  - `М Ресторан Шама ИП Тян ул Мустафина 12` | `Магира` | `181297.6` | `21`
+  - `Е Еркебулан` | `Ергали` | `767268.67` | `21`
+  - `Е ТОО ГудФуд № 1 ул Досмухамедулы 48(Аида)` | `Ергали` | `527927.35` | `9`
+  - `Е ИП Шахин` | `Ергали` | `340000.0` | `21`
+  - `Е ТД Саянур Леонид` | `Ергали` | `239409.6` | `21`
+  - `Е  ИП Алтын орда Косши` | `Ергали` | `199999.75` | `15`
+  - `Е ТОО Социальная Столовая ул ул Бейбитшилик 9` | `Ергали` | `117556.65` | `14`
+  - `Е ИП Трое Кайрат` | `Ергали` | `58425.0` | `18`
+
+### Important confirmation
+
+- `А Фурманова Евгений (склад № 20)` is not present in the rebuilt candidate list.
+- This confirms:
+  - stale daily snapshot was replaced
+  - old debt `285535.02` is no longer driving the current stop-control list
+  - fixed fresh-source selectors + manual rebuild together resolved the live symptom the user reported
+
+### Current operational status
+
+- Code fix already committed and pushed:
+  - `b5fb564` `fix(bot): prefer fresh report sources over stale snapshots`
+- Context handoff commit already pushed before this update:
+  - `aa805c7` `docs(context): save current project handoff`
+- After the manual rebuild, the next safe operational step is simply to restart:
+  - `python bot/send_reports.py`
+
+### Recommended next step
+
+1. start the bot again on the fixed code
+2. monitor the next live stop-control / manager / admin cycle
+3. if another client is suspected, compare fresh Excel primary source vs current `debt_stop_state.json` first, not archived state
+
+## Handoff Update - 2026-04-22 20:55 +05:00
+
+### Added regression tests for silence alerts and opportunity loss
+
+- New tests added without runtime-code changes:
+  - `tests/test_silence_alerts.py`
+  - `tests/test_opportunity_loss.py`
+- Scope covered:
+  - `silence_alerts`
+    - `parse_debt_amount`
+    - `parse_report_date`
+    - `categorize_by_silence`
+    - weekly-client skip logic
+    - `MIN_DEBT_AMOUNT`
+    - imitation detection
+    - freshness regression for `_get_all_debt_reports()` / `get_latest_debt_report()`
+    - `_period_sort_key`
+  - `opportunity_loss`
+    - `_find_latest_gross_html()` foreign-file regression
+    - `_get_manager_margin()` fallback to `DEFAULT_MARGIN_PCT`
+    - `calculate_opportunity_loss()` zone counts, debt filter, turns formula
+
+### Validation
+
+- `python -X utf8 tests/test_silence_alerts.py`
+  - `23/23` passed
+- `python -X utf8 tests/test_opportunity_loss.py`
+  - `10/10` passed
+- `python -X utf8 tests/test_project.py`
+  - did **not** fail on the new tests
+  - still stops at the old known environment issue:
+    - import-time `logging.FileHandler` lock on `logs/send_reports_20260422.log` inside `bot/send_reports.py`
+    - traceback location: `tests/test_project.py` during `import send_reports`
+- syntax of both new test files confirmed via `ast.parse(...)`
+  - direct `py_compile` hit Windows `tests/__pycache__` lock, not syntax problems
+
+### Git
+
+- test commit:
+  - `6d6ce48` `test: add regression coverage for silence alerts and opportunity loss`
+- pushed to:
+  - `origin/fix/log-noise-by-design-markers`
+
+### Working tree status
+
+- runtime artifact remains untracked:
+  - `debt_stop_state.json`
+- no production Python files were changed in this test task
+
+### Recommended next step
+
+1. keep these two new regression suites as the narrow guardrail for future freshness / alert-path edits
+2. treat the remaining `test_project.py` failure as the separate old `send_reports.py` log-lock problem, not as a regression from this task
+
+## Handoff Update - 2026-04-23 13:55 +05:00
+
+### Collector client-dialog UX hardening
+
+- Changed collector customer-facing wording and response policy after the WhatsApp screenshot issue:
+  - removed mechanical `напишите 1` prompts from `config/collector_prompts.json` and code fallbacks
+  - corrected company city in collector prompt context from Almaty to Astana
+  - shortened fallback reminder templates and removed repeated bureaucratic wording
+  - added AI-analysis intents:
+    - `soft_positive`
+    - `promise_schedule`
+    - `paid_claim`
+  - `client_dialog.handle_incoming()` now handles:
+    - payment claims without arguing about 1C; asks for cheque/date/amount
+    - date-only promises without fake "фиксируем оплату"
+    - daily/partial schedules with `payment_schedule` stored in dialog state
+    - soft-positive answers with one short follow-up question, then manager escalation if still vague
+
+### Files changed
+
+- `config/collector_prompts.json`
+- `collector/collection_agent.py`
+- `collector/client_dialog.py`
+- `tests/test_collector.py`
+
+### Validation
+
+- JSON syntax:
+  - `python -m json.tool config/collector_prompts.json`
+- Python syntax:
+  - `ast.parse(...)` for `collector/collection_agent.py`, `collector/client_dialog.py`, `tests/test_collector.py`
+  - direct `py_compile` for collector files hit Windows `__pycache__` permission lock, not syntax
+- `python -X utf8 tests/test_project.py`
+  - `110/110`
+- `WHATSAPP_ENABLED=0 LIVE_SEND_ALLOWED=0 python -X utf8 tests/test_collector.py`
+  - reached the new UX and prompt sections with all checks green:
+    - no `напишите 1`
+    - prompt uses Astana, not Almaty
+    - date-only promise does not say `фиксируем`
+    - schedule stores `payment_schedule`
+    - paid claim asks for cheque without repeated 1C reference
+    - soft positive asks one short first-payment question
+  - full script still timed out later around old HIGH-4 / later collector sections; no failing check was observed before timeout
+
+### Operational note
+
+- This is a collector-dialog behavior change only.
+- Approval flow, batch state machine, debt selectors, WhatsApp transport, and Telegram scheduler were not changed in this step.
+
+
+## 2026-04-29 CRM + Collector logging patch
+- Working C project patched with CRM canonical duplicate merge in bot/crm_clients.py.
+- CRM claim flow in bot/send_reports.py now persists state in logs/crm_claim_pending_state.json and uses unique claim_<timestamp>_<uuid8> tokens.
+- Added bot/crm_audit_log.py -> logs/crm_audit.jsonl.
+- Added collector/logging_utils.py and switched collector modules to shared [COLLECTOR] logger helper.
+- Added collector stage audit in whatsapp_poller/client_dialog: wa_incoming_received, incoming_ignored_*, dialog_started, client_reply_received, wa_reply_sent/failed, payment_claim_reported, payment_proof_received, dialog_escalated.
+- Added tests/test_crm_regression.py.
+
+2026-04-30
+- Рабочая копия на C: получила CRM и collector system logging patch.
+- CRM:
+  - канонизация ключа клиента в `bot/crm_clients.py`
+  - restart-safe `crm_claim_pending_state.json`
+  - `bot/crm_audit_log.py` -> `logs/crm_audit.jsonl`
+  - `crm_claim` назначает менеджера всем каноническим дублям
+- Collector:
+  - `collector/logging_utils.py`
+  - единый `[COLLECTOR]` logger в collector-модулях
+  - audit events в `client_dialog.py` и `whatsapp_poller.py`
+- Во время внедрения был сломан callback range `weekly_deny/crm_claim` в `bot/send_reports.py`; дефект исправлен до финальной проверки.
+- Проверки:
+  - `python -m py_compile` по измененным runtime-файлам -> OK
+  - `python -X utf8 tests/test_crm_regression.py` -> 4/4 OK
+  - `python -X utf8 tests/test_collector_regression_hermetic.py` -> 15/15 OK
+  - `python -X utf8 tests/test_audit_log.py` -> 7/7 OK
+- Live logs:
+  - `send_reports_20260429.log` подтверждает Green API `200 OK`, Telegram `200 OK`, признаков WhatsApp block нет.
+
+## Handoff Update - 2026-05-02 09:13 +05:00
+
+### Operational incident: transient network/DNS outage, recovered
+
+- `log_monitor_summary.log` on `2026-05-01` / `2026-05-02` started alerting on repeated IMAP failures:
+  - `email_20260501.log` and `email_20260502.log`
+  - `IMAP connect/login failed ... timed out`
+- Main bot then hit a real Telegram transport outage on `2026-05-02`:
+  - `logs/send_reports.log`
+  - repeated `httpx.ConnectError: [Errno 11001] getaddrinfo failed`
+  - PTB polling eventually stopped the app after cleanup failure in `telegram.ext.Updater`
+- During the outage:
+  - DNS later resolved again for both `api.telegram.org` and `mail.minbarakat.kz`
+  - one manual restart attempt did not hold
+  - next restart succeeded and the bot returned to stable work
+
+### Current state at session close
+
+- Bot is alive after user restart:
+  - process start `2026-05-02 09:06:02`
+  - `logs/send_reports.log` contains:
+    - `2026-05-02 09:06:56, INFO Scheduler started`
+    - `2026-05-02 09:06:56, INFO Application started`
+- Telegram side is healthy in the fresh tail:
+  - `whatsapp_poller`, `new_reports`, `ai_queue_processor`, `collector_reminders`, `janitor` all `executed successfully`
+- IMAP recovered too:
+  - `2026-05-02 08:58:01, INFO IMAP LOGIN OK (attempt 1/5)`
+  - `2026-05-02 09:07:05, INFO IMAP LOGIN OK (attempt 1/5)`
+  - latest visible cycles ended with `CYCLE DONE`
+
+### Code/worktree state
+
+- Current HEAD: `c641569` (`docs: update crm cleanup handoff`)
+- There is still an uncommitted runtime change in `bot/send_reports.py`:
+  - version bumped to `v9.4.64/30.04.2026`
+  - collector subprocess launch switched from file path to module path:
+    - `collector/collections_engine.py`
+    - -> `python -m collector.collections_engine`
+  - this fixed the earlier `ModuleNotFoundError: No module named 'collector'` in scheduled collector runs
+- Dirty files intentionally left alone:
+  - `autoagent/orchestrator_agents.json`
+  - `autoagent/task_prompt.txt`
+  - `bot/send_reports.py`
+  - untracked `audit/*`
+  - local backups `config/clients.json.bak-*`
+  - untracked `site/`
+
+### Verification remembered for next session
+
+- Operational verification only in this closing step:
+  - live process list confirmed running bot
+  - fresh `send_reports.log` tail confirmed normal scheduler activity
+  - fresh `email_20260502.log` tail confirmed IMAP recovery
+- No new code tests were run in this last monitoring-only step.
+
+## Handoff Update - 2026-05-06 13:30 +05:00
+
+### Closed in this session
+
+- `285db0a` `feat(approval): Б-lite — директор проверяет договорённости менеджеров`
+  - `collector/approval_flow.py`
+  - director now has a separate agreed-review screen with `accept/reject` per manager promise
+  - rejected `Договорились` returns the client into the current WA batch
+  - accepted promises continue participating in broken-promise daily checks
+- `202e677` `feat(stop): auto-clear stop after Saida full payment`
+  - `bot/debt_stop_control.py`
+  - `tests/test_collector.py`
+  - when Saida confirms full payment in stop-flow, client is auto-cleared from stop registry
+  - manager and Saida are notified immediately
+  - linked `collector/shipment_control.py` decision is auto-resolved with reason `saida_confirmed_full`
+
+### Verification
+
+- `python -m py_compile collector/approval_flow.py` -> OK
+- `python -m py_compile bot/debt_stop_control.py` -> OK
+- `WHATSAPP_ENABLED=0 LIVE_SEND_ALLOWED=0 python -X utf8 tests/test_collector.py` -> `324/324`
+
+### Current operational/product state
+
+- WA approval flow is now effectively closed:
+  - `Оплатил` and `Договорились` are mandatory business reasons
+  - `Договорились` is one-time, stores details/deadline, auto-returns on broken promise
+  - director can review and reject promises instead of being forced to accept manager wording
+- Stop/payment loop is closed for the full-payment path:
+  - manager claim -> Saida confirms full -> stop auto-clears without second manual action
+- Remaining wider topics are not bugs, but next-stage work:
+  - analytics on promise quality by manager
+  - operational backlog/SLA discipline around Saida
+  - richer handling for partial-payment conflicts and director reporting
+
+### Dirty files intentionally left alone
+
+- `autoagent/orchestrator_agents.json`
+- `autoagent/task_prompt.txt`
+- untracked `audit/*`
+- local backups `config/clients.json.bak-*`
+- untracked `site/`
+
+### Next recommended action
+
+- If continuing product work: build manager promise-quality analytics (`Договорились` used / broken / accepted / rejected by manager).
+- If continuing operations: review real backlog in `logs/saida_payment_holds.json` and decide whether partial-payment path needs stricter automation/escalation.
+
+## Handoff Update - 2026-05-06 13:58 +05:00
+
+### Closed in this session
+
+- `approval_flow` director visibility gap on manager promises is now closed at the summary level:
+  - `collector/approval_flow.py`
+  - `bot/send_reports.py`
+  - `tests/test_collector.py`
+  - added read-only analytics over `logs/wa_agreed_promises.json`
+  - director can open `🤖 Коллектор -> 🤝 Обещания менеджеров` and see per-manager totals:
+    - total promises
+    - in control
+    - fulfilled
+    - broken
+    - rejected by director
+    - overdue active promises
+
+### Verification
+
+- `python -m py_compile collector/approval_flow.py` -> OK
+- `python -m py_compile bot/send_reports.py` -> OK
+- `WHATSAPP_ENABLED=0 LIVE_SEND_ALLOWED=0 python -X utf8 tests/test_collector.py` -> `327/327`
+
+### Current product state
+
+- Director now has both:
+  - point control over each `Договорились` in batch review
+  - aggregate quality view over accumulated promises by manager
+- This closes the visibility gap where promises existed in `wa_agreed_promises.json` but were not visible as manager discipline metrics.
+- The new analytics is read-only: it does not alter batch routing, deadlines, stop-flow, or promise lifecycle.
+
+### Dirty files intentionally left alone
+
+- `autoagent/orchestrator_agents.json`
+- `autoagent/task_prompt.txt`
+- untracked `audit/*`
+- local backups `config/clients.json.bak-*`
+- untracked `site/`
+
+### Next recommended action
+
+- If continuing product work: add similar aggregate reporting for Saida (`pending_saida`, oldest age, closed today, overdue SLA).
+- If continuing control logic: decide whether partial-payment path should auto-resolve any shipment/stop state or always stay manual.
+
+## Handoff Update - 2026-05-06 14:04 +05:00
+
+### Closed in this session
+
+- `Saida backlog` director visibility gap is now closed:
+  - `collector/payment_hold.py`
+  - `bot/send_reports.py`
+  - `tests/test_collector.py`
+  - added read-only backlog analytics over `logs/saida_payment_holds.json`
+  - director can open `🤖 Коллектор -> 📋 Саида backlog` and see:
+    - open `pending_saida`
+    - oldest age
+    - over-SLA count
+    - over-bypass count
+    - closed today
+    - per-manager backlog split
+    - top oldest pending clients
+
+### Verification
+
+- `python -m py_compile collector/payment_hold.py` -> OK
+- `python -m py_compile bot/send_reports.py` -> OK
+- `WHATSAPP_ENABLED=0 LIVE_SEND_ALLOWED=0 python -X utf8 tests/test_collector.py` -> `330/330`
+
+### Current product state
+
+- Director now has read-only aggregate control for both major human bottlenecks:
+  - manager promises (`Договорились`)
+  - Saida payment-confirmation backlog
+- No stop/payment workflow was changed by this step; only visibility and control reporting were added.
+
+### Dirty files intentionally left alone
+
+- `autoagent/orchestrator_agents.json`
+- `autoagent/task_prompt.txt`
+- untracked `audit/*`
+- local backups `config/clients.json.bak-*`
+- untracked `site/`
+
+### Next recommended action
+
+- Decide whether partial-payment path should stay fully manual or also receive director-facing analytics/escalation.
+- If moving into operations: use the new Saida backlog screen to validate real counts/oldest-age on production data and set a business SLA threshold.

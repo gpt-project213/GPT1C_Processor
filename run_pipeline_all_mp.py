@@ -1,10 +1,14 @@
-# run_pipeline_all_mp.py · v1.5.5 · Asia/Almaty · 2026-04-19
+# run_pipeline_all_mp.py · v1.5.7 · Asia/Almaty · 2026-04-22
 # Оркестратор всех типов отчётов: DEBT / SALES / GROSS / INVENTORY / EXPENSE
 # Fix P-002: datetime.now() → datetime.now(ZoneInfo(...)) в _move_to_processed (naive datetime)
 # Fix P-001: исправлен импорт expenses_parser — реальное имя функции вместо build_report
 #            импорт: parse_expenses_file (возвращает Path к HTML); вызов с явным out_root=PRJ
 # Fix #PIPE-1: добавлен тип EXPENSE (RE_EXPENSE_NAME, _classify_by_content, process_expenses_file)
 # Fix #PIPE-1: else-ветка в _process_one теперь SKIP вместо fallback на DEBT
+# Fix F-P3-001: docstring _route_file обновлён — fallback SKIP, не DEBT
+# Fix F-P3-002: DEBT с пустым outs не уезжает в processed — файл возвращается в очередь для retry
+# Fix F-P3-003: аннотация _process_one → Tuple[str, Optional[List[Path]]]
+# Fix F-P3-004: удалён неиспользуемый import queue as pyqueue
 # - Берёт файлы из reports/queue
 # - Claim через переименование *.xlsx -> *.xlsx.work (исключает двойной захват)
 # - Копия в reports/excel/active для устойчивой обработки
@@ -23,7 +27,6 @@ import sys
 import time
 import json
 import shutil
-import queue as pyqueue
 import subprocess
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -245,7 +248,8 @@ def _classify_by_content(path: Path) -> Optional[str]:
 
 def _route_file(path: Path) -> str:
     """
-    Классификация: по имени, затем по содержимому, иначе DEBT по умолчанию.
+    Классификация: по имени, затем по содержимому, иначе SKIP.
+    Fallback на DEBT убран в Fix #PIPE-1 — неопознанный файл не уходит в DEBT.
     """
     typ = _classify_by_name(path.name)
     if typ:
@@ -291,7 +295,7 @@ def process_debt_file(work: Path) -> List[Path]:
         if outs:
             _log(f"[DEBT] ok {work.name}: {', '.join(p.name for p in outs)}")
     except Exception as e:
-        _log(f"[DEBT] fail {work.name}: {e}", err=False)
+        _log(f"[DEBT] fail {work.name}: {e}", err=True)
     finally:
         _cleanup_active(a)
     return outs
@@ -313,7 +317,7 @@ def process_sales_file(work: Path) -> List[Path]:
             outs.extend(new)
             _log(f"[SALES] ok {work.name}: {', '.join(p.name for p in new)}")
     except Exception as e:
-        _log(f"[SALES] fail {work.name}: {e}", err=False)
+        _log(f"[SALES] fail {work.name}: {e}", err=True)
     finally:
         _cleanup_active(a)
     return outs
@@ -341,7 +345,7 @@ def process_gross_file(work: Path) -> List[Path]:
         else:
             _log(f"[GROSS] skip (no outputs): {work.name}")
     except Exception as e:
-        _log(f"[GROSS] fail {work.name}: {e}", err=False)
+        _log(f"[GROSS] fail {work.name}: {e}", err=True)
     finally:
         _cleanup_active(a)
     return outs
@@ -365,7 +369,7 @@ def process_inventory_file(work: Path) -> List[Path]:
         else:
             _log(f"[INVENTORY] skip (no outputs): {work.name}")
     except Exception as e:
-        _log(f"[INVENTORY] fail {work.name}: {e}", err=False)
+        _log(f"[INVENTORY] fail {work.name}: {e}", err=True)
     finally:
         _cleanup_active(a)
     return outs
@@ -389,7 +393,7 @@ def process_expenses_file(work: Path) -> List[Path]:  # Fix #PIPE-1
         else:
             _log(f"[EXPENSE] skip (no outputs): {work.name}")
     except Exception as e:
-        _log(f"[EXPENSE] fail {work.name}: {e}", err=False)
+        _log(f"[EXPENSE] fail {work.name}: {e}", err=True)
     finally:
         _cleanup_active(a)
     return outs
@@ -408,10 +412,15 @@ def _iter_queue() -> List[Path]:
     candidates = [p for p in QUEUE_DIR.glob("*.xlsx") if not p.name.endswith(".work")]
     return sorted(candidates, key=_mtime)
 
-def _process_one(src: Path) -> Tuple[str, List[Path]]:
+def _process_one(src: Path) -> Tuple[str, Optional[List[Path]]]:
     """
     Обработка одного файла: claim -> route -> process -> move to processed
-    Возвращает (тип, список output-путей)
+    Возвращает (тип, список output-путей | None при исключении).
+
+    Fix F-P3-002: для DEBT пустой outs трактуется как failure (builder
+    недоступен или упал) — файл НЕ уезжает в processed, а возвращается
+    в очередь для retry. Для SALES/GROSS/INVENTORY/EXPENSE пустой outs
+    остаётся нормой («тихий skip»).
     """
     work = _claim(src)
     if work is None:
@@ -433,7 +442,15 @@ def _process_one(src: Path) -> Tuple[str, List[Path]]:
         else:
             _log(f"[SKIP] {src.name} (route={routed_to})")
             outs = []
-        moved = _move_to_processed(work, src.name)
+        # Fix F-P3-002: DEBT с пустым outs — не терять файл, оставить в очереди
+        if routed_to == "DEBT" and not outs:
+            _log(
+                f"[DEBT] FAIL {src.name}: builder returned empty output — "
+                f"keeping file in queue for retry (not moved to processed)",
+                err=True,
+            )
+        else:
+            moved = _move_to_processed(work, src.name)
         return (routed_to, outs)
     except Exception as e:
         _log(f"[PROCESS] FAIL {src.name}: {e}", err=True)

@@ -4,7 +4,38 @@
 collections/collections_engine.py
 Главный оркестратор AI-Коллектора долгов.
 
-Версия: 1.4.0 (2026-04-12)
+Версия: 1.5.0 (2026-04-30)
+
+v1.4.8 (2026-04-29): added debt freshness guardrails. Preview now carries
+  debt snapshot date/age warnings, while live run and send-approved can be
+  blocked when debt files are too old to trust.
+
+v1.4.7 (2026-04-29): старые хвостовые stop-клиенты отделены от живых
+  shipment-stop кейсов: если клиент долго висит в долге, новых отгрузок нет,
+  используется отдельный msg_type без фразы про ограничение отгрузок.
+
+v1.4.6 (2026-04-29): send-approved теперь перед реальной WhatsApp-рассылкой
+  пересверяет admin-approved batch по свежей дебиторке, обновляет суммы/дни/телефоны
+  и пропускает устаревших клиентов вместо отправки по вчерашнему snapshot.
+
+v1.4.5 (2026-04-28): no-movement Saida-first check — debit==0+credit==0 →
+  ask Saida before WhatsApp; new msg_types no_movement_reminder и
+  promise_broken_reminder; admin approves after Saida confirms no payment.
+
+v1.4.4 (2026-04-26): (previous)
+
+v1.4.3 (2026-04-22): тестовый режим `COLLECTOR_TEST_MODE=1` больше не пишет в
+  боевой `logs/collector_YYYYMMDD.log`; это убирает ложные тревоги log_monitor
+  от тестов коллектора.
+
+v1.4.2 (2026-04-22): новый preview-батч вытесняет предыдущий активный как
+  неактуальный: старые manager-preview закрываются, а новый батч помечает, какой
+  именно батч он заменил.
+
+v1.4.1 (2026-04-22): в run_approval_preview после send_manager_previews
+  вызывается send_admin_preview_notice — админ получает уведомление о
+  создании батча сразу, не дожидаясь ответов менеджеров (фикс кейса,
+  когда менеджеры игнорируют превью и админ никогда ничего не получает).
 
 CLI:
   python -m collector.collections_engine --dry-run
@@ -38,10 +69,12 @@ if hasattr(sys.stdout, "buffer"):
 if hasattr(sys.stderr, "buffer"):
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from dotenv import load_dotenv
 from zoneinfo import ZoneInfo
+from collector.logging_utils import get_collector_logger
+from bot.logging_utils import configure_runtime_logging, get_log_retention_days
 
 # Добавляем корень проекта в sys.path для standalone запуска
 _ROOT = Path(__file__).resolve().parent.parent
@@ -53,18 +86,19 @@ load_dotenv(dotenv_path=_ROOT / ".env", encoding="utf-8-sig", override=False)
 TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 LOGS_DIR = _ROOT / "logs"
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
+_TEST_MODE = os.getenv("COLLECTOR_TEST_MODE", "0").lower() in ("1", "true", "yes")
 
 # Настройка логирования
-_log_file = LOGS_DIR / f"collector_{datetime.now(tz=TZ).strftime('%Y%m%d')}.log"
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s, %(levelname)s %(message)s",
-    handlers=[
-        logging.FileHandler(_log_file, encoding="utf-8"),
-        logging.StreamHandler(sys.stdout),
-    ],
+configure_runtime_logging(
+    logs_dir=LOGS_DIR,
+    tz=TZ,
+    app_name="collector",
+    retention_days=get_log_retention_days(),
+    error_alert_level=logging.ERROR,
+    alert_cooldown_sec=int(os.getenv("LOG_ALERT_COOLDOWN_SEC", "300")),
+    test_mode=_TEST_MODE,
 )
-logger = logging.getLogger(__name__)
+logger = get_collector_logger(__name__)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 
@@ -79,6 +113,7 @@ from collector.debt_monitor import (
 from collector.collections_db import (
     _DEBT_DATE_PREFIX,
     already_contacted_today,
+    get_client_state,
     get_debt_days_since_first_seen,
     get_pending_promises,
     load_state,
@@ -226,6 +261,142 @@ def _fmt_amount(n: float) -> str:
     return f"{n:,.0f}".replace(",", " ")
 
 
+def _fmt_date_ru(value: str) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return "—"
+    for fmt in ("%Y-%m-%d", "%d.%m.%Y"):
+        try:
+            return datetime.strptime(raw[:10], fmt).strftime("%d.%m.%Y")
+        except ValueError:
+            continue
+    return raw
+
+
+def _summarize_debt_freshness(
+    debt_data: Dict[str, Any],
+    manager_names: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    meta = debt_data.get("_freshness") if isinstance(debt_data, dict) else {}
+    if not isinstance(meta, dict):
+        meta = {}
+    managers_meta = meta.get("managers") if isinstance(meta.get("managers"), dict) else {}
+    if not managers_meta:
+        return {
+            "warn_threshold_days": int(meta.get("warn_threshold_days", 1) or 1),
+            "block_threshold_days": int(meta.get("block_threshold_days", 2) or 2),
+            "snapshot_label_ru": "—",
+            "max_age_days": None,
+            "warning_managers": [],
+            "stale_managers": [],
+            "has_warning": False,
+            "is_stale": False,
+            "managers": {},
+            "block_reason": "",
+        }
+    wanted = {str(name or "").strip() for name in (manager_names or []) if str(name or "").strip()}
+
+    selected: Dict[str, Any] = {}
+    if wanted:
+        for manager_name in wanted:
+            entry = managers_meta.get(manager_name)
+            if isinstance(entry, dict):
+                selected[manager_name] = dict(entry)
+            else:
+                selected[manager_name] = {
+                    "period_max": "",
+                    "period_max_ru": "—",
+                    "age_days": None,
+                    "warn": True,
+                    "stale": True,
+                    "file": "",
+                    "missing": True,
+                }
+    else:
+        selected = {
+            manager_name: dict(entry)
+            for manager_name, entry in managers_meta.items()
+            if isinstance(entry, dict)
+        }
+
+    warn_threshold = int(meta.get("warn_threshold_days", 1) or 1)
+    block_threshold = int(meta.get("block_threshold_days", max(2, warn_threshold)) or max(2, warn_threshold))
+    warning_managers: List[str] = []
+    stale_managers: List[str] = []
+    date_values: List[str] = []
+    max_age_days: Optional[int] = None
+
+    for manager_name, entry in selected.items():
+        age_days = entry.get("age_days")
+        if isinstance(age_days, int):
+            max_age_days = age_days if max_age_days is None else max(max_age_days, age_days)
+        period_max = str(entry.get("period_max") or "").strip()
+        if period_max:
+            date_values.append(period_max)
+        if entry.get("warn"):
+            warning_managers.append(manager_name)
+        if entry.get("stale"):
+            stale_managers.append(manager_name)
+
+    date_values = sorted(set(date_values))
+    if not date_values:
+        snapshot_label_ru = "—"
+    elif len(date_values) == 1:
+        snapshot_label_ru = _fmt_date_ru(date_values[0])
+    else:
+        snapshot_label_ru = f"{_fmt_date_ru(date_values[0])} → {_fmt_date_ru(date_values[-1])}"
+
+    summary = {
+        "warn_threshold_days": warn_threshold,
+        "block_threshold_days": block_threshold,
+        "snapshot_label_ru": snapshot_label_ru,
+        "max_age_days": max_age_days,
+        "warning_managers": warning_managers,
+        "stale_managers": stale_managers,
+        "has_warning": bool(warning_managers),
+        "is_stale": bool(stale_managers),
+        "managers": selected,
+    }
+    if stale_managers:
+        details = []
+        for manager_name in stale_managers[:4]:
+            entry = selected.get(manager_name) or {}
+            age = entry.get("age_days")
+            period_ru = entry.get("period_max_ru") or "—"
+            age_text = "дата не определена" if age is None else f"{age} дн."
+            details.append(f"{manager_name}: {period_ru} ({age_text})")
+        summary["block_reason"] = (
+            f"устаревшие debt-данные по менеджерам: {'; '.join(details)}. "
+            f"Порог блокировки: {block_threshold} дн."
+        )
+    else:
+        summary["block_reason"] = ""
+    return summary
+
+
+def _freshness_notice_lines(summary: Dict[str, Any]) -> List[str]:
+    if not summary:
+        return []
+    lines = [f"🗓 Данные дебиторки: <b>{summary.get('snapshot_label_ru') or '—'}</b>"]
+    max_age_days = summary.get("max_age_days")
+    if isinstance(max_age_days, int):
+        lines.append(f"⌛ Возраст данных: <b>{max_age_days} дн.</b>")
+    if summary.get("has_warning"):
+        warn_managers = summary.get("warning_managers") or []
+        suffix = f" и ещё {len(warn_managers) - 5}" if len(warn_managers) > 5 else ""
+        lines.append(f"⚠️ Старые данные: {', '.join(warn_managers[:5])}{suffix}")
+    return lines
+
+
+def _is_legacy_tail_client(client: Dict[str, Any]) -> bool:
+    """True for old residual debt clients who no longer trade with us."""
+    amount = float(client.get("amount", 0) or 0)
+    days = int(client.get("days", 0) or 0)
+    debit = float(client.get("debit", 0) or 0)
+    opening = float(client.get("opening", 0) or 0)
+    return amount > 0 and opening > 0 and debit == 0 and days >= 20
+
+
 def _collector_candidate_decision(
     client: Dict[str, Any],
     contact: Optional[Dict[str, Any]],
@@ -264,6 +435,19 @@ def _collector_candidate_decision(
         return {"action": "skip", "reason": "ручной запрет уведомления в stop-registry"}
 
     if stop_status in ("stopped", "auto_stopped"):
+        if _is_legacy_tail_client(client):
+            msg_type = "partial_tail_reminder" if credit > 0 else "legacy_tail_reminder"
+            detail = (
+                f"старый хвост: оплата {_fmt_amount(credit)} тг, остаток {_fmt_amount(amount)} тг"
+                if credit > 0 else
+                f"старый хвост без движения, остаток {_fmt_amount(amount)} тг"
+            )
+            return {
+                "action": "client_approval",
+                "msg_type": msg_type,
+                "reason": f"{stop_status}: {detail}",
+                "stop_status": stop_status,
+            }
         return {
             "action": "client_approval",
             "msg_type": "stoplist_reminder",
@@ -441,6 +625,7 @@ def daily_summary(processed: List[Dict], total_classified: int = 0, dry_run: boo
     escalated = [r for r in processed if r.get("escalated")]
     skipped = total_classified - total if total_classified > total else 0
 
+    wa_sent = [r for r in processed if r.get("wa_phone")]
     mode_label = "🔇 DRY-RUN (сообщения НЕ отправлялись)" if dry_run else "✅ LIVE"
     lines = [
         f"📊 <b>AI Коллектор — ежедневная сводка</b> {mode_label}",
@@ -450,6 +635,12 @@ def daily_summary(processed: List[Dict], total_classified: int = 0, dry_run: boo
         f"Пропущено фильтрами: {skipped}",
         f"Отправлено сообщений: {sent}",
     ]
+    if wa_sent:
+        lines.append(f"\n📲 <b>WhatsApp отправлен ({len(wa_sent)}):</b>")
+        for r in wa_sent:
+            _ph = r["wa_phone"]
+            _ph_show = _ph[:4] + "***" + _ph[-3:] if len(_ph) > 7 else _ph
+            lines.append(f"  • {r['name']} — {_ph_show} — {r.get('amount', 0):,.0f} ₸ / {r.get('days', 0)} дн.")
     if promised:
         lines.append(f"Обещали оплату: {len(promised)}")
         for r in promised[:5]:
@@ -558,6 +749,12 @@ async def _process_single(
             return result
 
     # Генерируем текст сообщения (только когда реально нужен)
+    _cstate = get_client_state(name)
+    _prev_promise = (
+        _cstate.get("promise_date")
+        if _cstate.get("promise_kept") is False
+        else None
+    )
     text = generate_message(
         client_name=display_name,
         debt_amount=amount,
@@ -567,6 +764,7 @@ async def _process_single(
         manager_name=manager_name,
         msg_type=msg_type,
         report_date=report_date,
+        previous_promise=_prev_promise,
     )
     logger.info("[%s] level=%d days=%d | текст: %s...", name, level, days, text[:60])
 
@@ -600,6 +798,23 @@ async def _process_single(
         if sent:
             update_after_contact(name, "whatsapp" if wa_ok else "telegram", level, text)
             result["sent"] = True
+            # Мгновенное уведомление admin о каждой WA-отправке
+            if wa_ok:
+                _phone_visible = phone[:4] + "***" + phone[-3:] if len(phone) > 7 else phone
+                result["wa_phone"] = phone
+                await notify_admin(
+                    f"✅ <b>WA отправлен</b>\n"
+                    f"👤 {display_name}\n"
+                    f"📞 {_phone_visible}\n"
+                    f"💰 {amount:,.0f} ₸ / {days} дн."
+                )
+                try:
+                    from collector.audit_log import audit as _audit
+                    _audit("wa_sent", name=name, amount=amount, days=days,
+                           phone_masked=_phone_visible, level=level,
+                           msg_type=msg_type, manager=manager_name, dry_run=dry_run)
+                except Exception:
+                    pass
             # Регистрируем клиентский диалог если WhatsApp отправлен
             if wa_ok and phone:
                 try:
@@ -689,6 +904,17 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
     if not debt_data:
         logger.warning("Нет данных дебиторки — завершаем")
         await notify_admin("⚠️ AI Коллектор: нет данных дебиторки для обработки")
+        return
+
+    freshness = _summarize_debt_freshness(debt_data)
+    if not dry_run and freshness.get("is_stale"):
+        block_reason = str(freshness.get("block_reason") or "устаревшие debt-данные")
+        logger.error("LIVE SEND BLOCKED: stale debt snapshot: %s", block_reason)
+        await notify_admin(
+            "⛔ <b>AI Коллектор: live-send заблокирован</b>\n\n"
+            f"{block_reason}\n\n"
+            "Сначала обновите debt_ext-файлы, потом повторите отправку."
+        )
         return
 
     debtors = classify_debtors(debt_data)
@@ -835,10 +1061,22 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
         if not _bypass_active_guard and (_debit_val > 0 or _credit_val > 0):
             logger.info("[%s] пропуск — клиент активен (debit=%.0f, credit=%.0f)",
                         name, _debit_val, _credit_val)
+            try:
+                from collector.audit_log import audit as _audit
+                _audit("wa_skipped", name=name, reason="active_client",
+                       debit=_debit_val, credit=_credit_val, dry_run=dry_run)
+            except Exception:
+                pass
             continue
         if client.get("amount", 0) <= 0:
             logger.info("[%s] пропуск — долг погашен или отрицательный (amount=%.0f)",
                         name, client.get("amount", 0))
+            try:
+                from collector.audit_log import audit as _audit
+                _audit("wa_skipped", name=name, reason="zero_amount",
+                       amount=client.get("amount", 0), dry_run=dry_run)
+            except Exception:
+                pass
             continue
         try:
             from collector.payment_hold import get_hold_for_client
@@ -847,7 +1085,67 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
             _payment_hold = None
         if _payment_hold:
             logger.info("[%s] пропуск — Саида подтвердила оплату, ждём разноски в 1С", name)
+            try:
+                from collector.audit_log import audit as _audit
+                _audit("wa_skipped", name=name, reason="payment_hold", dry_run=dry_run)
+            except Exception:
+                pass
             continue
+        try:
+            from collector.collections_db import get_wa_dialog_suppress
+            _wa_suppress = get_wa_dialog_suppress(name)
+        except Exception:
+            _wa_suppress = None
+        if _wa_suppress:
+            logger.info(
+                "[%s] пропуск — wa_dialog_suppress reason=%s until=%s",
+                name, _wa_suppress.get("reason"), _wa_suppress.get("until"),
+            )
+            try:
+                from collector.audit_log import audit as _audit
+                _audit("wa_skipped", name=name, reason="suppress",
+                       suppress_reason=_wa_suppress.get("reason"),
+                       suppress_until=_wa_suppress.get("until"), dry_run=dry_run)
+            except Exception:
+                pass
+            continue
+
+        # Нет движений (debit==0, credit==0) → сначала спрашиваем Саиду.
+        # Если Саида ответила "нет оплат" и руководитель одобрил (approved_send) —
+        # проходим дальше со специальным msg_type.
+        if not dry_run and not _bypass_active_guard and _debit_val == 0 and _credit_val == 0:
+            try:
+                from collector.no_movement import (
+                    get_nm_state, ask_saida_about_no_movement, was_saida_asked_today,
+                )
+                from collector.collections_db import get_client_state as _get_cstate
+                _nm = get_nm_state(name)
+                if _nm:
+                    _nm_status = _nm.get("status", "")
+                    if _nm_status in ("pending_saida", "nopay_notified_admin",
+                                      "skipped", "paid"):
+                        logger.info("[%s] no_movement status=%s — пропуск", name, _nm_status)
+                        continue
+                    if _nm_status == "approved_send":
+                        # Руководитель одобрил — отправляем с особым тоном
+                        _broken = _get_cstate(name).get("promise_kept") is False
+                        _msg_type = "promise_broken_reminder" if _broken else "no_movement_reminder"
+                        logger.info("[%s] no_movement approved: msg_type=%s", name, _msg_type)
+                        # fall through to _process_single
+                else:
+                    # Первый раз сегодня — задаём вопрос Саиде
+                    _nm_mgr = (contact.get("manager") if contact else None) or \
+                               _get_client_manager_from_crm(name) or ""
+                    _nm_mgr_id = _get_manager_chat_id(_nm_mgr) if _nm_mgr else None
+                    await ask_saida_about_no_movement(
+                        name, float(client.get("amount", 0)),
+                        int(client.get("days", 0)),
+                        _nm_mgr, _nm_mgr_id,
+                    )
+                    logger.info("[%s] вопрос Саиде задан — WA отложен", name)
+                    continue
+            except Exception as _nm_e:
+                logger.debug("[%s] no_movement check error: %s", name, _nm_e)
 
         # Уже контактировали сегодня — пропускаем
         if not dry_run and already_contacted_today(name):
@@ -971,6 +1269,12 @@ async def _send_approved_client(client: Dict[str, Any]) -> Dict[str, Any]:
     msg_type = str(client.get("msg_type") or "")
     report_date = _client_report_date(client, days)
 
+    _cstate2 = get_client_state(name)
+    _prev_promise2 = (
+        _cstate2.get("promise_date")
+        if _cstate2.get("promise_kept") is False
+        else None
+    )
     text = generate_message(
         client_name=name,
         debt_amount=amount,
@@ -980,6 +1284,7 @@ async def _send_approved_client(client: Dict[str, Any]) -> Dict[str, Any]:
         manager_name=manager_name,
         msg_type=msg_type,
         report_date=report_date,
+        previous_promise=_prev_promise2,
     )
 
     if not send_whatsapp(phone, text):
@@ -1011,9 +1316,185 @@ async def _send_approved_client(client: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
+def _batch_client_key(name: str) -> str:
+    return str(name or "").strip().lower()
+
+
+def _prepare_current_approved_clients(
+    approved_clients: Optional[List[Dict[str, Any]]] = None,
+) -> Tuple[Dict[str, Dict[str, Any]], Optional[str], Dict[str, Any]]:
+    """Builds the latest collector-approved shortlist for send-approved revalidation."""
+    debt_data = load_latest_debt_json()
+    if not debt_data:
+        return {}, "latest debt json unavailable", {}
+
+    manager_names = sorted({
+        str(client.get("manager") or "").strip()
+        for client in (approved_clients or [])
+        if str(client.get("manager") or "").strip()
+    })
+    freshness = _summarize_debt_freshness(debt_data, manager_names or None)
+    if freshness.get("is_stale"):
+        return {}, str(freshness.get("block_reason") or "stale debt snapshot"), freshness
+
+    debtors = classify_debtors(debt_data)
+    try:
+        from collector.payment_hold import sync_holds_with_debtors
+        sync_holds_with_debtors(debtors)
+    except Exception as e:
+        logger.debug("payment hold sync skipped during send-approved refresh: %s", e)
+
+    try:
+        from bot.crm_clients import load_contacts_compat as _crm_contacts
+        contacts = _crm_contacts()
+    except Exception:
+        contacts = load_contacts()
+
+    stop_registry = _load_stop_registry_safe()
+    prepared: Dict[str, Dict[str, Any]] = {}
+
+    for raw_client in debtors:
+        name = str(raw_client.get("name") or "").strip()
+        if not name:
+            continue
+
+        client = _apply_collector_day_policy(raw_client, name, use_first_seen=True)
+        level = int(client.get("level", 0) or 0)
+        if level == 0 or float(client.get("amount", 0) or 0) <= 0:
+            continue
+
+        contact = match_client(name, contacts)
+        stop_rec = _get_stop_record(name, stop_registry)
+        decision = _collector_candidate_decision(client, contact, stop_rec)
+        if decision.get("action") != "client_approval":
+            continue
+
+        phone = ((contact or {}).get("whatsapp") or (contact or {}).get("phone") or "").strip()
+        manager_name = (contact or {}).get("manager", "").strip()
+        if not manager_name:
+            manager_name = str((stop_rec or {}).get("manager") or "").strip()
+        if not manager_name:
+            manager_name = _get_client_manager_from_crm(name)
+        if not manager_name:
+            continue
+
+        if not phone:
+            continue
+
+        prepared[_batch_client_key(name)] = {
+            "name": name,
+            "manager": manager_name,
+            "phone": phone,
+            "amount": float(client.get("amount", 0) or 0),
+            "days": int(client.get("days", 0) or 0),
+            "level": level,
+            "opening": float(client.get("opening", 0) or 0),
+            "debit": float(client.get("debit", 0) or 0),
+            "credit": float(client.get("credit", 0) or 0),
+            "payment_silence_days": client.get("payment_silence_days"),
+            "report_date": client.get("report_date", ""),
+            "oldest_unpaid_date": client.get("oldest_unpaid_date"),
+            "unpaid_parts": client.get("unpaid_parts", []),
+            "ignored_tail_parts": client.get("ignored_tail_parts", []),
+            "debt_age_basis": client.get("debt_age_basis", ""),
+            "debt_age_confidence": client.get("debt_age_confidence", ""),
+            "active_turnover": bool(client.get("active_turnover", False)),
+            "violation_shipment": bool(client.get("violation_shipment", False)),
+            "language": (contact or {}).get("language", "ru"),
+            "msg_type": decision.get("msg_type"),
+            "reason": decision.get("reason", ""),
+            "stop_status": decision.get("stop_status", str((stop_rec or {}).get("status") or "")),
+            "review_action": decision.get("action", "client_approval"),
+        }
+
+    return prepared, None, freshness
+
+
+def _refresh_approved_batch_clients(
+    batch_id: str,
+    approved_clients: List[Dict[str, Any]],
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[str], Optional[str]]:
+    """Refreshes admin-approved clients against the latest debt snapshot before send."""
+    current_clients, blocked_reason, _freshness = _prepare_current_approved_clients(approved_clients)
+    if blocked_reason:
+        return [], [], [], blocked_reason
+
+    sendable: List[Dict[str, Any]] = []
+    skipped: List[Dict[str, Any]] = []
+    changes: List[str] = []
+    compare_fields = ("amount", "days", "level", "phone", "manager", "msg_type", "report_date", "language")
+
+    for stored in approved_clients:
+        name = str(stored.get("name") or "").strip()
+        current = current_clients.get(_batch_client_key(name))
+        if not current:
+            skipped.append({
+                "name": name,
+                "manager": str(stored.get("manager") or "").strip(),
+                "phone": str(stored.get("phone") or stored.get("whatsapp") or "").strip(),
+                "status": "skipped",
+                "reason": "stale approved batch: client not present in latest debt shortlist",
+            })
+            changes.append(f"{name}: removed from current debt shortlist")
+            continue
+
+        field_changes: List[str] = []
+        for field in compare_fields:
+            old_value = stored.get(field)
+            new_value = current.get(field)
+            if old_value != new_value:
+                if field == "amount":
+                    field_changes.append(
+                        f"amount {_fmt_amount(float(old_value or 0))}→{_fmt_amount(float(new_value or 0))}"
+                    )
+                else:
+                    field_changes.append(f"{field} {old_value!r}→{new_value!r}")
+
+        if field_changes:
+            changes.append(f"{name}: " + ", ".join(field_changes[:4]))
+
+        sendable.append(current)
+
+    if not sendable and approved_clients and not skipped:
+        changes.append(f"batch {batch_id}: no актуальных клиентов after refresh")
+    return sendable, skipped, changes, None
+
+
+def preview_batch_changes(
+    batch_id: str,
+    approved_clients: List[Dict[str, Any]],
+) -> Optional[str]:
+    """Возвращает текст-сводку изменений данных с момента создания батча, или None.
+
+    Вызывается из approval_flow при утверждении администратором (wa_appr_adm_ok),
+    чтобы показать изменившиеся данные до нажатия «Отправить».
+    Не производит никаких отправок.
+    """
+    try:
+        _, skipped, changes, blocked_reason = _refresh_approved_batch_clients(
+            batch_id, approved_clients
+        )
+    except Exception as exc:
+        logger.warning("preview_batch_changes[%s]: ошибка вычисления diff: %s", batch_id, exc)
+        return None
+    if blocked_reason:
+        return f"⚠️ Проверка свежести невозможна: {blocked_reason}"
+    if not changes and not skipped:
+        return None
+    lines: List[str] = []
+    if changes:
+        lines.append(f"Изменений с момента формирования ({len(changes)}):")
+        lines.extend(f"  • {c}" for c in changes[:6])
+        if len(changes) > 6:
+            lines.append(f"  • ещё: {len(changes) - 6}")
+    if skipped:
+        lines.append(f"Исчезли из дебиторки: {len(skipped)} кл.")
+    return "\n".join(lines)
+
+
 async def send_approved_batch(batch_id: str, single_client: Optional[str] = None) -> List[Dict[str, Any]]:
     """Sends WhatsApp only to clients stored in an admin-approved batch."""
-    from collector.approval_flow import get_approved_clients, is_ready_for_send, record_send_results
+    from collector.approval_flow import get_approved_clients, is_ready_for_send, load_batch, record_send_results
 
     if not is_ready_for_send(batch_id):
         logger.error("send-approved blocked: batch %s is not admin-approved", batch_id)
@@ -1032,8 +1513,33 @@ async def send_approved_batch(batch_id: str, single_client: Optional[str] = None
         f" client_filter={single_client!r}" if single_client else "",
     )
 
-    results = []
-    for client in clients:
+    refreshed_clients, pre_results, changes, blocked_reason = _refresh_approved_batch_clients(batch_id, clients)
+    if blocked_reason:
+        logger.error("send-approved blocked: batch=%s freshness check failed: %s", batch_id, blocked_reason)
+        await notify_admin(
+            f"⚠️ send-approved остановлен для batch <b>{batch_id}</b>.\n"
+            f"Не удалось пересверить batch по свежей дебиторке: {blocked_reason}."
+        )
+        return []
+
+    if changes:
+        batch = load_batch(batch_id) or {}
+        created_at = str(batch.get("created_at") or "—")
+        lines = [
+            f"⚠️ send-approved batch <b>{batch_id}</b> обновлён перед отправкой.",
+            f"Создан: <b>{created_at}</b>",
+            f"К отправке после refresh: <b>{len(refreshed_clients)}</b>",
+        ]
+        if pre_results:
+            lines.append(f"Пропущено как устаревшее: <b>{len(pre_results)}</b>")
+        lines.append("")
+        lines.extend(f"• {item}" for item in changes[:8])
+        if len(changes) > 8:
+            lines.append(f"• ещё изменений: {len(changes) - 8}")
+        await notify_admin("\n".join(lines))
+
+    results = list(pre_results)
+    for client in refreshed_clients:
         results.append(await _send_approved_client(client))
 
     record_send_results(batch_id, results)
@@ -1057,12 +1563,22 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
     ВАЖНО: WhatsApp не отправляется. Это только UX согласования.
     Реальная отправка — отдельный шаг после admin approve + WHATSAPP_ENABLED=1.
     """
-    from collector.approval_flow import create_batch, save_batch, send_manager_previews
+    from collector.approval_flow import (
+        create_batch,
+        close_manager_previews,
+        load_latest_batch,
+        save_batch,
+        send_manager_previews,
+        send_admin_preview_notice,
+        close_admin_messages,
+        supersede_batch,
+    )
 
     debt_data = load_latest_debt_json()
     if not debt_data:
         logger.warning("run_approval_preview: нет данных дебиторки")
         return None
+    preview_freshness = _summarize_debt_freshness(debt_data)
 
     debtors = classify_debtors(debt_data)
     try:
@@ -1189,9 +1705,49 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
         len(debtors_by_manager), total,
     )
 
+    active_batch = load_latest_batch()
     batch = create_batch(debtors_by_manager)
+    batch["debt_snapshot"] = _summarize_debt_freshness(
+        debt_data,
+        list(debtors_by_manager.keys()),
+    )
+    if preview_freshness.get("has_warning"):
+        logger.warning(
+            "run_approval_preview: debt snapshot warning for batch %s: %s",
+            batch["batch_id"],
+            "; ".join(_freshness_notice_lines(batch["debt_snapshot"])),
+        )
+    if active_batch:
+        batch["replaced_batch_id"] = active_batch.get("batch_id")
+        supersede_batch(active_batch, superseded_by=batch["batch_id"])
+        await close_manager_previews(
+            active_batch,
+            "⚠️ Этот запрос закрыт как неактуальный.\n\n"
+            "Сформирован новый батч по свежей дебиторке. Ждите новый запрос.",
+        )
+        await close_admin_messages(
+            active_batch,
+            "⚠️ Этот список закрыт как неактуальный.\n\n"
+            "По свежей дебиторке уже сформирован новый актуальный запрос.",
+        )
     save_batch(batch)
     await send_manager_previews(batch)
+
+    # v1.4.1: уведомляем админа о создании батча СРАЗУ, не дожидаясь
+    # ответов менеджеров. Полноценная сводка с кнопками утверждения
+    # придёт позже из send_admin_summary, когда все менеджеры нажмут кнопки.
+    try:
+        await send_admin_preview_notice(batch)
+    except Exception as e:
+        logger.error("send_admin_preview_notice failed: %s", e)
+
+    # Немедленная проверка узкого окна: если до cutoff < 1 ч — не ждём
+    # следующего цикла collector_reminders (каждые 30 мин), эскалируем сразу.
+    try:
+        from collector.approval_flow import promote_silent_batches_to_admin
+        await promote_silent_batches_to_admin()
+    except Exception as e:
+        logger.error("promote_silent_batches_to_admin (immediate check) failed: %s", e)
 
     logger.info("run_approval_preview: батч %s создан и отправлен менеджерам", batch["batch_id"])
     return batch["batch_id"]

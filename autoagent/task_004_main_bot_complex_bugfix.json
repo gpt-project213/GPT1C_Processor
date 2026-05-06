@@ -1,0 +1,67 @@
+{
+  "task_id": "TASK-004-MAIN-BOT-COMPLEX",
+  "title": "Complex bugfix основного бота",
+  "project_root": ".",
+  "target_system": "main_bot",
+  "status": "new",
+  "stage": "analysis",
+  "created_at": "",
+  "updated_at": "",
+  "requested_by": "user",
+  "task_class": "complex",
+  "review_policy": "require_claude",
+  "goal": "Автономно локализовать подтвержденный сложный баг основного бота, внести минимальный production-safe патч, выполнить узкие проверки и оставить задачу на обязательном Claude-review.",
+  "constraints": [
+    "Работа только локально",
+    "Обслуживание только основного бота",
+    "Сначала лог/код-доказательство, потом патч",
+    "Не менять бизнес-логику без подтвержденной причины",
+    "После правки обязательны py_compile и узкие тесты",
+    "Сложная задача не должна завершаться без Claude-review"
+  ],
+  "inputs": {
+    "files": [
+      "bot/send_reports.py",
+      "bot/log_monitor.py",
+      "collector/whatsapp_poller.py",
+      "send_tg.py",
+      "imap_fetcher.py"
+    ],
+    "logs": [
+      "logs/send_reports_20260423.log",
+      "logs/email_20260423.log",
+      "logs/collector_20260423.log",
+      "logs/log_monitor_summary.log",
+      "logs/log_monitor_state.json"
+    ],
+    "notes": [
+      "Использовать только подтвержденные баги основного бота",
+      "Не подменять задачу аудитом самого оркестратора",
+      "Если причина внешняя или operational — честно зафиксировать это"
+    ]
+  },
+  "allowed_files": [
+    "bot/send_reports.py",
+    "bot/log_monitor.py",
+    "collector/whatsapp_poller.py",
+    "send_tg.py",
+    "imap_fetcher.py",
+    "tests/test_project.py",
+    "tests/test_collector.py",
+    "tests/test_log_monitor.py"
+  ],
+  "codex_output_file": ".ai_logs/TASK-004-MAIN-BOT-COMPLEX_codex_result.json",
+  "claude_output_file": ".ai_reviews/TASK-004-MAIN-BOT-COMPLEX_claude_review.json",
+  "last_codex_attempt_at": null,
+  "last_claude_attempt_at": null,
+  "next_codex_retry_after": null,
+  "next_claude_retry_after": null,
+  "codex_rate_limited": false,
+  "claude_rate_limited": false,
+  "last_codex_error": null,
+  "last_claude_error": null,
+  "review_attempts": 0,
+  "codex_result": null,
+  "claude_result": null,
+  "final_status": null
+}

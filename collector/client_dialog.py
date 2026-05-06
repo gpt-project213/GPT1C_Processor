@@ -4,19 +4,32 @@
 collector/client_dialog.py
 Управление диалогами с должниками через WhatsApp.
 
-Версия: 1.0.7 (2026-04-13)
+Версия: 1.1.1 (2026-04-29)
+
+v1.1.0 (2026-04-29): paid_claim переведён в отдельное состояние
+  awaiting_payment_proof; claim об оплате и вложенные чеки/скрины теперь
+  сразу уходят менеджеру/наблюдателям в Telegram с прямой ссылкой на файл.
+
+v1.0.9 (2026-04-29): убраны повторяющиеся ответы в WhatsApp-диалогах:
+  короткие подтверждения после просьбы о чеке больше не вызывают новый ответ,
+  "счс оплачу/всю" не запускает повторный допрос про сумму/дату,
+  сервисные запросы вроде акта сверки сразу эскалируются менеджеру.
+
+v1.0.8 (2026-04-23): мягкая обработка ответов клиентов: soft_positive /
+  promise_schedule / paid_claim, без ложной фиксации обещаний и без повторной ссылки на 1С.
 
 Хранилище: logs/collector_client_dialogs.json
 Ключ: номер телефона (цифры, без +, без @c.us)
 
 Жизненный цикл диалога:
   start_client_dialog() → handle_incoming() → escalate_to_manager()
-  state: active | escalated | closed
+  state: active | awaiting_payment_proof | awaiting_manager | escalated | closed
 """
 
 import asyncio
 import json
 import logging
+from collector.logging_utils import get_collector_logger
 import os
 import tempfile
 import time
@@ -34,13 +47,30 @@ load_dotenv(
 )
 
 TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
+_TEST_MODE = os.getenv("COLLECTOR_TEST_MODE", "0").lower() in ("1", "true", "yes")
 COMPANY_NAME = os.getenv("COMPANY_NAME", "Минбаракат")
 
 _ROOT = Path(__file__).resolve().parent.parent
 _DIALOGS_PATH = _ROOT / "logs" / "collector_client_dialogs.json"
 _DELETION_QUEUE_PATH = _ROOT / "logs" / "deletion_queue.json"
 
-logger = logging.getLogger(__name__)
+logger = get_collector_logger(__name__)
+_DIALOG_ACTIVE_STATES = {"active", "awaiting_payment_proof", "awaiting_manager"}
+
+
+def _mask_phone(phone: str) -> str:
+    digits = "".join(c for c in str(phone or "") if c.isdigit())
+    if len(digits) <= 4:
+        return digits
+    return f"{digits[:4]}***{digits[-2:]}"
+
+
+def _audit(event: str, **kwargs: Any) -> None:
+    try:
+        from collector.audit_log import audit as _collector_audit
+        _collector_audit(event, **kwargs)
+    except Exception as exc:
+        logger.debug("audit skipped %s: %s", event, exc)
 
 
 def _schedule_tg_deletion(chat_id: int, message_id: int, delay_hours: int = 24) -> None:
@@ -152,6 +182,29 @@ async def _send_tg(chat_id: int, text: str, reply_markup: Any = None) -> None:
         logger.error("Ошибка отправки Telegram chat_id=%d: %s", chat_id, e)
 
 
+async def _notify_dialog_observers(dialog: Dict[str, Any], text: str) -> None:
+    if _TEST_MODE:
+        logger.info(
+            "COLLECTOR_TEST_MODE: observer notification suppressed for %s",
+            dialog.get("client_name", "unknown"),
+        )
+        return
+    manager_chat_id = dialog.get("manager_chat_id")
+    manager_name = dialog.get("manager_name", "")
+    try:
+        from collector.communications import get_observer_ids
+        observer_ids = get_observer_ids(manager_name)
+    except Exception as e:
+        logger.error("get_observer_ids ошибка: %s", e)
+        observer_ids = []
+
+    if manager_chat_id and manager_chat_id not in observer_ids:
+        observer_ids = [manager_chat_id] + observer_ids
+
+    for obs_id in observer_ids:
+        await _send_tg(obs_id, text)
+
+
 def _gender_pronoun(manager_name: str) -> str:
     """Возвращает 'Она' или 'Он' по окончанию имени менеджера."""
     name = manager_name.strip()
@@ -184,20 +237,192 @@ def _report_date_context(dialog: Optional[Dict[str, Any]] = None) -> str:
 
 
 def _mentions_recent_unposted_payment(text: str) -> bool:
-    """True, если клиент говорит про недавнюю оплату, которая могла не попасть в 1С."""
+    """True, если клиент говорит про недавнюю оплату, которая могла не попасть в 1С.
+
+    Требует КОНТЕКСТНЫЙ сигнал (QR/временной/1С-статус) + ПЛАТЁЖНЫЙ сигнал.
+    "оплат" убран из контекстных маркеров: иначе "Передам на оплату"
+    ложно срабатывает, т.к. "оплат" входит как подстрока в "оплату".
+    """
     t = text.lower()
+    context_markers = (
+        "qr", "куар", "киар", "упад", "поступ",
+        "за выходные", "сегодня", "завтра",
+        "не разнес", "не провел", "не прошло",
+    )
+    payment_markers = ("оплат", "qr", "куар", "киар", "упад", "поступ")
+    return any(m in t for m in context_markers) and any(m in t for m in payment_markers)
+
+
+def _normalize_text(text: str) -> str:
+    lowered = str(text or "").lower().replace("\u0451", "\u0435")
+    return " ".join(
+        ch if ch.isalnum() or ch.isspace() else " "
+        for ch in lowered
+    ).strip()
+
+
+def _is_greeting_only(text: str) -> bool:
+    normalized = _normalize_text(text)
+    if not normalized:
+        return False
+    greetings = {
+        "\u0437\u0434\u0440\u0430\u0432\u0441\u0442\u0432\u0443\u0439\u0442\u0435",
+        "\u0437\u0434\u0440\u0430\u0441\u0442\u0432\u0443\u0439\u0442\u0435",
+        "\u0434\u043e\u0431\u0440\u044b\u0439 \u0434\u0435\u043d\u044c",
+        "\u0434\u043e\u0431\u0440\u044b\u0439 \u0432\u0435\u0447\u0435\u0440",
+        "\u0434\u043e\u0431\u0440\u043e\u0435 \u0443\u0442\u0440\u043e",
+        "\u043f\u0440\u0438\u0432\u0435\u0442",
+        "\u0441\u0430\u043b\u0430\u043c",
+        "\u0430\u0441\u0441\u0430\u043b\u0430\u0443\u043c\u0430\u0433\u0430\u043b\u0435\u0439\u043a\u0443\u043c",
+    }
+    return normalized in greetings
+
+
+def _is_acknowledgement_only(text: str) -> bool:
+    normalized = _normalize_text(text)
+    if not normalized:
+        return False
+    acknowledgements = {
+        "\u043e\u043a",
+        "\u043e\u043a\u0435\u0439",
+        "\u0445\u043e\u0440\u043e\u0448\u043e",
+        "\u043f\u043e\u043d\u044f\u043b",
+        "\u043f\u043e\u043d\u044f\u043b\u0430",
+        "\u043f\u0440\u0438\u043d\u044f\u043b",
+        "\u043f\u0440\u0438\u043d\u044f\u043b\u0430",
+        "\u044f\u0441\u043d\u043e",
+        "\u043b\u0430\u0434\u043d\u043e",
+        "\u0434\u043e\u0433\u043e\u0432\u043e\u0440\u0438\u043b\u0438\u0441\u044c",
+        "\u0445\u043e\u0440\u043e\u0448\u043e \u0441\u043f\u0430\u0441\u0438\u0431\u043e",
+        "\u043e\u043a \u0441\u043f\u0430\u0441\u0438\u0431\u043e",
+    }
+    return normalized in acknowledgements
+
+
+def _is_service_request(text: str) -> bool:
+    normalized = _normalize_text(text)
+    if not normalized:
+        return False
     markers = (
-        "qr", "куар", "киар", "оплат", "упад", "поступ", "за выходные",
-        "сегодня", "завтра", "не разнес", "не провел", "не прошло",
+        "\u0430\u043a\u0442 \u0441\u0432\u0435\u0440",
+        "\u0441\u0432\u0435\u0440\u043a",
+        "\u0430\u043a\u0442",
+        "\u0441\u0447\u0435\u0442",
+        "\u0441\u0447\u0435\u0442 \u0444\u0430\u043a\u0442\u0443\u0440",
+        "\u043d\u0430\u043a\u043b\u0430\u0434\u043d",
+        "\u0434\u043e\u0433\u043e\u0432\u043e\u0440",
+        "\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442",
     )
-    return any(m in t for m in markers) and any(
-        m in t for m in ("оплат", "qr", "куар", "киар", "упад", "поступ")
+    return any(marker in normalized for marker in markers)
+
+
+def _shows_imminent_payment_commitment(text: str) -> bool:
+    normalized = _normalize_text(text)
+    if not normalized:
+        return False
+    explicit = (
+        "\u0441\u0435\u0439\u0447\u0430\u0441 \u043e\u043f\u043b\u0430\u0447\u0443",
+        "\u0449\u0430\u0441 \u043e\u043f\u043b\u0430\u0447\u0443",
+        "\u0441\u0447\u0441 \u043e\u043f\u043b\u0430\u0447\u0443",
+        "\u0441\u0435\u0433\u043e\u0434\u043d\u044f \u043e\u043f\u043b\u0430\u0447\u0443",
+        "\u043e\u043f\u043b\u0430\u0447\u0443 \u0441\u0435\u0433\u043e\u0434\u043d\u044f",
+        "\u0441\u043a\u043e\u0440\u043e \u043e\u043f\u043b\u0430\u0447\u0443",
+        "\u0437\u0430\u043a\u0440\u043e\u044e \u0441\u0435\u0433\u043e\u0434\u043d\u044f",
+        "\u0432\u0441\u044e",
+        "\u043f\u043e\u043b\u043d\u043e\u0441\u0442\u044c\u044e",
     )
+    if normalized in explicit:
+        return True
+    return any(phrase in normalized for phrase in explicit if " " in phrase)
+
+
+def _last_bot_text(dialog: Dict[str, Any]) -> str:
+    for exchange in reversed(dialog.get("exchanges", [])):
+        if exchange.get("role") == "bot":
+            return str(exchange.get("text") or "")
+    return ""
+
+
+def _waiting_for_payment_proof(dialog: Dict[str, Any]) -> bool:
+    return bool(dialog.get("awaiting_payment_proof"))
+
+
+def _is_brief_reply(text: str, *, max_words: int = 2, max_chars: int = 18) -> bool:
+    raw = str(text or "").strip()
+    if not raw:
+        return False
+    return len(raw) <= max_chars and len(raw.split()) <= max_words
+
+
+def _attachment_note_lines(attachment: Optional[Dict[str, Any]]) -> List[str]:
+    if not isinstance(attachment, dict):
+        return []
+    att_type = str(attachment.get("type") or "file")
+    caption = str(attachment.get("caption") or "").strip()
+    file_name = str(attachment.get("file_name") or "").strip()
+    download_url = str(attachment.get("download_url") or "").strip()
+    lines = [f"📎 Вложение от клиента: <b>{att_type}</b>"]
+    if file_name:
+        lines.append(f"Файл: <b>{file_name}</b>")
+    if caption:
+        lines.append(f"Подпись: {caption}")
+    if download_url:
+        lines.append(f"Ссылка: {download_url}")
+    return lines
+
+
+def _build_payment_claim_note(
+    dialog: Dict[str, Any],
+    phone: str,
+    *,
+    client_text: str = "",
+    attachment: Optional[Dict[str, Any]] = None,
+    proof_received: bool = False,
+) -> str:
+    client_name = str(dialog.get("client_name") or "—")
+    manager_name = str(dialog.get("manager_name") or "—")
+    amount = _fmt_amount(float(dialog.get("amount", 0) or 0))
+    days = int(dialog.get("days", 0) or 0)
+    lines = [
+        f"💳 <b>{client_name}</b> сообщил об оплате.",
+        f"Менеджер: <b>{manager_name}</b>",
+        f"Телефон: <code>+{phone}</code>",
+        f"Текущий долг в контуре: <b>{amount} тг</b> | {days} дн.",
+    ]
+    if client_text:
+        lines.append(f"Сообщение клиента: {client_text}")
+    if proof_received:
+        lines.append("Статус: клиент прислал подтверждение оплаты.")
+    else:
+        lines.append("Статус: ждём чек / дату и сумму платежа.")
+    lines.extend(_attachment_note_lines(attachment))
+    return "\n".join(lines)
 
 
 def _fmt_amount(amount: float) -> str:
     """Форматирует сумму: 500000 → '500 000'."""
     return f"{amount:,.0f}".replace(",", " ")
+
+
+def _fmt_date_display(raw: Optional[str]) -> str:
+    """Форматирует ISO-дату для клиентского сообщения."""
+    if not raw:
+        return ""
+    try:
+        from datetime import date as _date
+        return _date.fromisoformat(str(raw)).strftime("%d.%m.%Y")
+    except (TypeError, ValueError):
+        return str(raw)
+
+
+def _payment_schedule_label(raw: Any) -> str:
+    """Человекочитаемая формулировка графика оплаты."""
+    value = str(raw or "").strip().lower()
+    if value in {"daily", "every_day", "ежедневно", "каждый день"}:
+        return "ежедневными частичными платежами"
+    if value in {"partial", "parts", "частями", "частично"}:
+        return "частями"
+    return str(raw or "частичными платежами")
 
 
 def _build_escalation_text(
@@ -234,11 +459,16 @@ def _build_escalation_text(
     # Обещание если есть
     promise_date = dialog.get("promise_date")
     promise_line = f"\n📅 Обещание оплаты: {promise_date}" if promise_date else ""
+    schedule = dialog.get("payment_schedule")
+    schedule_line = f"\n🧾 График: {_payment_schedule_label(schedule)}" if schedule else ""
 
     # Описание намерения
     intent_map = {
         "promise":              "обещал оплатить",
         "promise_without_date": "готов платить, но не назвал дату",
+        "promise_schedule":     "предложил график частичных платежей",
+        "paid_claim":           "сообщил, что уже оплатил",
+        "soft_positive":        "готов платить, но без точной суммы/графика",
         "refusal":              "отказывается платить",
         "delay_request":        "просит отсрочку",
         "question":             "задаёт вопрос о товарах/доставке",
@@ -252,7 +482,7 @@ def _build_escalation_text(
 
     return (
         f"📋 <b>{name}</b> — требуется участие {manager_name}\n\n"
-        f"💰 {_fmt_amount(amount)} тг | {days} дн. просрочки{promise_line}\n"
+        f"💰 {_fmt_amount(amount)} тг | {days} дн. просрочки{promise_line}{schedule_line}\n"
         f"📌 {intent_desc}\n\n"
         f"💬 Переписка:\n{exchanges_block}\n\n"
         f"⚠️ {summary}"
@@ -273,29 +503,23 @@ async def escalate_to_manager(
         summary: Человекочитаемое описание.
         phone:   Номер телефона клиента.
     """
-    manager_chat_id = dialog.get("manager_chat_id")
     manager_name = dialog.get("manager_name", "")
 
     # Обновляем состояние диалога
-    dialog["state"] = "escalated"
+    if dialog.get("state") not in {"awaiting_payment_proof", "awaiting_manager"}:
+        dialog["state"] = "escalated"
     _set_client_dialog(phone, dialog)
 
     text = _build_escalation_text(dialog, reason, summary)
-
-    # Получаем всех наблюдателей
-    try:
-        from collector.communications import get_observer_ids
-        observer_ids = get_observer_ids(manager_name)
-    except Exception as e:
-        logger.error("get_observer_ids ошибка: %s", e)
-        observer_ids = []
-
-    # Если менеджер не в списке — добавляем его
-    if manager_chat_id and manager_chat_id not in observer_ids:
-        observer_ids = [manager_chat_id] + observer_ids
-
-    for obs_id in observer_ids:
-        await _send_tg(obs_id, text)
+    await _notify_dialog_observers(dialog, text)
+    _audit(
+        "dialog_escalated",
+        name=dialog.get("client_name"),
+        phone_masked=_mask_phone(phone),
+        reason=reason,
+        manager=manager_name,
+        state=dialog.get("state"),
+    )
 
     logger.info(
         "[%s] диалог эскалирован менеджеру %s (reason=%s)",
@@ -310,7 +534,10 @@ async def _reply_to_client(phone: str, text: str) -> None:
     try:
         from collector.communications import send_whatsapp
         ok = send_whatsapp(phone, text)
-        if not ok:
+        if ok:
+            _audit("wa_reply_sent", phone_masked=_mask_phone(phone), text_preview=text[:120])
+        else:
+            _audit("wa_reply_failed", phone_masked=_mask_phone(phone), text_preview=text[:120], reason="send_whatsapp_false")
             logger.warning("Не удалось отправить ответ клиенту %s", phone)
     except Exception as e:
         logger.error("Ошибка ответа клиенту %s: %s", phone, e)
@@ -362,15 +589,17 @@ async def start_client_dialog(
         "last_activity":     now,
         "phone_silent_cycles": 0,
         "off_topic_count":   0,
+        "awaiting_payment_proof": False,
     }
     _set_client_dialog(phone_clean, dialog)
+    _audit("dialog_started", name=client_name, phone_masked=_mask_phone(phone_clean), manager=manager_name, level=level, amount=amount, days=days)
     logger.info(
         "[%s] клиентский диалог зарегистрирован (phone=%s, level=%d)",
         client_name, phone_clean, level,
     )
 
 
-async def handle_incoming(phone: str, text: str) -> None:
+async def handle_incoming(phone: str, text: str, attachment: Optional[Dict[str, Any]] = None) -> None:
     """Обрабатывает входящее WhatsApp-сообщение от клиента.
 
     Args:
@@ -383,10 +612,12 @@ async def handle_incoming(phone: str, text: str) -> None:
     dialog = dialogs.get(phone_clean)
 
     if not dialog:
+        _audit("incoming_ignored_no_dialog", phone_masked=_mask_phone(phone_clean), text_preview=text[:120], attachment_type=(attachment or {}).get("type", ""))
         logger.info("Неизвестный клиент %s — входящее сообщение проигнорировано", phone_clean)
         return
 
-    if dialog.get("state") != "active":
+    if dialog.get("state") not in _DIALOG_ACTIVE_STATES:
+        _audit("incoming_ignored_inactive_state", name=dialog.get("client_name"), phone_masked=_mask_phone(phone_clean), state=dialog.get("state"))
         logger.info(
             "Диалог %s в состоянии %s — входящее игнорируется",
             phone_clean, dialog.get("state"),
@@ -405,20 +636,78 @@ async def handle_incoming(phone: str, text: str) -> None:
     dialog["exchange_count"] = dialog.get("exchange_count", 0) + 1
     dialog["last_activity"] = now
     exchange_count = dialog["exchange_count"]
+    _audit("client_reply_received", name=client_name, phone_masked=_mask_phone(phone_clean), state=dialog.get("state"), exchange_count=exchange_count, attachment_type=(attachment or {}).get("type", ""), text_preview=text[:160])
 
     # Определяем язык
     language = detect_language(text)
 
-    if _mentions_recent_unposted_payment(text):
-        report_date = _report_date_context(dialog)
+    if attachment and dialog.get("state") in {"awaiting_payment_proof", "awaiting_manager"}:
+        reply = "Спасибо, подтверждение получили и уже передали менеджеру."
+        dialog["state"] = "awaiting_manager"
+        dialog["awaiting_payment_proof"] = False
+        dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
+        _set_client_dialog(phone_clean, dialog)
+        try:
+            from collector.collections_db import set_wa_dialog_suppress
+            from datetime import date, timedelta
+            _until = (date.today() + timedelta(days=2)).isoformat()
+            set_wa_dialog_suppress(client_name, "attachment", _until)
+        except Exception as _e:
+            logger.warning("wa_dialog_suppress (attachment): %s", _e)
+        await _reply_to_client(phone_clean, reply)
+        await _notify_dialog_observers(
+            dialog,
+            _build_payment_claim_note(
+                dialog,
+                phone_clean,
+                client_text=text,
+                attachment=attachment,
+                proof_received=True,
+            ),
+        )
+        _audit("payment_proof_received", name=client_name, phone_masked=_mask_phone(phone_clean), attachment_type=(attachment or {}).get("type", ""), state=dialog.get("state"))
+        return
+
+    if _waiting_for_payment_proof(dialog) and _is_brief_reply(text, max_words=2, max_chars=20):
+        _set_client_dialog(phone_clean, dialog)
+        return
+
+    if _is_greeting_only(text):
+        reply = "Здравствуйте. Подскажите, пожалуйста, когда ожидать ближайшую оплату?"
+        dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
+        _set_client_dialog(phone_clean, dialog)
+        await _reply_to_client(phone_clean, reply)
+        return
+
+    if _is_service_request(text):
         reply = (
-            f"Поняли. Задолженность указана по данным отчёта на {report_date}. "
-            "Если оплата уже прошла после этой даты или ещё не разнесена в 1С, "
-            "напишите, пожалуйста, точную дату и сумму оплаты. Мы передадим информацию менеджеру."
+            f"Спасибо, передаю вас менеджеру {manager_name}. "
+            f"{pronoun} свяжется с вами и поможет по документам."
         )
         dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
         _set_client_dialog(phone_clean, dialog)
         await _reply_to_client(phone_clean, reply)
+        await escalate_to_manager(
+            dialog, "question",
+            "Клиент запросил документы/акт сверки — нужен менеджер", phone_clean,
+        )
+        return
+
+    if _mentions_recent_unposted_payment(text):
+        reply = (
+            "Спасибо. Если оплата уже прошла, пришлите, пожалуйста, чек или дату и сумму платежа. "
+            f"Передадим информацию менеджеру {manager_name}."
+        )
+        dialog["awaiting_payment_proof"] = True
+        dialog["state"] = "awaiting_payment_proof"
+        dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
+        _set_client_dialog(phone_clean, dialog)
+        await _reply_to_client(phone_clean, reply)
+        await _notify_dialog_observers(
+            dialog,
+            _build_payment_claim_note(dialog, phone_clean, client_text=text),
+        )
+        _audit("payment_claim_reported", name=client_name, phone_masked=_mask_phone(phone_clean), source="heuristic_recent_unposted", state=dialog.get("state"))
         return
 
     # Анализируем через DeepSeek (синхронный вызов — выносим в поток)
@@ -445,6 +734,8 @@ async def handle_incoming(phone: str, text: str) -> None:
     requires_human = analysis.get("requires_human", False)
     suggested_reply = analysis.get("suggested_reply", "")
     promise_date = analysis.get("promise_date")
+    promise_amount = analysis.get("promise_amount")
+    payment_schedule = analysis.get("payment_schedule") or analysis.get("schedule")
 
     logger.info(
         "[%s] intent=%s requires_human=%s exchange_count=%d",
@@ -482,29 +773,110 @@ async def handle_incoming(phone: str, text: str) -> None:
         )
         return
 
-    if intent == "promise":
-        # Сохраняем дату обещания в диалог
+    if intent == "paid_claim":
+        reply = suggested_reply if suggested_reply else (
+            "Спасибо. Если оплата уже прошла, пришлите, пожалуйста, чек или дату и сумму платежа. "
+            f"Передадим информацию менеджеру {manager_name}."
+        )
+        dialog["awaiting_payment_proof"] = True
+        dialog["state"] = "awaiting_payment_proof"
+        dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
+        _set_client_dialog(phone_clean, dialog)
+        try:
+            from collector.collections_db import set_wa_dialog_suppress
+            from datetime import date, timedelta
+            _until = (date.today() + timedelta(days=3)).isoformat()
+            set_wa_dialog_suppress(client_name, "paid_claim", _until)
+        except Exception as _e:
+            logger.warning("wa_dialog_suppress (paid_claim): %s", _e)
+        await _reply_to_client(phone_clean, reply)
+        await _notify_dialog_observers(
+            dialog,
+            _build_payment_claim_note(dialog, phone_clean, client_text=text),
+        )
+        _audit("payment_claim_reported", name=client_name, phone_masked=_mask_phone(phone_clean), source="ai_paid_claim", state=dialog.get("state"))
+        return
+
+    if intent == "promise_schedule":
+        schedule_code = str(payment_schedule or "partial")
+        schedule_text = _payment_schedule_label(schedule_code)
+        dialog["payment_schedule"] = schedule_code
         if promise_date:
             dialog["promise_date"] = promise_date
-        date_str = f" до {promise_date}" if promise_date else ""
-        # Форматируем дату для клиента: YYYY-MM-DD → ДД.ММ.ГГГГ
-        date_display = ""
-        if promise_date:
-            try:
-                from datetime import date as _date
-                parsed = _date.fromisoformat(promise_date)
-                date_display = f" до {parsed.strftime('%d.%m.%Y')}"
-            except ValueError:
-                date_display = date_str
-        reply = (
-            f"Принято, фиксируем оплату{date_display}. "
-            f"Как оплатите — пришлите чек, пожалуйста."
+        if promise_amount:
+            dialog["promise_amount"] = promise_amount
+        first_payment = f" Первый платёж ждём до {_fmt_date_display(promise_date)}." if promise_date else ""
+        reply = suggested_reply if suggested_reply else (
+            f"Принято: оплата будет {schedule_text}.{first_payment} "
+            "Как оплатите — пришлите, пожалуйста, чек."
         )
         dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
         dialog["state"] = "escalated"
         _set_client_dialog(phone_clean, dialog)
         await _reply_to_client(phone_clean, reply)
+        summary = f"Клиент предложил график оплаты: {schedule_text}"
+        if promise_date:
+            summary += f", первый платёж до {promise_date}"
+        if promise_amount:
+            summary += f", сумма {promise_amount}"
+        await escalate_to_manager(dialog, "promise_schedule", summary, phone_clean)
+        return
+
+    if intent == "soft_positive":
+        if exchange_count >= 2 or _is_brief_reply(text, max_words=2, max_chars=18):
+            reply = (
+                "Понял вас. Тогда ждём ближайшую оплату. "
+                "Как оплатите — пришлите, пожалуйста, чек."
+            )
+            dialog["awaiting_payment_proof"] = True
+            dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
+            dialog["state"] = "escalated"
+            _set_client_dialog(phone_clean, dialog)
+            await _reply_to_client(phone_clean, reply)
+            await escalate_to_manager(
+                dialog, "soft_positive",
+                "Клиент готов платить, но точную сумму или график не назвал", phone_clean,
+            )
+            return
+        reply = suggested_reply if suggested_reply else (
+            "Спасибо, понял. Когда планируете первый платёж и примерно какая сумма?"
+        )
+        dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
+        _set_client_dialog(phone_clean, dialog)
+        await _reply_to_client(phone_clean, reply)
+        return
+
+    if intent == "promise":
+        # Сохраняем дату обещания в диалог
+        if promise_date:
+            dialog["promise_date"] = promise_date
+        if promise_amount:
+            dialog["promise_amount"] = promise_amount
+        date_str = f" до {promise_date}" if promise_date else ""
+        date_display = _fmt_date_display(promise_date)
+        if promise_amount:
+            reply = (
+                f"Спасибо, договорённость зафиксировал: оплата до {date_display} "
+                f"на сумму {_fmt_amount(float(promise_amount))} тг. "
+                "Как оплатите — пришлите чек, пожалуйста."
+            )
+        elif promise_date:
+            reply = (
+                f"Спасибо, понял. Тогда ждём оплату до {date_display}. "
+                "Как оплатите — пришлите, пожалуйста, чек."
+            )
+        else:
+            reply = (
+                "Спасибо, понял. Как оплатите — пришлите, пожалуйста, чек."
+            )
+        dialog["awaiting_payment_proof"] = True
+        dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
+        dialog["state"] = "escalated"
+        _set_client_dialog(phone_clean, dialog)
+        await _reply_to_client(phone_clean, reply)
         summary = f"Клиент обещал оплатить{date_str}"
+        if promise_amount:
+            summary += f" на сумму {promise_amount}"
         await escalate_to_manager(dialog, "promise", summary, phone_clean)
         return
 
@@ -574,10 +946,24 @@ async def handle_incoming(phone: str, text: str) -> None:
         return
 
     if intent == "promise_without_date":
+        if _is_brief_reply(text, max_words=2, max_chars=18):
+            reply = (
+                "Понял вас. Тогда ждём ближайшую оплату. "
+                "Как оплатите — пришлите, пожалуйста, чек."
+            )
+            dialog["awaiting_payment_proof"] = True
+            dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
+            dialog["state"] = "escalated"
+            _set_client_dialog(phone_clean, dialog)
+            await _reply_to_client(phone_clean, reply)
+            await escalate_to_manager(
+                dialog, "soft_positive",
+                "Клиент подтвердил ближайшую оплату без точной даты", phone_clean,
+            )
+            return
         # Клиент подтверждает готовность, но без даты — просим уточнить
         reply = suggested_reply if suggested_reply else (
-            "Хорошо, понял вас! Уточните, пожалуйста, точную дату оплаты — "
-            "например, 20.04.2026."
+            "Понятно. Уточните, пожалуйста, дату оплаты — когда планируете?"
         )
         dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
         _set_client_dialog(phone_clean, dialog)

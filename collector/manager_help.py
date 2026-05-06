@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import html
 import logging
+from collector.logging_utils import get_collector_logger
 import os
 from typing import Any, Dict, Iterable
 
@@ -22,7 +23,7 @@ try:
 except Exception:
     pass
 
-LOG = logging.getLogger(__name__)
+LOG = get_collector_logger(__name__)
 
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")

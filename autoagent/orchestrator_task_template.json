@@ -1,0 +1,49 @@
+{
+  "task_id": "",
+  "title": "",
+  "project_root": ".",
+  "target_system": "main_bot",
+  "status": "new",
+  "stage": "analysis",
+  "created_at": "",
+  "updated_at": "",
+  "requested_by": "user",
+  "task_class": "complex",
+  "review_policy": "require_claude",
+  "goal": "",
+  "constraints": [
+    "Работа только локально",
+    "Обслуживание только основного бота",
+    "Не ломать существующее",
+    "Минимальный патч",
+    "Сначала анализ, потом изменение, потом проверки, потом ревью"
+  ],
+  "inputs": {
+    "files": [],
+    "logs": [],
+    "notes": [
+      "Shared knowledge file: orchestrator_knowledge.json"
+    ]
+  },
+  "allowed_files": [],
+  "codex_output_file": ".ai_logs/codex_result.json",
+  "claude_output_file": ".ai_reviews/claude_review.md",
+  "last_codex_attempt_at": null,
+  "last_claude_attempt_at": null,
+  "next_codex_retry_after": null,
+  "next_claude_retry_after": null,
+  "codex_rate_limited": false,
+  "claude_rate_limited": false,
+  "last_codex_error": null,
+  "last_claude_error": null,
+  "review_attempts": 0,
+  "review_round": 0,
+  "max_review_rounds": 1,
+  "revise_requested": false,
+  "required_changes": [],
+  "out_of_scope_requests": [],
+  "notified_events": {},
+  "codex_result": null,
+  "claude_result": null,
+  "final_status": null
+}

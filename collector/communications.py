@@ -20,6 +20,7 @@ collections/communications.py
 
 import json
 import logging
+from collector.logging_utils import get_collector_logger
 import os
 from datetime import datetime, time as dt_time
 from pathlib import Path
@@ -45,7 +46,7 @@ TEST_WA_PHONE    = os.getenv("TEST_WA_PHONE", "")
 HOUR_START = int(os.getenv("COLLECTOR_HOUR_START", "9"))
 HOUR_END   = int(os.getenv("COLLECTOR_HOUR_END", "18"))
 
-logger = logging.getLogger(__name__)
+logger = get_collector_logger(__name__)
 
 
 def is_allowed_time() -> bool:

@@ -132,6 +132,34 @@ else:
     except Exception as e:
         check("sales_parser — без исключений", False, str(e)[:120])
 
+f_magira_302 = find_xlsx("Продажи Магира (302)")
+if not f_magira_302:
+    skip("sales_parser Magira 302", "xlsx не найден")
+else:
+    print(f"  Файл: {f_magira_302.name}")
+    try:
+        from sales_parser import parse_file
+        with tempfile.TemporaryDirectory() as td:
+            json_path = parse_file(f_magira_302, out_dir=Path(td))
+            check("sales_parser Magira 302 — JSON создан",
+                  json_path is not None and json_path.exists())
+            data = read_json(json_path)
+            check("sales_parser Magira 302 — JSON валиден", data is not None)
+            if data:
+                clients = data.get("clients", [])
+                names = [str(c.get("client", "")).strip().lower() for c in clients]
+                check("sales_parser Magira 302 — client_count > 40",
+                      (data.get("client_count") or 0) > 40,
+                      f"client_count={data.get('client_count')}")
+                check("sales_parser Magira 302 — нет bucket 'Без клиента'",
+                      "без клиента" not in names,
+                      f"names[:5]={names[:5]}")
+                check("sales_parser Magira 302 — total_revenue > 10 млн",
+                      float(data.get("total_revenue") or 0) > 10_000_000,
+                      f"total_revenue={data.get('total_revenue')}")
+    except Exception as e:
+        check("sales_parser Magira 302 — без исключений", False, str(e)[:120])
+
 # ═══════════════════════════════════════════════════════════════
 # 3. analyze_debt_excel — parse_debt_report
 #    Возвращает tuple(DataFrame, list[(client_name, amount)])

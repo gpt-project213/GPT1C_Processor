@@ -10,6 +10,7 @@ JSON-хранилище активных диалогов менеджеров �
 
 import json
 import logging
+from collector.logging_utils import get_collector_logger
 import os
 import tempfile
 from datetime import datetime
@@ -23,7 +24,7 @@ load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env",
             encoding="utf-8-sig", override=False)
 
 TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
-logger = logging.getLogger(__name__)
+logger = get_collector_logger(__name__)
 
 _ROOT = Path(__file__).resolve().parent.parent
 DIALOGS_PATH = _ROOT / "logs" / "collector_dialogs.json"

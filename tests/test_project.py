@@ -8,6 +8,7 @@ tests/test_project.py — комплексный тест проекта GPT1C_P
 import sys
 import os
 import json
+import ssl
 import tempfile
 import traceback
 from pathlib import Path
@@ -121,6 +122,8 @@ captured_data = {}
 def fake_post(url, data=None, **kwargs):
     captured_data.update(data or {})
     class FakeResp:
+        status_code = 200
+        def json(self): return {"ok": True}
         def raise_for_status(self): pass
     return FakeResp()
 
@@ -141,6 +144,31 @@ with mock.patch.object(send_tg.requests, "post", side_effect=fake_post):
     send_tg.send_text("тест с HTML", parse_html=True)
 check("send_text(parse_html=True) — parse_mode='HTML' в data",
       captured_data.get("parse_mode") == "HTML")
+
+captured_data.clear()
+send_tg.TG_BOT_TOKEN  = "token_one"
+check("_api_base() использует актуальный TG_BOT_TOKEN",
+      send_tg._api_base().endswith("/bottoken_one"))
+
+with mock.patch.object(send_tg.requests, "post", side_effect=fake_post):
+    send_tg.send_file(__file__, caption=None)
+check("send_file(caption=None) — parse_mode НЕ в data",
+      "parse_mode" not in captured_data and "caption" not in captured_data,
+      f"keys={list(captured_data.keys())}")
+
+orig_pre = send_tg.AI_TG_PRE
+orig_chunk = send_tg.AI_TG_CHUNK
+send_tg.AI_TG_PRE = False
+send_tg.AI_TG_CHUNK = 10
+try:
+    try:
+        send_tg.send_long_text("<b>12345678901</b>", parse_html=True)
+        check("send_long_text(long HTML) — безопасный отказ без split сырого HTML", False, "ValueError not raised")
+    except ValueError:
+        check("send_long_text(long HTML) — безопасный отказ без split сырого HTML", True)
+finally:
+    send_tg.AI_TG_PRE = orig_pre
+    send_tg.AI_TG_CHUNK = orig_chunk
 
 send_tg.TG_BOT_TOKEN  = orig_token
 send_tg.ADMIN_CHAT_ID = orig_chat
@@ -608,6 +636,45 @@ finally:
     _pipeline._COLLECTOR_TRIGGER_PATH = _orig_trigger_path
     _shutil.rmtree(_trigger_tmpdir, ignore_errors=True)
 
+_pipeline_retry_tmpdir = tempfile.mkdtemp()
+try:
+    import run_pipeline_all_mp as _pipeline_retry
+
+    _orig_log = _pipeline_retry._log
+    _orig_json_event = _pipeline_retry._json_event
+    _orig_processed_dir = _pipeline_retry.PROCESSED_DIR
+    _orig_build_report_debt = _pipeline_retry.build_report_debt
+
+    _pipeline_retry._log = lambda *args, **kwargs: None
+    _pipeline_retry._json_event = lambda *args, **kwargs: None
+    _pipeline_retry.PROCESSED_DIR = Path(_pipeline_retry_tmpdir) / "processed"
+    _pipeline_retry.PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+    _pipeline_retry.build_report_debt = None
+
+    try:
+        debt_src = Path(_pipeline_retry_tmpdir) / "Дебиторка_test.xlsx"
+        debt_src.write_text("stub", encoding="utf-8")
+
+        routed_to, outs = _pipeline_retry._process_one(debt_src)
+        queue_restored = debt_src.exists()
+        no_work_left = not debt_src.with_name(debt_src.name + ".work").exists()
+        processed_empty = not any(_pipeline_retry.PROCESSED_DIR.iterdir())
+
+        check(
+            "TRIGGER T5: DEBT с пустым outs не уходит в processed, а возвращается в очередь",
+            routed_to == "DEBT" and outs == [] and queue_restored and no_work_left and processed_empty,
+            f"routed_to={routed_to!r}, outs={outs!r}, exists={queue_restored}, no_work_left={no_work_left}, processed_empty={processed_empty}",
+        )
+    except Exception as e:
+        check("TRIGGER T5: DEBT с пустым outs не уходит в processed, а возвращается в очередь", False, str(e))
+    finally:
+        _pipeline_retry._log = _orig_log
+        _pipeline_retry._json_event = _orig_json_event
+        _pipeline_retry.PROCESSED_DIR = _orig_processed_dir
+        _pipeline_retry.build_report_debt = _orig_build_report_debt
+finally:
+    _shutil.rmtree(_pipeline_retry_tmpdir, ignore_errors=True)
+
 # ═══════════════════════════════════════════════════════════════
 # 14. opportunity_loss — форматирование и пустые данные
 # ═══════════════════════════════════════════════════════════════
@@ -705,6 +772,55 @@ check("_silence_clients_flat: on_stop последний", _flat[-1]["client"] =
 check("_silence_clients_flat: пустой dict → []", _scf({}) == [])
 
 # ═══════════════════════════════════════════════════════════════
+# 16. send_reports — pinned Telegram TLS request
+section("16. send_reports — pinned Telegram TLS request")
+
+_captured_async_kwargs = {}
+
+class _DummyTimeout:
+    def __init__(self, timeout):
+        self.read = timeout.read
+        self.write = timeout.write
+        self.connect = timeout.connect
+        self.pool = timeout.pool
+
+class _DummyAsyncClient:
+    def __init__(self, **kwargs):
+        _captured_async_kwargs.clear()
+        _captured_async_kwargs.update(kwargs)
+        self.is_closed = False
+        self.timeout = _DummyTimeout(kwargs["timeout"])
+    async def aclose(self):
+        self.is_closed = True
+
+with mock.patch.object(_send_reports.httpx, "AsyncClient", side_effect=lambda **kwargs: _DummyAsyncClient(**kwargs)):
+    _req = _send_reports._PinnedTelegramRequest(
+        client_label="test",
+        connection_pool_size=3,
+        read_timeout=11.0,
+        write_timeout=12.0,
+        connect_timeout=13.0,
+        pool_timeout=14.0,
+    )
+
+check("_PinnedTelegramRequest — trust_env=False",
+      _captured_async_kwargs.get("trust_env") is False,
+      f"kwargs={_captured_async_kwargs}")
+check("_PinnedTelegramRequest — verify is SSLContext",
+      isinstance(_captured_async_kwargs.get("verify"), ssl.SSLContext),
+      f"type={type(_captured_async_kwargs.get('verify'))}")
+
+with mock.patch.object(_send_reports.httpx, "AsyncClient", side_effect=lambda **kwargs: _DummyAsyncClient(**kwargs)):
+    _main_req, _updates_req = _send_reports._build_telegram_requests()
+
+check("_build_telegram_requests — main request type",
+      isinstance(_main_req, _send_reports._PinnedTelegramRequest))
+check("_build_telegram_requests — updates request type",
+      isinstance(_updates_req, _send_reports._PinnedTelegramRequest))
+check("_build_telegram_requests — updates timeout > main timeout",
+      _updates_req.read_timeout > _main_req.read_timeout,
+      f"main={_main_req.read_timeout} updates={_updates_req.read_timeout}")
+
 # ИТОГ
 # ═══════════════════════════════════════════════════════════════
 print(f"\n{'═'*60}")

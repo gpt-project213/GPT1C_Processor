@@ -1,8 +1,13 @@
 """
 Модуль для генерации кратких сводок по продажам
 
-Версия: 1.6 (2026-03-16)
+Версия: 1.7 (2026-04-22)
 ─────────────────────────────────────────────────
+v1.7: format_manager_pipeline — корректный Топ-3 клиентов
+  - Поддержка обоих форматов JSON: {client,total} (sales_parser.py) и {name,amount}
+  - Исключение псевдо-клиента "Без клиента" из Топ-3
+  - Причина: на декадной сводке менеджера (e.g. Магира, 11-20 апреля)
+    Топ-3 показывал "?" с 0 ₸, потому что читались отсутствующие ключи
 v1.5: C4 — тренд неделя-к-неделе в build_admin_sales_summary
   - get_all_periods_sorted() — список всех периодов по убыванию даты
   - build_admin_sales_summary() — дополняется строкой «vs пред.»
@@ -706,13 +711,36 @@ class SalesSummary:
             f"Клиентов: {cnt} · Средний чек: {self.format_amount(avg)} ₸",
         ]
 
-        top3 = sorted(clients, key=lambda x: x.get("amount", 0), reverse=True)[:3]
+        # v1.7 (2026-04-22): поддержка ОБОИХ форматов JSON клиентов:
+        #   - {client, total}  — пишет sales_parser.py (новый формат, используемый в pipeline)
+        #   - {name, amount}   — legacy-формат от собственного парсера HTML в sales_summary
+        # Причина: на декадной сводке менеджера Топ-3 показывал "?" с 0 ₸,
+        # потому что sales_parser пишет "client"/"total", а код читал только "name"/"amount".
+        def _client_amount(x):
+            v = x.get("amount")
+            if v is None:
+                v = x.get("total", 0)
+            try:
+                return float(v or 0)
+            except (TypeError, ValueError):
+                return 0.0
+        def _client_name(x):
+            return (x.get("name") or x.get("client") or "?")[:28]
+        # v1.7: исключаем псевдо-клиентов "Без клиента" из Топ-3 —
+        # это bucket для строк товаров без заголовка клиента в исходном 1С-отчёте,
+        # он не должен конкурировать с реальными клиентами за позицию в топе.
+        _PSEUDO = ("без клиента", "не определён", "не определен", "не указан", "?")
+        def _is_real_client(x):
+            raw = (x.get("name") or x.get("client") or "").strip().lower()
+            return raw and raw not in _PSEUDO
+        real_clients = [c for c in clients if _is_real_client(c)]
+        top3 = sorted(real_clients, key=_client_amount, reverse=True)[:3]
         if top3:
             lines.append("")
             lines.append("🏆 Топ-3 клиента:")
             for i, c in enumerate(top3, 1):
-                name   = (c.get("name", "?"))[:28]
-                amount = c.get("amount", 0)
+                name   = _client_name(c)
+                amount = _client_amount(c)
                 lines.append(f"  {i}. {name:<28} — {self.format_amount(amount)} ₸")
 
         # v1.4: Рейтинг среди всех менеджеров (розжиг конкуренции)

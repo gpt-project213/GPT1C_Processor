@@ -4,7 +4,11 @@
 bot/crm_clients.py
 Универсальная база клиентов Минбаракат (CRM).
 
-Версия: 1.0.3 (2026-04-19)
+Версия: 1.1.0 (2026-04-30)
+Изменения v1.0.5:
+  - Fix S1: список менеджеров читается из config/managers.json (single source of truth).
+    Раньше был хардкод ("Алена", "Ергали", "Магира", "Оксана"); fallback — тот же
+    хардкод, если файл отсутствует/пуст (защищает прод от сломанного конфига).
 
 Источники данных:
   - reports/json/debt_ext_*.json   → клиенты по менеджерам (дебиторка)
@@ -32,6 +36,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from dotenv import load_dotenv
 from zoneinfo import ZoneInfo
+from bot.crm_audit_log import audit as crm_audit
+from bot.logging_utils import get_runtime_logger
 
 load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env",
             encoding="utf-8-sig", override=False)
@@ -45,7 +51,8 @@ CLIENTS_PATH = CONFIG_DIR / "clients.json"
 CONTACTS_XLSX_PATH = ROOT_DIR / "contacts.xlsx"
 CONTACTS_XLSX_BACKUP_DIR = ROOT_DIR / "backups" / "contacts_xlsx"
 
-logger = logging.getLogger(__name__)
+logger = get_runtime_logger(__name__, system="CRM", component="STORE")
+_UNKNOWN_MANAGERS = {"", "Не определён", "?", "-", "—"}
 
 PHONE_IN_NAME_RE = re.compile(
     r"(?<!\d)(?:\+?7|8)[\s\-\(\)]*\d{3}[\s\-\(\)]*\d{3}[\s\-]*\d{2}[\s\-]*\d{2}(?!\d)"
@@ -54,6 +61,28 @@ PHONE_IN_NAME_RE = re.compile(
 # Фильтр служебных записей из sales JSON.
 # Клиенты и товары различаются по колонкам в sales_parser, а не по тексту имени.
 _METADATA_KEYWORDS = ("Дополнительные поля:", "Отборы:", "Сортировка:", "Группировка:")
+
+# Ключевые слова для автоматической пометки записей как вендоров/контрагентов.
+# Записи с этими подстроками — сотрудники, поставщики услуг, внутренние расчёты.
+# Они появляются в 1С как контрагенты, но не являются клиентами-покупателями.
+_VENDOR_NAME_KEYWORDS = (
+    "зарплат",    # зарплата, зарплату, зарплатный
+    "зар.плат",   # зар.плата
+    "зар плат",   # зар плата, зар плату, товар по зар плату
+    "з.п.",       # з.п. в любой позиции
+    "з/п",        # з/п в любой позиции
+    "зп",         # plain "ЗП" без разделителей
+    "по зп",       # тов по зп, товар по зп
+    "под зп",      # тов под зп, товар под зп
+    "тов по з",    # тов по зп, тов по з/п, тов по зарплате
+    "тов под з",   # тов под зп, тов под з/п, тов под зарплате
+    "товар по з",  # товар по зп, товар по зарплате
+    "товар под з", # товар под зп, товар под зарплате
+    "аванс сотр", # авансы сотрудникам
+    "водитель",   # внутренние сотрудники / логистика
+    "недостача",  # служебная строка, не клиент
+    "без клиента", # служебная строка, не клиент
+)
 
 
 # ─────────────────────────────────────────────
@@ -148,6 +177,316 @@ def extract_phones_from_client_name(client_name: str) -> List[str]:
     return phones
 
 
+def canonicalize_client_key(name: str) -> str:
+    """Canonical form for CRM duplicate detection without changing the display key."""
+    normalized = re.sub(r"\s+", " ", str(name or "").strip())
+    normalized = normalized.replace("ё", "е").replace("Ё", "Е")
+    return normalized.lower()
+
+
+def canonicalize_client_key_loose(name: str) -> str:
+    """
+    Softer canonical form for legacy duplicates.
+    Trims a trailing counter like "... В 2" so a filled card can win over an empty legacy row.
+    """
+    normalized = canonicalize_client_key(name)
+    return re.sub(r"(?<=\d\s[^\W\d_])\s+\d+$", "", normalized, count=1, flags=re.UNICODE)
+
+
+def is_service_client_name(name: str) -> bool:
+    """Returns True for internal/service rows that should not request contact filling."""
+    normalized = canonicalize_client_key(name)
+    if normalized in ("без клиента", "недостача"):
+        return True
+    return any(keyword in normalized for keyword in _VENDOR_NAME_KEYWORDS)
+
+
+def _find_existing_client_key(clients_db: Dict[str, Any], name: str) -> Optional[str]:
+    if name in clients_db:
+        return name
+    target = canonicalize_client_key(name)
+    for existing_key in clients_db.keys():
+        if canonicalize_client_key(existing_key) == target:
+            return existing_key
+    return None
+
+
+def _contact_phone_value(info: Dict[str, Any]) -> str:
+    if not isinstance(info, dict):
+        return ""
+    return (info.get("whatsapp") or info.get("phone") or "").strip()
+
+
+def _review_exclusions(info: Dict[str, Any]) -> List[str]:
+    raw = info.get("duplicate_review_exclusions", []) if isinstance(info, dict) else []
+    if isinstance(raw, list):
+        return [str(v) for v in raw if str(v).strip()]
+    return []
+
+
+def _pair_review_blocked(left_key: str, left_info: Dict[str, Any], right_key: str, right_info: Dict[str, Any]) -> bool:
+    left_exclusions = {canonicalize_client_key(v) for v in _review_exclusions(left_info)}
+    right_exclusions = {canonicalize_client_key(v) for v in _review_exclusions(right_info)}
+    left_canon = canonicalize_client_key(left_key)
+    right_canon = canonicalize_client_key(right_key)
+    return right_canon in left_exclusions or left_canon in right_exclusions
+
+
+def _iter_duplicate_candidate_keys(clients_db: Dict[str, Any], name: str) -> List[str]:
+    """Collects strict and loose duplicate candidates for a CRM key."""
+    target_strict = canonicalize_client_key(name)
+    target_loose = canonicalize_client_key_loose(name)
+    candidates: List[str] = []
+    for existing_key in clients_db.keys():
+        strict = canonicalize_client_key(existing_key)
+        loose = canonicalize_client_key_loose(existing_key)
+        if strict == target_strict or loose == target_loose:
+            candidates.append(existing_key)
+    return candidates
+
+
+def _choose_best_duplicate_key(
+    clients_db: Dict[str, Any],
+    name: str,
+    manager: str = "",
+) -> Optional[str]:
+    """
+    Prefer the most useful duplicate candidate:
+    - saved phone/contact first
+    - then stricter key equality
+    - then same manager / owned record
+    """
+    candidates = _iter_duplicate_candidate_keys(clients_db, name)
+    if not candidates:
+        return None
+
+    target_strict = canonicalize_client_key(name)
+    target_loose = canonicalize_client_key_loose(name)
+    unknown_managers = {"", "Не определён", "?", "-", "—"}
+
+    def _score(existing_key: str) -> Tuple[int, int, int, int, int]:
+        info = clients_db.get(existing_key, {}) if isinstance(clients_db.get(existing_key), dict) else {}
+        strict = canonicalize_client_key(existing_key)
+        loose = canonicalize_client_key_loose(existing_key)
+        phone = (info.get("whatsapp") or info.get("phone") or "").strip()
+        telegram_id = (info.get("telegram_id") or "").strip()
+        existing_manager = (info.get("manager") or "").strip()
+        relation = 3
+        if existing_key == name:
+            relation = 0
+        elif strict == target_strict:
+            relation = 1
+        elif loose == target_loose:
+            relation = 2
+        return (
+            0 if (phone or telegram_id) else 1,
+            relation,
+            0 if manager and existing_manager.lower() == manager.lower() else 1,
+            0 if existing_manager not in unknown_managers else 1,
+            len(existing_key),
+        )
+
+    return min(candidates, key=_score)
+
+
+def _find_phone_donor_key(clients_db: Dict[str, Any], name: str, manager: str = "") -> Optional[str]:
+    """Returns a duplicate key that already has a saved phone or telegram id."""
+    preferred = _choose_best_duplicate_key(clients_db, name, manager=manager)
+    if not preferred:
+        return None
+    info = clients_db.get(preferred, {}) if isinstance(clients_db.get(preferred), dict) else {}
+    if (info.get("whatsapp") or info.get("phone") or "").strip():
+        return preferred
+    if (info.get("telegram_id") or "").strip():
+        return preferred
+    return None
+
+
+def _merge_client_entries(clients_db: Dict[str, Any], keep_key: str, drop_key: str) -> None:
+    """Merges a legacy duplicate row into the preferred CRM card."""
+    if keep_key == drop_key:
+        return
+    keep = clients_db.get(keep_key)
+    drop = clients_db.get(drop_key)
+    if not isinstance(keep, dict) or not isinstance(drop, dict):
+        return
+
+    aliases = keep.setdefault("aliases", [])
+    for alias in [drop_key, *drop.get("aliases", [])]:
+        if alias and alias != keep_key and alias not in aliases:
+            aliases.append(alias)
+
+    keep_sources = keep.setdefault("sources", [])
+    for source in drop.get("sources", []):
+        if source not in keep_sources:
+            keep_sources.append(source)
+
+    for field in ("display_name", "original_name", "address", "phone_source", "name_mode"):
+        if not keep.get(field) and drop.get(field):
+            keep[field] = drop[field]
+    if keep.get("name_review_needed") is None and drop.get("name_review_needed") is not None:
+        keep["name_review_needed"] = drop["name_review_needed"]
+
+    first_seen_values = [v for v in (keep.get("first_seen"), drop.get("first_seen")) if v]
+    if first_seen_values:
+        keep["first_seen"] = min(first_seen_values)
+    last_seen_values = [v for v in (keep.get("last_seen"), drop.get("last_seen")) if v]
+    if last_seen_values:
+        keep["last_seen"] = max(last_seen_values)
+
+    if not keep.get("manager") and drop.get("manager"):
+        keep["manager"] = drop["manager"]
+    if drop.get("is_vendor"):
+        keep["is_vendor"] = True
+        keep["do_not_call"] = True
+    keep_exclusions = keep.setdefault("duplicate_review_exclusions", [])
+    if not isinstance(keep_exclusions, list):
+        keep_exclusions = keep["duplicate_review_exclusions"] = [keep_exclusions] if keep_exclusions else []
+    for excluded in _review_exclusions(drop):
+        if excluded != keep_key and excluded not in keep_exclusions:
+            keep_exclusions.append(excluded)
+
+    clients_db.pop(drop_key, None)
+
+
+def get_phone_conflict_groups(limit: Optional[int] = None) -> List[Dict[str, Any]]:
+    """
+    Returns duplicate groups where variants have different non-empty phones.
+    These groups need manager confirmation before merge.
+    """
+    data = load_clients()
+    clients_db = data.get("clients", {})
+    grouped: Dict[str, List[Tuple[str, Dict[str, Any]]]] = {}
+    for key, info in clients_db.items():
+        if not isinstance(info, dict):
+            continue
+        if info.get("is_vendor") or is_service_client_name(key):
+            continue
+        grouped.setdefault(canonicalize_client_key_loose(key), []).append((key, info))
+
+    results: List[Dict[str, Any]] = []
+    for loose_key, items in grouped.items():
+        if len(items) < 2:
+            continue
+        phones: Dict[str, List[str]] = {}
+        managers = set()
+        for key, info in items:
+            phone = _contact_phone_value(info)
+            if phone:
+                phones.setdefault(phone, []).append(key)
+            manager = (info.get("manager") or "").strip()
+            if manager not in _UNKNOWN_MANAGERS:
+                managers.add(manager)
+        if len(phones) < 2:
+            continue
+        if len(items) == 2 and _pair_review_blocked(items[0][0], items[0][1], items[1][0], items[1][1]):
+            continue
+
+        manager = managers.pop() if len(managers) == 1 else ""
+        results.append(
+            {
+                "group_key": loose_key,
+                "manager": manager,
+                "items": [
+                    {
+                        "client_key": key,
+                        "phone": _contact_phone_value(info),
+                        "manager": (info.get("manager") or "").strip(),
+                        "sources": list(info.get("sources", [])) if isinstance(info.get("sources"), list) else [],
+                        "display_name": (info.get("display_name") or "").strip(),
+                    }
+                    for key, info in items
+                    if _contact_phone_value(info)
+                ],
+            }
+        )
+    results.sort(key=lambda row: ((row.get("manager") or "~"), row.get("group_key") or ""))
+    return results[:limit] if limit else results
+
+
+def resolve_phone_conflict(
+    client_keys: List[str],
+    chosen_phone: str,
+    chosen_key: str = "",
+    reviewer: str = "",
+    phone_source: str = "manager_duplicate_review",
+) -> bool:
+    """
+    Resolves a duplicate phone conflict by keeping one key, setting the chosen phone,
+    and merging sibling entries into aliases of the kept card.
+    """
+    if not client_keys or len(client_keys) < 2:
+        return False
+    data = load_clients()
+    clients_db = data.get("clients", {})
+    existing_keys = [key for key in client_keys if isinstance(clients_db.get(key), dict)]
+    if len(existing_keys) < 2:
+        return False
+
+    manager = ""
+    for key in existing_keys:
+        info = clients_db.get(key, {})
+        manager = (info.get("manager") or "").strip()
+        if manager and manager not in _UNKNOWN_MANAGERS:
+            break
+    keep_key = chosen_key if chosen_key in existing_keys else _choose_best_duplicate_key(clients_db, existing_keys[0], manager=manager)
+    if keep_key not in existing_keys:
+        keep_key = existing_keys[0]
+
+    keep = clients_db.get(keep_key)
+    if not isinstance(keep, dict):
+        return False
+    keep["whatsapp"] = chosen_phone.strip()
+    keep["phone_source"] = phone_source
+    keep["duplicate_review_exclusions"] = []
+
+    for other_key in existing_keys:
+        if other_key == keep_key:
+            continue
+        _merge_client_entries(clients_db, keep_key, other_key)
+
+    data["clients"] = clients_db
+    save_clients(data)
+    crm_audit(
+        "duplicate_phone_conflict_resolved",
+        reviewer=reviewer,
+        keep_key=keep_key,
+        chosen_phone=chosen_phone,
+        merged_keys=existing_keys,
+    )
+    logger.info("CRM duplicate conflict resolved: keep=%s merged=%d reviewer=%s", keep_key, len(existing_keys), reviewer or "-")
+    return True
+
+
+def mark_phone_conflict_distinct(client_keys: List[str], reviewer: str = "") -> bool:
+    """Marks a duplicate pair as intentionally distinct so future review won't re-open it."""
+    if not client_keys or len(client_keys) < 2:
+        return False
+    data = load_clients()
+    clients_db = data.get("clients", {})
+    changed = False
+    for key in client_keys:
+        info = clients_db.get(key)
+        if not isinstance(info, dict):
+            continue
+        exclusions = info.setdefault("duplicate_review_exclusions", [])
+        if not isinstance(exclusions, list):
+            exclusions = info["duplicate_review_exclusions"] = [exclusions] if exclusions else []
+        for other_key in client_keys:
+            if other_key == key:
+                continue
+            if other_key not in exclusions:
+                exclusions.append(other_key)
+                changed = True
+    if not changed:
+        return False
+    data["clients"] = clients_db
+    save_clients(data)
+    crm_audit("duplicate_phone_conflict_marked_distinct", reviewer=reviewer, client_keys=client_keys)
+    logger.info("CRM duplicate conflict marked distinct: keys=%d reviewer=%s", len(client_keys), reviewer or "-")
+    return True
+
+
 # ─────────────────────────────────────────────
 # Вспомогательные функции разбора JSON отчётов
 # ─────────────────────────────────────────────
@@ -173,11 +512,75 @@ def _parse_manager_from_filename(filename: str) -> str:
     return ""
 
 
+def _latest_debt_json_for_manager(manager: str) -> Optional[Path]:
+    detailed = list(JSON_DIR.glob(f"debt_ext_*Детальный Дебиторы {manager}*.json"))
+    if detailed:
+        return max(detailed, key=_safe_mtime)
+
+    fallback = list(JSON_DIR.glob(f"debt_ext_*{manager}*.json"))
+    if fallback:
+        return max(fallback, key=_safe_mtime)
+    return None
+
+
+def _load_known_managers() -> Tuple[str, ...]:
+    """
+    Fix S1: читаем имена менеджеров из config/managers.json — единственный
+    источник правды по CLAUDE.md. Fallback — исторический хардкод, чтобы
+    прод не ломался при отсутствии конфига.
+    """
+    fallback = ("Алена", "Ергали", "Магира", "Оксана")
+    cfg_path = CONFIG_DIR / "managers.json"
+    try:
+        if cfg_path.exists():
+            data = json.loads(cfg_path.read_text(encoding="utf-8"))
+            if isinstance(data, dict) and data:
+                names = tuple(k.strip() for k in data.keys() if k and k.strip())
+                if names:
+                    return names
+    except (OSError, ValueError) as e:
+        logger.error("managers.json read error: %s — используем fallback", e)
+    return fallback
+
+
 def _load_latest_debt_clients() -> List[Tuple[str, str]]:
     """
     Читает последние debt_ext_*.json по каждому менеджеру.
     Возвращает список (client_name, manager).
     """
+    result: List[Tuple[str, str]] = []
+    for manager_name in _load_known_managers():
+        latest = _latest_debt_json_for_manager(manager_name)
+        if latest is None:
+            continue
+        try:
+            with open(latest, encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError) as e:
+            logger.error("debt JSON read error %s: %s", latest.name, e)
+            continue
+
+        manager = (data.get("manager") or manager_name) if isinstance(data, dict) else manager_name
+        if not manager or manager in ("?", "-", "вЂ”", "ABSENT"):
+            continue
+
+        clients: List[Dict[str, Any]] = []
+        if isinstance(data, dict):
+            for key in ("clients", "rows", "data"):
+                if key in data and isinstance(data[key], list):
+                    clients = data[key]
+                    break
+
+        for c in clients:
+            if not isinstance(c, dict):
+                continue
+            name = (c.get("name") or c.get("client") or "").strip()
+            if name:
+                result.append((name, manager))
+
+    if result:
+        return result
+
     candidates = list(JSON_DIR.glob("debt_ext_*.json"))
     if not candidates:
         return []
@@ -282,40 +685,56 @@ def update_from_reports() -> Dict[str, List[str]]:
     today = _today()
     new_by_manager: Dict[str, List[str]] = {}
 
+    def _is_vendor_name(name: str) -> bool:
+        return is_service_client_name(name)
+
     def _upsert(name: str, manager: str, source: str) -> bool:
-        """Добавляет/обновляет клиента. Возвращает True если клиент новый."""
-        existing = clients_db.get(name)
+        """Добавляет/обновляет клиента. Возвращает True если клиент новый (не вендор)."""
+        is_vendor = _is_vendor_name(name)
+        existing_key = _choose_best_duplicate_key(clients_db, name, manager=manager)
+        existing = clients_db.get(existing_key) if existing_key else None
         if existing is None:
             clients_db[name] = {
                 "manager": manager,
                 "whatsapp": "",
                 "telegram_id": "",
                 "language": "ru",
-                "do_not_call": False,
+                "do_not_call": is_vendor,
+                "is_vendor": is_vendor,
                 "sources": [source],
                 "first_seen": today,
                 "last_seen": today,
+                "aliases": [],
             }
-            return True
-        else:
-            # Обновляем last_seen и sources
-            existing["last_seen"] = today
-            if source not in existing.get("sources", []):
-                existing.setdefault("sources", []).append(source)
-            # Обновляем менеджера если был не определён или пуст
-            # Реальные имена ("Вадим", "Алена" и т.д.) не перезаписываем
-            _UNOWNED = ("", "Не определён", "?", "-", "—")
-            if existing.get("manager", "") in _UNOWNED and manager and manager not in _UNOWNED:
-                existing["manager"] = manager
-            return False
+            crm_audit("client_created", client_key=name, manager=manager, source=source, is_vendor=is_vendor)
+            return not is_vendor
 
-    # Из дебиторки
+        if existing_key != name and name in clients_db:
+            _merge_client_entries(clients_db, existing_key, name)
+            existing = clients_db.get(existing_key) if existing_key else None
+
+        existing["last_seen"] = today
+        if source not in existing.get("sources", []):
+            existing.setdefault("sources", []).append(source)
+        if is_vendor and not existing.get("is_vendor"):
+            existing["is_vendor"] = True
+            existing["do_not_call"] = True
+        _UNOWNED = ("", "Не определён", "?", "-", "—")
+        if existing.get("manager", "") in _UNOWNED and manager and manager not in _UNOWNED:
+            existing["manager"] = manager
+            crm_audit("manager_assigned", client_key=existing_key or name, manager=manager, source=source)
+        if existing_key and existing_key != name:
+            aliases = existing.setdefault("aliases", [])
+            if name not in aliases and name != existing_key:
+                aliases.append(name)
+                crm_audit("canonical_merge", client_key=existing_key, alias=name, manager=existing.get("manager", ""), source=source)
+        return False
+
     for name, manager in _load_latest_debt_clients():
         is_new = _upsert(name, manager, "debt")
         if is_new and manager:
             new_by_manager.setdefault(manager, []).append(name)
 
-    # Из продаж
     for name, manager in _load_latest_sales_clients():
         is_new = _upsert(name, manager, "sales")
         if is_new and manager:
@@ -325,18 +744,15 @@ def update_from_reports() -> Dict[str, List[str]]:
     save_clients(data)
 
     total_new = sum(len(v) for v in new_by_manager.values())
+    crm_audit("crm_sync_complete", total_clients=len(clients_db), total_new=total_new)
     logger.info("CRM обновлена: %d клиентов всего, %d новых", len(clients_db), total_new)
     return new_by_manager
-
-
-# ─────────────────────────────────────────────
-# Работа с телефонами
-# ─────────────────────────────────────────────
 
 def get_clients_without_phones(manager: str, limit: int = 5) -> List[str]:
     """
     Возвращает до `limit` имён клиентов данного менеджера без телефона.
     Приоритет: сначала клиенты из дебиторки.
+    Вендоры/контрагенты (is_vendor=True) пропускаются.
     """
     data = load_clients()
     clients_db = data.get("clients", {})
@@ -344,9 +760,15 @@ def get_clients_without_phones(manager: str, limit: int = 5) -> List[str]:
     for name, info in clients_db.items():
         if not isinstance(info, dict):
             continue
+        if info.get("is_vendor"):
+            continue
+        if is_service_client_name(name):
+            continue
         if info.get("manager", "").lower() != manager.lower():
             continue
         if info.get("whatsapp") or info.get("telegram_id"):
+            continue
+        if _find_phone_donor_key(clients_db, name, manager=manager):
             continue
         # Приоритет — дебиторка
         sources = info.get("sources", [])
@@ -436,9 +858,11 @@ def set_client_phone(client_name: str, phone: str, manager: str = "",
     data = load_clients()
     clients_db = data.get("clients", {})
 
-    entry = clients_db.get(client_name)
+    entry_key = _find_existing_client_key(clients_db, client_name)
+    entry = clients_db.get(entry_key) if entry_key else None
     if entry is None:
         logger.warning("set_client_phone: клиент не найден: %s", client_name)
+        crm_audit("phone_set_missing", client_key=client_name, phone=phone)
         return False
 
     entry["whatsapp"] = phone.strip()
@@ -453,6 +877,7 @@ def set_client_phone(client_name: str, phone: str, manager: str = "",
 
     data["clients"] = clients_db
     save_clients(data)
+    crm_audit("phone_set", client_key=entry_key or client_name, phone=phone, manager=entry.get("manager", manager), phone_source=phone_source or "")
     logger.info("Телефон записан: %s → %s", client_name, phone)
     return True
 
@@ -488,6 +913,7 @@ def set_client_details(client_name: str, display_name: str = "",
         entry["name_review_needed"] = bool(name_review_needed)
     data["clients"] = clients_db
     save_clients(data)
+    crm_audit("client_details_set", client_key=client_name, display_name=display_name or "", phone=phone or "", address=address or "", mode=name_mode or "")
     logger.info("Данные обновлены: %s (name=%r phone=%r address=%r original=%r mode=%r review=%r)",
                 client_name, display_name or "-", phone or "-", address or "-",
                 original_name or "-", name_mode or "-", name_review_needed)
@@ -508,6 +934,7 @@ def set_client_alias(client_name: str, alias: str) -> bool:
     entry["display_name"] = alias.strip()
     data["clients"] = clients_db
     save_clients(data)
+    crm_audit("alias_set", client_key=client_name, alias=alias)
     logger.info("Псевдоним сохранён: %s → «%s»", client_name, alias)
     return True
 
