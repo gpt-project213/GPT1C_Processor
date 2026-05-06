@@ -206,9 +206,18 @@ def _get_manager_chat_id(manager_name: str) -> Optional[int]:
 
 
 def _apply_collector_day_policy(client: Dict[str, Any], name: str, *, use_first_seen: bool) -> Dict[str, Any]:
-    """Apply first_seen day inflation only when residual debt age is unavailable."""
+    """Apply first_seen inflation only when FIFO debt age is unavailable (low-confidence bases).
+
+    Excluded (reliable FIFO-based): movements_fifo, movements_fifo_significant,
+    opening_fallback, opening_fallback_significant, no_debt.
+    Applied only to: fallback_days_silence and unknown bases.
+    """
     basis = str(client.get("debt_age_basis") or "")
-    if basis in ("movements_fifo", "opening_fallback", "no_debt"):
+    if basis in (
+        "movements_fifo", "movements_fifo_significant",
+        "opening_fallback", "opening_fallback_significant",
+        "no_debt",
+    ):
         return dict(client)
 
     real_days = get_debt_days_since_first_seen(name) if use_first_seen else 0

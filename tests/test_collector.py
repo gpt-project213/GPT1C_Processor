@@ -2795,9 +2795,54 @@ finally:
     _sh2.rmtree(_ship_tmpdir, ignore_errors=True)
 
 # ═══════════════════════════════════════════════════════════════
-# 20. ИТОГ
+# 21. _apply_collector_day_policy: movements_fifo_significant не инфлятирует
 # ═══════════════════════════════════════════════════════════════
-section("ИТОГ")  # секция 20
+section("21. _apply_collector_day_policy basis exclusions")
+
+import collector.collections_engine as _ce_pol
+
+_BASES_NO_INFLATE = [
+    "movements_fifo",
+    "movements_fifo_significant",
+    "opening_fallback",
+    "opening_fallback_significant",
+    "no_debt",
+]
+_BASES_INFLATE = ["fallback_days_silence", ""]
+
+for _basis in _BASES_NO_INFLATE:
+    _client = {"days": 5, "level": 0, "amount": 666000.0, "debt_age_basis": _basis}
+    _result = _ce_pol._apply_collector_day_policy(_client, "ТОО Тест", use_first_seen=False)
+    check(
+        f"basis={_basis!r}: days not inflated",
+        _result["days"] == 5 and _result["level"] == 0,
+    )
+
+for _basis in _BASES_INFLATE:
+    _client = {"days": 5, "level": 0, "amount": 666000.0, "debt_age_basis": _basis}
+    # use_first_seen=False → real_days=0, max(5, 0)=5 — проверяем что функция вообще доходит до inflation-пути
+    _result = _ce_pol._apply_collector_day_policy(_client, "ТОО Тест", use_first_seen=False)
+    check(
+        f"basis={_basis!r}: inflation path reached (no first_seen data → days unchanged)",
+        _result["days"] == 5,  # real_days=0 → max(5,0)=5
+    )
+
+# Симуляция реального кейса: movements_fifo_significant + days=5 → должно остаться 5, не 12
+_prime_client = {
+    "days": 5, "level": 0, "amount": 666000.6,
+    "debt_age_basis": "movements_fifo_significant",
+    "oldest_unpaid_date": "2026-05-01",
+}
+_prime_result = _ce_pol._apply_collector_day_policy(_prime_client, "М Прайм Фаст Фуд", use_first_seen=True)
+check(
+    "Прайм Фаст Фуд: movements_fifo_significant не накручивает дни до 12",
+    _prime_result["days"] == 5 and _prime_result["level"] == 0,
+)
+
+# ═══════════════════════════════════════════════════════════════
+# 22. ИТОГ (бывший 20)
+# ═══════════════════════════════════════════════════════════════
+section("ИТОГ")  # секция 22
 total  = len(results)
 passed = sum(1 for _, ok in results if ok)
 failed = total - passed
