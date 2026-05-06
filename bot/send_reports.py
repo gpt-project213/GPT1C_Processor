@@ -6522,26 +6522,52 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await q.answer("Это запрос другого менеджера.")
                     return
                 kb = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("Да, оплата есть", callback_data=f"payhold_full|{token}")],
-                    [InlineKeyboardButton("Частично", callback_data=f"payhold_partial|{token}")],
-                    [InlineKeyboardButton("Не вижу оплаты", callback_data=f"payhold_none|{token}")],
+                    [InlineKeyboardButton("✅ Да, оплата есть", callback_data=f"payhold_full|{token}")],
+                    [InlineKeyboardButton("🔸 Частично",        callback_data=f"payhold_partial|{token}")],
+                    [InlineKeyboardButton("❌ Не вижу оплаты",  callback_data=f"payhold_none|{token}")],
+                    [InlineKeyboardButton("❓ Не понимаю",      callback_data=f"payhold_help|{token}")],
                 ])
                 if not saida_chat_id:
                     await q.answer("Не найден chat_id Саиды.")
                     return
+                client_name = rec.get("client", "")
+                manager_name = rec.get("manager", "")
+                debt_str = rec.get("debt_str") or str(rec.get("debt", ""))
                 await context.bot.send_message(
                     chat_id=saida_chat_id,
                     text=(
-                        f"Проверь оплату по клиенту:\n\n"
-                        f"Менеджер: {rec.get('manager', '')}\n"
-                        f"Клиент: {rec.get('client', '')}\n"
-                        f"Долг в отчёте: {rec.get('debt_str') or rec.get('debt', '')}\n\n"
-                        f"Если оплата есть, но ещё не разнесена в 1С, нажми подтверждение."
+                        f"💬 <b>Запрос на проверку оплаты</b>\n\n"
+                        f"Менеджер <b>{manager_name}</b> сообщил, что клиент оплатил.\n\n"
+                        f"Клиент: <b>{client_name}</b>\n"
+                        f"Долг в отчёте: {debt_str}\n\n"
+                        f"Проверь в 1С и нажми нужную кнопку.\n"
+                        f"<i>Ответь в течение 4 часов.</i>"
                     ),
                     reply_markup=kb,
-                    parse_mode=None,
+                    parse_mode="HTML",
                 )
                 await q.answer("Запрос Саиде отправлен.")
+                return
+
+            if action == "payhold_help":
+                if chat_id != saida_chat_id:
+                    await q.answer("Только для Саиды.")
+                    return
+                await context.bot.send_message(
+                    chat_id=saida_chat_id,
+                    text=(
+                        "❓ <b>Что означают кнопки:</b>\n\n"
+                        "✅ <b>Да, оплата есть</b> — деньги пришли полностью.\n"
+                        "   Клиент снимается со стопа автоматически. Менеджер и директор узнают.\n\n"
+                        "🔸 <b>Частично</b> — пришла не вся сумма.\n"
+                        "   Директор получит уведомление и решит сам.\n\n"
+                        "❌ <b>Не вижу оплаты</b> — ничего не поступало.\n"
+                        "   Клиент остаётся в стопе.\n\n"
+                        "⏰ Если не ответишь в течение 8 часов — уведомления уйдут клиентам "
+                        "автоматически, а менеджеры и директор узнают об этом."
+                    ),
+                    parse_mode="HTML",
+                )
                 return
 
             # Директор решает за Саиду (байпас после SAIDA_BYPASS_HOURS)
