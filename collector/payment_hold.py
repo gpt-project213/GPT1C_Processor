@@ -300,6 +300,90 @@ def get_saida_hold_stats() -> Dict[str, Any]:
     }
 
 
+def get_partial_payment_stats() -> Dict[str, Any]:
+    """Read-only сводка активных частичных оплат по saida_payment_holds.json."""
+    data = _load()
+    now = _now()
+    partials: list[Dict[str, Any]] = []
+    totals = {
+        "partial_total": 0,
+        "claimed_by_manager_total": 0,
+        "oldest_age_hours": 0.0,
+    }
+    managers: Dict[str, Dict[str, Any]] = {}
+    changed = False
+
+    for token, record in list(data.items()):
+        if not isinstance(record, dict):
+            continue
+        if str(record.get("status") or "") != "confirmed_partial":
+            continue
+
+        created_raw = record.get("saida_confirmed_at") or record.get("updated_at") or record.get("created_at")
+        try:
+            created_at = datetime.fromisoformat(str(created_raw))
+            if created_at.tzinfo is None and TZ:
+                created_at = created_at.replace(tzinfo=TZ)
+        except Exception:
+            created_at = now
+
+        age_delta = now - created_at
+        if age_delta > timedelta(days=HOLD_TTL_DAYS):
+            record["status"] = "expired"
+            record["expired_at"] = _now_iso()
+            data[token] = record
+            changed = True
+            continue
+
+        age_hours = max(age_delta.total_seconds() / 3600.0, 0.0)
+        manager = str(record.get("manager") or "—")
+        claimed_by_manager = bool(record.get("claimed_by_manager"))
+        item = {
+            "token": str(token),
+            "manager": manager,
+            "client": str(record.get("client") or "—"),
+            "debt_str": str(record.get("debt_str") or ""),
+            "age_hours": age_hours,
+            "claimed_by_manager": claimed_by_manager,
+            "created_at": str(record.get("created_at") or ""),
+            "confirmed_at": str(record.get("saida_confirmed_at") or record.get("updated_at") or ""),
+        }
+        partials.append(item)
+        totals["partial_total"] += 1
+        totals["oldest_age_hours"] = max(totals["oldest_age_hours"], age_hours)
+        if claimed_by_manager:
+            totals["claimed_by_manager_total"] += 1
+
+        mgr = managers.setdefault(
+            manager,
+            {
+                "manager": manager,
+                "partial_total": 0,
+                "claimed_by_manager_total": 0,
+                "oldest_age_hours": 0.0,
+            },
+        )
+        mgr["partial_total"] += 1
+        mgr["oldest_age_hours"] = max(mgr["oldest_age_hours"], age_hours)
+        if claimed_by_manager:
+            mgr["claimed_by_manager_total"] += 1
+
+    if changed:
+        _save(data)
+
+    partials.sort(key=lambda item: (-item["age_hours"], item["manager"].lower(), item["client"].lower()))
+    managers_list = sorted(
+        managers.values(),
+        key=lambda item: (-item["partial_total"], item["manager"].lower()),
+    )
+    return {
+        "generated_at": _now_iso(),
+        "totals": totals,
+        "managers": managers_list,
+        "oldest_partials": partials[:10],
+    }
+
+
 def format_saida_hold_stats_text() -> str:
     """Текстовая сводка backlog Саиды для директора."""
     stats = get_saida_hold_stats()
@@ -342,6 +426,51 @@ def format_saida_hold_stats_text() -> str:
         lines.append("")
         lines.append("<b>Самые старые:</b>")
         for item in oldest_pending:
+            debt_part = f" · {item['debt_str']} ₸" if item.get("debt_str") else ""
+            source_part = " · WA" if item.get("claimed_by_manager") else ""
+            lines.append(
+                f"• {item['manager']}: {item['client']} — {item['age_hours'] / 24.0:.1f} дн{debt_part}{source_part}"
+            )
+
+    return "\n".join(lines)
+
+
+def format_partial_payment_stats_text() -> str:
+    """Текстовая сводка частичных оплат для директора."""
+    stats = get_partial_payment_stats()
+    totals = stats.get("totals", {})
+    if not totals.get("partial_total"):
+        return "🔸 <b>Частичные оплаты</b>\n\nСейчас нет активных кейсов со статусом confirmed_partial."
+
+    oldest_h = float(totals.get("oldest_age_hours") or 0.0)
+    oldest_days = oldest_h / 24.0 if oldest_h else 0.0
+    lines = [
+        "🔸 <b>Частичные оплаты</b>",
+        "",
+        f"Активных кейсов: <b>{totals.get('partial_total', 0)}</b>",
+        f"Старейший возраст: <b>{oldest_days:.1f} дн</b> ({oldest_h:.0f} ч)",
+    ]
+    if totals.get("claimed_by_manager_total", 0):
+        lines.append(f"Из WA approval без документа: <b>{totals['claimed_by_manager_total']}</b>")
+
+    managers = stats.get("managers", [])
+    if managers:
+        lines.append("")
+        lines.append("<b>По менеджерам:</b>")
+        for item in managers:
+            line = (
+                f"• <b>{item['manager']}</b> — частичных {item['partial_total']}, "
+                f"старейший {item['oldest_age_hours'] / 24.0:.1f} дн"
+            )
+            if item.get("claimed_by_manager_total"):
+                line += f", из WA {item['claimed_by_manager_total']}"
+            lines.append(line)
+
+    oldest_partials = stats.get("oldest_partials", [])
+    if oldest_partials:
+        lines.append("")
+        lines.append("<b>Текущие кейсы:</b>")
+        for item in oldest_partials:
             debt_part = f" · {item['debt_str']} ₸" if item.get("debt_str") else ""
             source_part = " · WA" if item.get("claimed_by_manager") else ""
             lines.append(

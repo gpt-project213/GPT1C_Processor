@@ -2376,6 +2376,17 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as _td_hold_stats:
             "created_at": (_now_hold - timedelta(days=1)).isoformat(timespec="seconds"),
             "updated_at": _now_hold.isoformat(timespec="seconds"),
         },
+        "partial-e": {
+            "token": "partial-e",
+            "status": "confirmed_partial",
+            "manager": "Алена",
+            "client": "ТОО Частичный",
+            "debt_str": "30 000,00",
+            "claimed_by_manager": True,
+            "created_at": (_now_hold - timedelta(hours=7)).isoformat(timespec="seconds"),
+            "updated_at": (_now_hold - timedelta(hours=7)).isoformat(timespec="seconds"),
+            "saida_confirmed_at": (_now_hold - timedelta(hours=7)).isoformat(timespec="seconds"),
+        },
     })
     _hold_stats = _payment_hold.get_saida_hold_stats()
     _hold_mgr = {item["manager"]: item for item in _hold_stats.get("managers", [])}
@@ -2383,7 +2394,7 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as _td_hold_stats:
           _hold_stats["totals"]["pending_total"] == 3
           and _hold_stats["totals"]["warn_total"] == 2
           and _hold_stats["totals"]["bypass_total"] == 1
-          and _hold_stats["totals"]["closed_today"] == 1
+          and _hold_stats["totals"]["closed_today"] == 2
           and _hold_stats["totals"]["claimed_by_manager_total"] == 1,
           str(_hold_stats["totals"]))
     check("PAYHOLD T4: backlog Саиды агрегируется по менеджерам",
@@ -2395,10 +2406,23 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as _td_hold_stats:
     _hold_text = _payment_hold.format_saida_hold_stats_text()
     check("PAYHOLD T5: текст backlog Саиды содержит ключевые метрики",
           "Открыто: <b>3</b>" in _hold_text
-          and "Закрыто сегодня: <b>1</b>" in _hold_text
+          and "Закрыто сегодня: <b>2</b>" in _hold_text
           and "Магира" in _hold_text
           and "Ергали" in _hold_text,
           _hold_text)
+    _partial_stats = _payment_hold.get_partial_payment_stats()
+    _partial_mgr = {item["manager"]: item for item in _partial_stats.get("managers", [])}
+    check("PAYHOLD T6: частичные оплаты агрегируются отдельно",
+          _partial_stats["totals"]["partial_total"] == 1
+          and _partial_stats["totals"]["oldest_age_hours"] > 0
+          and _partial_mgr["Алена"]["partial_total"] == 1,
+          str(_partial_stats))
+    _partial_text = _payment_hold.format_partial_payment_stats_text()
+    check("PAYHOLD T7: текст частичных оплат содержит ключевые метрики",
+          "Активных кейсов: <b>1</b>" in _partial_text
+          and "Алена" in _partial_text
+          and "ТОО Частичный" in _partial_text,
+          _partial_text)
     _payment_hold.PAYMENT_HOLD_PATH = _orig_hold_path
 
 # 19. Debt stop admin shipment limit — после оплаты с лимитом
