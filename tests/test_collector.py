@@ -11,7 +11,7 @@ import json
 import asyncio
 import tempfile
 import shutil
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from unittest.mock import patch, MagicMock, AsyncMock
 
@@ -2334,6 +2334,73 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as _td_hold:
 
 
 # ═══════════════════════════════════════════════════════════════
+with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as _td_hold_stats:
+    _payment_hold.PAYMENT_HOLD_PATH = Path(_td_hold_stats) / "saida_payment_holds.json"
+    _now_hold = _payment_hold._now()
+    _payment_hold._save({
+        "old-a": {
+            "token": "old-a",
+            "status": "pending_saida",
+            "manager": "Магира",
+            "client": "ТОО Старый",
+            "debt_str": "100 000,00",
+            "claimed_by_manager": True,
+            "created_at": (_now_hold - timedelta(hours=10)).isoformat(timespec="seconds"),
+            "updated_at": (_now_hold - timedelta(hours=10)).isoformat(timespec="seconds"),
+        },
+        "mid-b": {
+            "token": "mid-b",
+            "status": "pending_saida",
+            "manager": "Ергали",
+            "client": "ИП Средний",
+            "debt_str": "50 000,00",
+            "claimed_by_manager": False,
+            "created_at": (_now_hold - timedelta(hours=5)).isoformat(timespec="seconds"),
+            "updated_at": (_now_hold - timedelta(hours=5)).isoformat(timespec="seconds"),
+        },
+        "fresh-c": {
+            "token": "fresh-c",
+            "status": "pending_saida",
+            "manager": "Ергали",
+            "client": "ТОО Свежий",
+            "debt_str": "20 000,00",
+            "claimed_by_manager": False,
+            "created_at": (_now_hold - timedelta(hours=1)).isoformat(timespec="seconds"),
+            "updated_at": (_now_hold - timedelta(hours=1)).isoformat(timespec="seconds"),
+        },
+        "closed-d": {
+            "token": "closed-d",
+            "status": "confirmed_full",
+            "manager": "Алена",
+            "client": "ТОО Закрыт",
+            "created_at": (_now_hold - timedelta(days=1)).isoformat(timespec="seconds"),
+            "updated_at": _now_hold.isoformat(timespec="seconds"),
+        },
+    })
+    _hold_stats = _payment_hold.get_saida_hold_stats()
+    _hold_mgr = {item["manager"]: item for item in _hold_stats.get("managers", [])}
+    check("PAYHOLD T3: backlog Саиды считает pending/warn/bypass/closed_today",
+          _hold_stats["totals"]["pending_total"] == 3
+          and _hold_stats["totals"]["warn_total"] == 2
+          and _hold_stats["totals"]["bypass_total"] == 1
+          and _hold_stats["totals"]["closed_today"] == 1
+          and _hold_stats["totals"]["claimed_by_manager_total"] == 1,
+          str(_hold_stats["totals"]))
+    check("PAYHOLD T4: backlog Саиды агрегируется по менеджерам",
+          _hold_mgr["Магира"]["pending_total"] == 1
+          and _hold_mgr["Магира"]["bypass_total"] == 1
+          and _hold_mgr["Ергали"]["pending_total"] == 2
+          and _hold_mgr["Ергали"]["warn_total"] == 1,
+          str(_hold_mgr))
+    _hold_text = _payment_hold.format_saida_hold_stats_text()
+    check("PAYHOLD T5: текст backlog Саиды содержит ключевые метрики",
+          "Открыто: <b>3</b>" in _hold_text
+          and "Закрыто сегодня: <b>1</b>" in _hold_text
+          and "Магира" in _hold_text
+          and "Ергали" in _hold_text,
+          _hold_text)
+    _payment_hold.PAYMENT_HOLD_PATH = _orig_hold_path
+
 # 19. Debt stop admin shipment limit — после оплаты с лимитом
 # ═══════════════════════════════════════════════════════════════
 section("19. Debt stop admin shipment limit")

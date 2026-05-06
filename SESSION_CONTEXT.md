@@ -1810,3 +1810,47 @@ Observed rebuild result:
 
 - If continuing product work: add similar aggregate reporting for Saida (`pending_saida`, oldest age, closed today, overdue SLA).
 - If continuing control logic: decide whether partial-payment path should auto-resolve any shipment/stop state or always stay manual.
+
+## Handoff Update - 2026-05-06 14:04 +05:00
+
+### Closed in this session
+
+- `Saida backlog` director visibility gap is now closed:
+  - `collector/payment_hold.py`
+  - `bot/send_reports.py`
+  - `tests/test_collector.py`
+  - added read-only backlog analytics over `logs/saida_payment_holds.json`
+  - director can open `🤖 Коллектор -> 📋 Саида backlog` and see:
+    - open `pending_saida`
+    - oldest age
+    - over-SLA count
+    - over-bypass count
+    - closed today
+    - per-manager backlog split
+    - top oldest pending clients
+
+### Verification
+
+- `python -m py_compile collector/payment_hold.py` -> OK
+- `python -m py_compile bot/send_reports.py` -> OK
+- `WHATSAPP_ENABLED=0 LIVE_SEND_ALLOWED=0 python -X utf8 tests/test_collector.py` -> `330/330`
+
+### Current product state
+
+- Director now has read-only aggregate control for both major human bottlenecks:
+  - manager promises (`Договорились`)
+  - Saida payment-confirmation backlog
+- No stop/payment workflow was changed by this step; only visibility and control reporting were added.
+
+### Dirty files intentionally left alone
+
+- `autoagent/orchestrator_agents.json`
+- `autoagent/task_prompt.txt`
+- untracked `audit/*`
+- local backups `config/clients.json.bak-*`
+- untracked `site/`
+
+### Next recommended action
+
+- Decide whether partial-payment path should stay fully manual or also receive director-facing analytics/escalation.
+- If moving into operations: use the new Saida backlog screen to validate real counts/oldest-age on production data and set a business SLA threshold.
