@@ -32,17 +32,22 @@
   .msg-box { background: #e8f4fd; border-left: 3px solid #1a73e8;
              border-radius: 0 8px 8px 0; padding: 10px 12px;
              margin-top: 10px; font-size: 14px; line-height: 1.5; }
-  .msg-box.green { background: #e8f5e9; border-color: #2e7d32; }
+  .msg-box.green  { background: #e8f5e9; border-color: #2e7d32; }
   .msg-box.orange { background: #fff3e0; border-color: #e65100; }
-  .msg-box.red { background: #fce4ec; border-color: #c62828; }
+  .msg-box.red    { background: #fce4ec; border-color: #c62828; }
+  .msg-box.yellow { background: #fffde7; border-color: #f9a825; }
   .btn-row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
   .btn { padding: 7px 14px; border-radius: 8px; font-size: 13px;
          font-weight: 600; display: inline-flex; align-items: center; gap: 4px; }
   .btn.blue   { background: #1a73e8; color: white; }
   .btn.green  { background: #2e7d32; color: white; }
-  .btn.red    { background: #c62828; color: white; }
+  .btn.amber  { background: #e65100; color: white; }
+  .btn.teal   { background: #00695c; color: white; }
   .btn.gray   { background: #e0e0e0; color: #333; }
   .note { background: #fffde7; border-left: 3px solid #f9a825;
+          border-radius: 0 8px 8px 0; padding: 8px 12px;
+          margin-top: 10px; font-size: 13px; line-height: 1.5; }
+  .warn { background: #fce4ec; border-left: 3px solid #c62828;
           border-radius: 0 8px 8px 0; padding: 8px 12px;
           margin-top: 10px; font-size: 13px; line-height: 1.5; }
   .badge { display: inline-block; background: #e3f2fd; color: #1565c0;
@@ -60,14 +65,15 @@
   .time-table td { padding: 7px 10px; border-bottom: 1px solid #f0f0f0;
                    font-size: 14px; vertical-align: top; }
   .time-table td:first-child { font-weight: 700; color: #1a73e8;
-                               white-space: nowrap; width: 70px; }
+                               white-space: nowrap; width: 80px; }
+  .divider { border: none; border-top: 1px solid #f0f0f0; margin: 14px 0; }
 </style>
 </head>
 <body>
 
 <div class="header">
   <h1>📱 Бот аналитики — Минбаракат</h1>
-  <p>Инструкция для менеджеров</p>
+  <p>Инструкция для менеджеров · v9.4.66</p>
 </div>
 
 <div class="container">
@@ -80,16 +86,16 @@
       <span class="arrow">▼</span>
     </div>
     <div class="card-body">
-      <p style="margin-top:12px;line-height:1.6">После команды <strong>/start</strong> вы видите главное меню с 5 кнопками:</p>
+      <p style="margin-top:12px;line-height:1.6">После команды <strong>/start</strong> вы видите главное меню:</p>
       <h3>Кнопки меню</h3>
       <ul>
-        <li><strong>📊 Дебиторка</strong> — задолженность ваших клиентов (простой или детальный отчёт)</li>
+        <li><strong>📊 Дебиторка</strong> — задолженность ваших клиентов</li>
         <li><strong>📦 Остатки</strong> — текущие остатки товара на складе</li>
-        <li><strong>🛒 Продажи</strong> — отчёт по вашим продажам (по клиентам или по товару)</li>
+        <li><strong>🛒 Продажи</strong> — отчёт по вашим продажам</li>
         <li><strong>💰 Валовая</strong> — валовая прибыль по вашим клиентам</li>
-        <li><strong>🗄️ Архив</strong> — предыдущие отчёты за прошлые дни</li>
+        <li><strong>🗄️ Архив</strong> — отчёты за прошлые дни</li>
       </ul>
-      <div class="note">💡 Нажмите любую кнопку — бот пришлёт актуальный файл Excel за сегодня.</div>
+      <div class="note">💡 Нажмите любую кнопку — бот пришлёт актуальный отчёт.</div>
     </div>
   </div>
 
@@ -101,8 +107,7 @@
       <span class="arrow">▼</span>
     </div>
     <div class="card-body">
-      <p style="margin-top:12px;line-height:1.6">Показывает долги ваших клиентов перед компанией.</p>
-      <h3>Два варианта</h3>
+      <p style="margin-top:12px;line-height:1.6">Долги ваших клиентов перед компанией.</p>
       <div class="step">
         <div class="step-num">1</div>
         <div class="step-text"><strong>📊 Простой</strong> — список клиентов с суммой долга и днями просрочки</div>
@@ -111,7 +116,7 @@
         <div class="step-num">2</div>
         <div class="step-text"><strong>📈 Детальный</strong> — разбивка по каждому документу (накладной)</div>
       </div>
-      <div class="note">⚠️ Если клиент не платит 7+ дней — вы получите уведомление об этом автоматически в 14:00 и 21:00.</div>
+      <div class="note">⚠️ Если клиент не платит <strong>10+ дней</strong> — вы получите уведомление об этом автоматически.</div>
     </div>
   </div>
 
@@ -123,7 +128,7 @@
       <span class="arrow">▼</span>
     </div>
     <div class="card-body">
-      <p style="margin-top:12px;line-height:1.6">Ваши продажи за текущий день из 1С.</p>
+      <p style="margin-top:12px;line-height:1.6">Ваши продажи из 1С.</p>
       <div class="step">
         <div class="step-num">1</div>
         <div class="step-text"><strong>🛒 По клиентам</strong> — сколько продано каждому клиенту</div>
@@ -135,54 +140,113 @@
     </div>
   </div>
 
-  <!-- AI КОЛЛЕКТОР -->
+  <!-- AI КОЛЛЕКТОР — СОГЛАСОВАНИЕ -->
   <div class="card">
     <div class="card-header" onclick="toggle(this)">
       <span class="icon">🤖</span>
-      <span class="title">AI Коллектор — уведомления о долгах</span>
+      <span class="title">AI Коллектор — согласование рассылки</span>
       <span class="arrow">▼</span>
     </div>
     <div class="card-body">
-      <p style="margin-top:12px;line-height:1.6">Каждый день в <strong>18:05</strong> бот присылает вам сообщение по одному клиенту с просрочкой. Бот уже подготовил текст — вам нужно только решить: отправить или нет.</p>
+      <p style="margin-top:12px;line-height:1.6">
+        Когда поступает свежая дебиторка (обычно после обеда), бот присылает вам список должников.
+        Нужно решить по каждому: отправить напоминание в WhatsApp или нет.<br><br>
+        <strong>⏰ Время на ответ: 1 час.</strong> Если не ответите — директор решит сам.
+      </p>
 
-      <h3>Сообщение от бота в Telegram</h3>
-      <div style="background:#f1f3f4; border-radius:12px 12px 12px 0; padding:12px 14px;
-                  font-size:14px; line-height:1.6; margin-top:8px; max-width:90%;">
-        📬 <b>Готово к отправке</b><br><br>
-        👤 Клиент: ТОО Ромашка<br>
-        💰 Долг: 450 000 тг | Просрочка: 8 дн.<br>
-        📱 WhatsApp: +7 701 123 45 67<br><br>
-        <div style="border-left:3px solid #bbb; padding:6px 10px; margin-top:4px;
-                    background:#e8e8e8; border-radius:0 6px 6px 0; color:#333;">
-          <span style="font-size:11px;color:#888;display:block;margin-bottom:3px;">✉️ Текст сообщения клиенту:</span>
-          <i>Здравствуйте! Я — ИИ-помощник вашего менеджера Алена из компании Минбаракат. По нашим данным, за вами числится задолженность в размере 450 000 тенге (просрочка 8 дней). Просим уточнить планируемую дату оплаты. Если возникли вопросы — менеджер Алена готова помочь.</i>
-        </div>
-      </div>
-      <div class="tg-label">Вы видите это в Telegram от бота</div>
-
-      <h3>Кнопки действий</h3>
+      <h3>Быстрые кнопки (для всего списка)</h3>
       <div class="btn-row">
-        <span class="btn green">✅ Отправить</span>
-        <span class="btn gray">✏️ Изменить</span>
-        <span class="btn red">❌ Отказать</span>
+        <span class="btn green">✅ Разрешить всем</span>
+        <span class="btn teal">🤝 Со всеми договорились</span>
       </div>
+      <div class="btn-row" style="margin-top:6px">
+        <span class="btn amber">💰 Все оплатили</span>
+        <span class="btn gray">✏️ Выбрать вручную</span>
+      </div>
+
+      <hr class="divider">
+
+      <h3>По каждому клиенту — три варианта</h3>
+
       <div class="step" style="margin-top:12px">
         <div class="step-num" style="background:#2e7d32">1</div>
-        <div class="step-text">✅ <strong>Отправить</strong> — сообщение уйдёт клиенту в WhatsApp от вашего имени</div>
+        <div class="step-text">
+          <strong>✅ Отправить</strong> — клиент получит WA-напоминание о долге. Никаких дополнительных действий не нужно.
+        </div>
       </div>
+
       <div class="step">
-        <div class="step-num" style="background:#757575">2</div>
-        <div class="step-text">✏️ <strong>Изменить</strong> — напишите свой текст, бот отправит его вместо готового</div>
+        <div class="step-num" style="background:#e65100">2</div>
+        <div class="step-text">
+          <strong>💰 Оплатил</strong> — вы знаете что клиент уже оплатил. Бот спросит:<br>
+          <div class="msg-box" style="margin-top:8px">
+            💰 Клиент <b>ТОО Ромашка</b> отмечен как оплативший.<br><br>
+            Пришли фото чека или выписку следующим сообщением.<br>
+            Если документа нет — нажми «Без документа».
+          </div>
+          <div class="btn-row" style="margin-top:8px">
+            <span class="btn blue">📎 Отправлю документ</span>
+            <span class="btn gray">⚠️ Без документа</span>
+          </div>
+          <ul style="margin-top:8px">
+            <li><strong>Есть чек / выписка</strong> — отправьте фото. Документ уйдёт директору. Саида не задействуется.</li>
+            <li><strong>Нет документа</strong> — бот отправит запрос Саиде на проверку в 1С.</li>
+          </ul>
+        </div>
       </div>
+
       <div class="step">
-        <div class="step-num" style="background:#c62828">3</div>
-        <div class="step-text">❌ <strong>Отказать</strong> — напишите причину (например: <em>«оплата своевременно»</em>, <em>«договорились лично»</em>). Причина уходит руководителю.</div>
+        <div class="step-num" style="background:#00695c">3</div>
+        <div class="step-text">
+          <strong>🤝 Договорились</strong> — вы договорились с клиентом об оплате. Бот обязательно попросит детали:<br>
+          <div class="msg-box" style="margin-top:8px">
+            🤝 Клиент <b>ТОО Ромашка</b>.<br><br>
+            Укажи детали договорённости одним сообщением:<br>
+            • дата обещанной оплаты<br>
+            • сумма<br>
+            • что именно согласовано<br><br>
+            <i>Пример: «до 15 мая, 300 000 тг, договорился лично»</i>
+          </div>
+          <div class="warn" style="margin-top:8px">
+            ⚠️ <strong>Важно:</strong> «Договорились» можно использовать <strong>только один раз</strong> по каждому клиенту.
+            Если клиент не оплатит к указанному сроку — он автоматически вернётся в следующую рассылку,
+            и повторно снять его через «Договорились» будет нельзя.
+          </div>
+        </div>
       </div>
-      <div class="note">📝 Причину отказа пишите своими словами — бот сохранит её дословно и передаст руководителю.</div>
+
+      <hr class="divider">
+
+      <div class="note">
+        📝 Убрать клиента из списка без причины нельзя. Каждое снятие фиксируется — директор видит причину по каждому клиенту.
+      </div>
     </div>
   </div>
 
-  <!-- CRM — пополнение базы -->
+  <!-- СТОП-ЛИСТ -->
+  <div class="card">
+    <div class="card-header" onclick="toggle(this)">
+      <span class="icon">🚫</span>
+      <span class="title">Стоп-лист отгрузки</span>
+      <span class="arrow">▼</span>
+    </div>
+    <div class="card-body">
+      <p style="margin-top:12px;line-height:1.6">
+        В <strong>16:30</strong> бот спрашивает по клиентам из стоп-листа: оплатил или нет?
+      </p>
+      <div class="step">
+        <div class="step-num" style="background:#2e7d32">1</div>
+        <div class="step-text"><strong>Оплатил</strong> — клиент будет снят со стопа после подтверждения оплаты</div>
+      </div>
+      <div class="step">
+        <div class="step-num" style="background:#c62828">2</div>
+        <div class="step-text"><strong>Нет, стоп</strong> — клиент остаётся в стоп-листе, отгрузка запрещена</div>
+      </div>
+      <div class="note">💡 Если Саида подтвердила полную оплату в 1С — клиент снимается со стопа автоматически, вы получите уведомление.</div>
+    </div>
+  </div>
+
+  <!-- CRM -->
   <div class="card">
     <div class="card-header" onclick="toggle(this)">
       <span class="icon">📋</span>
@@ -190,21 +254,19 @@
       <span class="arrow">▼</span>
     </div>
     <div class="card-body">
-      <p style="margin-top:12px;line-height:1.6">Каждый день в <strong>18:00</strong> бот спрашивает про одного клиента, у которого ещё нет контактов в базе. Это занимает 30 секунд.</p>
+      <p style="margin-top:12px;line-height:1.6">Каждый день в <strong>18:00</strong> бот спрашивает про одного клиента без контактов. Занимает 30 секунд.</p>
 
-      <h3>Три вопроса по шагам</h3>
       <div class="step">
         <div class="step-num">1</div>
         <div class="step-text">
-          Бот называет клиента из 1С и спрашивает: <strong>Как к нему обращаться?</strong><br>
-          <div class="msg-box">📋 <b>ТОО ГудФуд № 1 ул Досмухамедулы 48</b><br><br>Как к нему обращаться?<br>(введите имя или имя и отчество)</div>
-          Напишите просто: <em>Аида</em> или <em>Аида Петровна</em>
+          Бот называет клиента: <strong>Как к нему обращаться?</strong><br>
+          <div class="msg-box">📋 <b>ТОО ГудФуд № 1</b><br><br>Как к нему обращаться?<br>(введите имя)</div>
+          Напишите: <em>Аида</em>
         </div>
       </div>
       <div class="step">
         <div class="step-num">2</div>
         <div class="step-text">
-          Бот спросит телефон:<br>
           <div class="msg-box">📱 Телефон Аида в WhatsApp?<br>(формат: 87xxxxxxxxx)</div>
           Напишите: <em>87012345678</em>
         </div>
@@ -212,13 +274,12 @@
       <div class="step">
         <div class="step-num">3</div>
         <div class="step-text">
-          Бот спросит адрес торговой точки:<br>
           <div class="msg-box">🏪 Адрес торговой точки Аида?</div>
           Напишите: <em>ул. Достык 12, магазин Аида</em>
         </div>
       </div>
       <div class="msg-box green">✅ Готово! Данные Аида сохранены.</div>
-      <div class="note">💡 Данные сохраняются в вашей личной базе клиентов. Другие менеджеры их не видят — конфиденциальность гарантирована. Пополнение базы — обязанность каждого менеджера. Данные должны быть актуальными: руководитель видит состояние базы и контролирует заполнение.</div>
+      <div class="note">💡 Данные видите только вы. Пополнение базы обязательно — руководитель контролирует заполнение.</div>
     </div>
   </div>
 
@@ -230,7 +291,7 @@
       <span class="arrow">▼</span>
     </div>
     <div class="card-body">
-      <p style="margin-top:12px;line-height:1.6">Кнопка <strong>🗄️ Архив</strong> — отчёты за прошлые дни. Выберите нужную дату и тип отчёта.</p>
+      <p style="margin-top:12px;line-height:1.6">Кнопка <strong>🗄️ Архив</strong> — отчёты за прошлые дни. Выберите дату и тип отчёта.</p>
       <div class="note">📅 Хранятся последние 30 дней.</div>
     </div>
   </div>
@@ -245,11 +306,11 @@
     <div class="card-body">
       <table class="time-table">
         <tr><td>09:00</td><td>📦 Краткая сводка остатков (только руководителю)</td></tr>
-        <tr><td>14:00</td><td>🔔 Уведомление о молчащих клиентах (долг 7+ дней)</td></tr>
+        <tr><td>После обеда</td><td>🤖 AI Коллектор — список должников для согласования (при поступлении дебиторки)</td></tr>
+        <tr><td>16:30</td><td>🚫 Запрос по стоп-листу — кто из клиентов оплатил?</td></tr>
         <tr><td>18:00</td><td>📋 Запрос данных нового клиента (CRM)</td></tr>
-        <tr><td>18:05</td><td>🤖 AI Коллектор — сообщение для утверждения</td></tr>
         <tr><td>20:00</td><td>💰 Краткая сводка валовой (руководителю)</td></tr>
-        <tr><td>21:00</td><td>🔔 Повтор уведомления о молчащих + сводка продаж</td></tr>
+        <tr><td>21:00</td><td>🛒 Сводка продаж + уведомления о молчащих должниках</td></tr>
       </table>
       <div class="note">🌴 В воскресенье и праздники уведомления не отправляются.</div>
     </div>
@@ -264,21 +325,24 @@
     </div>
     <div class="card-body">
       <h3>Нет отчёта за сегодня?</h3>
-      <p style="margin-top:6px;line-height:1.5">Отчёты появляются после того как 1С выгрузит данные (обычно до 10:00). Нажмите кнопку ещё раз позже.</p>
+      <p style="margin-top:6px;line-height:1.5">Отчёты появляются после выгрузки из 1С (обычно до 10:00). Нажмите кнопку ещё раз позже.</p>
 
       <h3 style="margin-top:14px">Неправильно введён телефон?</h3>
-      <p style="margin-top:6px;line-height:1.5">Напишите руководителю или введите команду <code>/phone Имя клиента 87xxxxxxxxx</code></p>
+      <p style="margin-top:6px;line-height:1.5">Введите команду <code>/phone Имя клиента 87xxxxxxxxx</code></p>
 
-      <h3 style="margin-top:14px">Что значит "имитация оплаты"?</h3>
-      <p style="margin-top:6px;line-height:1.5">Клиент платит маленькими суммами (менее 10% долга) чтобы сбросить счётчик дней. Бот помечает таких клиентов ⚠️</p>
+      <h3 style="margin-top:14px">Что значит «имитация оплаты»?</h3>
+      <p style="margin-top:6px;line-height:1.5">Клиент платит маленькими суммами чтобы сбросить счётчик дней. Бот помечает таких клиентов ⚠️</p>
+
+      <h3 style="margin-top:14px">Можно ли снова использовать «Договорились»?</h3>
+      <p style="margin-top:6px;line-height:1.5">Нет. По каждому клиенту это работает <strong>один раз</strong>. Если клиент не оплатил к сроку — в следующий раз только «Оплатил» с документом или решение директора.</p>
 
       <h3 style="margin-top:14px">Бот не отвечает?</h3>
-      <p style="margin-top:6px;line-height:1.5">Напишите <strong>/start</strong> — это сбросит состояние и восстановит меню.</p>
+      <p style="margin-top:6px;line-height:1.5">Напишите <strong>/start</strong> — это восстановит меню.</p>
     </div>
   </div>
 
   <p style="text-align:center;color:#aaa;font-size:12px;margin:20px 0">
-    Минбаракат · Бот аналитики · v9.4.39
+    Минбаракат · Бот аналитики · v9.4.66 · 06.05.2026
   </p>
 
 </div>
@@ -289,7 +353,6 @@ function toggle(header) {
   const body = header.nextElementSibling;
   body.classList.toggle('open');
 }
-// Открыть первый раздел по умолчанию
 document.querySelector('.card-header').click();
 </script>
 </body>
