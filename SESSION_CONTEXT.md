@@ -1,7 +1,60 @@
 # SESSION CONTEXT — АРХИВ
 
-> **ВНИМАНИЕ:** Этот файл содержит исторические сессии (2026-04-09, 2026-04-13, 2026-04-14, 2026-04-29, 2026-04-30).
+> **ВНИМАНИЕ:** Этот файл содержит исторические сессии (2026-04-09, 2026-04-13, 2026-04-14, 2026-04-29, 2026-04-30, 2026-05-06).
 > Многие "OPEN" пункты уже закрыты коммитами. **Актуальный статус → `gpt1c.md`.**
+
+---
+
+## HANDOFF 2026-05-06 — Таймаут менеджеров + cutoff 19:00 для WA-рассылки
+
+### Что сделано (ветка `fix/log-noise-by-design-markers`, коммит `6f64d4d`)
+
+**Задача:** устранить структурный блокер: WhatsApp-уведомления не уходили должникам, потому что
+батч создавался в 17:00, менеджеры не реагировали, а `collector_reminders` закрывался в 18:00 —
+ровно в момент когда должен был сработать 1-часовой таймаут.
+
+**Root cause:**
+- `collector_reminders` окно: `9 <= hour < 18` — при батче созданном в 17:00 таймаут бил в 18:xx,
+  но джоб уже не запускался
+- При `timeout`-статусе менеджера `_build_admin_decisions` отдавал клиентов в `skip` (пустой
+  `approved_names`), а не в авто-включение
+- Нет жёсткого cutoff: батч висел до 02:00 ночи без пользы
+- Менеджеры не видели дедлайн в превью — не понимали что молчание что-то означает
+
+**Фикс в коде:**
+
+- `collector/approval_flow.py`:
+  - новая константа `SEND_WINDOW_CUTOFF_HOUR = 19` (env `WA_SEND_WINDOW_CUTOFF_HOUR`)
+  - `_format_manager_preview_text`: добавлена строка дедлайна
+    `"⏰ Ответьте до HH:MM. Если не успеете — уведомления уйдут автоматически."`
+  - `_build_admin_decisions`: `status == "timeout"` → клиенты в `keep` (авто-включение),
+    кроме явно отклонённых
+  - `_format_admin_summary_text`: для timeout-менеджеров статус `🔇 не ответил → авто (N кл.)`,
+    список авто-клиентов в сводке; `total_ok` учитывает авто-включённых
+  - `promote_silent_batches_to_admin`: после 19:00 → статус `too_late`, уведомление админу
+    "Сегодня не состоится. Следующий батч — при поступлении новой дебиторки."
+
+- `bot/send_reports.py`:
+  - `collector_reminders` окно расширено: `< 18` → `< 19`
+
+**Доказательства:**
+- `python -m py_compile collector/approval_flow.py bot/send_reports.py` → OK
+- `python -X utf8 tests/test_collector.py` (с `WHATSAPP_ENABLED=0; LIVE_SEND_ALLOWED=0`) → 320/320 OK
+
+### Что не трогать
+
+- `autoagent/orchestrator_agents.json`, `autoagent/task_prompt.txt` — пользовательские/служебные
+- `audit/` черновики
+- `bot/debt_stop_control.py` — изменён в предыдущей сессии, не трогать
+
+### Следующий безопасный шаг
+
+Сегодня во второй половине дня Саида скинет свежую дебиторку.
+Проверить в `logs/collector.log`:
+1. создался батч при поступлении debt_ext файлов
+2. менеджеры получили превью с дедлайном
+3. через 1 час — сводка ушла директору с `🔇 Авто` статусами молчавших
+4. после нажатия "Утвердить" директором — сообщения ушли в WhatsApp до 19:00
 
 ---
 
@@ -1611,3 +1664,57 @@ Observed rebuild result:
 - Live logs:
   - `send_reports_20260429.log` подтверждает Green API `200 OK`, Telegram `200 OK`, признаков WhatsApp block нет.
 
+## Handoff Update - 2026-05-02 09:13 +05:00
+
+### Operational incident: transient network/DNS outage, recovered
+
+- `log_monitor_summary.log` on `2026-05-01` / `2026-05-02` started alerting on repeated IMAP failures:
+  - `email_20260501.log` and `email_20260502.log`
+  - `IMAP connect/login failed ... timed out`
+- Main bot then hit a real Telegram transport outage on `2026-05-02`:
+  - `logs/send_reports.log`
+  - repeated `httpx.ConnectError: [Errno 11001] getaddrinfo failed`
+  - PTB polling eventually stopped the app after cleanup failure in `telegram.ext.Updater`
+- During the outage:
+  - DNS later resolved again for both `api.telegram.org` and `mail.minbarakat.kz`
+  - one manual restart attempt did not hold
+  - next restart succeeded and the bot returned to stable work
+
+### Current state at session close
+
+- Bot is alive after user restart:
+  - process start `2026-05-02 09:06:02`
+  - `logs/send_reports.log` contains:
+    - `2026-05-02 09:06:56, INFO Scheduler started`
+    - `2026-05-02 09:06:56, INFO Application started`
+- Telegram side is healthy in the fresh tail:
+  - `whatsapp_poller`, `new_reports`, `ai_queue_processor`, `collector_reminders`, `janitor` all `executed successfully`
+- IMAP recovered too:
+  - `2026-05-02 08:58:01, INFO IMAP LOGIN OK (attempt 1/5)`
+  - `2026-05-02 09:07:05, INFO IMAP LOGIN OK (attempt 1/5)`
+  - latest visible cycles ended with `CYCLE DONE`
+
+### Code/worktree state
+
+- Current HEAD: `c641569` (`docs: update crm cleanup handoff`)
+- There is still an uncommitted runtime change in `bot/send_reports.py`:
+  - version bumped to `v9.4.64/30.04.2026`
+  - collector subprocess launch switched from file path to module path:
+    - `collector/collections_engine.py`
+    - -> `python -m collector.collections_engine`
+  - this fixed the earlier `ModuleNotFoundError: No module named 'collector'` in scheduled collector runs
+- Dirty files intentionally left alone:
+  - `autoagent/orchestrator_agents.json`
+  - `autoagent/task_prompt.txt`
+  - `bot/send_reports.py`
+  - untracked `audit/*`
+  - local backups `config/clients.json.bak-*`
+  - untracked `site/`
+
+### Verification remembered for next session
+
+- Operational verification only in this closing step:
+  - live process list confirmed running bot
+  - fresh `send_reports.log` tail confirmed normal scheduler activity
+  - fresh `email_20260502.log` tail confirmed IMAP recovery
+- No new code tests were run in this last monitoring-only step.

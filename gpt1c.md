@@ -13,7 +13,7 @@
 **TZ:** Asia/Almaty → `ZoneInfo(os.getenv("TZ", "Asia/Almaty"))` — всегда через env  
 **Venv:** `.venv/` | **Tests:** `python -X utf8 tests/test_project.py && python -X utf8 tests/test_collector.py`
 
-### Текущий статус collector на 2026-04-29
+### Текущий статус collector на 2026-05-06
 
 - stale admin-approved batch перед `send-approved` закрыт: batch теперь пересверяется по свежей дебиторке перед фактической WhatsApp-отправкой;
 - debt snapshot freshness теперь явный runtime-фактор:
@@ -469,6 +469,15 @@ perf(<module>): <оптимизация>
 Jinja2 → `templates/base.html`. Layer 5 (f-strings) → фигурные скобки экранировать `{{`/`}}`.
 Footer: `"Сформировано: DD.MM.YYYY HH:MM (Asia/Almaty) | Версия: …"`
 
+
+- 2026-05-06 (коммит `6f64d4d`): approval flow — таймаут менеджеров + cutoff 19:00:
+  - `SEND_WINDOW_CUTOFF_HOUR=19` (env `WA_SEND_WINDOW_CUTOFF_HOUR`)
+  - дедлайн в превью менеджерам: "⏰ Ответьте до HH:MM. Если не успеете — уведомления уйдут автоматически."
+  - `_build_admin_decisions`: timeout → keep (авто-включени��); явно отклонённые → skip
+  - сводка админу: `🔇 не ответил → авто (N кл.)` с перечнем авто-клиентов
+  - `promote_silent_batches_to_admin`: после 19:00 → статус `too_late`, уведомление "сегодня не состоится"
+  - `collector_reminders` окно: `< 18` → `< 19`
+  - тесты: 320/320 OK
 
 - 2026-04-29: working C project patched for CRM canonical duplicate merging, restart-safe crm_claim persistence, CRM audit log (logs/crm_audit.jsonl), and collector-wide shared [COLLECTOR] logger helper with end-to-end dialog/poller audit events.
 
