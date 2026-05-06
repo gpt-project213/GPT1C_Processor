@@ -1085,6 +1085,8 @@ try:
         amount=100000.0,
         current_contact={"phone": "+77001112233", "name_confirmations": 0, "phone_confirmations": 0},
     )
+    dialog_id = dlg["dialog_id"]
+    check("new_dialog: dialog_id assigned", bool(dialog_id))
     check("new_dialog: name_confirmed=False", dlg.get("name_confirmed") is False)
     check("new_dialog: phone_confirmed=False", dlg.get("phone_confirmed") is False)
     check("new_dialog: awaiting_name_text=False", dlg.get("awaiting_name_text") is False)
@@ -1093,10 +1095,14 @@ try:
     check("new_dialog: awaiting_manager_explanation=False",
           dlg.get("awaiting_manager_explanation") is False)
 
-    # Обновляем name_confirmed
-    ds_mod.update_dialog(999, name_confirmed=True)
-    d_upd = ds_mod.get_dialog(999)
+    # Обновляем name_confirmed через dialog_id (новый API)
+    ds_mod.update_dialog(dialog_id, name_confirmed=True)
+    d_upd = ds_mod.get_dialog(dialog_id)
     check("update_dialog: name_confirmed → True", d_upd.get("name_confirmed") is True)
+    # get_latest_active_dialog возвращает тот же диалог
+    d_lat = ds_mod.get_latest_active_dialog(999)
+    check("get_latest_active_dialog: returns dialog for chat_id", d_lat is not None)
+    check("get_latest_active_dialog: dialog_id matches", d_lat["dialog_id"] == dialog_id)
 
     # Новые состояния в PENDING_STATES
     check("STATE_AWAITING_MANAGER_EXPLANATION in PENDING_STATES",

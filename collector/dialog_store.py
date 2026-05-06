@@ -5,20 +5,32 @@ collector/dialog_store.py
 JSON-хранилище активных диалогов менеджеров с AI Коллектором.
 
 Файл: logs/collector_dialogs.json
-Ключ: str(manager_chat_id)
+Формат (v2):
+  {
+    "dialogs": {
+      "dlg_<stamp>_<hex8>": { "dialog_id": "...", "manager_chat_id": 123, ... }
+    },
+    "active_by_chat": {
+      "123": ["dlg_<stamp>_<hex8>"]
+    }
+  }
+
+Backward compat: старый плоский формат {str(manager_chat_id): dialog} мигрируется
+автоматически при первом чтении.
 """
 
 import json
-import logging
-from collector.logging_utils import get_collector_logger
 import os
 import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from uuid import uuid4
 
 from dotenv import load_dotenv
 from zoneinfo import ZoneInfo
+
+from collector.logging_utils import get_collector_logger
 
 load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env",
             encoding="utf-8-sig", override=False)
@@ -30,7 +42,8 @@ _ROOT = Path(__file__).resolve().parent.parent
 DIALOGS_PATH = _ROOT / "logs" / "collector_dialogs.json"
 DIALOG_TTL_HOURS = float(os.getenv("DIALOG_EXPIRE_HOURS", "48"))
 
-# Состояния диалога
+# ─── Состояния диалога ────────────────────────────────────────────────────────
+
 STATE_AWAITING_CONFIRM              = "AWAITING_CONFIRM"
 STATE_AWAITING_DATA                 = "AWAITING_DATA"
 STATE_AWAITING_REJECTION_REASON     = "AWAITING_REJECTION_REASON"
@@ -55,19 +68,74 @@ PENDING_STATES = {
     STATE_AWAITING_PHONE_TEXT,
 }
 
+TEXT_AWAITING_STATES = {
+    STATE_AWAITING_DATA,
+    STATE_AWAITING_REJECTION_REASON,
+    STATE_AWAITING_DATA_CONFIRM,
+    STATE_AWAITING_MANAGER_EXPLANATION,
+    STATE_AWAITING_NAME_TEXT,
+    STATE_AWAITING_PHONE_TEXT,
+}
+
 TERMINAL_STATES = {STATE_CONFIRMED, STATE_DONE}
 
+_EMPTY_CONTAINER: Dict[str, Any] = {"dialogs": {}, "active_by_chat": {}}
+
+
+# ─── Внутренние хелперы ───────────────────────────────────────────────────────
 
 def _now_iso() -> str:
-    """Текущее время в ISO формате (Asia/Almaty)."""
     return datetime.now(TZ).isoformat()
 
 
+def _new_dialog_id() -> str:
+    stamp = datetime.now(TZ).strftime("%Y%m%d%H%M%S")
+    return f"dlg_{stamp}_{uuid4().hex[:8]}"
+
+
+def _is_old_format(data: Dict[str, Any]) -> bool:
+    """Плоский формат: ключи — числовые строки (manager_chat_id), значения — dict-диалоги."""
+    if "dialogs" in data or "active_by_chat" in data:
+        return False
+    for key, val in data.items():
+        if not isinstance(val, dict):
+            return False
+        try:
+            int(key)
+        except (ValueError, TypeError):
+            return False
+    return True
+
+
+def _migrate_old_format(old_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Конвертирует старый плоский dict в новый контейнер. Логирует один раз."""
+    dialogs: Dict[str, Any] = {}
+    active_by_chat: Dict[str, List[str]] = {}
+    count = 0
+    for chat_key, dialog in old_data.items():
+        if not isinstance(dialog, dict):
+            continue
+        dialog_id = _new_dialog_id()
+        dialog["dialog_id"] = dialog_id
+        if "manager_chat_id" not in dialog:
+            try:
+                dialog["manager_chat_id"] = int(chat_key)
+            except (ValueError, TypeError):
+                continue
+        dialogs[dialog_id] = dialog
+        chat_str = str(dialog["manager_chat_id"])
+        active_by_chat.setdefault(chat_str, []).append(dialog_id)
+        count += 1
+    if count:
+        logger.info("dialog_store: migrated %d dialog(s) from old format to v2", count)
+    return {"dialogs": dialogs, "active_by_chat": active_by_chat}
+
+
 def _cleanup_stale_dialogs(dialogs: Dict[str, Any]) -> bool:
-    """Переводит просроченные pending-диалоги в DONE с явной записью в лог."""
+    """Помечает просроченные pending-диалоги. Принимает внутренний dict dialogs, не контейнер."""
     now = datetime.now(TZ)
     changed = False
-    for key, dialog in dialogs.items():
+    for dialog_id, dialog in dialogs.items():
         if not isinstance(dialog, dict):
             continue
         state = dialog.get("state")
@@ -86,35 +154,46 @@ def _cleanup_stale_dialogs(dialogs: Dict[str, Any]) -> bool:
         if age_hours <= DIALOG_TTL_HOURS:
             continue
         logger.warning(
-            "[%s] stale dialog marked for control after %.1f h (state=%s, manager_chat_id=%s)",
+            "[%s] stale dialog after %.1f h (state=%s, dialog_id=%s, manager_chat_id=%s)",
             dialog.get("client_name"),
             age_hours,
             state,
-            key,
+            dialog_id,
+            dialog.get("manager_chat_id"),
         )
-        dialogs[key]["control_deadline"] = now.isoformat()
+        dialogs[dialog_id]["control_deadline"] = now.isoformat()
         changed = True
     return changed
 
 
-def load_dialogs() -> Dict[str, Any]:
-    """Загружает все диалоги из JSON-файла."""
+def _load_container() -> Dict[str, Any]:
+    """Читает файл, мигрирует старый формат, запускает stale cleanup."""
     if not DIALOGS_PATH.exists():
-        return {}
+        return {"dialogs": {}, "active_by_chat": {}}
     try:
         with open(DIALOGS_PATH, encoding="utf-8") as f:
             data = json.load(f)
-        if isinstance(data, dict):
-            if _cleanup_stale_dialogs(data):
-                save_dialogs(data)
-            return data
-        return {}
     except (OSError, json.JSONDecodeError):
-        return {}
+        return {"dialogs": {}, "active_by_chat": {}}
+    if not isinstance(data, dict):
+        return {"dialogs": {}, "active_by_chat": {}}
+
+    if _is_old_format(data):
+        container = _migrate_old_format(data)
+        _save_container(container)
+        return container
+
+    container = data
+    container.setdefault("dialogs", {})
+    container.setdefault("active_by_chat", {})
+
+    if _cleanup_stale_dialogs(container["dialogs"]):
+        _save_container(container)
+    return container
 
 
-def save_dialogs(dialogs: Dict[str, Any]) -> None:
-    """Атомарно сохраняет диалоги в JSON-файл через tempfile."""
+def _save_container(container: Dict[str, Any]) -> None:
+    """Атомарная запись полного контейнера."""
     DIALOGS_PATH.parent.mkdir(parents=True, exist_ok=True)
     tmp_fd, tmp_path = tempfile.mkstemp(
         dir=str(DIALOGS_PATH.parent),
@@ -123,7 +202,7 @@ def save_dialogs(dialogs: Dict[str, Any]) -> None:
     )
     try:
         with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
-            json.dump(dialogs, f, ensure_ascii=False, indent=2)
+            json.dump(container, f, ensure_ascii=False, indent=2)
         os.replace(tmp_path, str(DIALOGS_PATH))
     except (OSError, TypeError, ValueError):
         try:
@@ -133,37 +212,120 @@ def save_dialogs(dialogs: Dict[str, Any]) -> None:
         raise
 
 
-def get_dialog(manager_chat_id: int) -> Optional[Dict[str, Any]]:
-    """Возвращает диалог менеджера или None."""
-    dialogs = load_dialogs()
-    return dialogs.get(str(manager_chat_id))
+# ─── Публичный API ────────────────────────────────────────────────────────────
+
+def load_dialogs() -> Dict[str, Any]:
+    """Возвращает полный контейнер {"dialogs": {...}, "active_by_chat": {...}}."""
+    return _load_container()
 
 
-def set_dialog(manager_chat_id: int, dialog: Dict[str, Any]) -> None:
-    """Сохраняет диалог менеджера (полная замена)."""
-    dialogs = load_dialogs()
-    dialogs[str(manager_chat_id)] = dialog
-    save_dialogs(dialogs)
+def save_dialogs(container: Dict[str, Any]) -> None:
+    """Сохраняет полный контейнер."""
+    _save_container(container)
 
 
-def update_dialog(manager_chat_id: int, **kwargs: Any) -> None:
-    """Частичное обновление полей диалога менеджера."""
-    dialogs = load_dialogs()
-    key = str(manager_chat_id)
-    if key not in dialogs:
+def get_dialog(dialog_id: str) -> Optional[Dict[str, Any]]:
+    """Возвращает диалог по dialog_id или None."""
+    container = _load_container()
+    return container["dialogs"].get(dialog_id)
+
+
+def set_dialog(dialog_id: str, dialog: Dict[str, Any]) -> None:
+    """Полная замена диалога по dialog_id."""
+    container = _load_container()
+    container["dialogs"][dialog_id] = dialog
+    _save_container(container)
+
+
+def update_dialog(dialog_id: str, **kwargs: Any) -> None:
+    """Частичное обновление полей диалога по dialog_id."""
+    container = _load_container()
+    if dialog_id not in container["dialogs"]:
         return
-    dialogs[key].update(kwargs)
-    save_dialogs(dialogs)
+    container["dialogs"][dialog_id].update(kwargs)
+    _save_container(container)
 
 
-def remove_dialog(manager_chat_id: int) -> None:
-    """Удаляет диалог менеджера."""
-    dialogs = load_dialogs()
-    key = str(manager_chat_id)
-    if key in dialogs:
-        del dialogs[key]
-        save_dialogs(dialogs)
+def remove_dialog(dialog_id: str) -> None:
+    """Удаляет диалог и чистит индекс active_by_chat."""
+    container = _load_container()
+    dialog = container["dialogs"].pop(dialog_id, None)
+    if dialog is None:
+        return
+    chat_str = str(dialog.get("manager_chat_id", ""))
+    ids = container["active_by_chat"].get(chat_str, [])
+    ids = [i for i in ids if i != dialog_id]
+    if ids:
+        container["active_by_chat"][chat_str] = ids
+    else:
+        container["active_by_chat"].pop(chat_str, None)
+    _save_container(container)
 
+
+# ─── Chat-level helpers ───────────────────────────────────────────────────────
+
+def get_active_dialog_ids(manager_chat_id: int) -> List[str]:
+    """Возвращает список dialog_id для данного chat_id (только существующие диалоги)."""
+    container = _load_container()
+    ids = container["active_by_chat"].get(str(manager_chat_id), [])
+    existing = container["dialogs"]
+    return [d for d in ids if d in existing]
+
+
+def get_latest_active_dialog(manager_chat_id: int) -> Optional[Dict[str, Any]]:
+    """Возвращает последний (по created) активный диалог менеджера или None."""
+    container = _load_container()
+    ids = container["active_by_chat"].get(str(manager_chat_id), [])
+    candidates = [
+        container["dialogs"][d]
+        for d in ids
+        if d in container["dialogs"]
+    ]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda d: d.get("created", ""))
+
+
+def get_text_target_dialog(manager_chat_id: int) -> Optional[Dict[str, Any]]:
+    """
+    Возвращает единственный диалог менеджера, ожидающий текстового ввода.
+    Возвращает None если таких диалогов нет или их больше одного (ambiguity).
+    """
+    container = _load_container()
+    ids = container["active_by_chat"].get(str(manager_chat_id), [])
+    waiting = [
+        container["dialogs"][d]
+        for d in ids
+        if d in container["dialogs"]
+        and container["dialogs"][d].get("state") in TEXT_AWAITING_STATES
+    ]
+    return waiting[0] if len(waiting) == 1 else None
+
+
+def link_dialog_to_chat(manager_chat_id: int, dialog_id: str) -> None:
+    """Добавляет dialog_id в индекс active_by_chat для manager_chat_id."""
+    container = _load_container()
+    chat_str = str(manager_chat_id)
+    ids = container["active_by_chat"].setdefault(chat_str, [])
+    if dialog_id not in ids:
+        ids.append(dialog_id)
+    _save_container(container)
+
+
+def unlink_dialog_from_chat(manager_chat_id: int, dialog_id: str) -> None:
+    """Убирает dialog_id из индекса active_by_chat."""
+    container = _load_container()
+    chat_str = str(manager_chat_id)
+    ids = container["active_by_chat"].get(chat_str, [])
+    ids = [i for i in ids if i != dialog_id]
+    if ids:
+        container["active_by_chat"][chat_str] = ids
+    else:
+        container["active_by_chat"].pop(chat_str, None)
+    _save_container(container)
+
+
+# ─── Создание нового диалога ──────────────────────────────────────────────────
 
 def new_dialog(
     manager_chat_id: int,
@@ -174,9 +336,11 @@ def new_dialog(
     amount: float,
     current_contact: Dict[str, Any],
 ) -> Dict[str, Any]:
-    """Создаёт новую запись диалога и сохраняет её."""
+    """Создаёт диалог с уникальным dialog_id, сохраняет и индексирует по chat_id."""
+    dialog_id = _new_dialog_id()
     now = _now_iso()
     dialog: Dict[str, Any] = {
+        "dialog_id":                  dialog_id,
         "client_name":                client_name,
         "manager_name":               manager_name,
         "manager_chat_id":            manager_chat_id,
@@ -192,26 +356,30 @@ def new_dialog(
         "last_reminded":              now,
         "created":                    now,
         "message_id":                 None,
-        # Подтверждение имени/телефона в текущем диалоге
         "name_confirmed":             False,
         "phone_confirmed":            False,
         "awaiting_name_text":         False,
         "awaiting_phone_text":        False,
-        # Контроль администратора
         "control_deadline":           None,
         "control_extensions":         0,
-        # Ожидание объяснения менеджера
         "awaiting_manager_explanation": False,
     }
-    set_dialog(manager_chat_id, dialog)
+    container = _load_container()
+    container["dialogs"][dialog_id] = dialog
+    chat_str = str(manager_chat_id)
+    ids = container["active_by_chat"].setdefault(chat_str, [])
+    if dialog_id not in ids:
+        ids.append(dialog_id)
+    _save_container(container)
     return dialog
 
 
+# ─── Bulk helpers ─────────────────────────────────────────────────────────────
+
 def get_all_pending() -> List[Dict[str, Any]]:
     """Возвращает все диалоги в незавершённых состояниях."""
-    dialogs = load_dialogs()
-    result = []
-    for dialog in dialogs.values():
-        if isinstance(dialog, dict) and dialog.get("state") in PENDING_STATES:
-            result.append(dialog)
-    return result
+    container = _load_container()
+    return [
+        d for d in container["dialogs"].values()
+        if isinstance(d, dict) and d.get("state") in PENDING_STATES
+    ]

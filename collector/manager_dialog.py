@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-collector/manager_dialog.py · v1.0.3 · 2026-04-19
+collector/manager_dialog.py · v1.0.4 · 2026-05-06
 Движок диалогов менеджеров с AI Коллектором.
 
 Telegram-взаимодействие через httpx (без python-telegram-bot).
@@ -123,6 +123,16 @@ def _inline(rows: List[List[Tuple[str, str]]]) -> Dict[str, Any]:
     return {"inline_keyboard": keyboard}
 
 
+def _dialog_id(dialog: Dict[str, Any]) -> str:
+    """Возвращает dialog_id из payload диалога."""
+    return str(dialog.get("dialog_id") or "")
+
+
+def _cb(action: str, dialog: Dict[str, Any]) -> str:
+    """Строит callback data нового формата col|action|dialog_id."""
+    return f"col|{action}|{_dialog_id(dialog)}"
+
+
 def _fmt_amount(amount: float) -> str:
     """Форматирует сумму: 500000 → '500 000'."""
     return f"{amount:,.0f}".replace(",", " ")
@@ -132,7 +142,6 @@ def _fmt_amount(amount: float) -> str:
 
 def _build_initial_message(dialog: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
     """Строит начальное сообщение с раздельным подтверждением имени и телефона."""
-    mid = dialog["manager_chat_id"]
     contact = dialog.get("current_contact") or {}
     phone = contact.get("whatsapp") or contact.get("phone", "не задан")
     display_name = contact.get("display_name") or contact.get("contact_person", "не задано")
@@ -163,8 +172,8 @@ def _build_initial_message(dialog: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]
         lines.append(f"Сейчас в базе: {display_name}")
         lines.append("(это имя войдёт в сообщение клиенту)\n")
         keyboard_rows.append([
-            (f"✅ Верно — {display_name[:20]}", f"col_name_ok_{mid}"),
-            ("✏️ Другое название",               f"col_name_edit_{mid}"),
+            (f"✅ Верно — {display_name[:20]}", _cb("name_ok", dialog)),
+            ("✏️ Другое название",               _cb("name_edit", dialog)),
         ])
 
     if not phone_confirmed:
@@ -172,12 +181,12 @@ def _build_initial_message(dialog: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]
         lines.append("📞 <b>ТЕЛЕФОН ДЛЯ WHATSAPP:</b>\n")
         lines.append(f"{phone}\n")
         keyboard_rows.append([
-            ("✅ Актуален",    f"col_phone_ok_{mid}"),
-            ("📞 Изменился",   f"col_phone_edit_{mid}"),
+            ("✅ Актуален",    _cb("phone_ok", dialog)),
+            ("📞 Изменился",   _cb("phone_edit", dialog)),
         ])
 
-    keyboard_rows.append([("❌ Не отправлять сейчас", f"col_reject_{mid}")])
-    keyboard_rows.append([("❓ Не понимаю, что ответить", f"col_help_{mid}")])
+    keyboard_rows.append([("❌ Не отправлять сейчас", _cb("reject", dialog))])
+    keyboard_rows.append([("❓ Не понимаю, что ответить", _cb("help", dialog))])
 
     text = "\n".join(lines)
     markup = _inline(keyboard_rows)
@@ -186,7 +195,6 @@ def _build_initial_message(dialog: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]
 
 def _build_final_confirm_message(dialog: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
     """Строит финальное сообщение подтверждения после проверки имени и телефона."""
-    mid = dialog["manager_chat_id"]
     contact = dialog.get("current_contact") or {}
     phone = contact.get("whatsapp") or contact.get("phone", "не задан")
     display_name = contact.get("display_name") or contact.get("contact_person", "не задано")
@@ -202,17 +210,16 @@ def _build_final_confirm_message(dialog: Dict[str, Any]) -> Tuple[str, Dict[str,
     )
     markup = _inline([
         [
-            ("🚀 Отправить",        f"col_confirm_{mid}"),
-            ("❌ Не отправлять",    f"col_reject_{mid}"),
+            ("🚀 Отправить",        _cb("confirm", dialog)),
+            ("❌ Не отправлять",    _cb("reject", dialog)),
         ],
-        [("❓ Не понимаю, что ответить", f"col_help_{mid}")],
+        [("❓ Не понимаю, что ответить", _cb("help", dialog))],
     ])
     return text, markup
 
 
 def _build_data_confirm_message(dialog: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
     """Строит сообщение с предлагаемыми изменениями контакта + кнопки."""
-    mid = dialog["manager_chat_id"]
     proposed = dialog.get("proposed_contact") or {}
     current  = dialog.get("current_contact") or {}
 
@@ -238,10 +245,10 @@ def _build_data_confirm_message(dialog: Dict[str, Any]) -> Tuple[str, Dict[str, 
     text = "\n".join(lines)
     markup = _inline([
         [
-            ("✅ Подтвердить",    f"col_data_ok_{mid}"),
-            ("✏️ Ввести заново",  f"col_data_edit_{mid}"),
+            ("✅ Подтвердить",    _cb("data_ok", dialog)),
+            ("✏️ Ввести заново",  _cb("data_edit", dialog)),
         ],
-        [("❓ Не понимаю, что ответить", f"col_help_{mid}")],
+        [("❓ Не понимаю, что ответить", _cb("help", dialog))],
     ])
     return text, markup
 
@@ -412,8 +419,8 @@ async def _escalate_to_admin(dialog: Dict[str, Any]) -> None:
     )
     markup = _inline([
         [
-            ("✅ Принять отказ",                        f"col_adm_ok_{mid}"),
-            ("❌ Не принять — установить дедлайн",      f"col_adm_deny_{mid}"),
+            ("✅ Принять отказ",                        _cb("adm_ok", dialog)),
+            ("❌ Не принять — установить дедлайн",      _cb("adm_deny", dialog)),
         ],
     ])
 
@@ -469,7 +476,7 @@ async def _on_confirm(dialog: Dict[str, Any], mid: int) -> None:
 async def _on_reject_request(dialog: Dict[str, Any], mid: int) -> None:
     """Менеджер хочет отказаться от отправки."""
     from collector.dialog_store import update_dialog, STATE_AWAITING_REJECTION_REASON
-    update_dialog(mid, state=STATE_AWAITING_REJECTION_REASON)
+    update_dialog(_dialog_id(dialog), state=STATE_AWAITING_REJECTION_REASON)
     await _send_msg(
         mid,
         "❌ <b>Причина отказа</b>\n\n"
@@ -477,7 +484,7 @@ async def _on_reject_request(dialog: Dict[str, Any], mid: int) -> None:
         "Причина будет передана руководителю.\n\n"
         "<i>Если не написать причину, бот будет напоминать каждые 30 минут. "
         "Статистика игнора видна руководителю.</i>",
-        _inline([[("❓ Не понимаю, что ответить", f"col_help_{mid}")]]),
+        _inline([[("❓ Не понимаю, что ответить", _cb("help", dialog))]]),
     )
 
 
@@ -546,7 +553,7 @@ async def _on_data_received(
     if state == STATE_AWAITING_REJECTION_REASON:
         reason = await _parse_rejection_reason(text)
         update_dialog(
-            mid,
+            _dialog_id(dialog),
             state=STATE_REJECTED_PENDING_ADMIN,
             rejection_reason=reason,
         )
@@ -575,7 +582,7 @@ async def _on_data_received(
             return
 
         update_dialog(
-            mid,
+            _dialog_id(dialog),
             proposed_contact=proposed,
             state=STATE_AWAITING_DATA_CONFIRM,
         )
@@ -585,7 +592,7 @@ async def _on_data_received(
         confirm_text, markup = _build_data_confirm_message(dialog)
         msg_id = await _send_msg(mid, confirm_text, markup)
         if msg_id:
-            update_dialog(mid, message_id=msg_id)
+            update_dialog(_dialog_id(dialog), message_id=msg_id)
         return
 
 
@@ -598,7 +605,7 @@ async def _on_data_confirmed(dialog: Dict[str, Any], mid: int) -> None:
 
     _save_contact(dialog["client_name"], merged)
     update_dialog(
-        mid,
+        _dialog_id(dialog),
         state=STATE_AWAITING_CONFIRM,
         current_contact=merged,
         proposed_contact=None,
@@ -618,7 +625,7 @@ async def _on_data_confirmed(dialog: Dict[str, Any], mid: int) -> None:
 async def _on_data_edit(dialog: Dict[str, Any], mid: int) -> None:
     """Менеджер хочет ввести данные заново."""
     from collector.dialog_store import update_dialog, STATE_AWAITING_DATA
-    update_dialog(mid, state=STATE_AWAITING_DATA, proposed_contact=None)
+    update_dialog(_dialog_id(dialog), state=STATE_AWAITING_DATA, proposed_contact=None)
     await _send_msg(
         mid,
         "✏️ Введите данные заново.\n"
@@ -629,7 +636,7 @@ async def _on_data_edit(dialog: Dict[str, Any], mid: int) -> None:
 async def _on_admin_approve_rejection(dialog: Dict[str, Any], mid: int) -> None:
     """Администратор принял причину отказа — закрыть диалог."""
     from collector.dialog_store import update_dialog, STATE_DONE
-    update_dialog(mid, state=STATE_DONE)
+    update_dialog(_dialog_id(dialog), state=STATE_DONE)
 
     # Уведомляем менеджера
     await _send_msg(
@@ -658,7 +665,7 @@ async def _on_admin_deny_rejection(dialog: Dict[str, Any], mid: int) -> None:
     deadline_fmt = deadline_dt.strftime("%d.%m.%Y")
 
     update_dialog(
-        mid,
+        _dialog_id(dialog),
         state=STATE_DEADLINE_SET,
         deadline=deadline_iso,
         remind_count=0,
@@ -720,7 +727,7 @@ async def _on_admin_extend(dialog: Dict[str, Any], mid: int) -> None:
         new_deadline = (datetime.now(TZ) + timedelta(days=1)).date().isoformat()
 
     update_dialog(
-        mid,
+        _dialog_id(dialog),
         control_deadline=new_deadline,
         control_extensions=control_extensions,
     )
@@ -742,7 +749,7 @@ async def _on_admin_call_manager(dialog: Dict[str, Any], mid: int) -> None:
     amount = dialog["amount"]
     reason = dialog.get("rejection_reason") or "(не указана)"
 
-    update_dialog(mid, awaiting_manager_explanation=True, state=STATE_AWAITING_MANAGER_EXPLANATION)
+    update_dialog(_dialog_id(dialog), awaiting_manager_explanation=True, state=STATE_AWAITING_MANAGER_EXPLANATION)
 
     await _send_msg(
         mid,
@@ -767,9 +774,9 @@ async def _send_admin_timeout_escalation(dialog: Dict[str, Any], age_hours: floa
         f"Кейс передан на решение руководителю."
     )
     markup = _inline([
-        [("📤 Уведомить клиента сейчас", f"col_adm_send_{mid}")],
-        [("💬 Вызвать менеджера на отчёт", f"col_adm_call_{mid}")],
-        [("⏳ Продлить контроль +1 день", f"col_adm_extend_{mid}")],
+        [("📤 Уведомить клиента сейчас", _cb("adm_send", dialog))],
+        [("💬 Вызвать менеджера на отчёт", _cb("adm_call", dialog))],
+        [("⏳ Продлить контроль +1 день", _cb("adm_extend", dialog))],
     ])
     for admin_id in _get_admin_ids():
         await _send_msg(admin_id, text, markup)
@@ -782,7 +789,7 @@ async def _on_manager_explanation(dialog: Dict[str, Any], mid: int, text: str) -
     days   = dialog["days"]
     amount = dialog["amount"]
 
-    update_dialog(mid, awaiting_manager_explanation=False, state=STATE_DEADLINE_SET)
+    update_dialog(_dialog_id(dialog), awaiting_manager_explanation=False, state=STATE_DEADLINE_SET)
 
     forward_text = (
         f"💬 <b>Ответ менеджера {dialog['manager_name']}:</b>\n\n"
@@ -791,9 +798,9 @@ async def _on_manager_explanation(dialog: Dict[str, Any], mid: int, text: str) -
     )
     markup = _inline([
         [
-            ("📤 Уведомить клиента",    f"col_adm_send_{mid}"),
-            ("⏳ +1 день",               f"col_adm_extend_{mid}"),
-            ("✅ Принять объяснение",    f"col_adm_ok_{mid}"),
+            ("📤 Уведомить клиента",    _cb("adm_send", dialog)),
+            ("⏳ +1 день",               _cb("adm_extend", dialog)),
+            ("✅ Принять объяснение",    _cb("adm_ok", dialog)),
         ],
     ])
     admin_ids = _get_admin_ids()
@@ -810,7 +817,7 @@ async def _on_name_ok(dialog: Dict[str, Any], mid: int) -> None:
     contact["name_confirmations"] = contact.get("name_confirmations", 0) + 1
     # Сохраняем в debtors_contacts.json
     _save_contact(dialog["client_name"], contact)
-    update_dialog(mid, name_confirmed=True, current_contact=contact)
+    update_dialog(_dialog_id(dialog), name_confirmed=True, current_contact=contact)
     dialog["name_confirmed"] = True
     dialog["current_contact"] = contact
     # Переотправляем сообщение с обновлённым состоянием
@@ -821,11 +828,11 @@ async def _on_name_ok(dialog: Dict[str, Any], mid: int) -> None:
 async def _on_name_edit(dialog: Dict[str, Any], mid: int) -> None:
     """Менеджер хочет изменить имя клиента."""
     from collector.dialog_store import update_dialog, STATE_AWAITING_NAME_TEXT
-    update_dialog(mid, awaiting_name_text=True, state=STATE_AWAITING_NAME_TEXT)
+    update_dialog(_dialog_id(dialog), awaiting_name_text=True, state=STATE_AWAITING_NAME_TEXT)
     contact = dict(dialog.get("current_contact") or {})
     contact["name_confirmations"] = 0
     _save_contact(dialog["client_name"], contact)
-    update_dialog(mid, current_contact=contact)
+    update_dialog(_dialog_id(dialog), current_contact=contact)
     await _send_msg(
         mid,
         "✏️ <b>Введите имя клиента</b>\n\n"
@@ -845,7 +852,7 @@ async def _on_phone_ok(dialog: Dict[str, Any], mid: int) -> None:
         contact["phone"] = primary_phone
         contact["_needs_phone"] = False
     _save_contact(dialog["client_name"], contact)
-    update_dialog(mid, phone_confirmed=True, current_contact=contact)
+    update_dialog(_dialog_id(dialog), phone_confirmed=True, current_contact=contact)
     dialog["phone_confirmed"] = True
     dialog["current_contact"] = contact
     text, markup = _build_initial_message(dialog)
@@ -855,12 +862,12 @@ async def _on_phone_ok(dialog: Dict[str, Any], mid: int) -> None:
 async def _on_phone_edit(dialog: Dict[str, Any], mid: int) -> None:
     """Менеджер сообщает о смене телефона клиента."""
     from collector.dialog_store import update_dialog, STATE_AWAITING_PHONE_TEXT
-    update_dialog(mid, awaiting_phone_text=True, state=STATE_AWAITING_PHONE_TEXT)
+    update_dialog(_dialog_id(dialog), awaiting_phone_text=True, state=STATE_AWAITING_PHONE_TEXT)
     contact = dict(dialog.get("current_contact") or {})
     contact["phone_confirmations"] = 0
     contact["_needs_phone"] = True
     _save_contact(dialog["client_name"], contact)
-    update_dialog(mid, current_contact=contact)
+    update_dialog(_dialog_id(dialog), current_contact=contact)
     await _send_msg(
         mid,
         "📞 <b>Введите новый телефон</b>\n\n"
@@ -879,29 +886,21 @@ async def start_dialog(
 ) -> None:
     """Запускает новый диалог с менеджером по конкретному клиенту."""
     from collector.dialog_store import (
-        get_dialog, new_dialog, update_dialog,
+        get_active_dialog_ids, get_dialog, new_dialog, update_dialog,
         STATE_CONFIRMED, STATE_DONE,
     )
 
-    existing = get_dialog(manager_chat_id)
-
-    if existing:
+    for dialog_id in get_active_dialog_ids(manager_chat_id):
+        existing = get_dialog(dialog_id)
+        if not existing:
+            continue
         state = existing.get("state", "")
-        # Уже активный диалог по другому клиенту
-        if (state not in (STATE_CONFIRMED, STATE_DONE)
-                and existing.get("client_name") != client["name"]):
+        if state not in (STATE_CONFIRMED, STATE_DONE) and existing.get("client_name") == client["name"]:
             logger.info(
-                "[%s] менеджер %s занят диалогом по %s — пропуск нового",
-                client["name"], manager_name, existing.get("client_name"),
+                "[%s] уже есть активный dialog_id=%s для менеджера %s — дубликат не создаём",
+                client["name"], dialog_id, manager_name,
             )
             return
-        # Тот же клиент, уже подтверждён/закрыт
-        if (state in (STATE_CONFIRMED, STATE_DONE)
-                and existing.get("client_name") == client["name"]):
-            logger.info(
-                "[%s] диалог уже завершён (state=%s) — начинаем новый",
-                client["name"], state,
-            )
 
     # Создаём новый диалог
     dialog = new_dialog(
@@ -917,64 +916,67 @@ async def start_dialog(
     text, markup = _build_initial_message(dialog)
     msg_id = await _send_msg(manager_chat_id, text, markup)
     if msg_id:
-        update_dialog(manager_chat_id, message_id=msg_id)
+        update_dialog(dialog["dialog_id"], message_id=msg_id)
 
 
 async def handle_callback(data: str, chat_id: int, message_id: int) -> bool:
     """Обрабатывает inline callback от Telegram. Возвращает True если обработан."""
-    from collector.dialog_store import get_dialog, load_dialogs
+    from collector.dialog_store import get_active_dialog_ids, get_dialog
 
-    if not data.startswith("col_"):
+    if data.startswith("col|"):
+        parts = data.split("|", 2)
+        if len(parts) != 3:
+            return False
+        _, action, dialog_id = parts
+        dialog = get_dialog(dialog_id)
+        if not dialog:
+            logger.warning("handle_callback: dialog_id=%s не найден", dialog_id)
+            await _send_msg(chat_id, "⚠️ Этот запрос уже устарел. Откройте актуальное сообщение выше.")
+            return True
+        mid = int(dialog.get("manager_chat_id") or chat_id)
+    elif data.startswith("col_"):
+        callback_map = [
+            ("col_confirm_",   "confirm"),
+            ("col_reject_",    "reject"),
+            ("col_data_ok_",   "data_ok"),
+            ("col_data_edit_", "data_edit"),
+            ("col_adm_ok_",    "adm_ok"),
+            ("col_adm_deny_",  "adm_deny"),
+            ("col_adm_send_",  "adm_send"),
+            ("col_adm_call_",  "adm_call"),
+            ("col_adm_extend_","adm_extend"),
+            ("col_name_ok_",   "name_ok"),
+            ("col_name_edit_", "name_edit"),
+            ("col_phone_ok_",  "phone_ok"),
+            ("col_phone_edit_","phone_edit"),
+            ("col_help_",      "help"),
+        ]
+        action = None
+        mid_str = None
+        for prefix, act in callback_map:
+            if data.startswith(prefix):
+                action = act
+                mid_str = data[len(prefix):]
+                break
+        if action is None or not mid_str:
+            return False
+        try:
+            mid = int(mid_str)
+        except ValueError:
+            return False
+        active_ids = get_active_dialog_ids(mid)
+        if not active_ids:
+            logger.warning("handle_callback: legacy callback для %d без активных диалогов", mid)
+            return True
+        if len(active_ids) > 1:
+            await _send_msg(mid, "⚠️ Старое сообщение устарело: у вас уже несколько активных запросов. Используйте кнопки в новом сообщении.")
+            return True
+        dialog = get_dialog(active_ids[0])
+        if not dialog:
+            logger.warning("handle_callback: legacy callback для %d указывает на отсутствующий dialog_id=%s", mid, active_ids[0])
+            return True
+    else:
         return False
-
-    # Парсим callback data: col_<action>_<manager_chat_id>
-    parts = data.split("_", 2)
-    if len(parts) < 3:
-        return False
-
-    action_part = parts[1]
-    # Для составных actions (adm_ok, adm_deny, data_ok, data_edit)
-    # data: col_adm_ok_12345 → parts = ['col', 'adm', 'ok_12345']
-    # Нужна другая схема парсинга
-
-    # Полный список callback паттернов
-    callback_map = [
-        ("col_confirm_",   "confirm"),
-        ("col_reject_",    "reject"),
-        ("col_data_ok_",   "data_ok"),
-        ("col_data_edit_", "data_edit"),
-        ("col_adm_ok_",    "adm_ok"),
-        ("col_adm_deny_",  "adm_deny"),
-        ("col_adm_send_",  "adm_send"),
-        ("col_adm_call_",  "adm_call"),
-        ("col_adm_extend_","adm_extend"),
-        ("col_name_ok_",   "name_ok"),
-        ("col_name_edit_", "name_edit"),
-        ("col_phone_ok_",  "phone_ok"),
-        ("col_phone_edit_","phone_edit"),
-        ("col_help_",      "help"),
-    ]
-
-    action = None
-    mid_str = None
-    for prefix, act in callback_map:
-        if data.startswith(prefix):
-            action  = act
-            mid_str = data[len(prefix):]
-            break
-
-    if action is None or not mid_str:
-        return False
-
-    try:
-        mid = int(mid_str)
-    except ValueError:
-        return False
-
-    dialog = get_dialog(mid)
-    if not dialog:
-        logger.warning("handle_callback: диалог для %d не найден", mid)
-        return True  # Обработан (но нет данных)
 
     if action == "confirm":
         await _on_confirm(dialog, mid)
@@ -1013,7 +1015,9 @@ async def handle_callback(data: str, chat_id: int, message_id: int) -> bool:
 async def handle_text_message(chat_id: int, text: str) -> bool:
     """Обрабатывает текстовое сообщение от менеджера. Возвращает True если обработан."""
     from collector.dialog_store import (
-        get_dialog,
+        get_active_dialog_ids,
+        get_latest_active_dialog,
+        get_text_target_dialog,
         STATE_AWAITING_DATA,
         STATE_AWAITING_REJECTION_REASON,
         STATE_AWAITING_CONFIRM,
@@ -1024,9 +1028,20 @@ async def handle_text_message(chat_id: int, text: str) -> bool:
         STATE_AWAITING_PHONE_TEXT,
     )
 
-    dialog = get_dialog(chat_id)
-    if not dialog:
+    active_ids = get_active_dialog_ids(chat_id)
+    if not active_ids:
         return False
+    dialog = get_text_target_dialog(chat_id)
+    if dialog is None:
+        if len(active_ids) > 1:
+            await _send_msg(
+                chat_id,
+                "⚠️ У вас несколько активных запросов. Ответьте через кнопки в нужном сообщении, чтобы не перепутать клиентов.",
+            )
+            return True
+        dialog = get_latest_active_dialog(chat_id)
+        if not dialog:
+            return False
 
     state = dialog.get("state")
 
@@ -1042,7 +1057,7 @@ async def handle_text_message(chat_id: int, text: str) -> bool:
         contact["name_confirmations"] = 1
         _save_contact(dialog["client_name"], contact)
         update_dialog(
-            chat_id,
+            _dialog_id(dialog),
             current_contact=contact,
             name_confirmed=True,
             awaiting_name_text=False,
@@ -1067,7 +1082,7 @@ async def handle_text_message(chat_id: int, text: str) -> bool:
         contact["_needs_phone"] = False
         _save_contact(dialog["client_name"], contact)
         update_dialog(
-            chat_id,
+            _dialog_id(dialog),
             current_contact=contact,
             phone_confirmed=True,
             awaiting_phone_text=False,
@@ -1233,7 +1248,7 @@ async def send_reminders() -> None:
                         dialog.get("client_name"), age_hours, state,
                     )
                     update_dialog(
-                        mid,
+                        _dialog_id(dialog),
                         control_deadline=now.isoformat(),
                         escalated_at=now.isoformat(),
                     )
@@ -1262,7 +1277,7 @@ async def send_reminders() -> None:
                 pass
 
         count = (dialog.get("remind_count") or 0) + 1
-        update_dialog(mid, remind_count=count, last_reminded=now.isoformat())
+        update_dialog(_dialog_id(dialog), remind_count=count, last_reminded=now.isoformat())
 
         if state in (STATE_AWAITING_CONFIRM, STATE_DEADLINE_SET):
             # Проверяем дедлайн
@@ -1287,7 +1302,7 @@ async def send_reminders() -> None:
                 f"⏰ Напоминание #{count}\n\n"
                 f"Клиент: <b>{dialog['client_name']}</b>\n"
                 f"Отправьте обновлённые данные контакта текстом.",
-                _inline([[("❓ Не понимаю, что ответить", f"col_help_{mid}")]]),
+                _inline([[("❓ Не понимаю, что ответить", _cb("help", dialog))]]),
             )
 
         elif state == STATE_AWAITING_REJECTION_REASON:
@@ -1296,7 +1311,7 @@ async def send_reminders() -> None:
                 f"⏰ Напоминание #{count}\n\n"
                 f"Клиент: <b>{dialog['client_name']}</b>\n"
                 f"Напишите причину отказа от отправки сообщения.",
-                _inline([[("❓ Не понимаю, что ответить", f"col_help_{mid}")]]),
+                _inline([[("❓ Не понимаю, что ответить", _cb("help", dialog))]]),
             )
 
         elif state == STATE_AWAITING_DATA_CONFIRM:
@@ -1318,8 +1333,8 @@ async def send_reminders() -> None:
             )
             markup_adm = _inline([
                 [
-                    ("✅ Принять отказ",                   f"col_adm_ok_{mid}"),
-                    ("❌ Установить дедлайн",               f"col_adm_deny_{mid}"),
+                    ("✅ Принять отказ",                   _cb("adm_ok", dialog)),
+                    ("❌ Установить дедлайн",               _cb("adm_deny", dialog)),
                 ],
             ])
             for admin_id in admin_ids:
