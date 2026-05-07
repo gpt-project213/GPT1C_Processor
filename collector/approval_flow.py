@@ -1793,6 +1793,7 @@ async def handle_admin_callback(
         return True
 
     if action == "wa_appr_adm_ok":
+        logger.info("[%s] admin approve button pressed by chat_id=%s", batch_id, chat_id)
         # Финальное утверждение
         admin_decisions = _build_admin_decisions(batch)
         approved_clients = []
@@ -1865,7 +1866,10 @@ async def handle_admin_callback(
             raise _cancelled_exc
 
     elif action == "wa_appr_adm_send":
+        logger.info("[%s] admin send button pressed by chat_id=%s status=%s admin_status=%s",
+                    batch_id, chat_id, batch.get("status"), batch.get("admin_status"))
         if batch.get("admin_status") != "approved":
+            logger.warning("[%s] send rejected: admin_status=%s", batch_id, batch.get("admin_status"))
             await _tg_edit(
                 chat_id,
                 message_id,
@@ -1875,6 +1879,7 @@ async def handle_admin_callback(
             return True
 
         if batch.get("status") in ("sent", "partially_sent"):
+            logger.info("[%s] send skipped: already %s", batch_id, batch.get("status"))
             send_results = batch.get("send_results") or []
             await _tg_edit(chat_id, message_id, _format_send_results_text(batch_id, send_results))
             return True
