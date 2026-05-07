@@ -1819,6 +1819,7 @@ async def handle_admin_callback(
             pass
 
         _diff_block = ""
+        _cancelled_exc = None
         try:
             import asyncio
             from collector.collections_engine import preview_batch_changes as _preview_changes
@@ -1830,6 +1831,11 @@ async def handle_admin_callback(
             logger.info("[%s] admin approve: preview_batch_changes finish", batch_id)
             if _diff_text:
                 _diff_block = f"\n\n⚠️ <b>Данные обновились с момента формирования:</b>\n{_diff_text}"
+        except asyncio.CancelledError as _ce:
+            # Coroutine was cancelled (e.g. bot shutdown). Capture it — we must
+            # still update the Telegram message so the "Send" button appears,
+            # then re-raise to let the framework handle cleanup properly.
+            _cancelled_exc = _ce
         except asyncio.TimeoutError:
             logger.error("[%s] preview_batch_changes timeout during admin approve", batch_id)
             _diff_block = (
@@ -1855,6 +1861,8 @@ async def handle_admin_callback(
             "[%s] Администратор УТВЕРДИЛ отправку: %d клиентов",
             batch_id, len(approved_clients),
         )
+        if _cancelled_exc is not None:
+            raise _cancelled_exc
 
     elif action == "wa_appr_adm_send":
         if batch.get("admin_status") != "approved":

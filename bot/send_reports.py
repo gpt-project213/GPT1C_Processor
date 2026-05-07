@@ -7327,6 +7327,10 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # WhatsApp approval flow callbacks (wa_appr_mgr_* / wa_appr_cli_* / wa_appr_adm_*)
     if data.startswith("wa_appr_"):
         try:
+            await q.answer()
+        except Exception:
+            pass
+        try:
             from collector.approval_flow import handle_callback as _wa_appr_cb
             handled = await _wa_appr_cb(data, chat_id, q.message.message_id)
             if handled:
