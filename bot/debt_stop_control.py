@@ -589,12 +589,6 @@ async def send_manager_requests(bot) -> None:
 
         for cid, c in sorted(items, key=lambda x: -x[1]["days_silence"]):
             icon = "🔴" if c["level"] == "10+" else "⚡"
-            kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("вњ… РџРѕР»РЅР°СЏ РѕРїР»Р°С‚Р°",  callback_data=f"payhold_full|{token}")],
-                [InlineKeyboardButton("рџ”ё Р§Р°СЃС‚РёС‡РЅР°СЏ",     callback_data=f"payhold_partial|{token}")],
-                [InlineKeyboardButton("вќЊ РћРїР»Р°С‚С‹ РЅРµС‚",    callback_data=f"payhold_none|{token}")],
-                [InlineKeyboardButton("❓ Что это значит?", callback_data="payhold_help_full")],
-            ])
             text = (
                 f"{icon} <b>{c['client']}</b>\n"
                 f"Молчит: <b>{c['days_silence']}\u202fдн.</b>  |  "
@@ -1123,12 +1117,6 @@ async def send_saida_payment_hold_reminders(bot) -> None:
                 f"Менеджер <b>{manager}</b> и директор узнают о твоём молчании.\n\n"
                 f"Все последствия ошибки — на тебе."
             )
-            kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("вњ… РџРѕР»РЅР°СЏ РѕРїР»Р°С‚Р°",  callback_data=f"payhold_full|{token}")],
-                [InlineKeyboardButton("рџ”ё Р§Р°СЃС‚РёС‡РЅР°СЏ",     callback_data=f"payhold_partial|{token}")],
-                [InlineKeyboardButton("вќЊ РћРїР»Р°С‚С‹ РЅРµС‚",    callback_data=f"payhold_none|{token}")],
-                [InlineKeyboardButton("❓ Что это значит?", callback_data="payhold_help_full")],
-            ])
             try:
                 await bot.send_message(
                     chat_id=SAIDA_CHAT_ID, text=text,
@@ -2123,14 +2111,10 @@ async def _handle_mgr_paid_claim(cid: str, chat_id: int, bot) -> str:
     now_str = datetime.now(TZ).strftime("%H:%M")
 
     # Саиде — запрос с двумя кнопками
-    kb_saida = InlineKeyboardMarkup([[
-        InlineKeyboardButton("✅ Полная оплата",    callback_data=f"dstop_saida_full|{cid}"),
-        InlineKeyboardButton("⚠️ Частичная оплата", callback_data=f"dstop_saida_partial|{cid}"),
-    ]])
     kb_saida = InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("вњ… РџРѕР»РЅР°СЏ РѕРїР»Р°С‚Р°", callback_data=f"dstop_saida_full|{cid}"),
-            InlineKeyboardButton("вљ пёЏ Р§Р°СЃС‚РёС‡РЅР°СЏ РѕРїР»Р°С‚Р°", callback_data=f"dstop_saida_partial|{cid}"),
+            InlineKeyboardButton("✅ Полная оплата",    callback_data=f"dstop_saida_full|{cid}"),
+            InlineKeyboardButton("⚠️ Частичная оплата", callback_data=f"dstop_saida_partial|{cid}"),
         ],
         [InlineKeyboardButton("❓ Что это значит?", callback_data="dstop_saida_help")],
     ])
