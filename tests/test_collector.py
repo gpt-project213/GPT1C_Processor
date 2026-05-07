@@ -2692,12 +2692,19 @@ _orig_dstop_state = _dstop.STATE_FILE
 _orig_dstop_registry = _dstop.REGISTRY_FILE
 _orig_dstop_saida = _dstop.SAIDA_CHAT_ID
 _orig_dstop_deletion = _dstop.DELETION_QUEUE
+_orig_dstop_config = _dstop.CONFIG_DIR
 _dstop_tmpdir = tempfile.mkdtemp()
 try:
     _dstop.STATE_FILE = Path(_dstop_tmpdir) / "debt_stop_state.json"
     _dstop.REGISTRY_FILE = Path(_dstop_tmpdir) / "debt_stop_registry.json"
     _dstop.DELETION_QUEUE = Path(_dstop_tmpdir) / "deletion_queue.json"
     _dstop.SAIDA_CHAT_ID = 0
+    _dstop_config_dir = Path(_dstop_tmpdir) / "config"
+    _dstop_config_dir.mkdir(parents=True, exist_ok=True)
+    _dstop.CONFIG_DIR = _dstop_config_dir
+    (_dstop_config_dir / "managers.json").write_text(
+        '{"Ергали": 654321, "Алена": 111, "Магира": 777}', encoding="utf-8"
+    )
     _fake_dstop_bot = _FakeDstopBot()
     _admin_id = 123456
     _today = datetime.now(_dstop.TZ).strftime("%Y-%m-%d")
@@ -2780,6 +2787,7 @@ finally:
     _dstop.REGISTRY_FILE = _orig_dstop_registry
     _dstop.DELETION_QUEUE = _orig_dstop_deletion
     _dstop.SAIDA_CHAT_ID = _orig_dstop_saida
+    _dstop.CONFIG_DIR = _orig_dstop_config
 
 
 # ═══════════════════════════════════════════════════════════════

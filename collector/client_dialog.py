@@ -205,6 +205,46 @@ async def _notify_dialog_observers(dialog: Dict[str, Any], text: str) -> None:
         await _send_tg(obs_id, text)
 
 
+async def _notify_saida_doc_request(
+    dialog: Dict[str, Any],
+    client_text: str,
+    doc_kind: str = "акт сверки",
+) -> None:
+    """Дублирует Саиде запрос документа от клиента (акт сверки / счёт / накладная).
+
+    Why: Саида ведёт документооборот; ответственный менеджер может задержать,
+    а клиент уже ждёт. Параллельное уведомление Саиде в личку ускоряет ответ.
+    """
+    if _TEST_MODE:
+        logger.info(
+            "COLLECTOR_TEST_MODE: saida notification suppressed for %s",
+            dialog.get("client_name", "unknown"),
+        )
+        return
+    try:
+        saida_chat_id = int(os.getenv("SAIDA_CHAT_ID", "920236287"))
+    except (TypeError, ValueError):
+        logger.warning("SAIDA_CHAT_ID невалиден — пропуск уведомления")
+        return
+    if not saida_chat_id:
+        return
+
+    client_name = dialog.get("client_name", "—")
+    manager_name = dialog.get("manager_name", "—")
+    preview = (client_text or "").strip()
+    if len(preview) > 200:
+        preview = preview[:200] + "…"
+
+    text = (
+        f"📄 <b>Запрос документа от клиента</b>\n\n"
+        f"Клиент: <b>{client_name}</b>\n"
+        f"Менеджер: {manager_name}\n"
+        f"Запрос: <b>{doc_kind}</b>\n\n"
+        f"💬 Сообщение клиента:\n<i>{preview}</i>"
+    )
+    await _send_tg(saida_chat_id, text)
+
+
 def _gender_pronoun(manager_name: str) -> str:
     """Возвращает 'Она' или 'Он' по окончанию имени менеджера."""
     name = manager_name.strip()
@@ -617,11 +657,41 @@ async def handle_incoming(phone: str, text: str, attachment: Optional[Dict[str, 
         return
 
     if dialog.get("state") not in _DIALOG_ACTIVE_STATES:
-        _audit("incoming_ignored_inactive_state", name=dialog.get("client_name"), phone_masked=_mask_phone(phone_clean), state=dialog.get("state"))
-        logger.warning(
-            "incoming from %s ignored: dialog '%s' in inactive state=%s (audit logged)",
-            _mask_phone(phone_clean), dialog.get("client_name", "?"), dialog.get("state"),
+        # Диалог уже эскалирован/закрыт — бот не отвечает,
+        # но передаём сообщение клиента менеджеру в TG, чтобы он
+        # видел, что написал клиент (иначе возникает «тишина», и менеджер
+        # не знает о новой реплике в WA).
+        _audit(
+            "incoming_forwarded_inactive_state",
+            name=dialog.get("client_name"),
+            phone_masked=_mask_phone(phone_clean),
+            state=dialog.get("state"),
+            text_preview=text[:160],
+            attachment_type=(attachment or {}).get("type", ""),
         )
+        logger.warning(
+            "incoming from %s in inactive state=%s — forwarded to manager (no auto-reply)",
+            _mask_phone(phone_clean), dialog.get("state"),
+        )
+        try:
+            _client_name = dialog.get("client_name", "Клиент")
+            _manager_name = dialog.get("manager_name", "")
+            _state = dialog.get("state", "—")
+            _preview = (text or "").strip()
+            if len(_preview) > 400:
+                _preview = _preview[:400] + "…"
+            _attach_kind = (attachment or {}).get("type", "")
+            _attach_line = f"\n📎 Вложение: {_attach_kind}" if _attach_kind else ""
+            fwd_text = (
+                f"💬 <b>Новая реплика клиента</b> — {_client_name}\n"
+                f"Менеджер: {_manager_name}\n"
+                f"Статус диалога: <code>{_state}</code> (бот не отвечает){_attach_line}\n\n"
+                f"Клиент пишет:\n<i>{_preview}</i>\n\n"
+                f"⚠️ Ответьте клиенту вручную в WhatsApp."
+            )
+            await _notify_dialog_observers(dialog, fwd_text)
+        except Exception as _fe:
+            logger.error("forward inactive-state failed: %s", _fe)
         return
 
     now = _now_iso()
@@ -680,16 +750,50 @@ async def handle_incoming(phone: str, text: str, attachment: Optional[Dict[str, 
         return
 
     if _is_service_request(text):
+        # Подбираем тип документа для уведомления Саиды.
+        _norm = _normalize_text(text)
+        if "сверк" in _norm or ("акт" in _norm and "сверк" in _norm):
+            _doc_kind = "акт сверки"
+        elif "наклад" in _norm:
+            _doc_kind = "накладная"
+        elif "счет фактур" in _norm or "счёт фактур" in _norm or "сф" == _norm.strip():
+            _doc_kind = "счёт-фактура"
+        elif "счет" in _norm or "счёт" in _norm:
+            _doc_kind = "счёт"
+        elif "договор" in _norm:
+            _doc_kind = "договор"
+        else:
+            _doc_kind = "документы"
+
         reply = (
             f"Спасибо, передаю вас менеджеру {manager_name}. "
             f"{pronoun} свяжется с вами и поможет по документам."
         )
         dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
         _set_client_dialog(phone_clean, dialog)
+
+        # Suppress 2 дня — пока менеджер шлёт документ и клиент его смотрит,
+        # бот не дёргает напоминаниями.
+        try:
+            from collector.collections_db import set_wa_dialog_suppress
+            from datetime import date, timedelta
+            _until = (date.today() + timedelta(days=2)).isoformat()
+            set_wa_dialog_suppress(client_name, "doc_request", _until)
+        except Exception as _e:
+            logger.warning("wa_dialog_suppress (doc_request): %s", _e)
+
         await _reply_to_client(phone_clean, reply)
         await escalate_to_manager(
             dialog, "question",
-            "Клиент запросил документы/акт сверки — нужен менеджер", phone_clean,
+            f"Клиент запросил {_doc_kind} — нужен менеджер", phone_clean,
+        )
+        # Дублируем Саиде в личку — она ведёт документооборот.
+        await _notify_saida_doc_request(dialog, client_text=text, doc_kind=_doc_kind)
+        _audit(
+            "doc_request_to_saida",
+            name=client_name,
+            phone_masked=_mask_phone(phone_clean),
+            doc_kind=_doc_kind,
         )
         return
 
@@ -757,6 +861,78 @@ async def handle_incoming(phone: str, text: str, attachment: Optional[Dict[str, 
             dialog, "limit_reached",
             f"Достигнут лимит обменов ({exchange_count})", phone_clean,
         )
+        return
+
+    if intent == "cash_pickup":
+        # Клиент предлагает забрать оплату наличными.
+        # ВАЖНО: наличку забирает МЕНЕДЖЕР, не Саида — Саиду здесь не уведомляем.
+        reply = (
+            f"Спасибо, передаю менеджеру {manager_name}. "
+            f"{pronoun} согласует, как удобнее принять оплату."
+        )
+        dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
+        _set_client_dialog(phone_clean, dialog)
+        await _reply_to_client(phone_clean, reply)
+        await escalate_to_manager(
+            dialog, "cash_pickup",
+            "Клиент просит забрать оплату наличными — согласуйте визит и заберите кассу", phone_clean,
+        )
+        _audit("cash_pickup_request", name=client_name, phone_masked=_mask_phone(phone_clean))
+        return
+
+    if intent == "doc_request":
+        # AI распознал просьбу о документах (не сматчилось keyword-детектором).
+        reply = (
+            f"Спасибо, передаю вас менеджеру {manager_name}. "
+            f"{pronoun} свяжется с вами и поможет по документам."
+        )
+        dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
+        _set_client_dialog(phone_clean, dialog)
+        try:
+            from collector.collections_db import set_wa_dialog_suppress
+            from datetime import date, timedelta
+            _until = (date.today() + timedelta(days=2)).isoformat()
+            set_wa_dialog_suppress(client_name, "doc_request", _until)
+        except Exception as _e:
+            logger.warning("wa_dialog_suppress (doc_request, ai): %s", _e)
+        await _reply_to_client(phone_clean, reply)
+        await escalate_to_manager(
+            dialog, "doc_request",
+            "Клиент просит документы (распознано AI)", phone_clean,
+        )
+        await _notify_saida_doc_request(dialog, client_text=text, doc_kind="документы")
+        _audit("doc_request_to_saida", name=client_name, phone_masked=_mask_phone(phone_clean), source="ai")
+        return
+
+    if intent == "dispute":
+        # Клиент оспаривает сумму — диалог отдаём менеджеру, бот замолкает.
+        reply = (
+            f"Спасибо, передаю менеджеру {manager_name}. "
+            f"{pronoun} свяжется с вами и сверит цифры."
+        )
+        dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
+        _set_client_dialog(phone_clean, dialog)
+        await _reply_to_client(phone_clean, reply)
+        await escalate_to_manager(
+            dialog, "dispute",
+            "Клиент оспаривает сумму или факт долга — нужна сверка", phone_clean,
+        )
+        _audit("dispute_reported", name=client_name, phone_masked=_mask_phone(phone_clean))
+        return
+
+    if intent == "complaint":
+        reply = (
+            f"Спасибо за обратную связь, передаю менеджеру {manager_name}. "
+            f"{pronoun} свяжется с вами по этому вопросу."
+        )
+        dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
+        _set_client_dialog(phone_clean, dialog)
+        await _reply_to_client(phone_clean, reply)
+        await escalate_to_manager(
+            dialog, "complaint",
+            "Клиент жалуется (товар/доставка/сервис) — нужен живой ответ", phone_clean,
+        )
+        _audit("complaint_reported", name=client_name, phone_masked=_mask_phone(phone_clean))
         return
 
     if requires_human:

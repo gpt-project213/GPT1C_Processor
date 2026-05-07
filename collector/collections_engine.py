@@ -167,16 +167,19 @@ def _client_report_date(client: Dict[str, Any], days: int = 0) -> str:
 
 
 def _live_send_allowed(reason_prefix: str = "LIVE SEND BLOCKED") -> bool:
+    # Все три проверки — ожидаемые guardrail'ы (cutoff/feature flags),
+    # а не технические сбои. Логируем как WARNING, чтобы log_monitor
+    # не подсвечивал их как реальные ошибки.
     if not is_allowed_time():
-        logger.error("%s: outside allowed time window", reason_prefix)
+        logger.warning("%s: outside allowed time window", reason_prefix)
         return False
     _wa_live = os.getenv("WHATSAPP_ENABLED", "0").lower() in ("1", "true", "yes")
     _send_ok = os.getenv("LIVE_SEND_ALLOWED", "0").lower() in ("1", "true", "yes")
     if not _wa_live:
-        logger.error("%s: WHATSAPP_ENABLED=0", reason_prefix)
+        logger.warning("%s: WHATSAPP_ENABLED=0", reason_prefix)
         return False
     if not _send_ok:
-        logger.error("%s: LIVE_SEND_ALLOWED is not enabled", reason_prefix)
+        logger.warning("%s: LIVE_SEND_ALLOWED is not enabled", reason_prefix)
         return False
     return True
 

@@ -401,7 +401,8 @@ def analyze_response(
         '{"intent":"...", "promise_date":"...", "promise_amount":..., '
         '"requires_human":..., "suggested_reply":"..."}\n'
         "intent: одно из [promise, promise_without_date, promise_schedule, paid_claim, soft_positive, "
-        "refusal, delay_request, question, identity_question, unclear]\n"
+        "refusal, delay_request, question, identity_question, cash_pickup, dispute, "
+        "doc_request, complaint, unclear]\n"
         "  - promise: клиент обещает оплатить и даёт конкретную дату или относительный срок "
         "('завтра', 'послезавтра', 'до пятницы', 'в пятницу', 'через 2 дня', 'на этой неделе', '17 числа' и т.д.).\n"
         "  - promise_schedule: клиент описывает график частичных платежей: 'ежедневно', 'частями', "
@@ -418,10 +419,23 @@ def analyze_response(
         "'постараюсь' без любой временной привязки\n"
         "  - delay_request: клиент просит отсрочку, называет причину почему не может сейчас\n"
         "  - identity_question: клиент спрашивает кто пишет, откуда номер, кто вы такие\n"
+        "  - cash_pickup: клиент предлагает забрать оплату наличными у него "
+        "('зайдут заберут', 'из кассы возьмите', 'самовывоз оплаты', 'налом отдам', "
+        "'приезжайте за деньгами', 'у меня в магазине заберёте'). "
+        "Наличку забирает МЕНЕДЖЕР, не бухгалтер. ВСЕГДА requires_human=true.\n"
+        "  - dispute: клиент оспаривает сумму или сам факт долга "
+        "('у меня по моим данным меньше', 'я уже всё оплатил, проверьте', 'это не моя задолженность', "
+        "'сверим, у меня другие цифры'). ВСЕГДА requires_human=true.\n"
+        "  - doc_request: клиент просит документы — акт сверки, счёт-фактуру, накладную, договор. "
+        "ВСЕГДА requires_human=true.\n"
+        "  - complaint: клиент жалуется на качество товара, доставку, сервис, менеджера, "
+        "просрочку или порчу товара. ВСЕГДА requires_human=true.\n"
+        "  - unclear: ни одна категория не подходит и смысл не считывается. ВСЕГДА requires_human=true.\n"
         "promise_date: YYYY-MM-DD — ОБЯЗАТЕЛЬНО вычисли если клиент назвал относительную дату. "
         "null только если дата вообще не упоминается\n"
         "promise_amount: число или null\n"
-        "requires_human: true если агрессия, юридические угрозы или неоднозначность\n"
+        "requires_human: true если агрессия, юридические угрозы, неоднозначность, "
+        "или intent ∈ {cash_pickup, dispute, doc_request, complaint, unclear}\n"
         "suggested_reply при promise с датой и суммой: коротко подтверди договорённость.\n"
         "suggested_reply при promise с датой, но без суммы: подтверди срок без фразы 'фиксируем' "
         "и попроси чек после оплаты.\n"
@@ -467,7 +481,9 @@ def analyze_response(
             valid_intents = {
                 "promise", "promise_without_date", "promise_schedule", "paid_claim",
                 "soft_positive", "refusal", "delay_request", "question",
-                "identity_question", "unclear",
+                "identity_question",
+                "cash_pickup", "dispute", "doc_request", "complaint",
+                "unclear",
             }
             if data.get("intent") not in valid_intents:
                 data["intent"] = "unclear"
@@ -475,6 +491,12 @@ def analyze_response(
             data.setdefault("promise_amount", None)
             data.setdefault("requires_human", False)
             data.setdefault("suggested_reply", "")
+            # Жёсткое правило: при перечисленных intent-ах ответа от бота быть
+            # не должно — диалог уходит к менеджеру/Саиде. Подавляем suggested_reply
+            # и принудительно поднимаем requires_human, даже если модель забыла.
+            if data["intent"] in {"cash_pickup", "dispute", "doc_request", "complaint", "unclear"}:
+                data["requires_human"] = True
+                data["suggested_reply"] = ""
             return data
     except (json.JSONDecodeError, ValueError, KeyError) as e:
         logger.warning("Ошибка парсинга ответа DeepSeek: %s | raw=%s", e, raw[:200])

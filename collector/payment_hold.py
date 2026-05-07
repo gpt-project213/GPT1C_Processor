@@ -115,12 +115,21 @@ def create_manager_payment_request(
     return record
 
 
+_CONFIRMED_STATUSES = {"confirmed_full", "confirmed_partial", "rejected"}
+
+
 def confirm_by_saida(token: str, status: str) -> Optional[Dict[str, Any]]:
-    """Record Saida's answer: full, partial, or none."""
+    """Record Saida's answer: full, partial, or none.
+
+    Returns None if already confirmed (idempotent — prevents double notifications
+    when Saida both presses a button and writes a text reply).
+    """
     data = _load()
     record = data.get(token)
     if not isinstance(record, dict):
         return None
+    if record.get("status") in _CONFIRMED_STATUSES:
+        return None  # already answered — caller must not send notifications again
     if status == "full":
         record["status"] = "confirmed_full"
     elif status == "partial":

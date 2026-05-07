@@ -2183,14 +2183,73 @@ _MONTH_RU = {
 _DEFAULT_PROMISE_DAYS = 3   # если дату не удалось извлечь из текста
 
 
-def _extract_deadline_from_text(text: str) -> date:
+_WEEKDAY_RU = {
+    "понедельник": 0, "пн": 0,
+    "вторник": 1, "вт": 1,
+    "среда": 2, "среду": 2, "ср": 2,
+    "четверг": 3, "чт": 3,
+    "пятница": 4, "пятницу": 4, "пятниц": 4, "пт": 4,
+    "суббота": 5, "субботу": 5, "сб": 5,
+    "воскресенье": 6, "вс": 6,
+}
+
+
+def _extract_deadline_from_text(text: str) -> Optional[date]:
     """Пытается извлечь дату обещания из свободного текста.
 
-    Поддерживает: "до 15 мая", "15.05", "15/05", "15.05.2026", "через 3 дня".
-    Если не нашёл — возвращает сегодня + _DEFAULT_PROMISE_DAYS.
+    Поддерживает:
+      - "15 мая" / "до 15 мая" / "к 15 мая"
+      - "15.05" / "15/05" / "15.05.2026"
+      - "через 3 дня" / "через неделю" / "через 2 недели"
+      - "сегодня" / "завтра" / "послезавтра"
+      - "в пятницу" / "до пятницы" / "к понедельнику" / "на среду"
+      - "до конца недели" / "до выходных"
+      - "5 числа" / "к 5 числу"
+
+    Возвращает None если ничего не распознано (раньше всегда возвращался дефолт
+    +3 дня молча — менеджер не знал, что бот не понял дату). Caller теперь
+    может переспросить вместо тихого дефолта.
     """
     now = datetime.now(tz=TZ)
-    # "15 мая", "до 15 мая", "к 15 мая"
+    today = now.date()
+    t = (text or "").lower()
+
+    # «сегодня»
+    if re.search(r"\bсегодня\b", t):
+        return today
+    # «завтра»
+    if re.search(r"\bзавтра\b", t):
+        return today + timedelta(days=1)
+    # «послезавтра» / «после завтра»
+    if re.search(r"\bпосле\s*завтра\b|\bпослезавтра\b", t):
+        return today + timedelta(days=2)
+    # «через N дней»
+    m = re.search(r"через\s+(\d+)\s+дн", t)
+    if m:
+        return today + timedelta(days=int(m.group(1)))
+    # «через неделю / N недель»
+    if re.search(r"через\s+неделю", t):
+        return today + timedelta(days=7)
+    m = re.search(r"через\s+(\d+)\s+недел", t)
+    if m:
+        return today + timedelta(days=7 * int(m.group(1)))
+
+    # «до конца недели» / «до выходных» → ближайшая пятница
+    if re.search(r"до\s+конца\s+недели|до\s+выходн", t):
+        ahead = (4 - today.weekday()) % 7
+        if ahead == 0:
+            ahead = 7
+        return today + timedelta(days=ahead)
+
+    # День недели: «в пятницу», «до пятницы», «к понедельнику», «во вторник», «на среду»
+    for keyword, wday in _WEEKDAY_RU.items():
+        if re.search(rf"\b(в|во|до|к|на)\s+{keyword}", t):
+            ahead = (wday - today.weekday()) % 7
+            if ahead == 0:
+                ahead = 7
+            return today + timedelta(days=ahead)
+
+    # «15 мая» / «до 15 мая» / «к 15 мая»
     pattern_ru = r'(\d{1,2})\s+(' + '|'.join(_MONTH_RU.keys()) + r')'
     m = re.search(pattern_ru, text, re.IGNORECASE)
     if m:
@@ -2199,28 +2258,51 @@ def _extract_deadline_from_text(text: str) -> date:
         year  = now.year
         try:
             d = date(year, month, day)
-            if d < now.date():
+            if d < today:
                 d = date(year + 1, month, day)
             return d
         except ValueError:
             pass
-    # "15.05" / "15/05" / "15.05.2026"
+    # «15.05» / «15/05» / «15.05.2026»
     m = re.search(r'(\d{1,2})[./](\d{1,2})(?:[./](\d{4}))?', text)
     if m:
         try:
             day, month = int(m.group(1)), int(m.group(2))
             year = int(m.group(3)) if m.group(3) else now.year
             d = date(year, month, day)
-            if d < now.date():
+            if d < today:
                 d = date(year + 1, month, day)
             return d
         except ValueError:
             pass
-    # "через 3 дня"
-    m = re.search(r'через\s+(\d+)\s+дн', text, re.IGNORECASE)
+    # «5 числа» / «к 5 числу» — день текущего месяца, иначе следующего
+    m = re.search(r'(\d{1,2})\s*числ', t)
     if m:
-        return (now + timedelta(days=int(m.group(1)))).date()
-    return (now + timedelta(days=_DEFAULT_PROMISE_DAYS)).date()
+        try:
+            day = int(m.group(1))
+            d = date(now.year, now.month, day)
+            if d < today:
+                if now.month == 12:
+                    d = date(now.year + 1, 1, day)
+                else:
+                    d = date(now.year, now.month + 1, day)
+            return d
+        except ValueError:
+            pass
+
+    return None  # не распознано — пусть caller переспросит
+
+
+def _extract_deadline_or_default(text: str) -> date:
+    """Обратно-совместимый враппер: если парсер вернул None → дефолт.
+
+    Использовать только для legacy-вызовов, где переспрашивать невозможно.
+    Новые flow должны использовать _extract_deadline_from_text() и обрабатывать None.
+    """
+    d = _extract_deadline_from_text(text)
+    if d is not None:
+        return d
+    return (datetime.now(tz=TZ) + timedelta(days=_DEFAULT_PROMISE_DAYS)).date()
 
 
 def _load_promises() -> Dict[str, Any]:
@@ -2243,8 +2325,13 @@ def save_agreed_promise(
     details: str,
     batch_id: str,
 ) -> date:
-    """Сохраняет обещание менеджера. Возвращает извлечённую дату дедлайна."""
-    deadline = _extract_deadline_from_text(details)
+    """Сохраняет обещание менеджера. Возвращает извлечённую дату дедлайна.
+
+    Если в тексте дата не распознана, использует дефолт (+_DEFAULT_PROMISE_DAYS).
+    Для нового UX-flow (где можно переспросить) — используйте
+    `_extract_deadline_from_text()` напрямую и обработайте None.
+    """
+    deadline = _extract_deadline_or_default(details)
     promises = _load_promises()
     promises[client_name] = {
         "manager":    manager_name,
@@ -2563,6 +2650,10 @@ async def handle_manager_agreed_details(chat_id: int, text: str) -> bool:
     """Принимает текст с деталями договорённости от менеджера.
 
     Сохраняет в agreed_details, снимает waiting_for_agreed. Возвращает True если обработано.
+
+    Если в тексте не нашлась дата — НЕ сохраняем тихо с дефолтом,
+    а переспрашиваем менеджера. Это защита от ситуации «договорился завтра 50000»
+    где парсер раньше тихо ставил +3 дня и менеджер не знал.
     """
     state = find_manager_waiting_state(chat_id)
     if not state or state["wait_type"] != "agreed":
@@ -2573,6 +2664,22 @@ async def handle_manager_agreed_details(chat_id: int, text: str) -> bool:
     mgr_name    = state["manager_name"]
     client_name = state["wait_data"].get("client_name", "—")
     now_iso     = datetime.now(tz=TZ).isoformat()
+
+    # Сначала проверяем: распознана ли дата? Если нет — переспросить, не сохранять.
+    parsed_date = _extract_deadline_from_text(text)
+    if parsed_date is None:
+        await _tg_send(
+            chat_id,
+            f"🤔 По <b>{client_name}</b> — не понял когда оплата.\n\n"
+            "Напишите дату любым из способов:\n"
+            "• <b>завтра</b> / <b>послезавтра</b> / <b>сегодня</b>\n"
+            "• <b>в пятницу</b> / <b>до пятницы</b> / <b>к понедельнику</b>\n"
+            "• <b>через 3 дня</b> / <b>через неделю</b>\n"
+            "• <b>15 мая</b> / <b>до 15 мая</b>\n"
+            "• <b>15.05</b> / <b>15.05.2026</b>\n\n"
+            f"Например: «договорились до пятницы, 50 000 тг» или «{client_name} завтра 100000».",
+        )
+        return True
 
     deadline = save_agreed_promise(
         client_name=client_name,

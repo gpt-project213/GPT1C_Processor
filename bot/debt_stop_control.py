@@ -164,6 +164,8 @@ def load_state() -> Dict[str, Any]:
     today = datetime.now(TZ).strftime("%Y-%m-%d")
     if state.get("date") != today:
         state = {"date": today, "candidates": {}, "next_id": 1, "saida_sent": False}
+    if _sanitize_state_candidates(state):
+        save_state(state)
     return state
 
 
@@ -224,6 +226,39 @@ def _load_managers() -> Dict[str, int]:
 
 def _get_admin_chat_id() -> int:
     return int(os.getenv("ADMIN_CHAT_ID", "0"))
+
+
+def _sanitize_state_candidates(state: Dict[str, Any]) -> bool:
+    """Удаляет из debt_stop state кандидатов с невалидным manager_chat_id.
+
+    Прод-контур не должен обрабатывать тестовые записи вида manager_chat_id=111
+    или кандидатов, где manager→chat_id не совпадает с managers.json.
+    """
+    candidates = state.get("candidates", {})
+    if not isinstance(candidates, dict) or not candidates:
+        return False
+    managers = _load_managers()
+    changed = False
+    for cid, rec in list(candidates.items()):
+        if not isinstance(rec, dict):
+            candidates.pop(cid, None)
+            changed = True
+            continue
+        manager = str(rec.get("manager") or "").strip()
+        expected_chat = int(managers.get(manager, 0) or 0)
+        actual_chat = int(rec.get("manager_chat_id") or 0)
+        if not manager or not expected_chat or actual_chat != expected_chat:
+            LOG.warning(
+                "Skipping polluted debt_stop candidate cid=%s client=%s manager=%s actual_chat=%s expected_chat=%s",
+                cid,
+                rec.get("client"),
+                manager,
+                actual_chat,
+                expected_chat,
+            )
+            candidates.pop(cid, None)
+            changed = True
+    return changed
 
 
 # ══════════════════════════════════════════════════════════════════════

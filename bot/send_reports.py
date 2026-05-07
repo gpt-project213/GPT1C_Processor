@@ -175,6 +175,7 @@ import re
 import json
 import time
 import ssl
+import secrets
 import html as _html
 import asyncio
 import logging
@@ -188,7 +189,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.74/07.05.2026"
+__VERSION__ = "v9.4.75/07.05.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
@@ -1008,6 +1009,8 @@ def get_user_role(chat_id: int) -> str:
     subadmin_scopes = ROLES.get("subadmin_scopes", {})
     if str(chat_id) in subadmin_scopes:
         return "subadmin"
+    if chat_id == _get_saida_chat_id():
+        return "saida"
     for _, m_chat_id in (MANAGERS_MAP or {}).items():
         if m_chat_id == chat_id:
             return "manager"
@@ -3043,6 +3046,7 @@ def kb_main(user_role: str, chat_id: int = 0) -> InlineKeyboardMarkup:
             [InlineKeyboardButton("🗄️ Архив", callback_data="archive|root")],
             [InlineKeyboardButton("📈 Статистика", callback_data="show_stats")],
             [InlineKeyboardButton("📖 Инструкция", callback_data="show_help_doc")],
+            [InlineKeyboardButton("🛠️ Для Разработчика", callback_data="dev_feedback_open")],
         ]
     elif user_role == "subadmin":
         rows = [
@@ -3054,6 +3058,7 @@ def kb_main(user_role: str, chat_id: int = 0) -> InlineKeyboardMarkup:
             [InlineKeyboardButton("🔔 Уведомления сейчас", callback_data="menu_notify")],
             [InlineKeyboardButton("🗄️ Архив", callback_data="archive|root")],
             [InlineKeyboardButton("📖 Инструкция", callback_data="show_help_doc")],
+            [InlineKeyboardButton("🛠️ Для Разработчика", callback_data="dev_feedback_open")],
         ]
     elif user_role == "manager":
         my_name = get_my_manager_name(chat_id) or "Unknown"
@@ -3064,6 +3069,12 @@ def kb_main(user_role: str, chat_id: int = 0) -> InlineKeyboardMarkup:
             [InlineKeyboardButton("💰 Валовая", callback_data=f"direct|GROSS_PCT|{my_name}")],
             [InlineKeyboardButton("🗄️ Архив", callback_data="archive|root")],
             [InlineKeyboardButton("📖 Инструкция", callback_data="show_help_doc")],
+            [InlineKeyboardButton("🛠️ Для Разработчика", callback_data="dev_feedback_open")],
+        ]
+    elif user_role == "saida":
+        rows = [
+            [InlineKeyboardButton("📖 Инструкция", callback_data="show_help_doc")],
+            [InlineKeyboardButton("🛠️ Для Разработчика", callback_data="dev_feedback_open")],
         ]
     else:
         rows = []
@@ -5524,6 +5535,46 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await send_main_menu(context, chat_id, user_role, text="📋 Выберите раздел:")
 
+
+async def cmd_dev(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    if not await _acl_gate(chat_id, context):
+        return
+    _DEV_FEEDBACK_ARMED[chat_id] = datetime.now(TZ).isoformat()
+    _dev_feedback_save()
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=_dev_feedback_open_text(),
+        parse_mode="HTML",
+        reply_markup=_dev_feedback_menu_kb(),
+    )
+
+
+async def cmd_announce_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    if chat_id != _get_developer_chat_id():
+        await _send_auto(context, chat_id, "⛔ Доступ запрещён.")
+        return
+    sent, failed = await _broadcast_reset_notice(context.bot)
+    await _send_auto(
+        context,
+        chat_id,
+        f"✅ Информационная рассылка завершена.\n\nОтправлено: {sent}\nОшибок: {failed}"
+    )
+
+
+async def cmd_devhelp(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    if chat_id != _get_developer_chat_id():
+        await _send_auto(context, chat_id, "⛔ Доступ запрещён.")
+        return
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=_developer_command_help_text(),
+        parse_mode="HTML",
+        reply_markup=_dev_feedback_menu_kb(),
+    )
+
 async def cmd_health(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     if not is_admin(chat_id):
@@ -5693,6 +5744,385 @@ CRM_DAILY_LIMIT = 15  # максимум клиентов за один сеан
 CRM_PENDING_PATH = LOGS_DIR / "crm_pending_state.json"
 CRM_PENDING_TTL_HOURS = float(os.getenv("CRM_PENDING_TTL_HOURS", "48"))
 COLLECTOR_PENDING_TTL_DAYS = int(os.getenv("COLLECTOR_PENDING_TTL_DAYS", "2"))
+
+# One-shot inbox "Для Разработчика":
+# пользователь нажимает кнопку в меню, следующее текстовое/медиа сообщение
+# уходит разработчику. Разработчик отвечает адресно простым reply.
+DEVELOPER_FEEDBACK_PATH = LOGS_DIR / "developer_feedback_state.json"
+DEVELOPER_FEEDBACK_ARM_TTL_MIN = int(os.getenv("DEVELOPER_FEEDBACK_ARM_TTL_MIN", "30"))
+DEVELOPER_FEEDBACK_THREAD_TTL_HOURS = int(os.getenv("DEVELOPER_FEEDBACK_THREAD_TTL_HOURS", "168"))
+_DEV_FEEDBACK_ARMED: Dict[int, str] = {}
+_DEV_FEEDBACK_THREADS: Dict[str, Dict[str, Any]] = {}
+_DEV_FEEDBACK_REPLY_INDEX: Dict[int, str] = {}
+
+
+def _get_developer_chat_id() -> int:
+    raw = os.getenv("DEVELOPER_CHAT_ID", "").strip()
+    if raw:
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            pass
+    return int(ADMIN_CHAT_ID or 0)
+
+
+def _dev_feedback_sender_name(chat_id: int, update: Optional[Update] = None) -> str:
+    role = get_user_role(chat_id)
+    if role == "admin":
+        return "Вадим"
+    if role == "manager":
+        return get_my_manager_name(chat_id) or "Менеджер"
+    if role == "subadmin":
+        return get_my_manager_name(chat_id) or "Супервайзер"
+    if role == "saida":
+        return "Саида"
+    if update and update.effective_user:
+        return update.effective_user.full_name or update.effective_user.first_name or str(chat_id)
+    return str(chat_id)
+
+
+def _dev_feedback_sender_role(chat_id: int) -> str:
+    role = get_user_role(chat_id)
+    labels = {
+        "admin": "admin",
+        "subadmin": "subadmin",
+        "manager": "manager",
+        "saida": "saida",
+    }
+    return labels.get(role, "user")
+
+
+def _dev_feedback_menu_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📋 Открыть меню", callback_data="back_main")],
+        [InlineKeyboardButton("📖 Инструкция", callback_data="show_help_doc")],
+        [InlineKeyboardButton("🧾 Команды разработчика", callback_data="dev_commands")],
+    ])
+
+
+def _dev_feedback_open_text() -> str:
+    return (
+        "🛠️ <b>Связь с разработчиком</b>\n\n"
+        "Следующим сообщением отправьте то, что нужно передать:\n"
+        "• текст\n"
+        "• скриншот как фото\n"
+        "• файл или документ\n"
+        "• пересланное сообщение\n\n"
+        "Если отправляете скрин или файл, лучше добавьте подпись: что случилось и где именно.\n"
+        "После отправки я сразу перешлю это разработчику. "
+        "Он сможет ответить вам адресно прямо в этот чат."
+    )
+
+
+def _build_reset_broadcast_text() -> str:
+    return (
+        "ℹ️ <b>Важное обновление по работе бота</b>\n\n"
+        "Сегодня выполнен полный технический сброс рабочих хвостов.\n"
+        "Старые запросы, зависшие очереди и тестовые записи удалены.\n"
+        "С этого момента бот работает <b>с чистого нуля</b>.\n\n"
+        "<b>Что это значит для вас:</b>\n"
+        "• старые запросы больше не актуальны;\n"
+        "• новые сообщения от бота не игнорируем;\n"
+        "• отвечаем вовремя и по кнопкам/инструкциям из сообщения;\n"
+        "• если сообщение пришло повторно, считаем его рабочим и обрабатываем.\n\n"
+        "<b>Если что-то непонятно:</b>\n"
+        "1. Откройте меню.\n"
+        "2. Нажмите <b>📖 Инструкция</b>.\n"
+        "3. Выберите нужный сценарий и действуйте по подсказке.\n\n"
+        "<b>Если есть ошибка, вопрос или неудобство:</b>\n"
+        "1. Откройте меню.\n"
+        "2. Нажмите <b>🛠️ Для Разработчика</b>.\n"
+        "3. Следующим сообщением отправьте текст, скрин, фото, файл или пересланное сообщение.\n\n"
+        "По скринам лучше писать подпись: что именно не так, у кого, в каком разделе и что ожидали увидеть.\n"
+        "Разработчик получит это напрямую и сможет ответить вам адресно в этот же чат.\n\n"
+        "Важно: теперь новые рабочие сообщения считаем актуальными и не откладываем без ответа."
+    )
+
+
+def _developer_command_help_text() -> str:
+    return (
+        "🧾 <b>Краткая справка по developer-командам</b>\n\n"
+        "<b>Обратная связь от команды</b>\n"
+        "• <code>/dev</code> — открыть режим «Для Разработчика» для себя.\n"
+        "  Следующее сообщение, фото, скрин, файл или пересланный текст уйдёт разработчику.\n"
+        "• В меню у сотрудников: <b>🛠️ Для Разработчика</b> — делает то же самое.\n"
+        "• Чтобы ответить человеку адресно: просто сделайте <b>reply</b> на карточку тикета или на пересланное вложение.\n\n"
+        "<b>Рассылка после технического сброса</b>\n"
+        "• <code>/announce_reset</code> — отправить всем участникам инфо-сообщение,\n"
+        "  что старые и тестовые запросы очищены, бот работает с нуля и новые сообщения игнорировать нельзя.\n\n"
+        "<b>Технические команды бота</b>\n"
+        "• <code>/start</code> — открыть главное меню.\n"
+        "• <code>/guide</code> / <code>/help</code> — отправить инструкцию по роли.\n"
+        "• <code>/logs</code> — последние ERROR/CRITICAL.\n"
+        "• <code>/timeline &lt;клиент&gt;</code> — единая timeline по клиенту.\n"
+        "• <code>/stats</code> — статистика использования бота.\n"
+        "• <code>/restart</code> — перезапуск бота.\n"
+        "• <code>/shutdown</code> — остановка бота.\n\n"
+        "<b>CRM</b>\n"
+        "• <code>/phone Имя клиента 87XXXXXXXXX</code> — записать номер вручную.\n"
+        "• <code>/crmdupsend</code> — разовая отправка очереди конфликтных дублей CRM.\n\n"
+        "<b>Практика по скринам и файлам</b>\n"
+        "• Если шлёте скрин, добавляйте подпись: что произошло, у кого, где именно и что ожидали увидеть.\n"
+        "• Если проблема в конкретном сообщении — можно просто переслать его через «Для Разработчика».\n"
+    )
+
+
+def _all_bot_participants() -> Dict[int, str]:
+    participants: Dict[int, str] = {}
+    if ADMIN_CHAT_ID:
+        participants[int(ADMIN_CHAT_ID)] = "Вадим"
+    for name, chat_id in (MANAGERS_MAP or {}).items():
+        if not chat_id or name in _SYSTEM_ACCOUNTS:
+            continue
+        participants[int(chat_id)] = name
+    for chat_str in (ROLES.get("subadmin_scopes", {}) or {}):
+        try:
+            cid = int(chat_str)
+        except (TypeError, ValueError):
+            continue
+        participants.setdefault(cid, get_my_manager_name(cid) or "Супервайзер")
+    saida_cid = _get_saida_chat_id()
+    if saida_cid:
+        participants.setdefault(int(saida_cid), "Саида")
+    return participants
+
+
+def _dev_feedback_cleanup(now_dt: Optional[datetime] = None) -> None:
+    now_dt = now_dt or datetime.now(TZ)
+    armed_cutoff = now_dt - timedelta(minutes=DEVELOPER_FEEDBACK_ARM_TTL_MIN)
+    thread_cutoff = now_dt - timedelta(hours=DEVELOPER_FEEDBACK_THREAD_TTL_HOURS)
+
+    stale_armed = []
+    for chat_id, created_raw in list(_DEV_FEEDBACK_ARMED.items()):
+        try:
+            created_dt = datetime.fromisoformat(created_raw)
+        except (TypeError, ValueError):
+            stale_armed.append(chat_id)
+            continue
+        if created_dt < armed_cutoff:
+            stale_armed.append(chat_id)
+    for chat_id in stale_armed:
+        _DEV_FEEDBACK_ARMED.pop(chat_id, None)
+
+    stale_threads = []
+    for ticket_id, payload in list(_DEV_FEEDBACK_THREADS.items()):
+        try:
+            created_dt = datetime.fromisoformat(str(payload.get("created_at") or ""))
+        except (TypeError, ValueError):
+            stale_threads.append(ticket_id)
+            continue
+        if created_dt < thread_cutoff:
+            stale_threads.append(ticket_id)
+    for ticket_id in stale_threads:
+        _DEV_FEEDBACK_THREADS.pop(ticket_id, None)
+
+    _DEV_FEEDBACK_REPLY_INDEX.clear()
+    for ticket_id, payload in _DEV_FEEDBACK_THREADS.items():
+        for msg_id in payload.get("reply_message_ids", []) or []:
+            try:
+                _DEV_FEEDBACK_REPLY_INDEX[int(msg_id)] = ticket_id
+            except (TypeError, ValueError):
+                continue
+
+
+def _dev_feedback_save() -> None:
+    DEVELOPER_FEEDBACK_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _dev_feedback_cleanup()
+    tmp = DEVELOPER_FEEDBACK_PATH.with_suffix(".tmp")
+    payload = {
+        "armed": {str(k): v for k, v in _DEV_FEEDBACK_ARMED.items()},
+        "threads": _DEV_FEEDBACK_THREADS,
+    }
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, DEVELOPER_FEEDBACK_PATH)
+
+
+def _dev_feedback_load() -> None:
+    _DEV_FEEDBACK_ARMED.clear()
+    _DEV_FEEDBACK_THREADS.clear()
+    _DEV_FEEDBACK_REPLY_INDEX.clear()
+    if not DEVELOPER_FEEDBACK_PATH.exists():
+        return
+    try:
+        payload = json.loads(DEVELOPER_FEEDBACK_PATH.read_text(encoding="utf-8"))
+        armed = payload.get("armed", {}) if isinstance(payload, dict) else {}
+        threads = payload.get("threads", {}) if isinstance(payload, dict) else {}
+        if isinstance(armed, dict):
+            _DEV_FEEDBACK_ARMED.update({int(k): v for k, v in armed.items()})
+        if isinstance(threads, dict):
+            _DEV_FEEDBACK_THREADS.update(threads)
+        _dev_feedback_cleanup()
+        state_logger.info("developer_feedback restored: armed=%d threads=%d", len(_DEV_FEEDBACK_ARMED), len(_DEV_FEEDBACK_THREADS))
+    except Exception as exc:
+        state_logger.warning("_dev_feedback_load error: %s", exc)
+
+
+async def _send_feedback_to_developer(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    *,
+    content_type: str,
+    text: str = "",
+) -> bool:
+    chat_id = update.effective_chat.id
+    armed_at = _DEV_FEEDBACK_ARMED.pop(chat_id, None)
+    if not armed_at:
+        return False
+    _dev_feedback_save()
+
+    developer_chat_id = _get_developer_chat_id()
+    if not developer_chat_id:
+        await update.effective_message.reply_text("⚠️ Канал разработчика пока не настроен.")
+        return True
+
+    ticket_id = f"dev-{datetime.now(TZ).strftime('%Y%m%d-%H%M%S')}-{secrets.token_hex(2)}"
+    sender_name = _dev_feedback_sender_name(chat_id, update)
+    sender_role = _dev_feedback_sender_role(chat_id)
+    username = getattr(update.effective_user, "username", "") or "—"
+    header_lines = [
+        "🛠️ <b>Новое сообщение для разработчика</b>",
+        "",
+        f"Тикет: <code>{ticket_id}</code>",
+        f"От: <b>{_html.escape(sender_name)}</b> ({sender_role})",
+        f"chat_id: <code>{chat_id}</code>",
+        f"username: @{_html.escape(username)}" if username != "—" else "username: —",
+        f"Тип: {content_type}",
+        "",
+        "Ответьте <b>reply</b> на это сообщение текстом, фото или файлом — бот доставит ответ отправителю.",
+    ]
+    if text:
+        header_lines.extend(["", "<b>Комментарий:</b>", _html.escape(text[:3000])])
+
+    header_msg = await context.bot.send_message(
+        chat_id=developer_chat_id,
+        text="\n".join(header_lines),
+        parse_mode="HTML",
+    )
+    reply_ids = [header_msg.message_id]
+
+    if content_type != "text":
+        copied = await context.bot.copy_message(
+            chat_id=developer_chat_id,
+            from_chat_id=chat_id,
+            message_id=update.effective_message.message_id,
+        )
+        reply_ids.append(copied.message_id)
+
+    _DEV_FEEDBACK_THREADS[ticket_id] = {
+        "source_chat_id": chat_id,
+        "source_name": sender_name,
+        "source_role": sender_role,
+        "reply_message_ids": reply_ids,
+        "created_at": datetime.now(TZ).isoformat(),
+    }
+    _dev_feedback_save()
+
+    await update.effective_message.reply_text(
+        "✅ Сообщение отправлено разработчику.\n"
+        "Если нужен ещё один текст или скрин, снова нажмите «🛠️ Для Разработчика».",
+        reply_markup=_dev_feedback_menu_kb(),
+    )
+    return True
+
+
+async def _maybe_handle_developer_text_flow(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    msg = update.effective_message
+    if not msg:
+        return False
+    chat_id = update.effective_chat.id
+    reply_to = msg.reply_to_message.message_id if msg.reply_to_message else 0
+    developer_chat_id = _get_developer_chat_id()
+
+    if developer_chat_id and chat_id == developer_chat_id and reply_to in _DEV_FEEDBACK_REPLY_INDEX:
+        ticket_id = _DEV_FEEDBACK_REPLY_INDEX.get(reply_to, "")
+        thread = _DEV_FEEDBACK_THREADS.get(ticket_id) or {}
+        source_chat_id = int(thread.get("source_chat_id") or 0)
+        if not source_chat_id:
+            await msg.reply_text("⚠️ Тикет уже закрыт или не найден.")
+            return True
+        await context.bot.send_message(
+            chat_id=source_chat_id,
+            text=(
+                "🛠️ <b>Ответ разработчика</b>\n\n"
+                f"{_html.escape(msg.text or '')}"
+            ),
+            parse_mode="HTML",
+        )
+        await msg.reply_text(
+            f"✅ Ответ доставлен: {_html.escape(str(thread.get('source_name') or source_chat_id))}.",
+            parse_mode="HTML",
+        )
+        return True
+
+    if chat_id not in _DEV_FEEDBACK_ARMED:
+        return False
+    return await _send_feedback_to_developer(
+        update,
+        context,
+        content_type="text",
+        text=(msg.text or "").strip(),
+    )
+
+
+async def _maybe_handle_developer_media_flow(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    msg = update.effective_message
+    if not msg:
+        return False
+    chat_id = update.effective_chat.id
+    reply_to = msg.reply_to_message.message_id if msg.reply_to_message else 0
+    developer_chat_id = _get_developer_chat_id()
+
+    if developer_chat_id and chat_id == developer_chat_id and reply_to in _DEV_FEEDBACK_REPLY_INDEX:
+        ticket_id = _DEV_FEEDBACK_REPLY_INDEX.get(reply_to, "")
+        thread = _DEV_FEEDBACK_THREADS.get(ticket_id) or {}
+        source_chat_id = int(thread.get("source_chat_id") or 0)
+        if not source_chat_id:
+            await msg.reply_text("⚠️ Тикет уже закрыт или не найден.")
+            return True
+        await context.bot.send_message(
+            chat_id=source_chat_id,
+            text="🛠️ Ответ разработчика:",
+        )
+        await context.bot.copy_message(
+            chat_id=source_chat_id,
+            from_chat_id=chat_id,
+            message_id=msg.message_id,
+        )
+        await msg.reply_text(
+            f"✅ Вложение доставлено: {_html.escape(str(thread.get('source_name') or source_chat_id))}.",
+            parse_mode="HTML",
+        )
+        return True
+
+    if chat_id not in _DEV_FEEDBACK_ARMED:
+        return False
+
+    media_type = "фото" if msg.photo else "документ" if msg.document else "вложение"
+    return await _send_feedback_to_developer(
+        update,
+        context,
+        content_type=media_type,
+        text=(msg.caption or "").strip(),
+    )
+
+
+async def _broadcast_reset_notice(bot) -> Tuple[int, int]:
+    text = _build_reset_broadcast_text()
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📋 Открыть меню", callback_data="back_main")],
+        [InlineKeyboardButton("📖 Инструкция", callback_data="show_help_doc")],
+        [InlineKeyboardButton("🛠️ Для Разработчика", callback_data="dev_feedback_open")],
+    ])
+    sent = 0
+    failed = 0
+    for chat_id, _name in _all_bot_participants().items():
+        try:
+            await bot.send_message(chat_id=chat_id, text=text, parse_mode="HTML", reply_markup=kb)
+            sent += 1
+        except Exception as exc:
+            failed += 1
+            logger.warning("reset broadcast failed chat_id=%s: %s", chat_id, exc)
+    return sent, failed
 
 
 def _crm_name_choice_kb() -> InlineKeyboardMarkup:
@@ -7036,6 +7466,37 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.answer(f"❌ Ошибка: {e}")
         return
 
+    if data == "dev_feedback_open":
+        _DEV_FEEDBACK_ARMED[chat_id] = datetime.now(TZ).isoformat()
+        _dev_feedback_save()
+        await q.answer("Следующим сообщением отправьте текст, скрин или файл.")
+        try:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=_dev_feedback_open_text(),
+                parse_mode="HTML",
+                reply_markup=_dev_feedback_menu_kb(),
+            )
+        except Exception as exc:
+            logger.warning("dev_feedback_open send failed chat_id=%s: %s", chat_id, exc)
+        return
+
+    if data == "dev_commands":
+        if chat_id != _get_developer_chat_id():
+            await q.answer("⛔ Доступ запрещён")
+            return
+        await q.answer()
+        try:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=_developer_command_help_text(),
+                parse_mode="HTML",
+                reply_markup=_dev_feedback_menu_kb(),
+            )
+        except Exception as exc:
+            logger.warning("dev_commands send failed chat_id=%s: %s", chat_id, exc)
+        return
+
     # Коллектор: статус активного батча
     if data == "collector_batch":
         if user_role != "admin":
@@ -8039,6 +8500,7 @@ async def post_init(app: Application):
     _crm_load_pending()
     _crm_load_claim_pending()
     _crmdup_load_pending()
+    _dev_feedback_load()
     _crmdup_load_ambiguous()
 
     # v9.4.27: Уведомление о запуске — admin (техническое) + команда (мотивирующее)
@@ -8878,6 +9340,11 @@ async def handle_proof_document(update: Update, context: ContextTypes.DEFAULT_TY
     if get_user_role(chat_id) == "unknown":
         return
     try:
+        if await _maybe_handle_developer_media_flow(update, context):
+            return
+    except Exception as e:
+        logger.error("developer media flow error: %s", e)
+    try:
         from collector.approval_flow import handle_manager_proof
         msg = update.message
         if msg.photo:
@@ -9155,6 +9622,12 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
 
     if not await _acl_gate(chat_id, context):
         return
+
+    try:
+        if await _maybe_handle_developer_text_flow(update, context):
+            return
+    except Exception as _de:
+        logger.error("developer text flow error: %s", _de)
 
     # ─── Текстовый ответ Саиды по pending-оплатам ────────────────────────
     # Why: Саида часто пишет «Акжан полная» вместо нажатия кнопок.
@@ -9629,6 +10102,9 @@ def main():
     application.add_handler(CommandHandler("crmdupsend", cmd_crmdupsend))  # CRM: разовая сверка конфликтных дублей
     application.add_handler(CommandHandler("guide", cmd_guide))  # Инструкция (роль-зависимая)
     application.add_handler(CommandHandler("help", cmd_help))    # Алиас /guide
+    application.add_handler(CommandHandler("dev", cmd_dev))      # Вход в one-shot inbox разработчика
+    application.add_handler(CommandHandler("devhelp", cmd_devhelp))  # Краткая справка по dev-командам
+    application.add_handler(CommandHandler("announce_reset", cmd_announce_reset))  # Инфо-рассылка после reset
     application.add_handler(CommandHandler("logs", cmd_logs))    # Последние ERROR/CRITICAL
     application.add_handler(CommandHandler("timeline", cmd_timeline))  # Единая timeline по клиенту
     application.add_handler(CallbackQueryHandler(cb_data))
