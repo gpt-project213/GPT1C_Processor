@@ -146,6 +146,19 @@ def _schedule_delete(chat_id: int, message_id: int, msg_ts: float,
 # Суточное состояние
 # ══════════════════════════════════════════════════════════════════════
 
+def _kb_saida_help_only() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("❓ Что это значит?", callback_data="dstop_saida_help")
+    ]])
+
+
+def _kb_saida_stop_item(name_key: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("💰 Оплата получена", callback_data=f"dstop_paid|{name_key}")],
+        [InlineKeyboardButton("❓ Что это значит?", callback_data="dstop_saida_help")],
+    ])
+
+
 def load_state() -> Dict[str, Any]:
     state = _load_json(STATE_FILE, {})
     today = datetime.now(TZ).strftime("%Y-%m-%d")
@@ -332,7 +345,12 @@ async def monitor_exceptions(bot) -> None:
                 for chat_id in {mgr_id, admin_id, SAIDA_CHAT_ID}:
                     if chat_id:
                         try:
-                            await bot.send_message(chat_id=chat_id, text=msg, parse_mode="HTML")
+                            await bot.send_message(
+                                chat_id=chat_id,
+                                text=msg,
+                                parse_mode="HTML",
+                                reply_markup=_kb_saida_help_only() if chat_id == SAIDA_CHAT_ID else None,
+                            )
                         except Exception as e:
                             LOG.warning("Ошибка уведомления авто-стоп %s (chat=%s): %s",
                                         client_name, chat_id, e)
@@ -362,7 +380,12 @@ async def monitor_exceptions(bot) -> None:
                 for cid_tg in {admin_id, mgr_id, SAIDA_CHAT_ID}:
                     if cid_tg:
                         try:
-                            await bot.send_message(chat_id=cid_tg, text=note, parse_mode="HTML")
+                            await bot.send_message(
+                                chat_id=cid_tg,
+                                text=note,
+                                parse_mode="HTML",
+                                reply_markup=_kb_saida_help_only() if cid_tg == SAIDA_CHAT_ID else None,
+                            )
                         except Exception as e:
                             LOG.warning("Ошибка уведомления conditional-cleared %s: %s",
                                         client_name, e)
@@ -531,6 +554,12 @@ async def send_manager_requests(bot) -> None:
 
         for cid, c in sorted(items, key=lambda x: -x[1]["days_silence"]):
             icon = "🔴" if c["level"] == "10+" else "⚡"
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("вњ… РџРѕР»РЅР°СЏ РѕРїР»Р°С‚Р°",  callback_data=f"payhold_full|{token}")],
+                [InlineKeyboardButton("рџ”ё Р§Р°СЃС‚РёС‡РЅР°СЏ",     callback_data=f"payhold_partial|{token}")],
+                [InlineKeyboardButton("вќЊ РћРїР»Р°С‚С‹ РЅРµС‚",    callback_data=f"payhold_none|{token}")],
+                [InlineKeyboardButton("❓ Что это значит?", callback_data="payhold_help_full")],
+            ])
             text = (
                 f"{icon} <b>{c['client']}</b>\n"
                 f"Молчит: <b>{c['days_silence']}\u202fдн.</b>  |  "
@@ -943,6 +972,7 @@ async def send_saida_final(bot) -> None:
         kb = InlineKeyboardMarkup([[
             InlineKeyboardButton("💰 Оплата получена", callback_data=f"dstop_paid|{name[:26]}")
         ]])
+        kb = _kb_saida_stop_item(name[:26])
         try:
             item_msg = await bot.send_message(
                 chat_id=SAIDA_CHAT_ID, text=text, parse_mode="HTML", reply_markup=kb
@@ -985,7 +1015,12 @@ async def send_saida_final(bot) -> None:
                 f"на столько же дней, сколько ты тянешь с ответом.\n\n"
                 f"Это касается и остальных: игнор виден всем — последствия те же."
             )
-            warn_msg = await bot.send_message(chat_id=SAIDA_CHAT_ID, text=warn_text, parse_mode="HTML")
+            warn_msg = await bot.send_message(
+                chat_id=SAIDA_CHAT_ID,
+                text=warn_text,
+                parse_mode="HTML",
+                reply_markup=_kb_saida_help_only(),
+            )
             _schedule_delete(SAIDA_CHAT_ID, warn_msg.message_id, warn_msg.date.timestamp())
             LOG.info("Саиде предупреждение: %d неотвеченных запросов, макс. %d дн.",
                      len(unanswered), oldest_days)
@@ -1053,6 +1088,12 @@ async def send_saida_payment_hold_reminders(bot) -> None:
                 f"Менеджер <b>{manager}</b> и директор узнают о твоём молчании.\n\n"
                 f"Все последствия ошибки — на тебе."
             )
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("вњ… РџРѕР»РЅР°СЏ РѕРїР»Р°С‚Р°",  callback_data=f"payhold_full|{token}")],
+                [InlineKeyboardButton("рџ”ё Р§Р°СЃС‚РёС‡РЅР°СЏ",     callback_data=f"payhold_partial|{token}")],
+                [InlineKeyboardButton("вќЊ РћРїР»Р°С‚С‹ РЅРµС‚",    callback_data=f"payhold_none|{token}")],
+                [InlineKeyboardButton("❓ Что это значит?", callback_data="payhold_help_full")],
+            ])
             try:
                 await bot.send_message(
                     chat_id=SAIDA_CHAT_ID, text=text,
@@ -1225,7 +1266,7 @@ async def handle_dstop_callback(data: str, chat_id: int, bot) -> Optional[str]:
         return await _handle_admin_clearance_override(key, action, chat_id, bot)
 
     if data == "dstop_saida_stoplist":
-        await send_saida_full_stoplist(bot)
+        await send_saida_full_stoplist_with_help(bot)
         return ""
 
     if data == "dstop_saida_help":
@@ -2051,6 +2092,13 @@ async def _handle_mgr_paid_claim(cid: str, chat_id: int, bot) -> str:
         InlineKeyboardButton("✅ Полная оплата",    callback_data=f"dstop_saida_full|{cid}"),
         InlineKeyboardButton("⚠️ Частичная оплата", callback_data=f"dstop_saida_partial|{cid}"),
     ]])
+    kb_saida = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("вњ… РџРѕР»РЅР°СЏ РѕРїР»Р°С‚Р°", callback_data=f"dstop_saida_full|{cid}"),
+            InlineKeyboardButton("вљ пёЏ Р§Р°СЃС‚РёС‡РЅР°СЏ РѕРїР»Р°С‚Р°", callback_data=f"dstop_saida_partial|{cid}"),
+        ],
+        [InlineKeyboardButton("❓ Что это значит?", callback_data="dstop_saida_help")],
+    ])
     try:
         await bot.send_message(
             chat_id=SAIDA_CHAT_ID,
@@ -2501,6 +2549,19 @@ async def _apply_final_clearance(
 # ══════════════════════════════════════════════════════════════════════
 # Полный стоп-лист для Саиды по запросу
 # ══════════════════════════════════════════════════════════════════════
+
+async def send_saida_full_stoplist_with_help(bot) -> None:
+    """Полный стоп-лист Саиды + отдельная help-кнопка над списком."""
+    try:
+        await bot.send_message(
+            chat_id=SAIDA_CHAT_ID,
+            text="📋 Актуальный стоп-лист ниже. Если неясно, что делать, нажми кнопку под этим сообщением.",
+            reply_markup=_kb_saida_help_only(),
+        )
+    except Exception as e:
+        LOG.warning("РћС€РёР±РєР° help-промпта перед полным стоп-листом Саиды: %s", e)
+    await send_saida_full_stoplist(bot)
+
 
 async def send_saida_full_stoplist(bot) -> None:
     """Полный актуальный стоп-лист для Саиды (по нажатию кнопки)."""

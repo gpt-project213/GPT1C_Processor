@@ -141,6 +141,148 @@ def get_request(token: str) -> Optional[Dict[str, Any]]:
     return record if isinstance(record, dict) else None
 
 
+def list_pending() -> list:
+    """Возвращает все записи в статусе pending_saida (без TTL-чистки)."""
+    data = _load()
+    out = []
+    for token, rec in data.items():
+        if not isinstance(rec, dict):
+            continue
+        if rec.get("status") == "pending_saida":
+            out.append(rec)
+    return out
+
+
+# ─── Парсер текстовых ответов Саиды ──────────────────────────────────────────
+#
+# Why: Саида часто отвечает текстом «Акжан полная», «Шапагат частично»,
+# а не нажимает кнопки. Без парсера её ответы пропадают, а pending копится.
+# Алгоритм безопасный: реагируем только при найденном клиенте + ясном статусе,
+# при неоднозначности возвращаем структуру для уточнения вместо записи.
+
+_FULL_KEYWORDS = (
+    "полн", "оплачен", "оплата есть", "прошл", "пришл", "поступил",
+    "получен", "видн", " есть", "+",
+)
+_PARTIAL_KEYWORDS = (
+    "частич", "часть", "часть оплат", "не вся", "не весь",
+)
+_NONE_KEYWORDS = (
+    "не вижу", "не нашл", "нет оплат", " нет", " ноль", " 0", " -",
+    "не пришл", "не поступил",
+)
+# Стоп-слова — не считаем их «значимым токеном» имени клиента.
+_NAME_STOP_TOKENS = frozenset({
+    "тоо", "ип", "ао", "уп", "кх", "пкф", "тд", "пом",
+    "ул", "пр", "пл", "пер", "д", "дом", "кв",
+    "магазин", "кафе", "ресторан", "склад", "база", "точка",
+    "клиент", "оплата", "оплат", "чек", "сумма",
+})
+
+
+def _client_tokens(name: str) -> list:
+    """Значимые токены имени клиента — слова >=4 букв, без стоп-слов.
+
+    Для дефисных слов отдаём И целое, И каждую часть отдельно (если >=4 букв).
+    Например `акжан-лк` → ["акжан-лк", "акжан"]. Это нужно, чтобы Саида
+    могла написать просто «Акжан» без хвоста.
+    """
+    norm = normalize_client_name(name).replace("ё", "е")
+    # Грубое разбиение на слова (включая дефис как часть слова)
+    parts = []
+    cur = []
+    for ch in norm:
+        if ch.isalnum() or ch == "-":
+            cur.append(ch)
+        else:
+            if cur:
+                parts.append("".join(cur))
+                cur = []
+    if cur:
+        parts.append("".join(cur))
+    out = []
+    seen = set()
+    for p in parts:
+        candidates = [p]
+        if "-" in p:
+            candidates.extend(p.split("-"))
+        for cand in candidates:
+            if len(cand) < 4:
+                continue
+            if cand in _NAME_STOP_TOKENS:
+                continue
+            if cand in seen:
+                continue
+            seen.add(cand)
+            out.append(cand)
+    return out
+
+
+def _detect_status_from_text(text: str) -> Optional[str]:
+    """Возвращает 'full' / 'partial' / 'none' / None по ключевым словам."""
+    t = " " + (text or "").lower().replace("ё", "е") + " "
+    # partial проверяем ПЕРВЫМ — иначе «частичная оплата» сматчит на full ("оплачен")
+    for kw in _PARTIAL_KEYWORDS:
+        if kw in t:
+            return "partial"
+    for kw in _NONE_KEYWORDS:
+        if kw in t:
+            return "none"
+    for kw in _FULL_KEYWORDS:
+        if kw in t:
+            return "full"
+    return None
+
+
+def parse_saida_text_reply(text: str) -> Dict[str, Any]:
+    """Разбирает свободный текст Саиды и возвращает решение.
+
+    Возвращает dict:
+      {
+        "action": "confirm" | "ambiguous_client" | "unclear_status" | "no_match",
+        "status": "full"|"partial"|"none"|None,
+        "matches": [record, ...],  # совпавшие pending-записи
+      }
+
+    Никогда не пишет в файл — только определяет, что делать.
+    Запись делается через confirm_by_saida(token, status) на стороне вызывающего.
+    """
+    t = (text or "").strip()
+    result = {"action": "no_match", "status": None, "matches": []}
+    if not t:
+        return result
+
+    pending = list_pending()
+    if not pending:
+        return result
+
+    # 1. Найти все pending-записи, у которых хотя бы один значимый токен имени
+    #    встречается как подстрока в тексте Саиды.
+    norm_text = " " + normalize_client_name(t).replace("ё", "е") + " "
+    matches: list = []
+    for rec in pending:
+        tokens = _client_tokens(rec.get("client", ""))
+        if not tokens:
+            continue
+        for tok in tokens:
+            if f" {tok}" in norm_text or f"{tok} " in norm_text or tok in norm_text:
+                matches.append(rec)
+                break
+
+    if not matches:
+        return result
+
+    status = _detect_status_from_text(t)
+
+    if len(matches) == 1:
+        if status:
+            return {"action": "confirm", "status": status, "matches": matches}
+        return {"action": "unclear_status", "status": None, "matches": matches}
+
+    # Несколько совпадений — нужно уточнение
+    return {"action": "ambiguous_client", "status": status, "matches": matches}
+
+
 def get_hold_for_client(client: str) -> Optional[Dict[str, Any]]:
     client_norm = normalize_client_name(client)
     now = _now()
@@ -384,27 +526,61 @@ def get_partial_payment_stats() -> Dict[str, Any]:
     }
 
 
+def _fmt_age_human(hours: float) -> str:
+    """1.7 дн / 8 ч / 35 мин — человеческий формат возраста запроса."""
+    h = float(hours or 0.0)
+    if h < 1:
+        mins = int(round(h * 60))
+        return f"{mins} мин"
+    if h < 24:
+        return f"{h:.0f} ч"
+    days = h / 24.0
+    return f"{days:.1f} дн"
+
+
 def format_saida_hold_stats_text() -> str:
-    """Текстовая сводка backlog Саиды для директора."""
+    """Текстовая сводка backlog Саиды для директора (человеческий язык)."""
     stats = get_saida_hold_stats()
     totals = stats.get("totals", {})
     if not totals.get("pending_total"):
-        return "📋 <b>Саида — backlog оплат</b>\n\nСейчас нет открытых запросов со статусом pending_saida."
+        return (
+            "📋 <b>Запросы оплат у Саиды</b>\n\n"
+            "Сейчас всё закрыто — новых запросов нет."
+        )
 
     oldest_h = float(totals.get("oldest_age_hours") or 0.0)
-    oldest_days = oldest_h / 24.0 if oldest_h else 0.0
+    pending = totals.get("pending_total", 0)
+    warn_total = totals.get("warn_total", 0)
+    bypass_total = totals.get("bypass_total", 0)
+    closed_today = totals.get("closed_today", 0)
+
     lines = [
-        "📋 <b>Саида — backlog оплат</b>",
+        "📋 <b>Запросы оплат у Саиды</b>",
         "",
-        f"Открыто: <b>{totals.get('pending_total', 0)}</b>",
-        f"Старейший возраст: <b>{oldest_days:.1f} дн</b> ({oldest_h:.0f} ч)",
-        f"За SLA {SAIDA_WARN_HOURS}ч: <b>{totals.get('warn_total', 0)}</b>",
-        f"За байпас {SAIDA_BYPASS_HOURS}ч: <b>{totals.get('bypass_total', 0)}</b>",
-        f"Закрыто сегодня: <b>{totals.get('closed_today', 0)}</b>",
+        f"Менеджеры заявили оплату — Саида ещё не подтвердила: <b>{pending}</b>",
+        f"Самый старый ждёт уже <b>{_fmt_age_human(oldest_h)}</b>",
     ]
+    # Просрочка по 4-часовому SLA — мягкое напоминание
+    if warn_total:
+        lines.append(
+            f"Без ответа дольше {SAIDA_WARN_HOURS} ч: <b>{warn_total}</b> "
+            f"(пора отвечать)"
+        )
+    # Просрочка по 8-часовому байпасу — критично, директор может ответить сам
+    if bypass_total:
+        lines.append(
+            f"Без ответа дольше {SAIDA_BYPASS_HOURS} ч: <b>{bypass_total}</b> "
+            f"(критично — директор может ответить вместо неё)"
+        )
+    if closed_today:
+        lines.append(f"Сегодня закрыто: <b>{closed_today}</b>")
+    else:
+        lines.append("Сегодня закрыто: <b>0</b> — ни одного ответа за сегодня")
+
     if totals.get("claimed_by_manager_total", 0):
         lines.append(
-            f"Из WA approval без документа: <b>{totals['claimed_by_manager_total']}</b>"
+            f"Из них без приложенного документа от менеджера: "
+            f"<b>{totals['claimed_by_manager_total']}</b>"
         )
 
     managers = stats.get("managers", [])
@@ -412,25 +588,32 @@ def format_saida_hold_stats_text() -> str:
         lines.append("")
         lines.append("<b>По менеджерам:</b>")
         for item in managers:
-            line = (
-                f"• <b>{item['manager']}</b> — открыто {item['pending_total']}, "
-                f"байпас {item['bypass_total']}, SLA {item['warn_total']}, "
-                f"старейший {item['oldest_age_hours'] / 24.0:.1f} дн"
-            )
+            mgr_open = item['pending_total']
+            mgr_oldest = _fmt_age_human(item['oldest_age_hours'])
+            line = f"• <b>{item['manager']}</b>: {mgr_open} ждут ответа, самый старый {mgr_oldest}"
+            if item.get('bypass_total'):
+                line += f" · {item['bypass_total']} критично"
             if item.get("claimed_by_manager_total"):
-                line += f", из WA {item['claimed_by_manager_total']}"
+                line += f" · {item['claimed_by_manager_total']} без документа"
             lines.append(line)
 
     oldest_pending = stats.get("oldest_pending", [])
     if oldest_pending:
         lines.append("")
-        lines.append("<b>Самые старые:</b>")
+        lines.append("<b>Самые давние без ответа:</b>")
         for item in oldest_pending:
             debt_part = f" · {item['debt_str']} ₸" if item.get("debt_str") else ""
-            source_part = " · WA" if item.get("claimed_by_manager") else ""
+            wa_mark = " · из WA" if item.get("claimed_by_manager") else ""
             lines.append(
-                f"• {item['manager']}: {item['client']} — {item['age_hours'] / 24.0:.1f} дн{debt_part}{source_part}"
+                f"• {item['manager']}: {item['client']} — "
+                f"{_fmt_age_human(item['age_hours'])}{debt_part}{wa_mark}"
             )
+
+    lines.append("")
+    lines.append(
+        "<i>Саида может ответить кнопками под каждым запросом или "
+        "написать в свой чат «&lt;имя клиента&gt; полная/частично/нет».</i>"
+    )
 
     return "\n".join(lines)
 

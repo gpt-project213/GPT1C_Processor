@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Инструкция: Саида — Минбаракат</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+         background: #f0f2f5; color: #1a1a2e; font-size: 15px; }
+  .header { background: linear-gradient(135deg, #00695c, #004d40);
+            color: white; padding: 24px 20px; text-align: center; }
+  .header h1 { font-size: 22px; margin-bottom: 6px; }
+  .header p  { font-size: 13px; opacity: 0.85; }
+  .container { max-width: 640px; margin: 0 auto; padding: 16px; }
+  .card { background: white; border-radius: 12px; margin-bottom: 14px;
+          box-shadow: 0 1px 4px rgba(0,0,0,.1); overflow: hidden; }
+  .card-header { padding: 14px 16px; display: flex; align-items: center;
+                 gap: 10px; cursor: pointer; user-select: none; }
+  .card-header .icon { font-size: 22px; flex-shrink: 0; }
+  .card-header .title { font-weight: 600; font-size: 15px; flex: 1; }
+  .card-header .arrow { font-size: 12px; color: #888; transition: transform .2s; }
+  .card-header.open .arrow { transform: rotate(180deg); }
+  .card-body { display: none; padding: 0 16px 16px; border-top: 1px solid #f0f0f0; }
+  .card-body.open { display: block; }
+  .step { display: flex; gap: 12px; margin-top: 12px; }
+  .step-num { background: #00695c; color: white; border-radius: 50%;
+              width: 26px; height: 26px; flex-shrink: 0;
+              display: flex; align-items: center; justify-content: center;
+              font-size: 13px; font-weight: 700; margin-top: 1px; }
+  .step-text { flex: 1; line-height: 1.5; }
+  .msg-box { background: #e0f2f1; border-left: 3px solid #00695c;
+             border-radius: 0 8px 8px 0; padding: 10px 12px;
+             margin-top: 10px; font-size: 14px; line-height: 1.5; }
+  .msg-box.green  { background: #e8f5e9; border-color: #2e7d32; }
+  .msg-box.orange { background: #fff3e0; border-color: #e65100; }
+  .msg-box.red    { background: #fce4ec; border-color: #c62828; }
+  .msg-box.yellow { background: #fffde7; border-color: #f9a825; }
+  .btn-row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .btn { padding: 7px 14px; border-radius: 8px; font-size: 13px;
+         font-weight: 600; display: inline-flex; align-items: center; gap: 4px; }
+  .btn.green  { background: #2e7d32; color: white; }
+  .btn.amber  { background: #e65100; color: white; }
+  .btn.red    { background: #c62828; color: white; }
+  .btn.gray   { background: #e0e0e0; color: #333; }
+  .note { background: #fffde7; border-left: 3px solid #f9a825;
+          border-radius: 0 8px 8px 0; padding: 8px 12px;
+          margin-top: 10px; font-size: 13px; line-height: 1.5; }
+  .warn { background: #fce4ec; border-left: 3px solid #c62828;
+          border-radius: 0 8px 8px 0; padding: 8px 12px;
+          margin-top: 10px; font-size: 13px; line-height: 1.5; }
+  .badge { display: inline-block; background: #e0f2f1; color: #00695c;
+           border-radius: 6px; padding: 2px 8px; font-size: 12px;
+           font-weight: 600; margin-right: 4px; }
+  h3 { font-size: 14px; color: #555; margin-top: 14px; margin-bottom: 4px;
+       text-transform: uppercase; letter-spacing: .5px; }
+  ul { padding-left: 18px; margin-top: 6px; }
+  ul li { margin-top: 5px; line-height: 1.5; }
+  code { background: #eceff1; padding: 1px 6px; border-radius: 4px;
+         font-size: 13px; font-family: 'Courier New', monospace; }
+  .time-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  .time-table td { padding: 7px 10px; border-bottom: 1px solid #f0f0f0;
+                   font-size: 14px; vertical-align: top; }
+  .time-table td:first-child { font-weight: 700; color: #00695c;
+                               white-space: nowrap; width: 80px; }
+  .divider { border: none; border-top: 1px solid #f0f0f0; margin: 14px 0; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📱 Бот Минбаракат — Саиде</h1>
+  <p>Простая инструкция · v1.0</p>
+</div>
+
+<div class="container">
+
+  <!-- ВВЕДЕНИЕ -->
+  <div class="card">
+    <div class="card-header" onclick="toggle(this)">
+      <span class="icon">👋</span>
+      <span class="title">О чём бот пишет тебе и зачем</span>
+      <span class="arrow">▼</span>
+    </div>
+    <div class="card-body">
+      <p style="margin-top:12px;line-height:1.6">
+        Бот помогает тебе отвечать на вопросы менеджеров и держать в порядке стоп-лист отгрузки.
+        От тебя нужно <strong>только нажимать кнопки</strong> — бот сам всё запишет, разошлёт менеджерам и директору.
+      </p>
+      <h3 style="margin-top:14px">Два типа сообщений от бота</h3>
+      <ul>
+        <li><strong>💳 Запрос на проверку оплаты</strong> — менеджер сказал «клиент оплатил». Ты проверяешь в 1С и нажимаешь одну из трёх кнопок.</li>
+        <li><strong>🚫 Стоп-лист отгрузки</strong> — каждый вечер список клиентов, которым нельзя отгружать.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ПРОВЕРКА ОПЛАТЫ -->
+  <div class="card">
+    <div class="card-header" onclick="toggle(this)">
+      <span class="icon">💳</span>
+      <span class="title">Проверка оплаты — 3 кнопки</span>
+      <span class="arrow">▼</span>
+    </div>
+    <div class="card-body">
+      <p style="margin-top:12px;line-height:1.6">
+        Когда менеджер сказал что клиент оплатил, ты получаешь сообщение:
+      </p>
+      <div class="msg-box">
+        💬 <b>Запрос на проверку оплаты</b><br><br>
+        Менеджер <b>Магира</b> сообщил, что клиент оплатил.<br><br>
+        Клиент: <b>М Прайм Фаст Фуд ИП NUR</b><br>
+        Долг в отчёте: <b>666 001 ₸</b><br><br>
+        Проверь в 1С и нажми нужную кнопку.<br>
+        <i>Ответь в течение 4 часов.</i>
+      </div>
+
+      <h3 style="margin-top:14px">Что нажимать</h3>
+      <div class="step">
+        <div class="step-num" style="background:#2e7d32">1</div>
+        <div class="step-text">
+          <strong>✅ Да, оплата есть</strong> — деньги пришли полностью.<br>
+          Клиент снимется со стопа автоматически.
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num" style="background:#e65100">2</div>
+        <div class="step-text">
+          <strong>🔸 Частично</strong> — пришла не вся сумма.<br>
+          Директор получит уведомление и решит сам.
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num" style="background:#c62828">3</div>
+        <div class="step-text">
+          <strong>❌ Не вижу оплаты</strong> — ничего не поступало.<br>
+          Клиент остаётся в стопе.
+        </div>
+      </div>
+
+      <div class="note">
+        💡 Если запутаешься — нажми <b>❓ Не понимаю</b>. Бот объяснит.
+      </div>
+
+      <div class="warn">
+        ⏰ <strong>Важно:</strong> отвечай в течение <b>4 часов</b>.
+        Через <b>8 часов</b> молчания директор сам нажмёт кнопку за тебя.
+      </div>
+    </div>
+  </div>
+
+  <!-- ОТВЕТ ТЕКСТОМ -->
+  <div class="card">
+    <div class="card-header" onclick="toggle(this)">
+      <span class="icon">⌨️</span>
+      <span class="title">Если кнопок не видно — отвечай текстом</span>
+      <span class="arrow">▼</span>
+    </div>
+    <div class="card-body">
+      <p style="margin-top:12px;line-height:1.6">
+        Когда у тебя много открытых запросов, кнопки могут уехать далеко вверх.
+        Ты можешь ответить просто текстом в этот же чат:
+      </p>
+      <div class="msg-box green">
+        ✅ <b>Понятные мне фразы:</b><br>
+        • <code>Акжан полная</code> — записать как «оплата есть»<br>
+        • <code>Шапагат частично</code> — записать как «частичная»<br>
+        • <code>Petro нет</code> — записать как «не вижу»
+      </div>
+
+      <h3 style="margin-top:14px">Как писать имя клиента</h3>
+      <ul>
+        <li>Достаточно <b>одного слова</b> из имени: <i>Акжан</i>, <i>Шапагат</i>, <i>Петро</i>.</li>
+        <li>Если у двух клиентов похожее имя — добавь второе слово (улицу, точку).</li>
+        <li>Регистр не важен: <i>акжан</i> = <i>Акжан</i> = <i>АКЖАН</i>.</li>
+      </ul>
+
+      <h3 style="margin-top:14px">Что я НЕ понимаю</h3>
+      <div class="msg-box red">
+        ❌ <b>Эти ответы я не считаю ответом по оплате:</b><br>
+        • <code>ок</code>, <code>хорошо</code>, <code>понятно</code><br>
+        • <code>посмотрю</code>, <code>позже</code>, <code>сейчас гляну</code>
+      </div>
+      <p style="margin-top:8px;line-height:1.5">
+        Если пишешь так — статус оплаты не запишется.
+        Я переспрошу подсказкой что и как написать.
+      </p>
+
+      <div class="note">
+        💡 Если запрос неактуален или клиент уже не должен — нажми <b>❌ Не вижу оплаты</b>,
+        чтобы убрать запрос из списка.
+      </div>
+    </div>
+  </div>
+
+  <!-- СТОП-ЛИСТ -->
+  <div class="card">
+    <div class="card-header" onclick="toggle(this)">
+      <span class="icon">🚫</span>
+      <span class="title">Стоп-лист — каждый вечер</span>
+      <span class="arrow">▼</span>
+    </div>
+    <div class="card-body">
+      <p style="margin-top:12px;line-height:1.6">
+        Каждый вечер в <b>17:00</b> я присылаю тебе список клиентов, которым <b>нельзя отгружать</b>.
+        Это твоя справка на завтра — отказывай отгрузке таким клиентам, пока они не оплатят.
+      </p>
+
+      <h3 style="margin-top:14px">Типы стопа</h3>
+      <ul>
+        <li>🚫 <b>Нарушение фин. дисциплины</b> — менеджер не работает с должником</li>
+        <li>🔒 <b>Запрет до оплаты</b> — клиент задолжал, нужна полная оплата</li>
+        <li>⏳ <b>После оплаты</b> — снимется автоматом как только 1С разнесёт платёж</li>
+        <li>💳 <b>Только предоплата</b> — отгружать можно, но только по факту оплаты</li>
+        <li>⛔ <b>Чёрный список</b> — никогда, ни при каких условиях</li>
+      </ul>
+
+      <h3 style="margin-top:14px">Кнопки под клиентом</h3>
+      <ul>
+        <li><b>📋 Свежий стоп-лист</b> — посмотреть актуальный список прямо сейчас</li>
+        <li><b>❓ Инструкция / Не понимаю</b> — открыть подсказку</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ЕСЛИ БОТ НЕ ОТВЕЧАЕТ -->
+  <div class="card">
+    <div class="card-header" onclick="toggle(this)">
+      <span class="icon">🤔</span>
+      <span class="title">Бот не отвечает — что делать</span>
+      <span class="arrow">▼</span>
+    </div>
+    <div class="card-body">
+      <h3>Я написал в чат, а бот молчит</h3>
+      <p style="margin-top:6px;line-height:1.5">
+        Бот реагирует только когда у тебя есть открытый запрос на проверку оплаты.
+        Если бот молчит — скорее всего сейчас запросов нет.
+      </p>
+
+      <h3 style="margin-top:14px">Бот говорит «не понял к какому клиенту»</h3>
+      <p style="margin-top:6px;line-height:1.5">
+        Значит совпало несколько клиентов с похожим именем.
+        Уточни — добавь второе слово (улицу или название точки).
+      </p>
+      <div class="msg-box yellow">
+        Например, если у тебя 2 клиента «Шапагат»:<br>
+        вместо <code>Шапагат полная</code> — напиши <code>Шапагат Зарина полная</code>
+      </div>
+
+      <h3 style="margin-top:14px">Бот говорит «не понял статус»</h3>
+      <p style="margin-top:6px;line-height:1.5">
+        Значит ты назвала клиента, но не сказала <b>полная / частично / нет</b>.
+        Просто допиши одно слово в чат: <code>полная</code>, <code>частично</code> или <code>нет</code>.
+      </p>
+
+      <h3 style="margin-top:14px">Кнопки уехали далеко вверх</h3>
+      <p style="margin-top:6px;line-height:1.5">
+        Пролистай чат вверх и нажми кнопку под нужным запросом.
+        Или просто напиши текстом — <code>имя клиента</code> + <code>полная/частично/нет</code>.
+      </p>
+    </div>
+  </div>
+
+  <!-- ЧАСТЫЕ ВОПРОСЫ -->
+  <div class="card">
+    <div class="card-header" onclick="toggle(this)">
+      <span class="icon">❓</span>
+      <span class="title">Частые вопросы</span>
+      <span class="arrow">▼</span>
+    </div>
+    <div class="card-body">
+      <h3>Я не успела ответить за 4 часа — что будет?</h3>
+      <p style="margin-top:6px;line-height:1.5">
+        Бот пришлёт напоминание. Через 8 часов — директор сможет ответить за тебя.
+      </p>
+
+      <h3 style="margin-top:14px">Я нажала «Не вижу оплаты» по ошибке — как исправить?</h3>
+      <p style="margin-top:6px;line-height:1.5">
+        Напиши директору. Он откроет заново или примет решение сам.
+      </p>
+
+      <h3 style="margin-top:14px">Запрос пришёл по клиенту, которого я не знаю</h3>
+      <p style="margin-top:6px;line-height:1.5">
+        Это нормально — это клиент менеджера. Просто проверь в 1С есть ли по нему оплата
+        и нажми соответствующую кнопку.
+      </p>
+
+      <h3 style="margin-top:14px">Менеджер прислал чек напрямую</h3>
+      <p style="margin-top:6px;line-height:1.5">
+        Если менеджер приложил фото чека — запрос ко мне не идёт, оплата идёт напрямую к директору.
+        Тебя бот не дёргает.
+      </p>
+
+      <h3 style="margin-top:14px">Бот не отвечает совсем?</h3>
+      <p style="margin-top:6px;line-height:1.5">
+        Напиши <strong>/start</strong> — это перезагрузит меню.
+      </p>
+    </div>
+  </div>
+
+  <p style="text-align:center;color:#aaa;font-size:12px;margin:20px 0">
+    Минбаракат · Бот для Саиды · v1.0
+  </p>
+
+</div>
+
+<script>
+function toggle(header) {
+  header.classList.toggle('open');
+  const body = header.nextElementSibling;
+  body.classList.toggle('open');
+}
+document.querySelector('.card-header').click();
+</script>
+</body>
+</html>

@@ -188,7 +188,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.72/06.05.2026"
+__VERSION__ = "v9.4.74/07.05.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
@@ -3042,6 +3042,7 @@ def kb_main(user_role: str, chat_id: int = 0) -> InlineKeyboardMarkup:
             [InlineKeyboardButton(_crm_label, callback_data="crm_ambiguous_queue")],
             [InlineKeyboardButton("🗄️ Архив", callback_data="archive|root")],
             [InlineKeyboardButton("📈 Статистика", callback_data="show_stats")],
+            [InlineKeyboardButton("📖 Инструкция", callback_data="show_help_doc")],
         ]
     elif user_role == "subadmin":
         rows = [
@@ -3052,6 +3053,7 @@ def kb_main(user_role: str, chat_id: int = 0) -> InlineKeyboardMarkup:
             [InlineKeyboardButton("📈 АНАЛИТИКА", callback_data="menu_analytics")],
             [InlineKeyboardButton("🔔 Уведомления сейчас", callback_data="menu_notify")],
             [InlineKeyboardButton("🗄️ Архив", callback_data="archive|root")],
+            [InlineKeyboardButton("📖 Инструкция", callback_data="show_help_doc")],
         ]
     elif user_role == "manager":
         my_name = get_my_manager_name(chat_id) or "Unknown"
@@ -3061,6 +3063,7 @@ def kb_main(user_role: str, chat_id: int = 0) -> InlineKeyboardMarkup:
             [InlineKeyboardButton("🛒 Продажи", callback_data="menu_sales_manager")],
             [InlineKeyboardButton("💰 Валовая", callback_data=f"direct|GROSS_PCT|{my_name}")],
             [InlineKeyboardButton("🗄️ Архив", callback_data="archive|root")],
+            [InlineKeyboardButton("📖 Инструкция", callback_data="show_help_doc")],
         ]
     else:
         rows = []
@@ -3094,10 +3097,15 @@ def _format_collector_batch_text() -> str:
     if not batches:
         return "🤖 <b>Коллектор</b>\n\nАктивных батчей нет."
 
-    # Последний батч по created_at (независимо от статуса)
+    # Последний батч по created_at (а не по ключу — иначе тестовые
+    # `batch-*` или произвольные ID лексикографически побеждают
+    # нормальные `YYYYMMDD-HHMMSS-...` ключи).
     try:
-        latest_id = max(batches.keys())
-        batch = batches[latest_id]
+        def _created_at_key(item):
+            _id, _b = item
+            ca = str((_b or {}).get("created_at") or "")
+            return (ca, _id)
+        latest_id, batch = max(batches.items(), key=_created_at_key)
     except Exception:
         return "⚠️ Ошибка чтения батча."
 
@@ -4396,6 +4404,29 @@ def _get_saida_chat_id() -> int:
         return int(os.getenv("SAIDA_CHAT_ID", "920236287"))
     except Exception:
         return 0
+
+
+# Полная инструкция для Саиды по работе с запросами на проверку оплат.
+# Используется в двух местах: callback `payhold_help_full` и кнопке-подсказке
+# в text-handler. Держим в module-scope, чтобы оба handler-а могли сослаться.
+_SAIDA_PAYHOLD_HELP_TEXT = (
+    "📖 <b>Как отвечать по оплатам — коротко</b>\n\n"
+    "Когда менеджер заявил оплату, я присылаю тебе сообщение с кнопками. "
+    "Тебе достаточно нажать одну из кнопок:\n"
+    "  ✅ Да, оплата есть\n"
+    "  🔸 Частично\n"
+    "  ❌ Не вижу оплаты\n\n"
+    "<b>Если кнопок не видно</b> (например, сообщение уехало далеко вверх) — "
+    "просто напиши в этот чат:\n"
+    "  • <code>&lt;имя клиента&gt; полная</code> — например, «Акжан полная»\n"
+    "  • <code>&lt;имя клиента&gt; частично</code>\n"
+    "  • <code>&lt;имя клиента&gt; нет</code>\n\n"
+    "Имя нужно одно слово из названия клиента (Акжан, Шапагат, Petro). "
+    "Если у двух клиентов похожие имена — добавь второе слово (улицу, точку).\n\n"
+    "<b>Что я НЕ понимаю:</b> «ок», «хорошо», «посмотрю позже» — это не ответ. "
+    "По таким сообщениям статус оплаты не меняется. "
+    "Если запрос неактуален — нажми «❌ Не вижу оплаты»."
+)
 
 
 async def _send_payment_check_buttons(context, chat_id: int, manager: str, categorized: dict) -> None:
@@ -6260,11 +6291,22 @@ def _crm_collect_unowned_claim_clients(limit: int = 3) -> List[str]:
 
 
 async def cmd_guide(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Отправляет HTML-инструкцию менеджеру."""
+    """Отправляет HTML-инструкцию. Саиде — её инструкцию, остальным — общую."""
     chat_id = update.effective_chat.id
     if not await _acl_gate(chat_id, context):
         return
-    guide_path = ROOT_DIR / "docs" / "Инструкция по работе с ботом.html"
+
+    # Для Саиды отдаём отдельный простой документ
+    is_saida = (chat_id == _get_saida_chat_id())
+    if is_saida:
+        guide_path = ROOT_DIR / "docs" / "Инструкция Саида.html"
+        filename = "Инструкция Саида.html"
+        caption = "📖 Инструкция для тебя — как отвечать боту"
+    else:
+        guide_path = ROOT_DIR / "docs" / "Инструкция по работе с ботом.html"
+        filename = "Инструкция по работе с ботом.html"
+        caption = "📖 Инструкция по работе с ботом Минбаракат"
+
     if not guide_path.exists():
         await context.bot.send_message(chat_id=chat_id, text="❌ Файл инструкции не найден.")
         return
@@ -6273,12 +6315,16 @@ async def cmd_guide(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_document(
                 chat_id=chat_id,
                 document=f,
-                filename="Инструкция по работе с ботом.html",
-                caption="📖 Инструкция по работе с ботом Минбаракат",
+                filename=filename,
+                caption=caption,
             )
     except Exception as e:
         logger.error("cmd_guide error: %s", e)
         await context.bot.send_message(chat_id=chat_id, text="❌ Ошибка отправки инструкции. Попробуйте позже.")
+
+
+# Алиас: /help → /guide. Чтобы менеджер мог писать привычной командой.
+cmd_help = cmd_guide
 
 
 async def cmd_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -6654,6 +6700,23 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parts = data.split("|", 1)
             action = parts[0]
             token = parts[1] if len(parts) > 1 else ""
+
+            # payhold_help_full — кнопка-подсказка для Саиды, токен не нужен
+            if action == "payhold_help_full":
+                if chat_id != _get_saida_chat_id():
+                    await q.answer("Только для Саиды.")
+                    return
+                await q.answer()
+                try:
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=_SAIDA_PAYHOLD_HELP_TEXT,
+                        parse_mode="HTML",
+                    )
+                except Exception as _he:
+                    logger.warning("payhold_help_full send failed: %s", _he)
+                return
+
             rec = get_request(token)
             if not rec:
                 await q.answer("Запрос не найден или устарел.")
@@ -7503,6 +7566,22 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await send_main_menu(context, chat_id, user_role, text="📋 Выберите раздел:")
         return
 
+    if data == "show_help_doc":
+        # Отправляет HTML-инструкцию (то же что /help). Используется в подсказках.
+        await q.answer()
+        try:
+            await cmd_guide(update, context)
+        except Exception as _e:
+            logger.warning("show_help_doc failed: %s", _e)
+            try:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="📖 Инструкция временно недоступна. Попробуйте команду /help.",
+                )
+            except Exception:
+                pass
+        return
+
     if data == "analytics_menu":
         await cmd_analytics(update, context)
         return
@@ -7987,12 +8066,17 @@ async def post_init(app: Application):
                 f"\n"
                 f"⏰ Расписание сегодня:\n"
                 f"· 09:00 — остатки\n"
-                f"· 14:00 — молчание{_oploss_line}\n"
-                f"· 18:00 — база клиентов (CRM)\n"
-                f"· 17:00 — коллектор\n"
+                f"· 10:00 — обещания коллектора\n"
+                f"· 10:30 — срыв договорённостей\n"
+                f"· 14:00 — контроль отгрузки / авто-стоп{_oploss_line}\n"
+                f"· 16:30 — стоп-лист менеджерам\n"
+                f"· 17:00 — коллектор (резерв)\n"
+                f"· 18:00 — CRM: база + телефоны\n"
+                f"· 18:30 — эскалация стоп-листа\n"
                 f"· 20:00 — валовая\n"
                 f"· 21:00 — продажи\n"
                 f"· 22:00 — аналитика\n"
+                f"· 22:15 — стоп-лист Саиде\n"
                 f"· 23:00 — сводка дня\n"
             )
             await app.bot.send_message(
@@ -8834,6 +8918,236 @@ async def handle_agreed_details_text(update: Update, context: ContextTypes.DEFAU
         logger.error("handle_agreed_details_text error: %s", e)
 
 
+# Антиспам: один раз в 6 часов на чат — чтобы не дёргать Саиду каждым «ок»
+_SAIDA_HELP_LAST_SENT: Dict[int, float] = {}
+_SAIDA_HELP_COOLDOWN_SEC = 6 * 3600
+
+
+def _saida_help_due(chat_id: int) -> bool:
+    import time as _t
+    last = _SAIDA_HELP_LAST_SENT.get(chat_id, 0.0)
+    return (_t.time() - last) >= _SAIDA_HELP_COOLDOWN_SEC
+
+
+def _saida_help_mark_sent(chat_id: int) -> None:
+    import time as _t
+    _SAIDA_HELP_LAST_SENT[chat_id] = _t.time()
+
+
+# Catch-all hint для менеджера/админа: если ни один text-handler не сработал.
+_MGR_HINT_LAST_SENT: Dict[int, float] = {}
+_MGR_HINT_COOLDOWN_SEC = 4 * 3600  # 4ч — мягче чем у Саиды, у менеджеров рабочий день
+
+
+def _mgr_hint_due(chat_id: int) -> bool:
+    import time as _t
+    last = _MGR_HINT_LAST_SENT.get(chat_id, 0.0)
+    return (_t.time() - last) >= _MGR_HINT_COOLDOWN_SEC
+
+
+def _mgr_hint_mark_sent(chat_id: int) -> None:
+    import time as _t
+    _MGR_HINT_LAST_SENT[chat_id] = _t.time()
+
+
+async def _maybe_send_manager_no_active_hint(update, context, chat_id: int, text: str) -> None:
+    """Мягко подсказывает менеджеру: «у вас нет открытых запросов от меня».
+
+    Срабатывает только если:
+      - chat_id принадлежит менеджеру/админу (не Саиде, не неизвестному)
+      - текст похож на «попытку ответа» (короткий, без команд)
+      - cooldown 4ч прошёл
+    """
+    # Не для Саиды — там свой handler
+    if chat_id == _get_saida_chat_id():
+        return
+    # Только для известных пользователей
+    role = get_user_role(chat_id)
+    if role == "unknown":
+        return
+    # Не на команды и не на длинные тексты (>120 симв — это не «ой я ответил»)
+    t = (text or "").strip()
+    if not t or t.startswith("/") or len(t) > 120:
+        return
+    # Только если текст похож на «ответ»
+    looks_like_reply = any(kw in t.lower() for kw in (
+        "оплат", "договор", "клиент", "не зна", "позже",
+        "потом", "ок", "хорошо", "ладно", "понял", "поняла",
+        "да", "нет", "сделаю", "сейчас", "завтра",
+        "понедельник", "вторник", "среда", "четверг",
+        "пятниц", "суббот", "воскресень",
+    ))
+    if not looks_like_reply:
+        return
+    if not _mgr_hint_due(chat_id):
+        return
+    try:
+        kb_help = InlineKeyboardMarkup([[
+            InlineKeyboardButton("🔄 Открыть меню", callback_data="back_main"),
+            InlineKeyboardButton("📖 Инструкция", callback_data="show_help_doc"),
+        ]])
+        await update.message.reply_text(
+            "🤔 Я не нашёл, к какому запросу относится ваш ответ.\n\n"
+            "Возможные причины:\n"
+            "• Запрос уже закрыт или истёк по времени.\n"
+            "• Сообщение с кнопками уехало далеко вверх — пролистайте чат.\n"
+            "• Открытых запросов от меня сейчас нет.\n\n"
+            "Откройте меню кнопкой ниже или нажмите «📖 Инструкция».",
+            reply_markup=kb_help,
+        )
+        _mgr_hint_mark_sent(chat_id)
+    except Exception as _e:
+        logger.warning("mgr no-active hint send failed: %s", _e)
+
+
+async def _handle_saida_text_payhold_reply(update: Update, context, text: str) -> bool:
+    """Распознаёт текстовый ответ Саиды по запросам на проверку оплат.
+
+    Вызывается из handle_persistent_menu только если chat_id == SAIDA_CHAT_ID.
+    Возвращает True, если сообщение распознано и обработано (handle_persistent_menu
+    должен вернуться без дальнейшей обработки). False — пусть текст идёт обычным путём.
+    """
+    try:
+        from collector.payment_hold import (
+            parse_saida_text_reply,
+            confirm_by_saida,
+            list_pending,
+        )
+    except Exception as _e:
+        logger.warning("payment_hold module unavailable for saida text: %s", _e)
+        return False
+
+    decision = parse_saida_text_reply(text)
+    action = decision.get("action")
+    chat_id = update.effective_chat.id
+
+    if action == "no_match":
+        # Это обычное сообщение Саиды, не про оплаты.
+        # Если у неё есть pending запросы и текст похож на «ответ» — мягко
+        # покажем мини-подсказку (раз в 6 часов, чтоб не спамить).
+        try:
+            pending = list_pending()
+        except Exception:
+            pending = []
+        if not pending:
+            return False
+        # Триггер подсказки: текст короткий (<60 символов) — похоже на попытку ответа
+        looks_like_attempt = len(text) <= 60 and any(
+            kw in text.lower() for kw in (
+                "оплат", "оплачен", "прошл", "поступ", "видн", "нашл",
+                "част", "нет", "ок", "хорошо", "посмотр", "посмотрю",
+                "позже", "потом", "разбер",
+            )
+        )
+        if looks_like_attempt and _saida_help_due(chat_id):
+            kb_help = InlineKeyboardMarkup([[
+                InlineKeyboardButton(
+                    "❓ Подробная инструкция", callback_data="payhold_help_full",
+                ),
+            ]])
+            try:
+                await update.message.reply_text(
+                    f"🤔 У тебя сейчас открыто <b>{len(pending)}</b> "
+                    f"запросов по оплатам — но я не понял, к какому относится "
+                    f"твой ответ.\n\n"
+                    "Ответь так:\n"
+                    "  • Нажми кнопку под нужным запросом, или\n"
+                    "  • Напиши: <code>&lt;имя клиента&gt; полная / частично / нет</code>\n\n"
+                    "Например: <i>Акжан полная</i> или <i>Шапагат частично</i>.",
+                    parse_mode="HTML",
+                    reply_markup=kb_help,
+                )
+                _saida_help_mark_sent(chat_id)
+            except Exception as _ne:
+                logger.warning("saida soft hint send failed: %s", _ne)
+            # True, чтобы не пускать дальше в legacy-меню
+            return True
+        return False
+
+    matches = decision.get("matches") or []
+    status = decision.get("status")
+    chat_id = update.effective_chat.id
+
+    if action == "confirm" and len(matches) == 1 and status:
+        rec = matches[0]
+        token = rec.get("token", "")
+        client = rec.get("client", "")
+        manager = rec.get("manager", "")
+        manager_chat_id = int(rec.get("manager_chat_id") or 0)
+        updated = confirm_by_saida(token, status)
+        if not updated:
+            await update.message.reply_text(
+                f"⚠️ По «{client}» не удалось сохранить ответ — возможно, уже закрыт."
+            )
+            return True
+        status_label = {
+            "full": "полная оплата ✅",
+            "partial": "частичная оплата 🔸",
+            "none": "оплаты нет ❌",
+        }.get(status, status)
+        await update.message.reply_text(
+            f"Принято по «{client}»: {status_label}.\nМенеджер и директор уведомлены."
+        )
+        # Уведомить менеджера и админа — повторяем UX из payhold-кнопок.
+        notify_text_full = (
+            "Саида подтвердила оплату по клиенту:\n\n"
+            f"{client}\nМенеджер: {manager}\n"
+            f"Статус: {'оплата есть' if status == 'full' else 'частичная оплата'}\n\n"
+            "Клиент временно не будет попадать под давление до обновления 1С."
+        )
+        notify_text_none = (
+            "Саида не видит оплату по клиенту:\n\n"
+            f"{client}\nМенеджер: {manager}\n\n"
+            "Клиент остаётся в обычной дебиторке."
+        )
+        notify_text = notify_text_full if status in ("full", "partial") else notify_text_none
+        for target in {manager_chat_id, ADMIN_CHAT_ID}:
+            if not target:
+                continue
+            try:
+                await context.bot.send_message(
+                    chat_id=target,
+                    text=notify_text,
+                    parse_mode="HTML",
+                )
+            except Exception as _ne:
+                logger.warning("saida text confirm notify %s failed: %s", target, _ne)
+        log_event(
+            "saida_text_confirm",
+            client=client,
+            manager=manager,
+            status=status,
+        )
+        return True
+
+    if action == "ambiguous_client":
+        # Несколько клиентов в pending матчатся — переспрашиваем
+        names = []
+        for r in matches[:5]:
+            names.append(f"• {r.get('client', '—')} (менеджер {r.get('manager', '—')})")
+        msg = (
+            "🤔 Не понял, по какому клиенту ответ. Совпало несколько:\n\n"
+            + "\n".join(names)
+            + "\n\nНапишите имя клиента точнее (например, добавьте улицу) "
+            "или нажмите кнопку под нужным запросом."
+        )
+        await update.message.reply_text(msg)
+        return True
+
+    if action == "unclear_status":
+        rec = matches[0]
+        client = rec.get("client", "—")
+        msg = (
+            f"🤔 По «{client}» — не понял статус.\n\n"
+            "Напишите одно из: <b>полная</b> / <b>частично</b> / <b>нет</b>.\n"
+            "Или нажмите кнопку под исходным запросом."
+        )
+        await update.message.reply_text(msg, parse_mode="HTML")
+        return True
+
+    return False
+
+
 async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик текстовых сообщений (v9.4.12, cleanup v9.4.57)."""
     text = update.message.text
@@ -8841,6 +9155,18 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
 
     if not await _acl_gate(chat_id, context):
         return
+
+    # ─── Текстовый ответ Саиды по pending-оплатам ────────────────────────
+    # Why: Саида часто пишет «Акжан полная» вместо нажатия кнопок.
+    # Без парсера её ответы пропадают, pending копится. Реагируем
+    # ТОЛЬКО на её chat_id и ТОЛЬКО при найденном клиенте + ясном статусе.
+    try:
+        if text and chat_id == _get_saida_chat_id():
+            handled = await _handle_saida_text_payhold_reply(update, context, text)
+            if handled:
+                return
+    except Exception as _se:
+        logger.error("saida text payhold handler error: %s", _se)
 
     # v9.4.57 (legacy reply-menu cleanup): снять "призрак" старой
     # reply-клавиатуры. Срабатывает при нажатии пользователем на любую
@@ -8869,12 +9195,34 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
             _crmdup_save_pending()
         else:
             import re as _re
+            # Безопасный выход для менеджера который не знает телефон
+            _norm_text = text.strip().lower().replace("ё", "е")
+            _give_up_phrases = (
+                "не знаю", "не помню", "потом", "уточню", "позже",
+                "позднее", "завтра", "не в курсе", "хз", "отмена",
+            )
+            if any(p in _norm_text for p in _give_up_phrases):
+                _CRM_DUP_REVIEW_AWAITING_TEXT.pop(chat_id, None)
+                _crmdup_save_pending()
+                await update.message.reply_text(
+                    "Понял. Запрос закрыт без изменений — "
+                    "телефон в CRM не обновлялся.\n\n"
+                    "Когда уточните — напишите <code>/phone Имя клиента 87XXXXXXXXX</code>.",
+                    parse_mode="HTML",
+                )
+                return
             phone_digits = _re.sub(r"\D", "", text.strip())
             if _re.fullmatch(r"8\d{10}", phone_digits):
                 phone_digits = "7" + phone_digits[1:]
             if not _re.fullmatch(r"7\d{10}", phone_digits):
                 await update.message.reply_text(
-                    "❌ Неверный формат.\nВведите: <code>+7XXXXXXXXXX</code>",
+                    "❌ Это не похоже на телефон.\n\n"
+                    "Введите номер в одном из форматов:\n"
+                    "• <code>+77011234567</code>\n"
+                    "• <code>87011234567</code>\n"
+                    "• <code>77011234567</code>\n\n"
+                    "Если не знаете телефон — напишите <b>«не знаю»</b> "
+                    "или <b>«уточню позже»</b> и я закрою запрос.",
                     parse_mode="HTML",
                 )
                 return
@@ -8922,6 +9270,21 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
 
             if state == "clarify_name":
                 display_name = text.strip()
+                # Защита от «не знаю» / «потом» / «уточню» — это не имена.
+                _norm = display_name.lower().replace("ё", "е")
+                _bad_phrases = (
+                    "не знаю", "не помню", "потом", "уточню", "позже",
+                    "не в курсе", "хз", "?", "??", "???",
+                )
+                if any(p in _norm for p in _bad_phrases):
+                    await update.message.reply_text(
+                        "🤔 Это не похоже на имя клиента.\n\n"
+                        "Если сейчас не знаете — нажмите кнопку <b>⏳ Позже</b> "
+                        "под предыдущим сообщением. Я спрошу повторно завтра.\n\n"
+                        "Или напишите имя как есть (например: <i>Аида</i>, <i>Серик</i>).",
+                        parse_mode="HTML",
+                    )
+                    return
                 if len(display_name) < 2:
                     await update.message.reply_text(
                         "❌ Слишком коротко. Введите имя или имя и отчество:"
@@ -9112,6 +9475,15 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
     except Exception as e:
         logger.error("collector text handler error: %s", e)
 
+    # ─── Catch-all мягкая подсказка для менеджера/админа ─────────────────────
+    # Why: если менеджер пишет в чат, а ни один из flow выше не сматчился —
+    # значит у него нет открытых запросов от бота. Раньше бот молчал, и менеджер
+    # думал что бот сломан или его сообщение пропало. Теперь — мягкий хинт.
+    try:
+        await _maybe_send_manager_no_active_hint(update, context, chat_id, text)
+    except Exception as _he:
+        logger.warning("manager catch-all hint failed: %s", _he)
+
     # v9.4.57: elif-блок для мёртвых ярлыков kb_persistent()
     # (📊 Дебиторка / 🛒 Продажи / 💰 Валовая / 💸 Затраты / 📦 Остатки /
     # 📈 Аналитика / 🗄️ Архив) удалён. Функция kb_persistent() была
@@ -9255,7 +9627,8 @@ def main():
     application.add_handler(CommandHandler("analytics", cmd_analytics))  # 🆕 v9.4.9  # v2.0
     application.add_handler(CommandHandler("phone", cmd_phone))  # CRM: внести телефон клиента
     application.add_handler(CommandHandler("crmdupsend", cmd_crmdupsend))  # CRM: разовая сверка конфликтных дублей
-    application.add_handler(CommandHandler("guide", cmd_guide))  # Инструкция для менеджеров
+    application.add_handler(CommandHandler("guide", cmd_guide))  # Инструкция (роль-зависимая)
+    application.add_handler(CommandHandler("help", cmd_help))    # Алиас /guide
     application.add_handler(CommandHandler("logs", cmd_logs))    # Последние ERROR/CRITICAL
     application.add_handler(CommandHandler("timeline", cmd_timeline))  # Единая timeline по клиенту
     application.add_handler(CallbackQueryHandler(cb_data))

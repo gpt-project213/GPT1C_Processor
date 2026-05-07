@@ -1792,6 +1792,56 @@ Observed rebuild result:
 - local backups `config/clients.json.bak-*`
 - untracked `site/`
 
+## Handoff Update - 2026-05-07 11:05 +05:00
+
+### Saida help / startup UX closure
+
+- Closed the Saida help theme end-to-end:
+  - separate HTML guide for Saida is now part of the working tree
+  - `/guide` became role-aware; `/help` added as alias
+  - `show_help_doc` no longer depends on the failing `cmd_help` callback path
+  - startup admin message now reflects the actual current scheduler instead of stale lines
+  - passive stop/payment notifications for Saida now include a `❓ Что это значит?` path
+  - full Saida stop-list callback now goes through a help-aware entry point
+
+### Files intended for commit
+
+- `bot/send_reports.py`
+- `bot/debt_stop_control.py`
+- `collector/payment_hold.py`
+- `tests/test_collector.py`
+- `tests/test_collector_regression_hermetic.py`
+- `docs/Инструкция Саида.html`
+- `docs/Инструкция по работе с ботом.html`
+
+### Verification
+
+- `python -m py_compile bot/send_reports.py` → OK
+- `python -m py_compile bot/debt_stop_control.py` → OK
+- `WHATSAPP_ENABLED=0 LIVE_SEND_ALLOWED=0 COLLECTOR_TEST_MODE=1 python -X utf8 tests/test_collector_regression_hermetic.py` → `15/15 OK`
+- `WHATSAPP_ENABLED=0 LIVE_SEND_ALLOWED=0 COLLECTOR_TEST_MODE=1 python -X utf8 tests/test_collector.py` → `408/408 OK`
+
+### Safety proof
+
+- Test runs were hermetic:
+  - live WhatsApp disabled
+  - test mode enabled
+  - logs show `saida notification suppressed` / `observer notification suppressed`
+  - production state integrity checks and SHA-256 watchers stayed green
+- No evidence that test messages were sent after the run; post-test logs only show normal bot jobs.
+
+### Dirty files intentionally left alone
+
+- `autoagent/orchestrator_agents.json`
+- `autoagent/task_prompt.txt`
+- `collector/approval_flow.py`
+- `collector/client_dialog.py`
+- `collector/collection_agent.py`
+- `collector/collections_engine.py`
+- `collector/manager_dialog.py`
+- local backups `config/clients.json.bak-*`
+- untracked `site/`
+
 ## Handoff Update - 2026-05-06 17:20 +05:00
 
 ### Manager dialog migration: manager_chat_id -> dialog_id

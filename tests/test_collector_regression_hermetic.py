@@ -64,9 +64,14 @@ class ClientDialogHermeticTests(unittest.IsolatedAsyncioTestCase):
         self._tmpdir = tempfile.mkdtemp()
         self._orig_dialogs_path = client_dialog._DIALOGS_PATH
         client_dialog._DIALOGS_PATH = Path(self._tmpdir) / "collector_client_dialogs.json"
+        # Изолируем wa_approval_batches.json — иначе send_approved_batch
+        # пишет тестовые ключи (`batch-1`/`batch-2`) в боевой logs/wa_approval_batches.json.
+        self._orig_batches_path = approval_flow._BATCHES_PATH
+        approval_flow._BATCHES_PATH = Path(self._tmpdir) / "wa_approval_batches.json"
 
     def tearDown(self):
         client_dialog._DIALOGS_PATH = self._orig_dialogs_path
+        approval_flow._BATCHES_PATH = self._orig_batches_path
         shutil.rmtree(self._tmpdir, ignore_errors=True)
 
     async def _start_dialog(self, phone: str = "77010000001") -> None:
@@ -174,6 +179,18 @@ class ClientDialogHermeticTests(unittest.IsolatedAsyncioTestCase):
 
 
 class FreshnessGateHermeticTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        # Изолируем wa_approval_batches.json от продакшна — иначе
+        # send_approved_batch пишет тестовые ключи (`batch-1`/`batch-2`/`batch-stale`)
+        # в боевой logs/wa_approval_batches.json.
+        self._tmpdir = tempfile.mkdtemp()
+        self._orig_batches_path = approval_flow._BATCHES_PATH
+        approval_flow._BATCHES_PATH = Path(self._tmpdir) / "wa_approval_batches.json"
+
+    def tearDown(self):
+        approval_flow._BATCHES_PATH = self._orig_batches_path
+        shutil.rmtree(self._tmpdir, ignore_errors=True)
+
     def test_load_latest_debt_json_exposes_stale_freshness_metadata(self):
         tmpdir = tempfile.mkdtemp()
         original_json_dir = debt_monitor.JSON_DIR
@@ -216,6 +233,7 @@ class FreshnessGateHermeticTests(unittest.IsolatedAsyncioTestCase):
         with patch("collector.approval_flow.is_ready_for_send", return_value=True), \
              patch("collector.approval_flow.get_approved_clients", return_value=[dict(approved_client)]), \
              patch("collector.approval_flow.load_batch", return_value={"batch_id": "batch-1", "created_at": "2026-04-28T13:00:00+05:00"}), \
+             patch("collector.approval_flow.save_batch") as _save_batch_mock1, \
              patch("collector.approval_flow.record_send_results") as record_mock, \
              patch("collector.collections_engine._live_send_allowed", return_value=True), \
              patch("collector.collections_engine.load_latest_debt_json", return_value={"clients": [{"name": "Е Еркебулан"}]}), \
@@ -257,6 +275,7 @@ class FreshnessGateHermeticTests(unittest.IsolatedAsyncioTestCase):
         with patch("collector.approval_flow.is_ready_for_send", return_value=True), \
              patch("collector.approval_flow.get_approved_clients", return_value=[dict(approved_client)]), \
              patch("collector.approval_flow.load_batch", return_value={"batch_id": "batch-2", "created_at": "2026-04-28T13:00:00+05:00"}), \
+             patch("collector.approval_flow.save_batch") as _save_batch_mock2, \
              patch("collector.approval_flow.record_send_results") as record_mock, \
              patch("collector.collections_engine._live_send_allowed", return_value=True), \
              patch("collector.collections_engine.load_latest_debt_json", return_value={"clients": []}), \
@@ -302,6 +321,8 @@ class FreshnessGateHermeticTests(unittest.IsolatedAsyncioTestCase):
         }
         with patch("collector.approval_flow.is_ready_for_send", return_value=True), \
              patch("collector.approval_flow.get_approved_clients", return_value=[dict(approved_client)]), \
+             patch("collector.approval_flow.load_batch", return_value={"batch_id": "batch-stale", "created_at": "2026-04-28T13:00:00+05:00"}), \
+             patch("collector.approval_flow.save_batch") as _save_batch_mock5, \
              patch("collector.approval_flow.record_send_results") as record_mock, \
              patch("collector.collections_engine._live_send_allowed", return_value=True), \
              patch("collector.collections_engine.load_latest_debt_json", return_value=stale_debt), \

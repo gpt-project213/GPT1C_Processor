@@ -47,6 +47,43 @@ def section(title: str):
 
 
 # ═══════════════════════════════════════════════════════════════
+# 0. SHA-256 SNAPSHOT боевых state-файлов ДО запуска тестов
+# ═══════════════════════════════════════════════════════════════
+# Why: integrity check секции 23 ловит только конкретные тестовые маркеры
+# и невалидные batch-ID. SHA-256 watcher ловит ЛЮБОЕ изменение —
+# если тест случайно записал в боевой файл (даже один байт), хэш изменится.
+# Сравнение делается в секции 23 после всех тестов.
+import hashlib as _hashlib
+
+_PROD_STATE_FILES = [
+    ROOT / "logs" / "wa_approval_batches.json",
+    ROOT / "logs" / "saida_payment_holds.json",
+    ROOT / "logs" / "wa_agreed_promises.json",
+    ROOT / "logs" / "silence_last_sent.json",
+    ROOT / "logs" / "crm_pending_state.json",
+    ROOT / "logs" / "wa_dialog_suppress.json",
+    ROOT / "logs" / "debt_stop_saida_known.json",
+    ROOT / "logs" / "sales_notify_decade.json",
+    ROOT / "logs" / "collector_client_dialogs.json",
+    ROOT / "reports" / "debt_stop_state.json",
+    ROOT / "reports" / "debt_stop_registry.json",
+]
+
+
+def _sha256_of(path: Path) -> str:
+    """SHA-256 файла. Пустой '' если файла нет."""
+    if not path.exists():
+        return ""
+    try:
+        return _hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return ""
+
+
+_PROD_STATE_HASHES_BEFORE = {p: _sha256_of(p) for p in _PROD_STATE_FILES}
+
+
+# ═══════════════════════════════════════════════════════════════
 # 1. ИМПОРТЫ
 # ═══════════════════════════════════════════════════════════════
 section("1. Импорты collector.*")
@@ -2142,6 +2179,7 @@ _approved_batch_client = {
 with patch("collector.approval_flow.is_ready_for_send", return_value=True), \
      patch("collector.approval_flow.get_approved_clients", return_value=[dict(_approved_batch_client)]), \
      patch("collector.approval_flow.load_batch", return_value={"batch_id": "batch-1", "created_at": "2026-04-28T13:00:00+05:00"}), \
+     patch("collector.approval_flow.save_batch") as _save_batch_h2g_refresh, \
      patch("collector.approval_flow.record_send_results") as _record_send, \
      patch("collector.collections_engine._live_send_allowed", return_value=True), \
      patch("collector.collections_engine.load_latest_debt_json", return_value={"clients": [{"name": "Е Еркебулан"}]}), \
@@ -2172,6 +2210,7 @@ check("freshness gate: returned sent result", any(r.get("status") == "sent" for 
 with patch("collector.approval_flow.is_ready_for_send", return_value=True), \
      patch("collector.approval_flow.get_approved_clients", return_value=[dict(_approved_batch_client)]), \
      patch("collector.approval_flow.load_batch", return_value={"batch_id": "batch-2", "created_at": "2026-04-28T13:00:00+05:00"}), \
+     patch("collector.approval_flow.save_batch") as _save_batch_h2g_stale, \
      patch("collector.approval_flow.record_send_results") as _record_stale, \
      patch("collector.collections_engine._live_send_allowed", return_value=True), \
      patch("collector.collections_engine.load_latest_debt_json", return_value={"clients": []}), \
@@ -2418,8 +2457,8 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as _td_hold_stats:
           str(_hold_mgr))
     _hold_text = _payment_hold.format_saida_hold_stats_text()
     check("PAYHOLD T5: текст backlog Саиды содержит ключевые метрики",
-          "Открыто: <b>3</b>" in _hold_text
-          and "Закрыто сегодня: <b>2</b>" in _hold_text
+          "ещё не подтвердила: <b>3</b>" in _hold_text
+          and "Сегодня закрыто: <b>2</b>" in _hold_text
           and "Магира" in _hold_text
           and "Ергали" in _hold_text,
           _hold_text)
@@ -2436,6 +2475,160 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as _td_hold_stats:
           and "Алена" in _partial_text
           and "ТОО Частичный" in _partial_text,
           _partial_text)
+    _payment_hold.PAYMENT_HOLD_PATH = _orig_hold_path
+
+# ───────────────────────────────────────────────────────────────
+# 18a. Парсер дат для обещаний менеджера (расширенный)
+# ───────────────────────────────────────────────────────────────
+section("18a. Manager promise date parser")
+
+import collector.approval_flow as _af_dt
+from datetime import date as _DT_date, timedelta as _DT_td
+
+_today = _DT_date.today()
+
+# T1: «завтра» — раньше парсер не понимал, ставил +3 молча
+d = _af_dt._extract_deadline_from_text("оплатит завтра 50000")
+check("DATE-PARSE T1: 'завтра' → today+1",
+      d == _today + _DT_td(days=1), str(d))
+
+# T2: «послезавтра»
+d2 = _af_dt._extract_deadline_from_text("договорились на послезавтра")
+check("DATE-PARSE T2: 'послезавтра' → today+2",
+      d2 == _today + _DT_td(days=2), str(d2))
+
+# T3: «через неделю»
+d3 = _af_dt._extract_deadline_from_text("закроет через неделю")
+check("DATE-PARSE T3: 'через неделю' → today+7",
+      d3 == _today + _DT_td(days=7), str(d3))
+
+# T4: «в пятницу» — следующая пятница (или ближайшая если сегодня не пятница)
+d4 = _af_dt._extract_deadline_from_text("оплатит в пятницу")
+_expected_friday_offset = (4 - _today.weekday()) % 7
+if _expected_friday_offset == 0:
+    _expected_friday_offset = 7
+check("DATE-PARSE T4: 'в пятницу' → ближайшая пятница",
+      d4 == _today + _DT_td(days=_expected_friday_offset), f"{d4} (today={_today}, weekday={_today.weekday()})")
+
+# T5: «до конца недели» → пятница
+d5 = _af_dt._extract_deadline_from_text("обещал до конца недели")
+check("DATE-PARSE T5: 'до конца недели' → пятница",
+      d5 is not None and d5.weekday() == 4, str(d5))
+
+# T6: «5 числа» → 5 число текущего/следующего месяца
+d6 = _af_dt._extract_deadline_from_text("оплата к 5 числу")
+check("DATE-PARSE T6: '5 числа' → день=5",
+      d6 is not None and d6.day == 5, str(d6))
+
+# T7: «15 мая» (классика) — должно по-прежнему работать
+d7 = _af_dt._extract_deadline_from_text("до 15 мая 100000")
+check("DATE-PARSE T7: 'до 15 мая' → 15.05.YYYY",
+      d7 is not None and d7.day == 15 and d7.month == 5, str(d7))
+
+# T8: «15.05» (классика)
+d8 = _af_dt._extract_deadline_from_text("до 15.05 закроем")
+check("DATE-PARSE T8: '15.05' → 15.05.YYYY",
+      d8 is not None and d8.day == 15 and d8.month == 5, str(d8))
+
+# T9: непонятный текст — раньше тихо ставил +3, теперь возвращает None
+d9 = _af_dt._extract_deadline_from_text("ну как обычно")
+check("DATE-PARSE T9: непонятный текст → None (caller переспросит)",
+      d9 is None, str(d9))
+
+# T10: пустой текст
+d10 = _af_dt._extract_deadline_from_text("")
+check("DATE-PARSE T10: пустой текст → None",
+      d10 is None, str(d10))
+
+# T11: legacy-обёртка _extract_deadline_or_default — для обратной совместимости
+d11 = _af_dt._extract_deadline_or_default("ну как обычно")
+check("DATE-PARSE T11: legacy default — для непонятного даёт today+_DEFAULT",
+      d11 is not None and d11 > _today, str(d11))
+
+# ───────────────────────────────────────────────────────────────
+# 18b. Парсер текстовых ответов Саиды (parse_saida_text_reply)
+# ───────────────────────────────────────────────────────────────
+section("18b. Saida text reply parser")
+
+with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as _td_saida_parse:
+    _payment_hold.PAYMENT_HOLD_PATH = Path(_td_saida_parse) / "saida_payment_holds.json"
+
+    _payment_hold.create_manager_payment_request(
+        manager="Оксана", client="О Дет.сад ТОО Акжан-ЛК ул Манатау 5",
+        debt=25688.55, debt_str="25 688,55", manager_chat_id=111,
+    )
+    _payment_hold.create_manager_payment_request(
+        manager="Алена", client="А ТД Шапагат (7 павильон) ИП Зарина",
+        debt=230001.30, debt_str="230 001,30", manager_chat_id=222,
+    )
+    _payment_hold.create_manager_payment_request(
+        manager="Оксана", client="О ТОО Petro Retail (Автогаз) ул Мангилик Ел 89 В",
+        debt=335991.94, debt_str="335 991,94", manager_chat_id=333,
+    )
+
+    # T1: уникальный матч + статус → confirm
+    d = _payment_hold.parse_saida_text_reply("Акжан полная")
+    check("SAIDA-PARSE T1: 'Акжан полная' → confirm/full уникальный матч",
+          d.get("action") == "confirm" and d.get("status") == "full"
+          and len(d.get("matches", [])) == 1
+          and "Акжан" in d["matches"][0]["client"],
+          str(d))
+
+    # T2: вариант с порядком — статус впереди
+    d2 = _payment_hold.parse_saida_text_reply("частично шапагат")
+    check("SAIDA-PARSE T2: 'частично шапагат' → confirm/partial",
+          d2.get("action") == "confirm" and d2.get("status") == "partial"
+          and "Шапагат" in d2["matches"][0]["client"],
+          str(d2))
+
+    # T3: матч без статуса → unclear_status, требуется уточнение
+    d3 = _payment_hold.parse_saida_text_reply("Petro Retail смотрю")
+    check("SAIDA-PARSE T3: имя без статуса → unclear_status",
+          d3.get("action") == "unclear_status"
+          and len(d3.get("matches", [])) == 1
+          and "Petro" in d3["matches"][0]["client"],
+          str(d3))
+
+    # T4: сообщение не про оплаты — no_match
+    d4 = _payment_hold.parse_saida_text_reply("здравствуйте, я скоро отвечу")
+    check("SAIDA-PARSE T4: посторонний текст → no_match (бот не вмешивается)",
+          d4.get("action") == "no_match",
+          str(d4))
+
+    # T5: уже подтверждённая запись — не должна сматчиться (только pending)
+    _payment_hold.confirm_by_saida(
+        _payment_hold._token("Оксана", "О Дет.сад ТОО Акжан-ЛК ул Манатау 5"),
+        "full",
+    )
+    d5 = _payment_hold.parse_saida_text_reply("Акжан полная")
+    check("SAIDA-PARSE T5: подтверждённая запись больше не матчится",
+          d5.get("action") == "no_match",
+          str(d5))
+
+    # T6: «нет оплаты» → none
+    d6 = _payment_hold.parse_saida_text_reply("по Шапагат не вижу оплату")
+    check("SAIDA-PARSE T6: 'не вижу оплату' → status=none",
+          d6.get("action") == "confirm" and d6.get("status") == "none",
+          str(d6))
+
+    # T7: добавим ещё одну запись с похожим словом → ambiguous
+    _payment_hold.create_manager_payment_request(
+        manager="Магира", client="М Шапагат-2 ул Алтын Орда",
+        debt=12345.0, debt_str="12 345", manager_chat_id=444,
+    )
+    d7 = _payment_hold.parse_saida_text_reply("Шапагат полная")
+    check("SAIDA-PARSE T7: 2 клиента 'Шапагат' → ambiguous_client (требуется уточнение)",
+          d7.get("action") == "ambiguous_client"
+          and len(d7.get("matches", [])) >= 2,
+          str(d7))
+
+    # T8: пустая БД — no_match даже на ключевые слова
+    _payment_hold.PAYMENT_HOLD_PATH = Path(_td_saida_parse) / "empty.json"
+    d8 = _payment_hold.parse_saida_text_reply("Акжан полная")
+    check("SAIDA-PARSE T8: при пустом state — no_match (бот молчит)",
+          d8.get("action") == "no_match",
+          str(d8))
+
     _payment_hold.PAYMENT_HOLD_PATH = _orig_hold_path
 
 # 19. Debt stop admin shipment limit — после оплаты с лимитом
@@ -2591,54 +2784,59 @@ finally:
 
 # ═══════════════════════════════════════════════════════════════
 # 19b. Saida full payment auto-clears stop
+# ИЗОЛЯЦИЯ: после finally секции 19 пути уже восстановлены к боевым,
+# поэтому `save_registry({"ТОО АвтоСнятие": ...})` без isolation писал бы
+# в reports/debt_stop_registry.json. _DstopIsolation возвращает все пути
+# в tempdir на время секции.
 import collector.shipment_control as _ship_for_saida
 _orig_ship_for_saida = _ship_for_saida._DECISIONS_PATH
-_ship_for_saida._DECISIONS_PATH = Path(_dstop_tmpdir) / "collector_shipment_decisions_auto_clear.json"
-_ship_for_saida.set_decision("77011110000", "ТОО АвтоСнятие", "block_until", manager_name="Алена", manager_chat_id=111, amount=300_000)
-_dstop.save_registry({
-    "ТОО АвтоСнятие": {
-        "manager": "Алена",
-        "manager_chat_id": 111,
-        "approved_at": _today,
-        "days_at_approval": 18,
-        "debt_at_approval": 300_000,
-        "status": "block_until_payment",
-        "added_by": "admin_block_until_payment",
-        "discipline_violation": False,
-        "cleared_at": None,
-    }
-})
-_dstop.save_state({
-    "date": _today,
-    "next_id": 2,
-    "saida_sent": False,
-    "candidates": {
-        "1": {
-            "client": "ТОО АвтоСнятие",
+with _DstopIsolation(_dstop_tmpdir) as _iso19b:
+    _ship_for_saida._DECISIONS_PATH = _iso19b._tmp / "collector_shipment_decisions_auto_clear.json"
+    _ship_for_saida.set_decision("77011110000", "ТОО АвтоСнятие", "block_until", manager_name="Алена", manager_chat_id=111, amount=300_000)
+    _dstop.save_registry({
+        "ТОО АвтоСнятие": {
             "manager": "Алена",
             "manager_chat_id": 111,
-            "days_silence": 18,
-            "debt": 300_000,
-            "saida_payment_confirmed": None,
+            "approved_at": _today,
+            "days_at_approval": 18,
+            "debt_at_approval": 300_000,
+            "status": "block_until_payment",
+            "added_by": "admin_block_until_payment",
+            "discipline_violation": False,
+            "cleared_at": None,
         }
-    },
-})
-_fake_dstop_bot.messages.clear()
-_full_result = asyncio.run(_dstop._handle_saida_confirm_full("1", 0, _fake_dstop_bot))
-_reg_after_full = _dstop.load_registry().get("ТОО АвтоСнятие", {})
-_ship_after_full = _ship_for_saida.get_decision("ТОО АвтоСнятие")
-check("DSTOP SAIDA FULL T1: полная оплата Саиды авто-снимает стоп",
-      _reg_after_full.get("status") == "cleared" and bool(_reg_after_full.get("cleared_at")),
-      str(_reg_after_full))
-check("DSTOP SAIDA FULL T2: manager notified after auto-clear",
-      any(m.get("chat_id") == 111 and "АвтоСнятие" in str(m.get("text", "")) for m in _fake_dstop_bot.messages),
-      str(_fake_dstop_bot.messages))
-check("DSTOP SAIDA FULL T3: shipment decision closed after auto-clear",
-      _ship_after_full is None,
-      str(_ship_after_full))
-check("DSTOP SAIDA FULL T4: callback returns auto-clear confirmation",
-      "автоматичес" in str(_full_result).lower(),
-      str(_full_result))
+    })
+    _dstop.save_state({
+        "date": _today,
+        "next_id": 2,
+        "saida_sent": False,
+        "candidates": {
+            "1": {
+                "client": "ТОО АвтоСнятие",
+                "manager": "Алена",
+                "manager_chat_id": 111,
+                "days_silence": 18,
+                "debt": 300_000,
+                "saida_payment_confirmed": None,
+            }
+        },
+    })
+    _fake_dstop_bot.messages.clear()
+    _full_result = asyncio.run(_dstop._handle_saida_confirm_full("1", 0, _fake_dstop_bot))
+    _reg_after_full = _dstop.load_registry().get("ТОО АвтоСнятие", {})
+    _ship_after_full = _ship_for_saida.get_decision("ТОО АвтоСнятие")
+    check("DSTOP SAIDA FULL T1: полная оплата Саиды авто-снимает стоп",
+          _reg_after_full.get("status") == "cleared" and bool(_reg_after_full.get("cleared_at")),
+          str(_reg_after_full))
+    check("DSTOP SAIDA FULL T2: manager notified after auto-clear",
+          any(m.get("chat_id") == 111 and "АвтоСнятие" in str(m.get("text", "")) for m in _fake_dstop_bot.messages),
+          str(_fake_dstop_bot.messages))
+    check("DSTOP SAIDA FULL T3: shipment decision closed after auto-clear",
+          _ship_after_full is None,
+          str(_ship_after_full))
+    check("DSTOP SAIDA FULL T4: callback returns auto-clear confirmation",
+          "автоматичес" in str(_full_result).lower(),
+          str(_full_result))
 _ship_for_saida._DECISIONS_PATH = _orig_ship_for_saida
 
 # 20. Shipment control — collector/shipment_control.py
@@ -2961,6 +3159,54 @@ for _pf in _PROD_FILES_TO_CHECK:
             _forbidden not in _pf_text,
             f"CONTAMINATED: '{_forbidden}' found in {_pf}",
         )
+
+# Дополнительно: в wa_approval_batches.json не должно быть тестовых ключей
+# вида `batch-1`, `batch-2`, `batch-stale`, `batch-lock-*`. Реальные ID имеют
+# формат `YYYYMMDD-HHMMSS-XXXX` (см. approval_flow.create_batch).
+_BATCHES_PATH = ROOT / "logs" / "wa_approval_batches.json"
+if _BATCHES_PATH.exists():
+    try:
+        import json as _json
+        _batches_state = _json.loads(_BATCHES_PATH.read_text(encoding="utf-8"))
+        _bad_keys = [k for k in _batches_state.keys() if not k[:8].isdigit()]
+        check(
+            "prod wa_approval_batches.json: нет тестовых batch-ID (формат YYYYMMDD-...)",
+            not _bad_keys,
+            f"CONTAMINATED: тестовые ключи в боевом state — {_bad_keys}",
+        )
+    except (OSError, ValueError):
+        pass
+
+
+# ═══════════════════════════════════════════════════════════════
+# 23b. SHA-256 watcher: сравнение хэшей боевых state-файлов до/после
+# ═══════════════════════════════════════════════════════════════
+# Why: integrity check секции 23 ловит только known-bad маркеры и невалидные
+# batch-ID. SHA-256 watcher — гарантия 100%. Если тест записал ХОТЬ ЧТО-ТО
+# в любой из 11 контролируемых state-файлов, хэш изменится → красный fail.
+section("23b. SHA-256 watcher (any state file changed during tests)")
+
+_state_after_hashes = {p: _sha256_of(p) for p in _PROD_STATE_FILES}
+for _p in _PROD_STATE_FILES:
+    _before = _PROD_STATE_HASHES_BEFORE.get(_p, "")
+    _after = _state_after_hashes.get(_p, "")
+    if not _before and not _after:
+        # файла не было до и нет сейчас — пропускаем
+        continue
+    if not _before and _after:
+        # файл создан тестом — это всегда плохо
+        check(
+            f"prod state {_p.name}: файл создан тестом",
+            False,
+            f"CONTAMINATED: файл {_p} не существовал до тестов",
+        )
+        continue
+    check(
+        f"prod state {_p.name}: SHA-256 не изменился",
+        _before == _after,
+        f"CONTAMINATED: тесты записали в {_p}\n       "
+        f"before={_before[:12]}... after={_after[:12]}...",
+    )
 
 # ═══════════════════════════════════════════════════════════════
 # 24. ИТОГ
