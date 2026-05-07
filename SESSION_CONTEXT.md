@@ -1665,6 +1665,98 @@ Observed rebuild result:
 - This is a collector-dialog behavior change only.
 - Approval flow, batch state machine, debt selectors, WhatsApp transport, and Telegram scheduler were not changed in this step.
 
+---
+
+## HANDOFF 2026-05-07 — Инцидент approval flow + Saida UX overhaul
+
+### HEAD: `44df2a4` | Тесты: 408/408
+
+---
+
+### Инцидент: батч 20260507-170001-2709 не ушёл в WA
+
+**Хронология:**
+- 17:00 — батч создан, превью отправлено Ергали и Магире (6 клиентов)
+- 18:10 — эскалация к директору (менеджеры молчали 1 час)
+- 18:50:05 — последняя строка в `send_reports.log`
+- 18:50:10 / 18:51:11 — директор нажал "Утвердить" дважды (`batch_approved` в audit)
+- UI не обновился, кнопка "Отправить сейчас" не появилась
+- 19:30 — батч протух, WA не ушёл
+
+**Root cause #1 — `configure_runtime_logging()` на import-time (фикс `44df2a4`):**
+- `approval_flow.py` делает `lazy import collections_engine` внутри callback
+- При импорте модуль вызывал `configure_runtime_logging()` → закрывал root handlers живого бота
+- Все последующие `logger.*` вызовы → `ValueError: I/O operation on closed file`
+- `_tg_edit` с кнопкой "Отправить сейчас" падал на `logger.info` внутри → кнопка не рендерилась
+- Директор видел старый экран с кнопкой "Утвердить", жал снова — повторял цикл
+- **Фикс:** `configure_runtime_logging()` → `_configure_cli_logging()`, вызывается только из `main()`
+
+**Root cause #2 — `asyncio.CancelledError` в preview_batch_changes (фикс `cd87c47`):**
+- `preview_batch_changes` запускается через `asyncio.to_thread` с timeout=10
+- При отмене корутины бросался `CancelledError` (BaseException) — не ловился `except Exception`
+- `_tg_edit` с "Утверждено + кнопка Send" никогда не выполнялся
+- **Фикс:** отдельный `except asyncio.CancelledError as _ce` → UI обновляется, потом re-raise
+
+**Root cause #3 — нет `q.answer()` (фикс `cd87c47`):**
+- Все `wa_appr_*` callbacks не вызывали `q.answer()` перед тяжёлой работой
+- Telegram держал loading-spinner 30 сек → "Query is too old"
+- **Фикс:** `q.answer()` добавлен в `send_reports.py` перед `_wa_appr_cb`
+
+**Подтверждение исправления (22:53:29–22:53:32):**
+```
+[20260507-170001-2709] admin approve button pressed by chat_id=...
+[20260507-170001-2709] admin approve: preview_batch_changes start
+[20260507-170001-2709] admin approve: preview_batch_changes finish
+TG edit ok: message_id=18137
+[20260507-170001-2709] Администратор УТВЕРДИЛ отправку: 3 клиентов
+[20260507-170001-2709] admin send button pressed ... status=admin_approved
+send_started_at = 2026-05-07T22:53:32
+SEND-APPROVED BLOCKED: outside allowed time window  ← честная блокировка, не баг
+```
+
+---
+
+### Saida UX overhaul (коммит `130cf92`)
+
+- **Текстовый парсер Саиды:** `parse_saida_text_reply()` в `payment_hold.py`
+  - Распознаёт «Акжан полная», «Шапагат частично», «Петро нет»
+  - `confirm_by_saida()` идемпотентен — повторный вызов (кнопка + текст) не даёт второго уведомления
+- **Date parser** в `approval_flow.py`: `_extract_deadline_from_text()` → `Optional[date]`
+  - Поддержка: завтра / послезавтра / через N дней / в пятницу / до конца недели / 5 числа
+  - При None — переспрашивает менеджера вместо тихого дефолта +3 дня
+- **HTML инструкции:** `docs/Инструкция Саида.html` (уровень 1/10), обновлена менеджерская инструкция
+- **Client dialog:** inactive dialog forwarding, DeepSeek intents (cash_pickup/dispute/doc_request/complaint)
+- **Кнопка "📖 Инструкция"** в главном меню всех ролей
+
+---
+
+### Прочие фиксы (07.05)
+
+- `debt_stop_control.py`: удалены мёртвые mojibake-блоки с `NameError: name 'token'` (`2ebc663`)
+- `tests/test_collector.py` section 19: `CONFIG_DIR` теперь переключается в tempdir → `_sanitize_state_candidates` не режет тестовых кандидатов
+- `approval_flow.py`: entry-логи для `wa_appr_adm_ok` и `wa_appr_adm_send` (`db058dd`)
+- `approval_flow.py`: проверка `expires_at` в `wa_appr_adm_send` — если батч просрочен → `⛔ Окно закрыто`
+
+---
+
+### Коммиты сессии
+
+| Коммит | Что |
+|--------|-----|
+| `130cf92` | Saida UX overhaul + date parser + double-notify fix |
+| `2ebc663` | Удалены mojibake dead code + NameError 'token' |
+| `cd87c47` | CancelledError fix + q.answer() для wa_appr_* |
+| `db058dd` | Entry-логи approve/send кнопок |
+| `44df2a4` | configure_runtime_logging убран с import-time |
+
+---
+
+### Открытые задачи
+
+- Phase 3 dialog migration — text/voice routing через `get_text_target_dialog`
+- Алма Дист: уточнить расхождение Ведомость vs Детальный у бухгалтера
+- Операционно: Магира → Прайм Фаст Фуд + Бон Апетит; Оксана → МАСТЕР-КОНДИТЕР
+
 
 ## 2026-04-29 CRM + Collector logging patch
 - Working C project patched with CRM canonical duplicate merge in bot/crm_clients.py.

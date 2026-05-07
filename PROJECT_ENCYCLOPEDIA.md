@@ -418,6 +418,77 @@ State-файлы:
 
 Дали:
 - стартовую карту багов
+
+---
+
+## 15. Approval flow — known issues и диагностика (актуально на 2026-05-07)
+
+### 15.1. Как устроен approval flow
+
+```
+17:00 batch created → превью менеджерам
+18:10 (если молчат) → эскалация директору (admin_message_id записывается в батч)
+19:30 expires_at — после этого отправка заблокирована
+Директор: Утвердить (wa_appr_adm_ok) → Отправить сейчас (wa_appr_adm_send)
+```
+
+Ключевые файлы:
+- `collector/approval_flow.py` — весь approval state machine + Telegram callbacks
+- `collector/collections_engine.py` — `send_approved_batch()`, `_live_send_allowed()`
+- `logs/wa_approval_batches.json` — персистентное состояние батчей
+- `logs/collector_audit.jsonl` — audit trail: `batch_created`, `batch_approved`, `partially_sent`
+
+### 15.2. Root causes "кнопка не работает" — закрытые (07.05.2026)
+
+**1. `configure_runtime_logging()` на import-time** (фикс `44df2a4`)
+
+`approval_flow` делает `lazy import collections_engine` внутри callback.
+До фикса импорт модуля вызывал `configure_runtime_logging()` → закрывал root handlers бота →
+`ValueError: I/O operation on closed file` на любом `logger.*` → callback падал, UI не обновлялся.
+
+Признак: `wa_appr callback error: I/O operation on closed file` в логах, повторяется при каждом нажатии.
+
+Фикс: `_configure_cli_logging()` вызывается только из `main()`. Импорт как библиотека — нейтральный.
+
+**2. `asyncio.CancelledError` не ловился в preview_batch_changes** (фикс `cd87c47`)
+
+`preview_batch_changes` запускается через `asyncio.to_thread(timeout=10)`.
+`CancelledError` — `BaseException`, не `Exception` → не ловился → `_tg_edit` с кнопкой "Отправить сейчас" пропускался.
+
+Признак: два `batch_approved` в `collector_audit.jsonl` подряд, нет `TG edit ok` после первого.
+
+Фикс: `except asyncio.CancelledError as _ce` → UI обновляется, потом `raise _ce`.
+
+**3. Нет `q.answer()` перед тяжёлыми callbacks** (фикс `cd87c47`)
+
+Без `q.answer()` Telegram держит spinner 30 сек → "Query is too old" визуально.
+
+Фикс: `q.answer()` добавлен в `send_reports.py` перед `_wa_appr_cb` для всех `wa_appr_*`.
+
+### 15.3. Диагностика: что смотреть когда Send не ушёл
+
+1. `logs/collector_audit.jsonl` — есть `batch_approved`? есть `partially_sent`/`dialog_started`?
+2. `logs/wa_approval_batches.json`:
+   - `send_started_at` — если есть, `send_approved_batch` вызвался
+   - `send_lock_release_reason` — причина блокировки (`live_send_not_allowed` = время/флаги)
+   - `expires_at` — не просрочен ли
+3. `send_reports.log` — `wa_appr callback error`, `I/O operation on closed file`, `SEND-APPROVED BLOCKED`
+
+### 15.4. Entry-логи в approval flow (актуальны с db058dd)
+
+```
+[batch_id] admin approve button pressed by chat_id=...
+[batch_id] admin approve: preview_batch_changes start/finish
+[batch_id] Администратор УТВЕРДИЛ отправку: N клиентов
+[batch_id] admin send button pressed ... status=... admin_status=...
+[batch_id] Администратор запустил отправку из Telegram: N результатов
+```
+
+### 15.5. Time window
+
+- `batch.expires_at` = 19:30 — source of truth для `wa_appr_adm_send`
+- `is_allowed_time()` / `COLLECTOR_HOUR_END=21` — только для CLI `--send-approved`
+- После 19:30: кнопка показывает `⛔ Окно отправки закрыто. Нужен новый батч.`
 - архитектурные проблемные зоны
 - TZ / pipeline / ACL / report-fixes
 
