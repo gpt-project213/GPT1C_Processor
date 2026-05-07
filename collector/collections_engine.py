@@ -4,7 +4,11 @@
 collections/collections_engine.py
 Главный оркестратор AI-Коллектора долгов.
 
-Версия: 1.5.1 (2026-05-06)
+Версия: 1.5.2 (2026-05-07)
+
+v1.5.2 (2026-05-07): import-time runtime logging больше не переинициализируется.
+  При импорте из approval callback модуль не закрывает root handlers живого
+  bot-процесса; configure_runtime_logging вызывается только из CLI entrypoint.
 
 v1.5.1 (2026-05-06): send-approved защищён batch-level lock с TTL,
   чтобы повторные нажатия и параллельные вызовы не запускали дублирующую
@@ -94,15 +98,18 @@ LOGS_DIR.mkdir(parents=True, exist_ok=True)
 _TEST_MODE = os.getenv("COLLECTOR_TEST_MODE", "0").lower() in ("1", "true", "yes")
 
 # Настройка логирования
-configure_runtime_logging(
-    logs_dir=LOGS_DIR,
-    tz=TZ,
-    app_name="collector",
-    retention_days=get_log_retention_days(),
-    error_alert_level=logging.ERROR,
-    alert_cooldown_sec=int(os.getenv("LOG_ALERT_COOLDOWN_SEC", "300")),
-    test_mode=_TEST_MODE,
-)
+def _configure_cli_logging() -> None:
+    """Configure runtime logging only for standalone collector execution."""
+    configure_runtime_logging(
+        logs_dir=LOGS_DIR,
+        tz=TZ,
+        app_name="collector",
+        retention_days=get_log_retention_days(),
+        error_alert_level=logging.ERROR,
+        alert_cooldown_sec=int(os.getenv("LOG_ALERT_COOLDOWN_SEC", "300")),
+        test_mode=_TEST_MODE,
+    )
+
 logger = get_collector_logger(__name__)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
@@ -1840,6 +1847,7 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
 
 
 def main() -> int:
+    _configure_cli_logging()
     parser = argparse.ArgumentParser(
         description="AI Debt Collector — Минбаракат",
         formatter_class=argparse.RawDescriptionHelpFormatter,
