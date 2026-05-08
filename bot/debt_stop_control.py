@@ -1134,13 +1134,13 @@ async def send_saida_payment_hold_reminders(bot) -> None:
             from collector.payment_hold import confirm_by_saida as _confirm_saida
             _confirm_saida(token, "none")
 
-            # Директору — INFO без кнопок (решать нечего: нет подтверждения = нет оплаты)
+            # Директору — INFO без кнопок
             if admin_id:
                 try:
                     await bot.send_message(
                         chat_id=admin_id,
                         text=(
-                            f"ℹ️ Саида не подтвердила оплату <b>{client}</b> за <b>{age_h:.0f} ч</b>.\n"
+                            f"ℹ️ Саида не ответила на запрос по <b>{client}</b> за <b>{age_h:.0f} ч</b>.\n"
                             f"Менеджер: <b>{manager}</b> | Долг: {debt_str}\n\n"
                             f"Холд закрыт автоматически — клиент остаётся в дебиторке."
                         ),
@@ -1155,7 +1155,7 @@ async def send_saida_payment_hold_reminders(bot) -> None:
                     await bot.send_message(
                         chat_id=int(mgr_chat),
                         text=(
-                            f"ℹ️ Саида не подтвердила оплату по <b>{client}</b> за {age_h:.0f} ч.\n"
+                            f"ℹ️ Саида не ответила на запрос по <b>{client}</b> за {age_h:.0f} ч.\n"
                             f"Клиент остаётся в дебиторке."
                         ),
                         parse_mode="HTML",
@@ -1168,7 +1168,7 @@ async def send_saida_payment_hold_reminders(bot) -> None:
                 await bot.send_message(
                     chat_id=SAIDA_CHAT_ID,
                     text=(
-                        f"🚨 Саида, по клиенту <b>{client}</b> ты не дала ответ за {age_h:.0f} ч.\n"
+                        f"🚨 Саида, ты проигнорировала запрос по клиенту <b>{client}</b> — {age_h:.0f} ч без ответа.\n"
                         f"Холд закрыт автоматически. Все последствия — на тебе."
                     ),
                     parse_mode="HTML",
