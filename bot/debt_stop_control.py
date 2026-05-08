@@ -1065,10 +1065,11 @@ async def send_saida_final(bot) -> None:
 async def send_saida_payment_hold_reminders(bot) -> None:
     """SLA-контроль pending_saida: предупреждение → байпас директору.
 
-    SAIDA_WARN_HOURS   (дефолт 4ч): Саиде — предупреждение с дедлайном и угрозой огласки.
-    SAIDA_BYPASS_HOURS (дефолт 8ч): директору — список клиентов с кнопками решения;
-                                     менеджеру  — уведомление что Саида обойдена;
-                                     Саиде      — сообщение что решение принял директор.
+    SAIDA_WARN_HOURS   (дефолт 4ч): Саиде — предупреждение с дедлайном.
+    SAIDA_BYPASS_HOURS (дефолт 8ч): авто-закрытие холда как "нет подтверждения";
+                                     директору  — INFO (без кнопок, решать нечего);
+                                     менеджеру  — итог: клиент остаётся в дебиторке;
+                                     Саиде      — сообщение о последствиях игнора.
     """
     from collector.payment_hold import _load, _save  # type: ignore
     now = datetime.now(TZ)
@@ -1128,36 +1129,34 @@ async def send_saida_payment_hold_reminders(bot) -> None:
             except Exception as e:
                 LOG.warning("send_saida warn error (%s): %s", client, e)
 
-        # ── Шаг 2: байпас — директор решает ────────────────────────────
+        # ── Шаг 2: таймаут — авто-закрытие как "нет подтверждения" ─────
         if age_h >= SAIDA_BYPASS_HOURS and not rec.get("saida_escalated_at"):
-            from telegram import InlineKeyboardMarkup, InlineKeyboardButton
-            # Директору — запрос с кнопками
+            from collector.payment_hold import confirm_by_saida as _confirm_saida
+            _confirm_saida(token, "none")
+
+            # Директору — INFO без кнопок (решать нечего: нет подтверждения = нет оплаты)
             if admin_id:
-                kb_admin = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("✅ Принять оплату",  callback_data=f"payhold_admin_full|{token}")],
-                    [InlineKeyboardButton("❌ Оплаты нет",      callback_data=f"payhold_admin_none|{token}")],
-                ])
-                admin_text = (
-                    f"⚠️ Саида не подтвердила оплату <b>{client}</b> за <b>{age_h:.0f} ч</b>.\n"
-                    f"Менеджер: <b>{manager}</b> | Долг: {debt_str}\n\n"
-                    f"Саида уведомлена о последствиях. Ваше решение:"
-                )
                 try:
                     await bot.send_message(
-                        chat_id=admin_id, text=admin_text,
-                        parse_mode="HTML", reply_markup=kb_admin,
+                        chat_id=admin_id,
+                        text=(
+                            f"ℹ️ Саида не подтвердила оплату <b>{client}</b> за <b>{age_h:.0f} ч</b>.\n"
+                            f"Менеджер: <b>{manager}</b> | Долг: {debt_str}\n\n"
+                            f"Холд закрыт автоматически — клиент остаётся в дебиторке."
+                        ),
+                        parse_mode="HTML",
                     )
                 except Exception as e:
                     LOG.warning("send_saida bypass admin error: %s", e)
 
-            # Менеджеру — информация
+            # Менеджеру — итог
             if mgr_chat:
                 try:
                     await bot.send_message(
                         chat_id=int(mgr_chat),
                         text=(
-                            f"ℹ️ Саида не ответила по клиенту <b>{client}</b> за {age_h:.0f} ч.\n"
-                            f"Вопрос передан директору для решения."
+                            f"ℹ️ Саида не подтвердила оплату по <b>{client}</b> за {age_h:.0f} ч.\n"
+                            f"Клиент остаётся в дебиторке."
                         ),
                         parse_mode="HTML",
                     )
@@ -1170,7 +1169,7 @@ async def send_saida_payment_hold_reminders(bot) -> None:
                     chat_id=SAIDA_CHAT_ID,
                     text=(
                         f"🚨 Саида, по клиенту <b>{client}</b> ты не дала ответ за {age_h:.0f} ч.\n"
-                        f"Решение принял директор. Все последствия ошибки — на тебе."
+                        f"Холд закрыт автоматически. Все последствия — на тебе."
                     ),
                     parse_mode="HTML",
                 )
@@ -1179,7 +1178,7 @@ async def send_saida_payment_hold_reminders(bot) -> None:
 
             rec["saida_escalated_at"] = now.isoformat()
             changed = True
-            LOG.info("Байпас Саиды по %s (%.0fч) → директор", client, age_h)
+            LOG.info("Таймаут Саиды по %s (%.0fч) — авто-закрыт как rejected", client, age_h)
 
     if changed:
         _save(data)

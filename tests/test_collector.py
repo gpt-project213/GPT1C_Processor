@@ -642,7 +642,7 @@ comm.WHATSAPP_ENABLED = _wa_saved  # вернём как было
 # ═══════════════════════════════════════════════════════════════
 section("8. communications.is_allowed_time")
 
-from datetime import datetime
+from datetime import datetime, time as dt_time
 from zoneinfo import ZoneInfo
 
 TZ = ZoneInfo("Asia/Almaty")
@@ -652,6 +652,7 @@ with patch("collector.communications.datetime") as mock_dt:
     mock_now = MagicMock()
     mock_now.weekday.return_value = 0   # понедельник
     mock_now.hour = 10
+    mock_now.time.return_value = dt_time(10, 0)
     mock_dt.now.return_value = mock_now
     check("is_allowed_time: weekday 10h → True", comm.is_allowed_time())
 
@@ -660,6 +661,7 @@ with patch("collector.communications.datetime") as mock_dt:
     mock_now = MagicMock()
     mock_now.weekday.return_value = 1
     mock_now.hour = 8
+    mock_now.time.return_value = dt_time(8, 0)
     mock_dt.now.return_value = mock_now
     check("is_allowed_time: weekday 08h → False", not comm.is_allowed_time())
 
@@ -668,6 +670,7 @@ with patch("collector.communications.datetime") as mock_dt:
     mock_now = MagicMock()
     mock_now.weekday.return_value = 5   # суббота
     mock_now.hour = 11
+    mock_now.time.return_value = dt_time(11, 0)
     mock_dt.now.return_value = mock_now
     check("is_allowed_time: Saturday → False", not comm.is_allowed_time())
 
