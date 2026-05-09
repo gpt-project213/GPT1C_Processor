@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-debt_stop_control.py · v1.0.13 (2026-05-08)
+debt_stop_control.py · v1.0.14 (2026-05-09)
 
 Контроль стоп-листа отгрузки — уведомление Саиды-бухгалтера.
 
@@ -164,7 +164,22 @@ def load_state() -> Dict[str, Any]:
     state = _load_json(STATE_FILE, {})
     today = datetime.now(TZ).strftime("%Y-%m-%d")
     if state.get("date") != today:
+        old_date = state.get("date")
+        stale_candidates = state.get("candidates", {}) if isinstance(state.get("candidates"), dict) else {}
+        unresolved = sum(
+            1
+            for rec in stale_candidates.values()
+            if isinstance(rec, dict) and rec.get("admin_approved") is None
+        )
         state = {"date": today, "candidates": {}, "next_id": 1, "saida_sent": False}
+        if old_date or stale_candidates:
+            save_state(state)
+            LOG.info(
+                "Сброшен устаревший debt_stop state: old_date=%s unresolved=%d",
+                old_date,
+                unresolved,
+            )
+        return state
     if _sanitize_state_candidates(state):
         save_state(state)
     return state

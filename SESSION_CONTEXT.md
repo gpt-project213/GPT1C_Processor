@@ -5,6 +5,80 @@
 
 ---
 
+## HANDOFF 2026-05-09 — аудит state-machine + batch expiry + notify_state cleanup
+
+### Что сделано (master, коммиты 253c928…34462b4)
+
+**Тесты: 441/441.**
+
+| Коммит | Что |
+|--------|-----|
+| `253c928` | Текст Саиды использует f-string с `SAIDA_WARN_HOURS`/`SAIDA_BYPASS_HOURS`; `approval_flow >= expires_at` (граница cutoff) |
+| `ebb0b80` | Тесты 8b/8c: минутная граница cutoff, cross-module; docstring `communications.py`; `.gitignore site/` |
+| `4339d72` | autoagent: путь E:→C: |
+| `f8b3777` | `get_latest_send_ready_batch`: expired `admin_approved` не возвращается; `expire_old_batches`: `pending_admin`/`admin_approved` → `too_late`; `too_late` в `final_statuses`; `log_monitor_task` вызывает очистку каждые 2ч включая выходные; тесты 23c (8 кейсов) |
+| `34462b4` | `new_reports_notifier`: merge с pruning по `existing_paths` — мёртвые E:/F: пути удаляются; тесты 23d (9 кейсов); разовая очистка 6034→2995 записей |
+| `(local)` | `payment_hold.py`: SAIDA_WARN_HOURS default 4→1, SAIDA_BYPASS_HOURS 8→2; `debt_stop_control.py` v1.0.14: `load_state()` логирует сброс с unresolved count |
+
+### Аудит state-файлов 2026-05-09
+
+- **Очищены оба зависших батча** вручную через `expire_old_batches()`: `20260507-170001-2709` и `20260508-170000-aea6` → `too_late`
+- **notify_state.json**: 6034→2995 (E: 1959, F: 242, other 838 удалены)
+- **Всё чисто**: saida_payment_holds все `rejected`/`cleared_by_1c`, crm_pending пусто, deletion_queue в будущем
+
+### Живые бизнес-состояния (не мусор)
+
+- `wa_agreed_promises.json`: 1 обещание deadline=2026-05-09, статус `accepted` → понедельник: коллектор проверит
+- `debt_stop_registry.json`: 2 активных stopped → штатно
+- `debt_stop_saida_known.json`: обновится в 22:00 ближайшего рабочего дня
+
+### Следующий безопасный шаг
+
+Понедельник 17:00 — новый коллекторский прогон. Проверить логи:
+1. `collector_daily_start` → батч создан
+2. Менеджеры ответили (или таймаут → `pending_admin`)
+3. Батч утверждён и отправлен до 19:30
+4. Обещание из 2026-05-09 помечено `promise_broken` если не оплачено
+
+---
+
+## OPERATIONAL NOTE 2026-05-09 — почему в Process List видно два `python.exe` при одном боте
+
+Проверено локально на `C:\GPT1C_Processor_analitica`:
+
+- в Process List одновременно видны:
+  - `C:\GPT1C_Processor_analitica\.venv\Scripts\python.exe`
+  - `C:\Users\user\AppData\Local\Programs\Python\Python311\python.exe`
+- оба процесса стартовали в одно время, но это не оказалось самостоятельным дублированным запуском scheduler-а
+- `ParentProcessId` у системного `Python311\python.exe` указывал на `.venv`-процесс
+- родитель `.venv` был запущен через `cmd.exe /c ""C:\GPT1C_Processor_analitica\start_bot_watchdog.bat""`
+- `logs/bot.pid` принадлежал дочернему системному `Python311\python.exe`, то есть именно он был рабочим интерпретатором
+
+Вывод:
+
+- на этой Windows-машине `.venv\Scripts\python.exe` ведёт себя как launcher/redirector
+- тяжёлый рабочий процесс бота живёт как дочерний `Python311\python.exe`
+- поэтому **два `python.exe` в диспетчере задач не являются достаточным признаком второго экземпляра бота**
+
+Как отличать норму от реального дубля:
+
+- норма:
+  - parent `.venv\Scripts\python.exe`
+  - child `Python311\python.exe`
+  - один `bot_starting` в логе на старт
+  - один watchdog-parent
+- реальный дубль:
+  - два независимых `bot_starting`
+  - два независимых родителя процесса
+  - конфликты `bot.pid`
+  - дублирующиеся APScheduler job runs / двойные уведомления
+
+Связанное наблюдение:
+
+- stale `notify_state.json` на 09.05.2026 объяснялся не «вторым ботом», а отдельным operational-state хвостом; файл был очищен вручную до 659 живых записей без temp-path мусора
+
+---
+
 ## HANDOFF 2026-05-06 (финал) — WA approval полный цикл + SLA Саиды + аналитика
 
 ### Что сделано (ветка `fix/log-noise-by-design-markers`, HEAD `09f6531`)

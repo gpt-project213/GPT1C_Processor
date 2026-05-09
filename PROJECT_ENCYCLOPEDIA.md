@@ -69,6 +69,12 @@ python -X utf8 tests/test_collector.py
 Прод-вход:
 - `bot/send_reports.py`
 
+Operational note:
+- На Windows запуск через `.venv\Scripts\python.exe` может визуально давать два `python.exe` в Process List.
+- Проверенный кейс на `2026-05-09`: лёгкий родительский процесс `.venv\Scripts\python.exe` стартует из `start_bot_watchdog.bat`, а рабочий интерпретатор живёт как дочерний `C:\Users\user\AppData\Local\Programs\Python\Python311\python.exe`.
+- Это само по себе не означает второй экземпляр scheduler-а. Признак реального дубля нужно искать не по двум `python.exe`, а по двум независимым `bot_starting`, конфликту `bot.pid`, дублирующим APScheduler job runs или отдельным родителям процесса.
+- На той же проверке `ParentProcessId` у системного `Python311\python.exe` указывал на `.venv`-процесс watchdog, а `logs/bot.pid` принадлежал дочернему рабочему интерпретатору. Это соответствует launcher/redirector-поведению Windows venv, а не двум отдельным запускам бота.
+
 Ручной CLI/pipeline:
 - `run_pipeline_all_mp.py`
 - `imap_fetcher.py`

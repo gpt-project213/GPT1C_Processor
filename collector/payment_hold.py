@@ -26,8 +26,8 @@ except Exception:  # pragma: no cover - defensive fallback
 
 PAYMENT_HOLD_PATH = ROOT / "logs" / "saida_payment_holds.json"
 HOLD_TTL_DAYS = int(os.getenv("SAIDA_PAYMENT_HOLD_TTL_DAYS", "2"))
-SAIDA_WARN_HOURS = int(os.getenv("SAIDA_WARN_HOURS", "4"))
-SAIDA_BYPASS_HOURS = int(os.getenv("SAIDA_BYPASS_HOURS", "8"))
+SAIDA_WARN_HOURS = int(os.getenv("SAIDA_WARN_HOURS", "1"))
+SAIDA_BYPASS_HOURS = int(os.getenv("SAIDA_BYPASS_HOURS", "2"))
 
 ACTIVE_STATUSES = {"confirmed_full", "confirmed_partial"}
 OPEN_STATUSES = {"pending_saida", *ACTIVE_STATUSES}
