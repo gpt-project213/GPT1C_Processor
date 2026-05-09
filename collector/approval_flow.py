@@ -4,7 +4,11 @@
 collector/approval_flow.py
 UX согласования рассылки WhatsApp — менеджер → администратор.
 
-Версия: 1.1.8 (2026-05-06)
+Версия: 1.1.9 (2026-05-07)
+
+v1.1.9 (2026-05-07): send-кнопка администратора теперь уважает expires_at
+  у уже approved batch. После дедлайна callback больше не делает ложный
+  "запускаю отправку", а честно закрывает экран как too_late.
 
 v1.1.5 (2026-05-06): защита от клина admin approve/send: preview_batch_changes теперь
   считается через asyncio.to_thread() с таймаутом, а Telegram editMessageText получил
@@ -1875,6 +1879,28 @@ async def handle_admin_callback(
                 message_id,
                 "⚠️ Отправка недоступна: батч ещё не утверждён администратором.",
                 _admin_keyboard(batch_id, batch),
+            )
+            return True
+
+        expires_at = _parse_batch_dt(batch.get("expires_at"))
+        if expires_at and datetime.now(tz=TZ) >= expires_at:
+            batch["status"] = "too_late"
+            batch["closed_at"] = datetime.now(tz=TZ).isoformat()
+            batch["escalation_reason"] = "send_window_missed"
+            save_batch(batch)
+            logger.info(
+                "[%s] send rejected: batch expired at %s",
+                batch_id, batch.get("expires_at"),
+            )
+            await _tg_edit(
+                chat_id,
+                message_id,
+                (
+                    "⛔ <b>Окно отправки закрыто.</b>\n\n"
+                    f"Этот батч был активен до: <b>{batch.get('expires_at', '—')}</b>\n"
+                    "После дедлайна отправка по старому батчу не выполняется.\n\n"
+                    "Нужен новый актуальный батч."
+                ),
             )
             return True
 
