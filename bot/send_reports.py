@@ -5177,12 +5177,15 @@ async def new_reports_notifier(context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             log_event("notification_error", chat_id=chat_id, error=str(e), level="ERROR")
     
-    # v9.4.6.1: ПАТЧ - Атомарная запись с merge для защиты от race condition
+    # v9.4.6.1: Атомарная запись с merge для защиты от race condition.
+    # Фильтруем current по existing_paths: мёртвые пути (старые диски E:/F:) не накапливаются.
     try:
         current = _load_json_safe(NOTIFY_STATE_PATH)
         if not isinstance(current, dict):
             current = {}
-        merged = {**current, **new_state}
+        existing_paths = set(new_state.keys())
+        pruned = {k: v for k, v in current.items() if k in existing_paths}
+        merged = {**pruned, **new_state}
         _save_json_atomic(NOTIFY_STATE_PATH, merged)
     except Exception as e:
         log_event("save_state_error", error=str(e), level="ERROR")

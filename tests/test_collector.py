@@ -2817,6 +2817,37 @@ try:
     _fake_dstop_bot = _FakeDstopBot()
     _admin_id = 123456
     _today = datetime.now(_dstop.TZ).strftime("%Y-%m-%d")
+    _yesterday = (datetime.now(_dstop.TZ) - timedelta(days=1)).strftime("%Y-%m-%d")
+
+    _dstop.save_state({
+        "date": _yesterday,
+        "next_id": 3,
+        "saida_sent": True,
+        "candidates": {
+            "1": {
+                "client": "ТОО Вчерашний Хвост",
+                "manager": "Ергали",
+                "manager_chat_id": 654321,
+                "days_silence": 12,
+                "debt": 320_000,
+                "level": "10+",
+                "manager_response": "no",
+                "admin_approved": None,
+                "escalated": True,
+            }
+        },
+    })
+    _rolled_state = _dstop.load_state()
+    _rolled_disk = _dstop._load_json(_dstop.STATE_FILE, {})
+    check("DSTOP ROLLOVER T1: вчерашний state сбрасывается в памяти",
+          _rolled_state.get("date") == _today and _rolled_state.get("candidates") == {},
+          str(_rolled_state))
+    check("DSTOP ROLLOVER T2: вчерашний state перезаписывается на диске",
+          _rolled_disk.get("date") == _today
+          and _rolled_disk.get("candidates") == {}
+          and _rolled_disk.get("next_id") == 1
+          and _rolled_disk.get("saida_sent") is False,
+          str(_rolled_disk))
 
     _intro_path_before = _dstop.SAIDA_INTRO_FILE
     _dstop.SAIDA_INTRO_FILE = Path(_dstop_tmpdir) / "debt_stop_saida_intro_sent.test.json"
@@ -3354,6 +3385,54 @@ if _BATCHES_PATH.exists():
         )
     except (OSError, ValueError):
         pass
+
+
+# ═══════════════════════════════════════════════════════════════
+# 23d. notify_state pruning: мёртвые E:/F: пути не накапливаются
+# ═══════════════════════════════════════════════════════════════
+section("23d. notify_state: pruning dead drive paths (E:/F: → only C: survives)")
+
+def _simulate_notify_state_merge(old_state: dict, new_state: dict) -> dict:
+    """Воспроизводит новую логику merge из new_reports_notifier."""
+    existing_paths = set(new_state.keys())
+    pruned = {k: v for k, v in old_state.items() if k in existing_paths}
+    return {**pruned, **new_state}
+
+# Симулируем state с тремя мёртвыми дисками + живыми C:-путями
+_old = {
+    "E:\\GPT1C_Processor_analitica\\reports\\html\\file1.html": 1_000_000.0,
+    "F:\\GPT1C_Processor_analitic\\reports\\html\\file2.html": 1_000_001.0,
+    "C:\\GPT1C_Processor_analitica\\reports\\html\\file3.html": 1_000_002.0,
+    "C:\\GPT1C_Processor_analitica\\reports\\html\\file4.html": 1_000_003.0,
+}
+_new = {
+    "C:\\GPT1C_Processor_analitica\\reports\\html\\file3.html": 1_000_010.0,
+    "C:\\GPT1C_Processor_analitica\\reports\\html\\file4.html": 1_000_011.0,
+    "C:\\GPT1C_Processor_analitica\\reports\\html\\file5.html": 1_000_012.0,
+}
+
+_result = _simulate_notify_state_merge(_old, _new)
+
+check("pruning: E: path удалён",       "E:\\GPT1C_Processor_analitica\\reports\\html\\file1.html" not in _result)
+check("pruning: F: path удалён",       "F:\\GPT1C_Processor_analitic\\reports\\html\\file2.html"  not in _result)
+check("pruning: C: file3 сохранён",    "C:\\GPT1C_Processor_analitica\\reports\\html\\file3.html" in _result)
+check("pruning: C: file5 добавлен",    "C:\\GPT1C_Processor_analitica\\reports\\html\\file5.html" in _result)
+check("pruning: новый mtime file3",    _result["C:\\GPT1C_Processor_analitica\\reports\\html\\file3.html"] == 1_000_010.0)
+check("pruning: итого только C: пути", all("C:\\" in k for k in _result))
+check("pruning: count=3",              len(_result) == 3)
+
+# Race condition: конкурентная C:-запись в old_state сохраняется
+_old_race = {
+    "C:\\GPT1C_Processor_analitica\\reports\\html\\file3.html": 1_000_099.0,  # concurrent write
+    "E:\\dead\\file.html": 999.0,
+}
+_new_race = {
+    "C:\\GPT1C_Processor_analitica\\reports\\html\\file3.html": 1_000_002.0,
+    "C:\\GPT1C_Processor_analitica\\reports\\html\\file4.html": 1_000_003.0,
+}
+_result_race = _simulate_notify_state_merge(_old_race, _new_race)
+check("race-condition: E: всё равно удалён",       "E:\\dead\\file.html" not in _result_race)
+check("race-condition: C: file3 перезаписан new_state", _result_race["C:\\GPT1C_Processor_analitica\\reports\\html\\file3.html"] == 1_000_002.0)
 
 
 # ═══════════════════════════════════════════════════════════════
