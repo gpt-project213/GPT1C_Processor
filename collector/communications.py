@@ -4,7 +4,11 @@
 collections/communications.py
 Единый gateway для отправки сообщений должникам и уведомлений команде.
 
-Версия: 1.0.3 (2026-04-11)
+Версия: 1.0.4 (2026-05-08)
+
+v1.0.4 (2026-05-08): live-send окно синхронизировано с approval cutoff.
+  is_allowed_time() теперь использует WA_SEND_WINDOW_CUTOFF_HOUR/MINUTE, чтобы
+  backend send и expires_at жили по одному дедлайну.
 
 Каналы:
   WhatsApp — Green API (GREENAPI_ID, GREENAPI_TOKEN из .env)
@@ -12,7 +16,7 @@ collections/communications.py
   Admin     — уведомление директора (ADMIN_CHAT_ID из .env)
 
 Жёсткие ограничения:
-  - Только 09:00–18:00 Asia/Almaty
+  - COLLECTOR_HOUR_START (default 9) — WA_SEND_WINDOW_CUTOFF_HOUR:WA_SEND_WINDOW_CUTOFF_MINUTE (default COLLECTOR_HOUR_END:00)
   - Не в выходные (суббота, воскресенье)
   - Макс. 1 сообщение в день одному клиенту
   - При ошибке доставки — уведомить менеджера, не падать молча
@@ -45,16 +49,20 @@ TEST_WA_PHONE    = os.getenv("TEST_WA_PHONE", "")
 
 HOUR_START = int(os.getenv("COLLECTOR_HOUR_START", "9"))
 HOUR_END   = int(os.getenv("COLLECTOR_HOUR_END", "18"))
+SEND_WINDOW_CUTOFF_HOUR = int(os.getenv("WA_SEND_WINDOW_CUTOFF_HOUR", str(HOUR_END)))
+SEND_WINDOW_CUTOFF_MINUTE = int(os.getenv("WA_SEND_WINDOW_CUTOFF_MINUTE", "0"))
 
 logger = get_collector_logger(__name__)
 
 
 def is_allowed_time() -> bool:
-    """True если текущее время попадает в рабочее окно (не выходные, 09–18)."""
+    """True если текущее время в рабочем окне (не выходные, COLLECTOR_HOUR_START ≤ t < WA_SEND_WINDOW_CUTOFF_HOUR:MINUTE)."""
     now = datetime.now(tz=TZ)
     if now.weekday() >= 5:  # 5=суббота, 6=воскресенье
         return False
-    return HOUR_START <= now.hour < HOUR_END
+    start_ok = now.hour >= HOUR_START
+    cutoff = dt_time(hour=SEND_WINDOW_CUTOFF_HOUR, minute=SEND_WINDOW_CUTOFF_MINUTE)
+    return start_ok and now.time() < cutoff
 
 
 def send_whatsapp(phone: str, text: str) -> bool:

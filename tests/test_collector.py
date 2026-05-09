@@ -674,6 +674,75 @@ with patch("collector.communications.datetime") as mock_dt:
     mock_dt.now.return_value = mock_now
     check("is_allowed_time: Saturday → False", not comm.is_allowed_time())
 
+# ── 8b. is_allowed_time — минутная граница cutoff ───────────────────────────
+section("8b. communications.is_allowed_time — cutoff-minute boundary")
+
+_orig_cwh = comm.SEND_WINDOW_CUTOFF_HOUR
+_orig_cwm = comm.SEND_WINDOW_CUTOFF_MINUTE
+comm.SEND_WINDOW_CUTOFF_HOUR   = 19
+comm.SEND_WINDOW_CUTOFF_MINUTE = 30
+try:
+    with patch("collector.communications.datetime") as _dt:
+        _m = MagicMock(); _m.weekday.return_value = 2; _m.hour = 19
+        _m.time.return_value = dt_time(19, 29); _dt.now.return_value = _m
+        check("is_allowed_time: 19:29 with cutoff 19:30 → True",  comm.is_allowed_time())
+
+    with patch("collector.communications.datetime") as _dt:
+        _m = MagicMock(); _m.weekday.return_value = 2; _m.hour = 19
+        _m.time.return_value = dt_time(19, 30); _dt.now.return_value = _m
+        check("is_allowed_time: 19:30 with cutoff 19:30 → False", not comm.is_allowed_time())
+
+    with patch("collector.communications.datetime") as _dt:
+        _m = MagicMock(); _m.weekday.return_value = 2; _m.hour = 19
+        _m.time.return_value = dt_time(19, 31); _dt.now.return_value = _m
+        check("is_allowed_time: 19:31 with cutoff 19:30 → False", not comm.is_allowed_time())
+finally:
+    comm.SEND_WINDOW_CUTOFF_HOUR   = _orig_cwh
+    comm.SEND_WINDOW_CUTOFF_MINUTE = _orig_cwm
+
+# ── 8c. cross-module cutoff: approval_flow ↔ communications совпадают ───────
+section("8c. cutoff cross-module consistency (approval_flow ↔ communications)")
+
+import collector.approval_flow as _af
+
+_orig_comm_h = comm.SEND_WINDOW_CUTOFF_HOUR
+_orig_comm_m = comm.SEND_WINDOW_CUTOFF_MINUTE
+_orig_af_h   = _af.SEND_WINDOW_CUTOFF_HOUR
+_orig_af_m   = _af.SEND_WINDOW_CUTOFF_MINUTE
+
+# Нестандартный cutoff 18:45 — симулируем одинаковое чтение из env обоими модулями
+comm.SEND_WINDOW_CUTOFF_HOUR   = 18
+comm.SEND_WINDOW_CUTOFF_MINUTE = 45
+_af.SEND_WINDOW_CUTOFF_HOUR    = 18
+_af.SEND_WINDOW_CUTOFF_MINUTE  = 45
+try:
+    _tz   = ZoneInfo("Asia/Almaty")
+    _base = datetime(2026, 5, 9, 18, 44, 0, tzinfo=_tz)
+
+    # approval_flow._send_window_cutoff даёт 18:45 для этого дня
+    _af_cutoff = _af._send_window_cutoff(_base)
+    check(
+        "approval_flow._send_window_cutoff с 18:45 → 18:45",
+        _af_cutoff.hour == 18 and _af_cutoff.minute == 45,
+    )
+
+    # is_allowed_time ровно на 18:45 → False (граница закрыта)
+    with patch("collector.communications.datetime") as _dt:
+        _m = MagicMock(); _m.weekday.return_value = 4; _m.hour = 18
+        _m.time.return_value = dt_time(18, 45); _dt.now.return_value = _m
+        check("is_allowed_time: 18:45 with cutoff 18:45 → False", not comm.is_allowed_time())
+
+    # approval_flow >= check: теперь совпадает с is_allowed_time
+    _now_exact  = datetime(2026, 5, 9, 18, 45, 0, tzinfo=_tz)
+    _now_before = datetime(2026, 5, 9, 18, 44, 59, tzinfo=_tz)
+    check("approval_flow >=: now==expires_at → rejected", _now_exact  >= _af_cutoff)
+    check("approval_flow >=: now<expires_at  → allowed",  not (_now_before >= _af_cutoff))
+finally:
+    comm.SEND_WINDOW_CUTOFF_HOUR   = _orig_comm_h
+    comm.SEND_WINDOW_CUTOFF_MINUTE = _orig_comm_m
+    _af.SEND_WINDOW_CUTOFF_HOUR    = _orig_af_h
+    _af.SEND_WINDOW_CUTOFF_MINUTE  = _orig_af_m
+
 
 # ═══════════════════════════════════════════════════════════════
 # 9. collections_engine — daily_summary
@@ -1778,6 +1847,42 @@ finally:
     _af_mod._BATCHES_PATH = _orig_path
     _shutil_t3.rmtree(_tmp_dir10j, ignore_errors=True)
 
+_batch10k = create_batch({"Алена": _batch1_clients})
+_batch10k["status"] = "pending_admin"
+_batch10k["admin_status"] = "approved"
+_tmp_dir10k = _tempfile.mkdtemp()
+_af_mod._BATCHES_PATH = Path(_tmp_dir10k) / "wa_approval_batches.json"
+try:
+    _cutoff_now10k = datetime.now(_af_mod.TZ).replace(second=0, microsecond=0)
+    _batch10k["expires_at"] = _cutoff_now10k.isoformat()
+    save_batch(_batch10k)
+    _mock_dt10k = MagicMock(wraps=datetime)
+    _mock_dt10k.now = MagicMock(return_value=_cutoff_now10k)
+    _mock_dt10k.fromisoformat = datetime.fromisoformat
+    with patch("collector.approval_flow.datetime", _mock_dt10k), \
+         patch("collector.approval_flow._tg_edit", new=AsyncMock()) as _edit10k, \
+         patch("collector.collections_engine.send_approved_batch", new=AsyncMock()) as _send10k:
+        _handled10k = asyncio.run(handle_admin_callback("wa_appr_adm_send|" + _batch10k["batch_id"], 1, 2))
+    _after10k = load_batch(_batch10k["batch_id"])
+    _edit_text10k = str(_edit10k.await_args.args[2]) if _edit10k.await_args else ""
+    check(
+        "APPROVAL T10k: admin send на точной минуте cutoff блокируется как too_late",
+        _handled10k is True
+        and _after10k is not None
+        and _after10k.get("status") == "too_late"
+        and _after10k.get("escalation_reason") == "send_window_missed"
+        and "Окно отправки закрыто" in _edit_text10k,
+        str(_after10k),
+    )
+    check(
+        "APPROVAL T10l: на exact cutoff реальная send_approved_batch не вызывается",
+        _send10k.await_count == 0,
+        str(_send10k.await_count),
+    )
+finally:
+    _af_mod._BATCHES_PATH = _orig_path
+    _shutil_t3.rmtree(_tmp_dir10k, ignore_errors=True)
+
 _engine_src_v2 = (Path(__file__).parent.parent / "collector" / "collections_engine.py").read_text(encoding="utf-8")
 _approval_src_v2 = (Path(__file__).parent.parent / "collector" / "approval_flow.py").read_text(encoding="utf-8")
 check(
@@ -2447,8 +2552,8 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as _td_hold_stats:
     _hold_mgr = {item["manager"]: item for item in _hold_stats.get("managers", [])}
     check("PAYHOLD T3: backlog Саиды считает pending/warn/bypass/closed_today",
           _hold_stats["totals"]["pending_total"] == 3
-          and _hold_stats["totals"]["warn_total"] == 2
-          and _hold_stats["totals"]["bypass_total"] == 1
+          and _hold_stats["totals"]["warn_total"] == 3
+          and _hold_stats["totals"]["bypass_total"] == 2
           and _hold_stats["totals"]["closed_today"] == 2
           and _hold_stats["totals"]["claimed_by_manager_total"] == 1,
           str(_hold_stats["totals"]))
@@ -2456,7 +2561,8 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as _td_hold_stats:
           _hold_mgr["Магира"]["pending_total"] == 1
           and _hold_mgr["Магира"]["bypass_total"] == 1
           and _hold_mgr["Ергали"]["pending_total"] == 2
-          and _hold_mgr["Ергали"]["warn_total"] == 1,
+          and _hold_mgr["Ергали"]["warn_total"] == 2
+          and _hold_mgr["Ергали"]["bypass_total"] == 1,
           str(_hold_mgr))
     _hold_text = _payment_hold.format_saida_hold_stats_text()
     check("PAYHOLD T5: текст backlog Саиды содержит ключевые метрики",
@@ -2712,6 +2818,33 @@ try:
     _admin_id = 123456
     _today = datetime.now(_dstop.TZ).strftime("%Y-%m-%d")
 
+    _intro_path_before = _dstop.SAIDA_INTRO_FILE
+    _dstop.SAIDA_INTRO_FILE = Path(_dstop_tmpdir) / "debt_stop_saida_intro_sent.test.json"
+    try:
+        if _dstop.SAIDA_INTRO_FILE.exists():
+            _dstop.SAIDA_INTRO_FILE.unlink()
+        _fake_dstop_bot.messages.clear()
+        asyncio.run(_dstop._send_saida_intro(_fake_dstop_bot))
+        _intro_text = str(_fake_dstop_bot.messages[-1]["text"]) if _fake_dstop_bot.messages else ""
+        check("DSTOP SAIDA TXT T1: intro-текст Саиды использует текущий warn SLA",
+              f"Отвечай в течение {_dstop.SAIDA_WARN_HOURS}ч" in _intro_text
+              and f"Через {_dstop.SAIDA_WARN_HOURS}ч" in _intro_text,
+              _intro_text)
+        check("DSTOP SAIDA TXT T2: intro-текст Саиды использует текущий bypass SLA",
+              f"Через {_dstop.SAIDA_BYPASS_HOURS}ч молчания" in _intro_text,
+              _intro_text)
+    finally:
+        _dstop.SAIDA_INTRO_FILE = _intro_path_before
+
+    _fake_dstop_bot.messages.clear()
+    _help_result = asyncio.run(_dstop.handle_dstop_callback("dstop_saida_help", _admin_id, _fake_dstop_bot))
+    _help_text = str(_fake_dstop_bot.messages[-1]["text"]) if _fake_dstop_bot.messages else ""
+    check("DSTOP SAIDA TXT T3: help-текст Саиды использует текущие SLA-константы",
+          _help_result is None
+          and f"в течение {_dstop.SAIDA_WARN_HOURS}ч" in _help_text
+          and f"Через {_dstop.SAIDA_BYPASS_HOURS}ч молчания" in _help_text,
+          _help_text)
+
     _dstop.save_state({
         "date": _today,
         "next_id": 2,
@@ -2785,6 +2918,40 @@ try:
     check("DSTOP REMIND T1b: счётчик напоминаний растёт",
           _cand_after_remind.get("manager_remind_count") == 1,
           str(_cand_after_remind))
+
+    _hold_path_before = _payment_hold.PAYMENT_HOLD_PATH
+    _payment_hold.PAYMENT_HOLD_PATH = Path(_dstop_tmpdir) / "saida_payment_holds_stale.json"
+    _stale_now = datetime.now(_dstop.TZ).replace(hour=12, minute=0, second=0, microsecond=0)
+    _payment_hold._save({
+        "stale-hold": {
+            "token": "stale-hold",
+            "status": "pending_saida",
+            "manager": "Магира",
+            "client": "ТОО Неактуальный холд",
+            "debt_str": "120 000,00",
+            "manager_chat_id": 777,
+            "claimed_by_manager": True,
+            "created_at": (_stale_now - timedelta(hours=21)).isoformat(timespec="seconds"),
+            "updated_at": (_stale_now - timedelta(hours=21)).isoformat(timespec="seconds"),
+        }
+    })
+    _fake_dstop_bot.messages.clear()
+    _mock_stale = MagicMock(wraps=datetime)
+    _mock_stale.now = MagicMock(return_value=_stale_now)
+    _mock_stale.fromisoformat = datetime.fromisoformat
+    with patch("bot.debt_stop_control.datetime", _mock_stale), \
+         patch.object(_dstop, "SAIDA_STALE_TTL_HOURS", 12):
+        asyncio.run(_dstop.send_saida_payment_hold_reminders(_fake_dstop_bot))
+    _stale_after = _payment_hold._load().get("stale-hold", {})
+    check("DSTOP SAIDA TTL T1: протухший hold закрывается тихо как expired",
+          _stale_after.get("status") == "expired"
+          and _stale_after.get("expired_reason") == "stale_ttl"
+          and bool(_stale_after.get("expired_at")),
+          str(_stale_after))
+    check("DSTOP SAIDA TTL T2: по протухшему hold не уходят уведомления",
+          len(_fake_dstop_bot.messages) == 0,
+          str(_fake_dstop_bot.messages))
+    _payment_hold.PAYMENT_HOLD_PATH = _hold_path_before
 finally:
     _dstop.STATE_FILE = _orig_dstop_state
     _dstop.REGISTRY_FILE = _orig_dstop_registry

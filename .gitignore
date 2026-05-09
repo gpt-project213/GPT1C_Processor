@@ -43,3 +43,6 @@ config/clients.json
 # local backup files from audit sessions
 *.bak.*
 
+# untracked local artifacts — не для репозитория
+site/
+
