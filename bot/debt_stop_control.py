@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-debt_stop_control.py · v1.0.11 (2026-05-06)
+debt_stop_control.py · v1.0.13 (2026-05-08)
 
 Контроль стоп-листа отгрузки — уведомление Саиды-бухгалтера.
 
@@ -82,8 +82,9 @@ MIN_DEBT = 50_000.0
 STOP_PAID_THRESHOLD = float(os.getenv("STOP_PAID_THRESHOLD", "5000"))
 
 # SLA для подтверждения оплаты Саидой
-SAIDA_WARN_HOURS   = int(os.getenv("SAIDA_WARN_HOURS",   "4"))   # первое предупреждение
-SAIDA_BYPASS_HOURS = int(os.getenv("SAIDA_BYPASS_HOURS", "8"))   # байпас к директору
+SAIDA_WARN_HOURS   = int(os.getenv("SAIDA_WARN_HOURS",   "1"))   # первое предупреждение
+SAIDA_BYPASS_HOURS = int(os.getenv("SAIDA_BYPASS_HOURS", "2"))   # байпас к директору
+SAIDA_STALE_TTL_HOURS = int(os.getenv("SAIDA_STALE_TTL_HOURS", "12"))  # тихо протухает без эскалации
 
 SAIDA_KNOWN_FILE = ROOT / "logs" / "debt_stop_saida_known.json"
 
@@ -1065,11 +1066,13 @@ async def send_saida_final(bot) -> None:
 async def send_saida_payment_hold_reminders(bot) -> None:
     """SLA-контроль pending_saida: предупреждение → байпас директору.
 
-    SAIDA_WARN_HOURS   (дефолт 4ч): Саиде — предупреждение с дедлайном.
-    SAIDA_BYPASS_HOURS (дефолт 8ч): авто-закрытие холда как "нет подтверждения";
-                                     директору  — INFO (без кнопок, решать нечего);
-                                     менеджеру  — итог: клиент остаётся в дебиторке;
-                                     Саиде      — сообщение о последствиях игнора.
+    SAIDA_WARN_HOURS   (дефолт 1ч): Саиде — предупреждение с дедлайном.
+    SAIDA_BYPASS_HOURS (дефолт 2ч): авто-закрытие холда как "нет подтверждения";
+                                      директору  — INFO (без кнопок, решать нечего);
+                                      менеджеру  — итог: клиент остаётся в дебиторке;
+                                      Саиде      — сообщение о последствиях игнора.
+    SAIDA_STALE_TTL_HOURS (дефолт 12ч): если бот добрался до холда слишком поздно,
+                                     запись тихо закрывается как неактуальная без уведомлений.
     """
     from collector.payment_hold import _load, _save  # type: ignore
     now = datetime.now(TZ)
@@ -1103,8 +1106,72 @@ async def send_saida_payment_hold_reminders(bot) -> None:
         debt_str = rec.get("debt_str") or rec.get("debt", "—")
         mgr_chat = rec.get("manager_chat_id")
 
-        # ── Шаг 1: первое предупреждение Саиде ──────────────────────────
-        if age_h >= SAIDA_WARN_HOURS and not rec.get("saida_warned_at"):
+        # Приоритетная цепочка — строго взаимоисключающая:
+        # TTL → bypass → warning → ничего
+        if age_h >= SAIDA_STALE_TTL_HOURS:
+            # Слишком старый — не отражает актуальное состояние 1С.
+            # Закрываем тихо, без уведомлений.
+            rec["status"] = "expired"
+            rec["expired_at"] = now.isoformat()
+            rec["updated_at"] = now.isoformat()
+            rec["expired_reason"] = "stale_ttl"
+            data[token] = rec
+            changed = True
+            LOG.info(
+                "Старый payment hold закрыт без уведомлений: client=%s manager=%s age_h=%.1f ttl_h=%s",
+                client, manager, age_h, SAIDA_STALE_TTL_HOURS,
+            )
+
+        elif age_h >= SAIDA_BYPASS_HOURS and not rec.get("saida_escalated_at"):
+            # Время вышло — авто-закрытие, уведомления директору/менеджеру/Саиде.
+            from collector.payment_hold import confirm_by_saida as _confirm_saida
+            _confirm_saida(token, "none")
+
+            if admin_id:
+                try:
+                    await bot.send_message(
+                        chat_id=admin_id,
+                        text=(
+                            f"ℹ️ Саида не ответила на запрос по <b>{client}</b> за <b>{age_h:.0f} ч</b>.\n"
+                            f"Менеджер: <b>{manager}</b> | Долг: {debt_str}\n\n"
+                            f"Холд закрыт автоматически — клиент остаётся в дебиторке."
+                        ),
+                        parse_mode="HTML",
+                    )
+                except Exception as e:
+                    LOG.warning("send_saida bypass admin error: %s", e)
+
+            if mgr_chat:
+                try:
+                    await bot.send_message(
+                        chat_id=int(mgr_chat),
+                        text=(
+                            f"ℹ️ Саида не ответила на запрос по <b>{client}</b> за {age_h:.0f} ч.\n"
+                            f"Клиент остаётся в дебиторке."
+                        ),
+                        parse_mode="HTML",
+                    )
+                except Exception as e:
+                    LOG.warning("send_saida bypass mgr error: %s", e)
+
+            try:
+                await bot.send_message(
+                    chat_id=SAIDA_CHAT_ID,
+                    text=(
+                        f"🚨 Саида, ты проигнорировала запрос по клиенту <b>{client}</b> — {age_h:.0f} ч без ответа.\n"
+                        f"Холд закрыт автоматически. Все последствия — на тебе."
+                    ),
+                    parse_mode="HTML",
+                )
+            except Exception as e:
+                LOG.warning("send_saida bypass saida msg error: %s", e)
+
+            rec["saida_escalated_at"] = now.isoformat()
+            changed = True
+            LOG.info("Таймаут Саиды по %s (%.0fч) — авто-закрыт как rejected", client, age_h)
+
+        elif age_h >= SAIDA_WARN_HOURS and not rec.get("saida_warned_at"):
+            # Первое предупреждение — только если bypass ещё не наступил.
             remaining = max(0.0, SAIDA_BYPASS_HOURS - age_h)
             from telegram import InlineKeyboardMarkup, InlineKeyboardButton
             kb = InlineKeyboardMarkup([
@@ -1129,56 +1196,7 @@ async def send_saida_payment_hold_reminders(bot) -> None:
             except Exception as e:
                 LOG.warning("send_saida warn error (%s): %s", client, e)
 
-        # ── Шаг 2: таймаут — авто-закрытие как "нет подтверждения" ─────
-        if age_h >= SAIDA_BYPASS_HOURS and not rec.get("saida_escalated_at"):
-            from collector.payment_hold import confirm_by_saida as _confirm_saida
-            _confirm_saida(token, "none")
-
-            # Директору — INFO без кнопок
-            if admin_id:
-                try:
-                    await bot.send_message(
-                        chat_id=admin_id,
-                        text=(
-                            f"ℹ️ Саида не ответила на запрос по <b>{client}</b> за <b>{age_h:.0f} ч</b>.\n"
-                            f"Менеджер: <b>{manager}</b> | Долг: {debt_str}\n\n"
-                            f"Холд закрыт автоматически — клиент остаётся в дебиторке."
-                        ),
-                        parse_mode="HTML",
-                    )
-                except Exception as e:
-                    LOG.warning("send_saida bypass admin error: %s", e)
-
-            # Менеджеру — итог
-            if mgr_chat:
-                try:
-                    await bot.send_message(
-                        chat_id=int(mgr_chat),
-                        text=(
-                            f"ℹ️ Саида не ответила на запрос по <b>{client}</b> за {age_h:.0f} ч.\n"
-                            f"Клиент остаётся в дебиторке."
-                        ),
-                        parse_mode="HTML",
-                    )
-                except Exception as e:
-                    LOG.warning("send_saida bypass mgr error: %s", e)
-
-            # Саиде — последствия
-            try:
-                await bot.send_message(
-                    chat_id=SAIDA_CHAT_ID,
-                    text=(
-                        f"🚨 Саида, ты проигнорировала запрос по клиенту <b>{client}</b> — {age_h:.0f} ч без ответа.\n"
-                        f"Холд закрыт автоматически. Все последствия — на тебе."
-                    ),
-                    parse_mode="HTML",
-                )
-            except Exception as e:
-                LOG.warning("send_saida bypass saida msg error: %s", e)
-
-            rec["saida_escalated_at"] = now.isoformat()
-            changed = True
-            LOG.info("Таймаут Саиды по %s (%.0fч) — авто-закрыт как rejected", client, age_h)
+        # else: age < SAIDA_WARN_HOURS — ничего не делаем
 
     if changed:
         _save(data)
