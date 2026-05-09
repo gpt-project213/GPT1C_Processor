@@ -3387,6 +3387,90 @@ for _p in _PROD_STATE_FILES:
     )
 
 # ═══════════════════════════════════════════════════════════════
+# 23c. approval_flow — batch expiry state-machine
+# ═══════════════════════════════════════════════════════════════
+section("23c. approval_flow: expire_old_batches + get_latest_send_ready_batch")
+
+from collector.approval_flow import (
+    expire_old_batches as _expire_batches,
+    get_latest_send_ready_batch as _get_send_ready,
+)
+from unittest.mock import patch as _patch
+from datetime import timezone as _timezone
+
+_TZ_ALM = ZoneInfo("Asia/Almaty")
+
+
+def _make_batch(bid: str, status: str, expires_offset_hours: float) -> dict:
+    """Вспомогательный: создаёт минимальный батч с заданным смещением expires_at."""
+    from datetime import timedelta
+    now = datetime.now(tz=_TZ_ALM)
+    expires = now + timedelta(hours=expires_offset_hours)
+    return {
+        "batch_id": bid,
+        "status": status,
+        "admin_status": "approved" if status == "admin_approved" else "pending",
+        "expires_at": expires.isoformat(),
+        "created_at": now.isoformat(),
+        "managers": {},
+        "approved_clients": [],
+    }
+
+
+# ── 23c-1. get_latest_send_ready_batch: просроченный admin_approved не возвращается ──
+_expired_batch = _make_batch("TEST-expired-appr", "admin_approved", -1.0)  # час назад
+_fresh_batch   = _make_batch("TEST-fresh-appr",   "admin_approved", +1.0)  # через час
+
+with _patch("collector.approval_flow._load_batches", return_value={"TEST-expired-appr": _expired_batch}):
+    check(
+        "get_latest_send_ready_batch: expired admin_approved → None",
+        _get_send_ready() is None,
+    )
+
+with _patch("collector.approval_flow._load_batches", return_value={"TEST-fresh-appr": _fresh_batch}):
+    check(
+        "get_latest_send_ready_batch: fresh admin_approved → возвращается",
+        _get_send_ready() is not None,
+    )
+
+# ── 23c-2. expire_old_batches: pending_admin → too_late ──────────────────────
+_pa_batch = _make_batch("TEST-pending-admin", "pending_admin", -2.0)  # 2ч назад
+_saved: list = []
+
+def _fake_save(batches):
+    _saved.clear()
+    _saved.append(batches)
+
+with _patch("collector.approval_flow._load_batches", return_value={"TEST-pending-admin": _pa_batch}), \
+     _patch("collector.approval_flow._save_batches", side_effect=_fake_save):
+    _n = _expire_batches()
+    check("expire_old_batches: pending_admin expired → count=1", _n == 1)
+    _result_status = _saved[0]["TEST-pending-admin"]["status"] if _saved else "?"
+    check("expire_old_batches: pending_admin expired → status=too_late", _result_status == "too_late")
+
+# ── 23c-3. expire_old_batches: admin_approved → too_late ─────────────────────
+_aa_batch = _make_batch("TEST-admin-approved", "admin_approved", -1.0)
+_saved2: list = []
+
+with _patch("collector.approval_flow._load_batches", return_value={"TEST-admin-approved": _aa_batch}), \
+     _patch("collector.approval_flow._save_batches", side_effect=lambda b: _saved2.append(b)):
+    _n2 = _expire_batches()
+    check("expire_old_batches: admin_approved expired → count=1", _n2 == 1)
+    _result_status2 = _saved2[0]["TEST-admin-approved"]["status"] if _saved2 else "?"
+    check("expire_old_batches: admin_approved expired → status=too_late", _result_status2 == "too_late")
+
+# ── 23c-4. expire_old_batches: свежий батч не трогается ──────────────────────
+_fresh_pa = _make_batch("TEST-fresh-pa", "pending_admin", +2.0)
+_saved3: list = []
+
+with _patch("collector.approval_flow._load_batches", return_value={"TEST-fresh-pa": _fresh_pa}), \
+     _patch("collector.approval_flow._save_batches", side_effect=lambda b: _saved3.append(b)):
+    _n3 = _expire_batches()
+    check("expire_old_batches: свежий pending_admin → не трогается (count=0)", _n3 == 0)
+    check("expire_old_batches: свежий pending_admin → _save_batches не вызван", len(_saved3) == 0)
+
+
+# ═══════════════════════════════════════════════════════════════
 # 24. ИТОГ
 # ═══════════════════════════════════════════════════════════════
 section("ИТОГ")  # секция 24

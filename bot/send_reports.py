@@ -1747,6 +1747,16 @@ async def cleanup_old_files(context: ContextTypes.DEFAULT_TYPE):
 
 async def log_monitor_task(context: ContextTypes.DEFAULT_TYPE):
     """Every 2 hours: scan new log lines and alert admin on fresh errors."""
+    # Финализируем просроченные батчи — работает в том числе в выходные,
+    # когда debt_collector_daily пропускается.
+    try:
+        from collector.approval_flow import expire_old_batches as _expire_batches
+        _n = _expire_batches()
+        if _n:
+            logger.info("log_monitor_task: финализировано %d просроченных батч(ей)", _n)
+    except Exception as _eb:
+        logger.debug("log_monitor_task: expire_old_batches error: %s", _eb)
+
     state_path = LOGS_DIR / "log_monitor_state.json"
     summary_path = LOGS_DIR / "log_monitor_summary.log"
     try:

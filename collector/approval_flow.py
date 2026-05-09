@@ -161,6 +161,7 @@ def load_latest_batch() -> Optional[Dict[str, Any]]:
         "admin_approved",
         "cancelled",
         "expired",
+        "too_late",
         "sent",
         "partially_sent",
         "send_failed",
@@ -176,10 +177,14 @@ def load_latest_batch() -> Optional[Dict[str, Any]]:
 
 
 def get_latest_send_ready_batch() -> Optional[Dict[str, Any]]:
-    """Возвращает последний батч, уже утверждённый администратором, но ещё не отправленный."""
+    """Возвращает последний батч, уже утверждённый администратором, но ещё не отправленный.
+
+    Батч с истёкшим expires_at не считается готовым — окно отправки пропущено.
+    """
     batches = _load_batches()
     if not batches:
         return None
+    now = datetime.now(tz=TZ)
     for bid in sorted(batches.keys(), reverse=True):
         b = batches[bid]
         if (
@@ -187,6 +192,9 @@ def get_latest_send_ready_batch() -> Optional[Dict[str, Any]]:
             and b.get("admin_status") == "approved"
             and not b.get("send_completed_at")
         ):
+            expires = _parse_batch_dt(b.get("expires_at"))
+            if expires and now >= expires:
+                continue  # окно отправки истекло — не считать send-ready
             return b
     return None
 
@@ -1787,7 +1795,7 @@ async def handle_admin_callback(
         return True
 
     now_iso = datetime.now(tz=TZ).isoformat()
-    if batch.get("status") in ("superseded", "expired", "cancelled", "sent", "partially_sent", "send_failed", "send_empty"):
+    if batch.get("status") in ("superseded", "expired", "too_late", "cancelled", "sent", "partially_sent", "send_failed", "send_empty"):
         await _tg_edit(
             chat_id,
             message_id,
@@ -2762,15 +2770,19 @@ def _load_managers_cfg() -> Dict[str, Any]:
 
 
 def expire_old_batches() -> int:
-    """Помечает просроченные батчи как expired. Возвращает количество."""
+    """Финализирует просроченные батчи. Возвращает количество закрытых.
+
+    pending_admin / admin_approved + expired → too_late (окно отправки пропущено).
+    Остальные незавершённые + expired         → expired (тихий таймаут).
+    """
     batches = _load_batches()
     now = datetime.now(tz=TZ)
     count = 0
     for bid, batch in batches.items():
         if batch.get("status") in (
-            "admin_approved",
             "cancelled",
             "expired",
+            "too_late",
             "sent",
             "partially_sent",
             "send_failed",
@@ -2783,13 +2795,19 @@ def expire_old_batches() -> int:
             if expires.tzinfo is None:
                 expires = expires.replace(tzinfo=TZ)
             if now > expires:
-                batch["status"] = "expired"
-                batch["expired_at"] = now.isoformat()
-                for mgr_state in (batch.get("managers") or {}).values():
-                    if mgr_state.get("status") in ("pending", "manual_editing"):
-                        mgr_state["status"] = "timeout"
+                if batch.get("status") in ("pending_admin", "admin_approved"):
+                    batch["status"] = "too_late"
+                    batch["closed_at"] = now.isoformat()
+                    batch["escalation_reason"] = "send_window_missed"
+                    logger.info("Батч %s помечен как too_late", bid)
+                else:
+                    batch["status"] = "expired"
+                    batch["expired_at"] = now.isoformat()
+                    for mgr_state in (batch.get("managers") or {}).values():
+                        if mgr_state.get("status") in ("pending", "manual_editing"):
+                            mgr_state["status"] = "timeout"
+                    logger.info("Батч %s помечен как expired", bid)
                 count += 1
-                logger.info("Батч %s помечен как expired", bid)
         except (KeyError, ValueError):
             pass
     if count:
