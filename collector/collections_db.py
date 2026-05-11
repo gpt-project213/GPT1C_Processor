@@ -11,6 +11,8 @@ collections/collections_db.py
 Межпроцессная блокировка через portalocker (защита от гонки бот↔subprocess).
 """
 
+# v1.0.3 (2026-05-11): sticky approval state for unchanged no-movement tail debt clients.
+
 import json
 import logging
 from collector.logging_utils import get_collector_logger
@@ -105,6 +107,7 @@ def _empty_record() -> Dict[str, Any]:
         "escalated_to_admin": False,
         "history": [],
         "wa_dialog_suppress": None,
+        "sticky_approval": None,
     }
 
 
@@ -295,6 +298,75 @@ def save_call_result(name: str, call_result: str, transcript: Optional[str]) -> 
 
 
 # Ключ для хранения даты уведомления менеджера об отсутствии контакта
+def get_sticky_approval(name: str) -> Optional[Dict[str, Any]]:
+    """Возвращает активное sticky-решение по клиенту или None."""
+    record = get_client_state(name)
+    sticky = record.get("sticky_approval")
+    return dict(sticky) if isinstance(sticky, dict) else None
+
+
+def set_sticky_approval(
+    name: str,
+    *,
+    batch_id: str,
+    msg_type: str,
+    amount: float,
+    credit: float,
+    debit: float,
+    stop_status: str = "",
+) -> None:
+    """Фиксирует липкое решение: клиента не переспрашивать до платёжного изменения."""
+    with _state_lock():
+        state = load_state()
+        record = state.get(name, _empty_record())
+        record["sticky_approval"] = {
+            "mode": "send",
+            "batch_id": batch_id,
+            "approved_at": datetime.now(tz=TZ).isoformat(),
+            "msg_type": msg_type,
+            "amount": float(amount or 0),
+            "credit": float(credit or 0),
+            "debit": float(debit or 0),
+            "stop_status": str(stop_status or ""),
+        }
+        state[name] = record
+        save_state(state)
+
+
+def clear_sticky_approval(name: str) -> None:
+    """Снимает sticky-решение по клиенту."""
+    with _state_lock():
+        state = load_state()
+        record = state.get(name)
+        if not record or record.get("sticky_approval") is None:
+            return
+        record["sticky_approval"] = None
+        state[name] = record
+        save_state(state)
+
+
+def clear_missing_sticky_approvals(active_client_names: set[str]) -> int:
+    """Очищает sticky-решения у клиентов, которых больше нет в текущей дебиторке."""
+    cleared = 0
+    with _state_lock():
+        state = load_state()
+        changed = False
+        for name, record in state.items():
+            if not isinstance(record, dict):
+                continue
+            if not record.get("sticky_approval"):
+                continue
+            if name in active_client_names:
+                continue
+            record["sticky_approval"] = None
+            state[name] = record
+            changed = True
+            cleared += 1
+        if changed:
+            save_state(state)
+    return cleared
+
+
 _MGR_NOTIFY_PREFIX = "__mgr_notify__"
 
 

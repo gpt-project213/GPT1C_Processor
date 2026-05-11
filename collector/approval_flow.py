@@ -4,7 +4,7 @@
 collector/approval_flow.py
 UX согласования рассылки WhatsApp — менеджер → администратор.
 
-Версия: 1.1.10 (2026-05-11)
+Версия: 1.1.11 (2026-05-11)
 
 v1.1.10 (2026-05-11): forensics: поле close_reason фиксирует причину финальной
   закрытия батча (send_window_missed), а escalation_reason теперь не перезаписывается
@@ -1467,8 +1467,15 @@ def _format_admin_summary_text(batch: Dict[str, Any]) -> str:
         total_paid_doc  += len(paid_doc)
         total_paid_ndoc += len(paid_ndoc)
 
+    sticky_auto = list(batch.get("sticky_auto_clients") or [])
+    if sticky_auto:
+        lines.append(f"\n<b>Автопродление без нового согласования</b> — {len(sticky_auto)}:")
+        for client in sticky_auto:
+            lines.append(f"  • {client.get('name', '—')} ({client.get('manager', '—')})")
+        total_send += len(sticky_auto)
+
     admin_decisions = _build_admin_decisions(batch)
-    admin_selected = sum(1 for v in admin_decisions.values() if v == "keep")
+    admin_selected = sum(1 for v in admin_decisions.values() if v == "keep") + len(sticky_auto)
 
     lines += [
         "",
@@ -1537,6 +1544,18 @@ def _format_admin_detail_text(batch: Dict[str, Any]) -> str:
                 f"     Тип: {type_label} · {c.get('reason', '—')}\n"
                 f"     Тел: <code>{phone}</code>"
             )
+
+    sticky_auto = list(batch.get("sticky_auto_clients") or [])
+    if sticky_auto:
+        lines.append("\n<b>Автопродление без нового согласования</b>")
+        for client in sticky_auto:
+            lines.append(
+                f"  🔁 <b>{client.get('name', '—')}</b>\n"
+                f"     Менеджер: {client.get('manager', '—')} · {_debt_age_text(client)}\n"
+                f"     Долг: {_fmt(client.get('amount', 0))} тг · Тип: {_MSG_TYPE_LABELS.get(client.get('msg_type', ''), client.get('msg_type', '—'))}"
+            )
+            total_all += 1
+            total_ready += 1
 
     lines += [
         "",
@@ -1776,6 +1795,46 @@ async def send_admin_preview_notice(batch: Dict[str, Any], bot=None) -> None:
         )
 
 
+async def send_admin_auto_ready_notice(batch: Dict[str, Any], bot=None) -> None:
+    """Информирует директора о sticky-клиентах, которые готовы к отправке без нового approval."""
+    try:
+        admin_id = int(ADMIN_CHAT_ID)
+    except (ValueError, TypeError):
+        logger.error("send_admin_auto_ready_notice: ADMIN_CHAT_ID не задан или некорректен")
+        return
+
+    clients = list(batch.get("sticky_auto_clients") or [])
+    lines = [
+        "🔁 <b>Повторное согласование не требуется</b>",
+        "",
+        f"Батч: <code>{batch.get('batch_id', '—')}</code>",
+        f"К отправке без нового вопроса менеджерам: <b>{len(clients)}</b>",
+        "",
+        "У этих клиентов с прошлого решения нет новой оплаты, поэтому прошлое разрешение продолжено автоматически.",
+    ]
+    freshness_lines = _freshness_lines(batch)
+    if freshness_lines:
+        lines.extend([""] + freshness_lines)
+    if clients:
+        lines.append("")
+        for client in clients:
+            lines.append(f"  • {client.get('name', '—')} ({client.get('manager', '—')})")
+    lines.extend([
+        "",
+        "Можно сразу запускать отправку кнопкой ниже.",
+    ])
+    text = "\n".join(lines)
+
+    msg_id = await _tg_send(admin_id, text, _admin_send_now_keyboard(batch["batch_id"]))
+    if msg_id:
+        batch["admin_message_id"] = msg_id
+        batch["admin_chat_id"] = admin_id
+        save_batch(batch)
+        logger.info("[%s] Sticky auto-ready notice sent to admin (msg_id=%d)", batch["batch_id"], msg_id)
+    else:
+        logger.error("[%s] Не удалось отправить sticky auto-ready notice админу", batch["batch_id"])
+
+
 # ─── Admin callback handling ──────────────────────────────────────────────────
 
 async def handle_admin_callback(
@@ -1814,7 +1873,7 @@ async def handle_admin_callback(
         logger.info("[%s] admin approve button pressed by chat_id=%s", batch_id, chat_id)
         # Финальное утверждение
         admin_decisions = _build_admin_decisions(batch)
-        approved_clients = []
+        approved_clients = [dict(client) for client in (batch.get("sticky_auto_clients") or [])]
         for client in _iter_admin_clients(batch):
             if admin_decisions.get(client["_admin_key"]) != "keep":
                 continue
@@ -1831,6 +1890,25 @@ async def handle_admin_callback(
         batch["admin_approved_at"] = now_iso
         batch["approved_clients"]  = approved_clients
         save_batch(batch)
+        try:
+            from collector.collections_db import set_sticky_approval as _set_sticky_approval
+            for client in approved_clients:
+                msg_type = str(client.get("msg_type") or "")
+                if msg_type not in {"strict_reminder", "stoplist_reminder", "legacy_tail_reminder", "partial_tail_reminder"}:
+                    continue
+                if float(client.get("amount", 0) or 0) <= 0 or float(client.get("debit", 0) or 0) != 0:
+                    continue
+                _set_sticky_approval(
+                    client.get("name", ""),
+                    batch_id=batch_id,
+                    msg_type=msg_type,
+                    amount=float(client.get("amount", 0) or 0),
+                    credit=float(client.get("credit", 0) or 0),
+                    debit=float(client.get("debit", 0) or 0),
+                    stop_status=str(client.get("stop_status") or ""),
+                )
+        except Exception as _sticky_exc:
+            logger.warning("[%s] sticky_approval save skipped: %s", batch_id, _sticky_exc)
         try:
             from collector.audit_log import audit as _audit
             _audit("batch_approved", batch_id=batch_id, clients=len(approved_clients))

@@ -46,6 +46,11 @@ v1.4.1 (2026-04-22): в run_approval_preview после send_manager_previews
   создании батча сразу, не дожидаясь ответов менеджеров (фикс кейса,
   когда менеджеры игнорируют превью и админ никогда ничего не получает).
 
+v1.5.3 (2026-05-11): sticky approval for unchanged no-movement tail debt clients.
+  Если после прошлого решения нет новой оплаты, клиент не идёт в новый manager preview:
+  прошлое разрешение переносится автоматически, а директор получает ready-to-send список
+  без ежедневного повторного вопроса менеджерам.
+
 CLI:
   python -m collector.collections_engine --dry-run
   python -m collector.collections_engine --preview
@@ -126,15 +131,19 @@ from collector.debt_monitor import (
 from collector.collections_db import (
     _DEBT_DATE_PREFIX,
     already_contacted_today,
+    clear_missing_sticky_approvals,
+    clear_sticky_approval,
     get_client_state,
     get_debt_days_since_first_seen,
     get_pending_promises,
+    get_sticky_approval,
     load_state,
     save_state,
     mark_escalated,
     mark_promise_broken,
     reset_debt_first_seen,
     save_call_result,
+    set_sticky_approval,
     save_promise,
     update_after_contact,
 )
@@ -420,6 +429,72 @@ def _is_legacy_tail_client(client: Dict[str, Any]) -> bool:
     debit = float(client.get("debit", 0) or 0)
     opening = float(client.get("opening", 0) or 0)
     return amount > 0 and opening > 0 and debit == 0 and days >= 20
+
+
+_STICKY_MSG_TYPES = {
+    "strict_reminder",
+    "stoplist_reminder",
+    "legacy_tail_reminder",
+    "partial_tail_reminder",
+}
+
+
+def _sticky_approval_eligible(client: Dict[str, Any], decision: Dict[str, Any]) -> bool:
+    return (
+        decision.get("action") == "client_approval"
+        and float(client.get("amount", 0) or 0) > 0
+        and float(client.get("debit", 0) or 0) == 0
+        and str(decision.get("msg_type") or "") in _STICKY_MSG_TYPES
+    )
+
+
+def _sticky_approval_signature(client: Dict[str, Any], decision: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "msg_type": str(decision.get("msg_type") or ""),
+        "amount": round(float(client.get("amount", 0) or 0), 2),
+        "credit": round(float(client.get("credit", 0) or 0), 2),
+        "debit": round(float(client.get("debit", 0) or 0), 2),
+        "stop_status": str(decision.get("stop_status") or ""),
+    }
+
+
+def _sticky_approval_matches(sticky: Optional[Dict[str, Any]], client: Dict[str, Any], decision: Dict[str, Any]) -> bool:
+    if not isinstance(sticky, dict):
+        return False
+    current = _sticky_approval_signature(client, decision)
+    return all(sticky.get(key) == value for key, value in current.items())
+
+
+def _build_preview_client_payload(
+    client: Dict[str, Any],
+    contact: Optional[Dict[str, Any]],
+    decision: Dict[str, Any],
+    stop_rec: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    phone = ((contact or {}).get("whatsapp") or (contact or {}).get("phone", "")).strip()
+    return {
+        "name":               client["name"],
+        "amount":             client.get("amount", 0),
+        "days":               client.get("days", 0),
+        "level":              int(client.get("level", 0) or 0),
+        "opening":            client.get("opening", 0) or 0,
+        "debit":              client.get("debit", 0) or 0,
+        "credit":             client.get("credit", 0) or 0,
+        "payment_silence_days": client.get("payment_silence_days"),
+        "report_date":        client.get("report_date", ""),
+        "oldest_unpaid_date": client.get("oldest_unpaid_date"),
+        "unpaid_parts":       client.get("unpaid_parts", []),
+        "debt_age_basis":     client.get("debt_age_basis", ""),
+        "debt_age_confidence": client.get("debt_age_confidence", ""),
+        "active_turnover":    client.get("active_turnover", False),
+        "violation_shipment": client.get("violation_shipment", False),
+        "phone":              phone,
+        "language":           (contact or {}).get("language", "ru"),
+        "msg_type":           decision.get("msg_type"),
+        "reason":             decision.get("reason", ""),
+        "stop_status":        decision.get("stop_status", str((stop_rec or {}).get("status") or "")),
+        "review_action":      decision.get("action", "client_approval"),
+    }
 
 
 def _collector_candidate_decision(
@@ -1684,10 +1759,17 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
         contacts = _crm_contacts()
     except Exception:
         contacts = load_contacts()
+    active_client_names = {
+        str(client.get("name") or "").strip()
+        for client in debtors
+        if str(client.get("name") or "").strip() and float(client.get("amount", 0) or 0) > 0
+    }
+    clear_missing_sticky_approvals(active_client_names)
 
     # Preview shortlist: stop-list and debit/credit are not absolute skips here.
     # They become explicit business reasons shown to manager/admin.
     debtors_by_manager: Dict[str, List[Dict]] = {}
+    sticky_auto_clients: List[Dict[str, Any]] = []
     stop_registry = _load_stop_registry_safe()
 
     for client in debtors:
@@ -1764,35 +1846,22 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
             )
             continue
 
-        debtors_by_manager.setdefault(manager_name, []).append({
-            "name":               name,
-            "amount":             client.get("amount", 0),
-            "days":               client.get("days", 0),
-            "level":              level,
-            "opening":            client.get("opening", 0) or 0,
-            "debit":              client.get("debit", 0) or 0,
-            "credit":             client.get("credit", 0) or 0,
-            "payment_silence_days": client.get("payment_silence_days"),
-            "report_date":        client.get("report_date", ""),
-            "oldest_unpaid_date": client.get("oldest_unpaid_date"),
-            "unpaid_parts":       client.get("unpaid_parts", []),
-            "debt_age_basis":     client.get("debt_age_basis", ""),
-            "debt_age_confidence": client.get("debt_age_confidence", ""),
-            "active_turnover":    client.get("active_turnover", False),
-            "violation_shipment": client.get("violation_shipment", False),
-            "phone":              _phone,
-            "language":           (contact or {}).get("language", "ru"),
-            "msg_type":           decision.get("msg_type"),
-            "reason":             decision.get("reason", ""),
-            "stop_status":        decision.get("stop_status", str((stop_rec or {}).get("status") or "")),
-            "review_action":      decision.get("action", "client_approval"),
-        })
+        payload = _build_preview_client_payload(client, contact, decision, stop_rec)
+        sticky = get_sticky_approval(name)
+        if _sticky_approval_eligible(client, decision) and _sticky_approval_matches(sticky, client, decision):
+            sticky_auto_clients.append({**payload, "manager": manager_name})
+            logger.info("run_approval_preview: [%s] sticky approval reused", name)
+            continue
+        if sticky and not _sticky_approval_matches(sticky, client, decision):
+            clear_sticky_approval(name)
 
-    if not debtors_by_manager:
+        debtors_by_manager.setdefault(manager_name, []).append(payload)
+
+    if not debtors_by_manager and not sticky_auto_clients:
         logger.info("run_approval_preview: кандидатов нет — батч не создан")
         return None
 
-    total = sum(len(v) for v in debtors_by_manager.values())
+    total = sum(len(v) for v in debtors_by_manager.values()) + len(sticky_auto_clients)
     logger.info(
         "run_approval_preview: создаём батч — %d менеджеров, %d клиентов",
         len(debtors_by_manager), total,
@@ -1800,6 +1869,7 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
 
     active_batch = load_latest_batch()
     batch = create_batch(debtors_by_manager)
+    batch["sticky_auto_clients"] = sticky_auto_clients
     batch["debt_snapshot"] = _summarize_debt_freshness(
         debt_data,
         list(debtors_by_manager.keys()),
@@ -1823,24 +1893,38 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
             "⚠️ Этот список закрыт как неактуальный.\n\n"
             "По свежей дебиторке уже сформирован новый актуальный запрос.",
         )
+    if sticky_auto_clients and not debtors_by_manager:
+        batch["status"] = "admin_approved"
+        batch["admin_status"] = "approved"
+        batch["admin_approved_at"] = datetime.now(tz=TZ).isoformat()
+        batch["approved_clients"] = [dict(client) for client in sticky_auto_clients]
     save_batch(batch)
-    await send_manager_previews(batch)
+    if debtors_by_manager:
+        await send_manager_previews(batch)
 
     # v1.4.1: уведомляем админа о создании батча СРАЗУ, не дожидаясь
     # ответов менеджеров. Полноценная сводка с кнопками утверждения
     # придёт позже из send_admin_summary, когда все менеджеры нажмут кнопки.
-    try:
-        await send_admin_preview_notice(batch)
-    except Exception as e:
-        logger.error("send_admin_preview_notice failed: %s", e)
+    if sticky_auto_clients and not debtors_by_manager:
+        try:
+            from collector.approval_flow import send_admin_auto_ready_notice
+            await send_admin_auto_ready_notice(batch)
+        except Exception as e:
+            logger.error("send_admin_auto_ready_notice failed: %s", e)
+    else:
+        try:
+            await send_admin_preview_notice(batch)
+        except Exception as e:
+            logger.error("send_admin_preview_notice failed: %s", e)
 
     # Немедленная проверка узкого окна: если до cutoff < 1 ч — не ждём
     # следующего цикла collector_reminders (каждые 30 мин), эскалируем сразу.
-    try:
-        from collector.approval_flow import promote_silent_batches_to_admin
-        await promote_silent_batches_to_admin()
-    except Exception as e:
-        logger.error("promote_silent_batches_to_admin (immediate check) failed: %s", e)
+    if debtors_by_manager:
+        try:
+            from collector.approval_flow import promote_silent_batches_to_admin
+            await promote_silent_batches_to_admin()
+        except Exception as e:
+            logger.error("promote_silent_batches_to_admin (immediate check) failed: %s", e)
 
     logger.info("run_approval_preview: батч %s создан и отправлен менеджерам", batch["batch_id"])
     return batch["batch_id"]
