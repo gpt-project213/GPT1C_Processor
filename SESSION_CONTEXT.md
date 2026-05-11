@@ -2415,3 +2415,75 @@ These were treated as auxiliary/external memory or archive, not as active source
 - untracked `audit/*`
 - local backups `config/clients.json.bak-*`
 - untracked `site/`
+
+---
+
+## HANDOFF 2026-05-11 — soft_positive fix, стоп-лист, штрафные баллы
+
+**Тесты: 491/491. HEAD: 6afb3d9 (pushed)**
+
+### Коммиты сессии
+f526c5f fix(approval): escalation_reason через setdefault + close_reason
+6b2f309 test(approval): покрытие close_reason / escalation_reason
+cb1e21f test(approval): T10m — prior escalation_reason при admin send too_late
+cba6fdf fix(dialog): soft_positive не эскалирует на чистом приветствии
+b18d765 feat(dialog): исламские и казахские приветствия в _PURE_GREETINGS
+83bfca4 feat(dialog): саламатсызбе/саламатсыз ба
+a424813 style(dialog): выровнены отступы в _PURE_GREETINGS
+eabb62d fix(collector): harden soft-positive routing
+dd6ec49 fix(stop-list): нормализация имён + новая цепочка Саида→Админ
+b7d0dbe feat(penalty): штрафные баллы — новый модуль
+f26d6a6 fix(penalty): 2-й пропуск = 2 000 тг
+b0815c1 fix(penalty): предупреждение показывает 2 000 тг
+b9de9e4 fix: форматирование _n(), guard игнорирует suggested_reply, тесты
+6afb3d9 chore(penalty): версия v1.0.2, changelog
+
+### Ключевые изменения
+
+approval_flow.py v1.1.10 — close_reason + escalation_reason через setdefault
+
+client_dialog.py v1.1.5
+- _normalize_text исправлен ("".join вместо " ".join)
+- _is_greeting_only() + _PURE_GREETINGS (25+ вариантов: рус/каз/ислам)
+- _is_acknowledgement_only() подключена к soft_positive-ветке
+- Guard ИГНОРИРУЕТ suggested_reply от AI — safe-текст всегда имеет приоритет
+- E2E тесты с непустым suggested_reply проверяют что guard блокирует AI-ответ
+
+collection_agent.py v1.1.1 — промпт: soft_positive требует платёжное слово
+
+debt_stop_control.py v1.0.15
+- Нормализация имён в _build_candidates() — нечёткое совпадение
+- STOP_PAID_THRESHOLD: 5000 → 100 тг
+- Цепочка: debt<=100 → Саида → Админ (3 кнопки) → уведомление менеджеру
+
+approval_penalty.py v1.0.2 (новый модуль)
+- Формула: 1й=0, 2й=2000, N>=3: N*1000*2, частичный -10%
+- Немедленное уведомление менеджеру после каждого пропуска
+- check_recent_batches() каждые 30 мин, отчёт в последний день месяца 23:00
+- Форматирование через _n(): "2 000", не "2,000"
+
+### Дословные тексты уведомлений
+
+Штрафы → менеджеру (1-й пропуск):
+  ⚠️ Предупреждение
+  Вы не ответили в окне согласования рассылки 11.05.2026.
+  Это первый пропуск в этом месяце — штраф не начисляется.
+  ⚠️ Следующий пропуск: 2 000 тг
+
+Штрафы → менеджеру (2-й пропуск):
+  🔴 Штраф: 2 000 тг
+  Пропущено окно согласования рассылки 11.05.2026.
+  Пропусков за месяц: 2 | Итого: 2 000 тг
+
+Штрафы → Саиде+Вам (конец месяца): таблица по всем менеджерам + ИТОГО
+Штрафы → менеджеру (конец месяца): только его строка + "учтёт при расчёте зарплаты"
+
+Стоп-лист → Саиде: "💰 [Клиент] долг<=100 тг. Подтверди оплату? [✅/❌]"
+Стоп-лист → Админу: 3 кнопки — Снять / Предоплата 100% / Чёрный список
+Стоп-лист → менеджеру: уведомление о решении Админа (все три ветки)
+
+### Следующие шаги
+
+1. Проверить в бою (12.05, следующий рабочий день)
+2. collections_engine.py: фильтр стоп-клиентов без движений в WA-батче
+3. Тест для _handle_saida_zeropay_confirm/deny
