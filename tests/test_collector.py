@@ -1153,7 +1153,8 @@ try:
         message_text="Напоминание по задолженности.",
     ))
     with patch("collector.collection_agent._call_deepseek") as mock_soft_greeting:
-        mock_soft_greeting.return_value = '{"intent":"soft_positive","promise_date":null,"promise_amount":null,"requires_human":false,"suggested_reply":""}'
+        # suggested_reply намеренно НЕ пустой — guard должен его игнорировать
+        mock_soft_greeting.return_value = '{"intent":"soft_positive","promise_date":null,"promise_amount":null,"requires_human":false,"suggested_reply":"Тогда ждём ближайшую оплату. Пришлите чек."}'
         with patch("collector.client_dialog._reply_to_client") as mock_soft_greeting_reply:
             mock_soft_greeting_reply.return_value = None
             with patch("collector.client_dialog.escalate_to_manager") as mock_soft_greeting_escalate:
@@ -1183,7 +1184,8 @@ try:
         message_text="Напоминание по задолженности.",
     ))
     with patch("collector.collection_agent._call_deepseek") as mock_soft_ack:
-        mock_soft_ack.return_value = '{"intent":"soft_positive","promise_date":null,"promise_amount":null,"requires_human":false,"suggested_reply":""}'
+        # suggested_reply намеренно НЕ пустой — guard должен его игнорировать
+        mock_soft_ack.return_value = '{"intent":"soft_positive","promise_date":null,"promise_amount":null,"requires_human":false,"suggested_reply":"Тогда ждём ближайшую оплату. Пришлите чек."}'
         with patch("collector.client_dialog._reply_to_client") as mock_soft_ack_reply:
             mock_soft_ack_reply.return_value = None
             with patch("collector.client_dialog.escalate_to_manager") as mock_soft_ack_escalate:
@@ -3746,6 +3748,28 @@ _sample_ignores = [
     {"penalty": 6_000},
 ]
 check("cumulative: 0+2000+6000 = 8 000",               _cumulative_penalty(_sample_ignores) == 8_000)
+
+# текст предупреждения: пробел как разделитель, сумма 2 000 тг
+import asyncio as _asyncio_pen
+from unittest.mock import AsyncMock as _AsyncMock_pen
+
+_pen_bot = _AsyncMock_pen()
+_pen_bot.send_message = _AsyncMock_pen()
+from collector.approval_penalty import _notify_manager as _pen_notify
+_asyncio_pen.run(_pen_notify("Тест", 123, 1, 0, 0, "11.05.2026", False, _pen_bot))
+_pen_call_text = str(_pen_bot.send_message.call_args)
+check("penalty warning: содержит '2 000 тг' (пробел, не запятая)",
+      "2 000 тг" in _pen_call_text and "2,000" not in _pen_call_text,
+      _pen_call_text[:200])
+
+# текст штрафа: пробел как разделитель
+_pen_bot2 = _AsyncMock_pen()
+_pen_bot2.send_message = _AsyncMock_pen()
+_asyncio_pen.run(_pen_notify("Тест", 123, 2, 2000, 2000, "11.05.2026", False, _pen_bot2))
+_pen_call_text2 = str(_pen_bot2.send_message.call_args)
+check("penalty штраф: содержит '2 000 тг' (пробел, не запятая)",
+      "2 000 тг" in _pen_call_text2 and "2,000" not in _pen_call_text2,
+      _pen_call_text2[:200])
 
 # ═══════════════════════════════════════════════════════════════
 # 25. ИТОГ

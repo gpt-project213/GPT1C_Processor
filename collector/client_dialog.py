@@ -1046,19 +1046,16 @@ async def handle_incoming(phone: str, text: str, attachment: Optional[Dict[str, 
         return
 
     if intent == "soft_positive":
-        # Чистое приветствие без платёжного сигнала — уточняем, не делаем вывода.
+        # Чистое приветствие — guard имеет приоритет над suggested_reply от AI:
+        # AI мог вернуть ответ в стиле "ждём оплату" даже на "Здравствуйте".
         if _is_greeting_only(text):
-            reply = suggested_reply if suggested_reply else (
-                "Спасибо за ответ. Подскажите, пожалуйста, когда планируете ближайший платёж?"
-            )
+            reply = "Спасибо за ответ. Подскажите, пожалуйста, когда планируете ближайший платёж?"
             dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
             _set_client_dialog(phone_clean, dialog)
             await _reply_to_client(phone_clean, reply)
             return
         if _is_acknowledgement_only(text):
-            reply = suggested_reply if suggested_reply else (
-                "Спасибо, понял. Подскажите, пожалуйста, когда планируете ближайший платёж?"
-            )
+            reply = "Спасибо, понял. Подскажите, пожалуйста, когда планируете ближайший платёж?"
             dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
             _set_client_dialog(phone_clean, dialog)
             await _reply_to_client(phone_clean, reply)

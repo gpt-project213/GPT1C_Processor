@@ -8,8 +8,8 @@ v1.0.0 (2026-05-11)
 
 Правила:
   - 1-й пропуск в месяце:          предупреждение, штраф 0 тг
-  - 2-й пропуск:                   1 000 тг
-  - N-й пропуск (N ≥ 3):           1 000 × N × 2 тг
+  - 2-й пропуск:                   2 000 тг
+  - N-й пропуск (N ≥ 3):           N × 1 000 × 2 тг
   - Частичный пропуск (-10%):      менеджер начал отвечать, но не завершил
 
 Период: календарный месяц (1–последний день).
@@ -133,6 +133,7 @@ async def _notify_manager(
     if not chat_id:
         return
     partial_note = " (частичный ответ, −10%)" if partial else ""
+    _n = lambda v: f"{v:,}".replace(",", " ")
 
     if ignore_num == 1:
         next_penalty = _penalty_amount(2)
@@ -140,14 +141,14 @@ async def _notify_manager(
             f"⚠️ <b>Предупреждение</b>\n\n"
             f"Вы не ответили в окне согласования рассылки {batch_date}.\n"
             f"Это первый пропуск в этом месяце — штраф не начисляется.\n\n"
-            f"⚠️ Следующий пропуск: <b>{next_penalty:,} тг</b>"
+            f"⚠️ Следующий пропуск: <b>{_n(next_penalty)} тг</b>"
         )
     else:
         text = (
-            f"🔴 <b>Штраф: {penalty:,} тг</b>{partial_note}\n\n"
+            f"🔴 <b>Штраф: {_n(penalty)} тг</b>{partial_note}\n\n"
             f"Пропущено окно согласования рассылки {batch_date}.\n"
             f"Пропусков за месяц: <b>{ignore_num}</b>\n"
-            f"Итого штрафов за месяц: <b>{cumulative:,} тг</b>"
+            f"Итого штрафов за месяц: <b>{_n(cumulative)} тг</b>"
         )
     try:
         await bot.send_message(chat_id=chat_id, text=text, parse_mode="HTML")
