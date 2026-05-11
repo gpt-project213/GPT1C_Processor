@@ -1,7 +1,43 @@
 # SESSION CONTEXT — АРХИВ
 
-> **ВНИМАНИЕ:** Этот файл содержит исторические сессии (2026-04-09, 2026-04-13, 2026-04-14, 2026-04-29, 2026-04-30, 2026-05-06).
+> **ВНИМАНИЕ:** Этот файл содержит исторические сессии (2026-04-09, 2026-04-13, 2026-04-14, 2026-04-29, 2026-04-30, 2026-05-06, 2026-05-09, 2026-05-11).
 > Многие "OPEN" пункты уже закрыты коммитами. **Актуальный статус → `gpt1c.md`.**
+
+---
+
+## HANDOFF 2026-05-11 — forensic батчей, soft_positive, стоп-лист, штрафы, CRM-префикс
+
+### Что сделано (master, коммиты cba6fdf…d66560a)
+
+**Тесты: 491/491.**
+
+| Коммит | Что |
+|--------|-----|
+| `cba6fdf` | `close_reason` + `setdefault(escalation_reason)` в `approval_flow.py` — forensic observability |
+| `eabb62d` | `_normalize_text` fix (`"".join` не `" ".join`); `_is_greeting_only` без дубля; `_PURE_GREETINGS` 25+ вариантов |
+| `...` | soft_positive: guard ветки игнорируют `suggested_reply`, используют hardcoded safe text |
+| `...` | `client_dialog.py` v1.1.5: `_is_acknowledgement_only` подключена в soft_positive ветку |
+| `...` | `collection_agent.py` v1.1.1: AI-промпт требует платёжное слово для `soft_positive` |
+| `...` | `debt_stop_control.py` v1.0.15: `STOP_PAID_THRESHOLD`=100 тг; нормализация имён; Саида→Админ цепочка |
+| `...` | `approval_penalty.py` v1.0.2: новый модуль штрафов за пропуск окна согласования |
+| `...` | `send_reports.py`: 2 новые APScheduler джобы (penalty_check 30мин, penalty_monthly 23:00) |
+| `a6d0b52` | тесты 441→491: greeting/ack/E2E/penalty формула/числа |
+| `d66560a` | `send_reports.py`: CRM-префикс (А/Е/М/О+пробел) → skip clarify_name, auto-assign unowned |
+
+### Ключевые решения
+
+- `close_reason` фиксирует финальное закрытие; `escalation_reason` — исходную причину (setdefault)
+- Threshold стопа: 5000 → 100 тг; Саида подтверждает ПЕРЕД admin-меню
+- Формула штрафов: 1й=0, 2й=2000, N≥3: N×1000×2, частичный -10%
+- CRM: клиент «А ТД Сарыарка» → менеджер Алена, сразу запрос телефона без «чей клиент?»
+- Исключения CRM-префикса: «Без клиента», «Недостача», содержит «зп»/«ЗП»
+
+### Что осталось открытым
+
+- Тесты для `_handle_saida_zeropay_confirm/deny` (новая stop-list цепочка)
+- CRM ignore → штрафная интеграция (`check_crm_ignores()` в `approval_penalty.py`)
+- Проверить фильтр `no_movement` в `collections_engine.py` (стоп-клиенты без движений)
+- Проверить в бою: penalty_check, новый стоп-маршрут, CRM-префикс
 
 ---
 
