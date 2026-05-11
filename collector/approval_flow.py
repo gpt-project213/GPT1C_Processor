@@ -4,7 +4,13 @@
 collector/approval_flow.py
 UX согласования рассылки WhatsApp — менеджер → администратор.
 
-Версия: 1.1.9 (2026-05-07)
+Версия: 1.1.10 (2026-05-11)
+
+v1.1.10 (2026-05-11): forensics: поле close_reason фиксирует причину финальной
+  закрытия батча (send_window_missed), а escalation_reason теперь не перезаписывается
+  при финализации — сохраняется исходная причина эскалации (tight_send_window,
+  manager_silence_timeout). Это позволяет при разборе инцидентов видеть обе точки:
+  когда и почему батч ушёл к администратору, и когда окно закрылось окончательно.
 
 v1.1.9 (2026-05-07): send-кнопка администратора теперь уважает expires_at
   у уже approved batch. После дедлайна callback больше не делает ложный
@@ -1894,7 +1900,8 @@ async def handle_admin_callback(
         if expires_at and datetime.now(tz=TZ) >= expires_at:
             batch["status"] = "too_late"
             batch["closed_at"] = datetime.now(tz=TZ).isoformat()
-            batch["escalation_reason"] = "send_window_missed"
+            batch["close_reason"] = "send_window_missed"
+            batch.setdefault("escalation_reason", "send_window_missed")
             save_batch(batch)
             logger.info(
                 "[%s] send rejected: batch expired at %s",
@@ -2798,7 +2805,8 @@ def expire_old_batches() -> int:
                 if batch.get("status") in ("pending_admin", "admin_approved"):
                     batch["status"] = "too_late"
                     batch["closed_at"] = now.isoformat()
-                    batch["escalation_reason"] = "send_window_missed"
+                    batch["close_reason"] = "send_window_missed"
+                    batch.setdefault("escalation_reason", "send_window_missed")
                     logger.info("Батч %s помечен как too_late", bid)
                 else:
                     batch["status"] = "expired"
@@ -2869,7 +2877,8 @@ async def promote_silent_batches_to_admin(bot=None) -> int:
                     mgr_state["status"] = "timeout"
             batch["status"] = "too_late"
             batch["closed_at"] = now.isoformat()
-            batch["escalation_reason"] = "send_window_missed"
+            batch["close_reason"] = "send_window_missed"
+            batch.setdefault("escalation_reason", "send_window_missed")
             too_late_ids.append(bid)
             logger.info("[%s] батч закрыт: окно отправки %d:%02d пропущено", bid, SEND_WINDOW_CUTOFF_HOUR, SEND_WINDOW_CUTOFF_MINUTE)
             continue
