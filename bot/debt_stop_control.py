@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-debt_stop_control.py · v1.0.14 (2026-05-09)
+debt_stop_control.py · v1.0.15 (2026-05-11)
 
 Контроль стоп-листа отгрузки — уведомление Саиды-бухгалтера.
 
@@ -79,7 +79,7 @@ AUTO_STOP_MIN = 15   # 15+ дней: авто-стоп даже для одоб�
 
 # Минимальная сумма долга — игнорировать мелочь
 MIN_DEBT = 50_000.0
-STOP_PAID_THRESHOLD = float(os.getenv("STOP_PAID_THRESHOLD", "5000"))
+STOP_PAID_THRESHOLD = float(os.getenv("STOP_PAID_THRESHOLD", "100"))
 
 # SLA для подтверждения оплаты Саидой
 SAIDA_WARN_HOURS   = int(os.getenv("SAIDA_WARN_HOURS",   "1"))   # первое предупреждение
@@ -457,10 +457,10 @@ async def monitor_exceptions(bot) -> None:
             if not current:
                 continue
             if current["debt"] <= STOP_PAID_THRESHOLD:
-                rec["status"] = "pending_clearance_mgr"
+                rec["status"] = "pending_clearance_saida"
                 paid_in_full_today.append(client_name)
-                LOG.info("Оплата обнаружена: %s → уведомление менеджеру", client_name)
-                await _notify_manager_clearance_proposal(client_name, rec, bot)
+                LOG.info("Оплата обнаружена: %s → запрос подтверждения Саиде", client_name)
+                await _request_saida_zero_balance_confirmation(client_name, rec, bot)
 
     save_registry(registry)
 
@@ -495,11 +495,13 @@ def _build_candidates() -> Dict[str, Any]:
         if rec.get("status") in (
             "exception", "auto_stopped", "stopped", "conditional",
             "allow_after_payment", "block_until_payment",
-            "pending_clearance", "pending_clearance_mgr", "pending_clearance_admin",
+            "pending_clearance", "pending_clearance_saida", "pending_clearance_mgr", "pending_clearance_admin",
             "awaiting_clearance_limit", "awaiting_mgr_limit_input", "awaiting_admin_limit_override",
             "prepayment_only", "blacklisted", "cleared_limited",
         )
     }
+    # Нормализованный вариант для нечёткого совпадения (пробелы, регистр)
+    already_controlled_norm = {" ".join(n.lower().split()) for n in already_controlled}
 
     # Нарушители дисциплины (были авто-остановлены ранее, но уже cleared)
     discipline_violators = {
@@ -529,7 +531,7 @@ def _build_candidates() -> Dict[str, Any]:
             if name in weekly:
                 LOG.debug("Исключён (еженедельный): %s", name)
                 continue
-            if name in already_controlled:
+            if name in already_controlled or " ".join(name.lower().split()) in already_controlled_norm:
                 LOG.debug("Уже в реестре: %s", name)
                 continue
 
@@ -1295,7 +1297,16 @@ async def handle_dstop_callback(data: str, chat_id: int, bot) -> Optional[str]:
         cid = data.split("|", 1)[1]
         return await _handle_admin_allow_after_saida(cid, chat_id, bot)
 
-    # ── Новая цепочка: менеджер предлагает → руководитель утверждает ──
+    # ── Саида подтверждает нулевой остаток (новая цепочка) ──
+    if data.startswith("dstop_saida_zeropay_confirm|"):
+        key = data.split("|", 1)[1]
+        return await _handle_saida_zeropay_confirm(key, chat_id, bot)
+
+    if data.startswith("dstop_saida_zeropay_deny|"):
+        key = data.split("|", 1)[1]
+        return await _handle_saida_zeropay_deny(key, chat_id, bot)
+
+    # ── Старая цепочка: менеджер предлагает → руководитель утверждает ──
     if (
         data.startswith("dstop_mgr_cl_clear|")
         or data.startswith("dstop_mgr_cl_prepay|")
@@ -2297,7 +2308,108 @@ async def _handle_admin_allow_after_saida(cid: str, chat_id: int, bot) -> str:
 
 
 # ══════════════════════════════════════════════════════════════════════
-# Новая цепочка снятия стопа: менеджер → руководитель → финал
+# Цепочка снятия стопа при полной оплате: Саида → Админ → финал
+# ══════════════════════════════════════════════════════════════════════
+
+async def _request_saida_zero_balance_confirmation(
+    client_name: str, rec: Dict[str, Any], bot
+) -> None:
+    """Запрашивает у Саиды подтверждение нулевого остатка перед решением админа."""
+    if not SAIDA_CHAT_ID:
+        await _send_admin_direct_clearance_menu(client_name, rec, bot)
+        return
+    key = client_name[:26]
+    current = _get_client_current_state(client_name)
+    debt_line = f"Остаток в 1С: <b>{_fmt(current['debt'])}</b>" if current else ""
+    manager = rec.get("manager", "?")
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Да, оплата прошла", callback_data=f"dstop_saida_zeropay_confirm|{key}")],
+        [InlineKeyboardButton("❌ Оплаты не вижу",   callback_data=f"dstop_saida_zeropay_deny|{key}")],
+    ])
+    msg = (
+        f"💰 <b>{client_name}</b> — долг в системе ≤ 100 тг.\n"
+        f"{debt_line}\n"
+        f"Менеджер: <b>{manager}</b>\n\n"
+        f"Подтверди, пожалуйста: оплата прошла?"
+    )
+    try:
+        await bot.send_message(chat_id=SAIDA_CHAT_ID, text=msg,
+                               parse_mode="HTML", reply_markup=kb)
+    except Exception as e:
+        LOG.warning("Ошибка запроса Саиде по нулевому остатку %s: %s", client_name, e)
+        await _send_admin_direct_clearance_menu(client_name, rec, bot)
+
+
+async def _send_admin_direct_clearance_menu(
+    client_name: str, rec: Dict[str, Any], bot
+) -> None:
+    """Отправляет админу меню из 3 кнопок для решения по снятию стопа."""
+    admin_id = _get_admin_chat_id()
+    if not admin_id:
+        return
+    current = _get_client_current_state(client_name)
+    debt_line = f"Остаток: <b>{_fmt(current['debt'])}</b>\n" if current else ""
+    manager = rec.get("manager", "?")
+    key = client_name[:26]
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Снять со стопа",         callback_data=f"dstop_adm_cl_clear|{key}")],
+        [InlineKeyboardButton("⚠️ Только предоплата 100%", callback_data=f"dstop_adm_cl_prepay|{key}")],
+        [InlineKeyboardButton("🚫 Чёрный список",          callback_data=f"dstop_adm_cl_blacklist|{key}")],
+    ])
+    msg = (
+        f"💰 <b>{client_name}</b> — клиент рассчитался.\n"
+        f"{debt_line}"
+        f"Менеджер: <b>{manager}</b>\n\n"
+        f"Саида подтвердила оплату. Выберите решение:"
+    )
+    try:
+        await bot.send_message(chat_id=admin_id, text=msg,
+                               parse_mode="HTML", reply_markup=kb)
+    except Exception as e:
+        LOG.warning("Ошибка отправки меню снятия стопа админу %s: %s", client_name, e)
+
+
+async def _handle_saida_zeropay_confirm(client_key: str, chat_id: int, bot) -> str:
+    """Саида подтвердила оплату → отправляем меню решения админу."""
+    if int(chat_id) != int(SAIDA_CHAT_ID or 0):
+        return "⛔ Только для бухгалтера."
+    registry = load_registry()
+    matched_key = next(
+        (n for n in registry if n[:26] == client_key[:26] or n.startswith(client_key)), None
+    )
+    if not matched_key:
+        return "❓ Клиент не найден."
+    rec = registry[matched_key]
+    if rec.get("status") != "pending_clearance_saida":
+        return "ℹ️ Статус уже изменён."
+    rec["status"] = "pending_clearance_admin"
+    save_registry(registry)
+    await _send_admin_direct_clearance_menu(matched_key, rec, bot)
+    return f"✅ Подтверждено. Руководитель получил запрос по <b>{matched_key}</b>."
+
+
+async def _handle_saida_zeropay_deny(client_key: str, chat_id: int, bot) -> str:
+    """Саида не видит оплату — клиент остаётся на стопе."""
+    if int(chat_id) != int(SAIDA_CHAT_ID or 0):
+        return "⛔ Только для бухгалтера."
+    registry = load_registry()
+    matched_key = next(
+        (n for n in registry if n[:26] == client_key[:26] or n.startswith(client_key)), None
+    )
+    if not matched_key:
+        return "❓ Клиент не найден."
+    rec = registry[matched_key]
+    if rec.get("status") != "pending_clearance_saida":
+        return "ℹ️ Статус уже изменён."
+    rec["status"] = "stopped"
+    save_registry(registry)
+    LOG.info("Саида не подтвердила оплату %s — клиент остаётся на стопе", matched_key)
+    return f"❌ Оплата не подтверждена. <b>{matched_key}</b> остаётся на стопе."
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Старая цепочка снятия стопа: менеджер → руководитель → финал
+# (сохраняется для обратной совместимости с уже открытыми запросами)
 # ══════════════════════════════════════════════════════════════════════
 
 async def _notify_manager_clearance_proposal(
