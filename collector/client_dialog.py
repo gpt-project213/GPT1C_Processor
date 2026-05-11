@@ -4,7 +4,13 @@
 collector/client_dialog.py
 Управление диалогами с должниками через WhatsApp.
 
-Версия: 1.1.1 (2026-04-29)
+Версия: 1.1.2 (2026-05-11)
+
+v1.1.2 (2026-05-11): soft_positive-ветка защищена от преждевременного
+  вывода о готовности платить: чистые приветствия (Здравствуйте, Добрый день
+  и пр.) теперь получают уточняющий вопрос вместо «ждём оплату».
+  Добавлен _is_greeting_only(); _PURE_GREETINGS содержит русские и казахские
+  варианты.
 
 v1.1.0 (2026-04-29): paid_claim переведён в отдельное состояние
   awaiting_payment_proof; claim об оплате и вложенные чеки/скрины теперь
@@ -392,6 +398,20 @@ def _is_brief_reply(text: str, *, max_words: int = 2, max_chars: int = 18) -> bo
     if not raw:
         return False
     return len(raw) <= max_chars and len(raw.split()) <= max_words
+
+
+_PURE_GREETINGS: frozenset[str] = frozenset({
+    "здравствуйте", "здравствуй",
+    "добрый день", "добрый вечер", "добрый",
+    "доброе утро",
+    "привет",
+    "сәлем", "salem", "салем",
+})
+
+
+def _is_greeting_only(text: str) -> bool:
+    """True если текст — чистое приветствие без платёжного сигнала."""
+    return str(text or "").strip().lower().rstrip("!.,") in _PURE_GREETINGS
 
 
 def _attachment_note_lines(attachment: Optional[Dict[str, Any]]) -> List[str]:
@@ -999,6 +1019,15 @@ async def handle_incoming(phone: str, text: str, attachment: Optional[Dict[str, 
         return
 
     if intent == "soft_positive":
+        # Чистое приветствие без платёжного сигнала — уточняем, не делаем вывода.
+        if _is_greeting_only(text):
+            reply = suggested_reply if suggested_reply else (
+                "Спасибо за ответ. Подскажите, пожалуйста, когда планируете ближайший платёж?"
+            )
+            dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
+            _set_client_dialog(phone_clean, dialog)
+            await _reply_to_client(phone_clean, reply)
+            return
         if exchange_count >= 2 or _is_brief_reply(text, max_words=2, max_chars=18):
             reply = (
                 "Понял вас. Тогда ждём ближайшую оплату. "

@@ -794,6 +794,21 @@ check("detect_language: ә+ғ → kz",
       detect_language("Ғалым мен Әселдің есімі") == "kz")
 
 
+# ── 10b. _is_greeting_only ───────────────────────────────────────────────────
+from collector.client_dialog import _is_greeting_only
+
+check("_is_greeting_only: 'Здравствуйте' → True",  _is_greeting_only("Здравствуйте"))
+check("_is_greeting_only: 'здравствуйте!' → True",  _is_greeting_only("здравствуйте!"))
+check("_is_greeting_only: 'Добрый день' → True",    _is_greeting_only("Добрый день"))
+check("_is_greeting_only: 'Добрый вечер' → True",   _is_greeting_only("Добрый вечер"))
+check("_is_greeting_only: 'Сәлем' → True",          _is_greeting_only("Сәлем"))
+check("_is_greeting_only: 'Привет' → True",          _is_greeting_only("Привет"))
+check("_is_greeting_only: 'Оплачу' → False",         not _is_greeting_only("Оплачу"))
+check("_is_greeting_only: 'Хорошо' → False",         not _is_greeting_only("Хорошо"))
+check("_is_greeting_only: 'Ок' → False",             not _is_greeting_only("Ок"))
+check("_is_greeting_only: 'Завтра оплачу' → False",  not _is_greeting_only("Завтра оплачу"))
+check("_is_greeting_only: '' → False",               not _is_greeting_only(""))
+
 # ═══════════════════════════════════════════════════════════════
 # 11. client_dialog — store operations
 # ═══════════════════════════════════════════════════════════════
