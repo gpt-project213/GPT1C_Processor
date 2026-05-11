@@ -3823,14 +3823,174 @@ check("display_name 'О Торговый дом'[2:] == 'Торговый дом
 import re as _re_crm
 _dn_matches = [m.group() for m in _re_crm.finditer(r'client_key\[2:\]|_client_key\[2:\]|next_key\[2:\]',
                                                      _REPORTS_SRC)]
-check("fast-path: все три точки display_name используют [2:] (ожидаем ≥ 3 совпадения)",
-      len(_dn_matches) >= 3,
+check("fast-path: все четыре точки display_name используют [2:] (ожидаем ≥ 4 совпадения)",
+      len(_dn_matches) >= 4,
       f"найдено: {_dn_matches}")
 
 # ═══════════════════════════════════════════════════════════════
 # 26. ИТОГ
 # ═══════════════════════════════════════════════════════════════
 section("ИТОГ")  # секция 26
+section("26. Sticky approval")
+
+from collector.collections_engine import (
+    _sticky_approval_eligible,
+    _sticky_approval_matches,
+    _sticky_approval_signature,
+)
+from collector import collections_db as _cdb_sticky
+
+_sticky_client = {
+    "name": "Е Еркебулан",
+    "amount": 739409.67,
+    "days": 30,
+    "debit": 0.0,
+    "credit": 0.0,
+    "opening": 739409.67,
+}
+_sticky_decision = {
+    "action": "client_approval",
+    "msg_type": "legacy_tail_reminder",
+    "stop_status": "",
+}
+_sticky_sig = _sticky_approval_signature(_sticky_client, _sticky_decision)
+check("sticky signature: msg_type", _sticky_sig["msg_type"] == "legacy_tail_reminder")
+check("sticky eligible: legacy tail without debit", _sticky_approval_eligible(_sticky_client, _sticky_decision))
+check("sticky match: identical signature", _sticky_approval_matches(dict(_sticky_sig), _sticky_client, _sticky_decision))
+check("sticky mismatch: payment change breaks reuse",
+      not _sticky_approval_matches(dict(_sticky_sig, credit=100.0), _sticky_client, _sticky_decision))
+
+_sticky_tmp = Path(tempfile.mkdtemp(prefix="sticky_state_"))
+_sticky_state_path = _sticky_tmp / "collector_state.json"
+_orig_state_path = _cdb_sticky.STATE_PATH
+_cdb_sticky.STATE_PATH = _sticky_state_path
+try:
+    _cdb_sticky.set_sticky_approval(
+        "Е Еркебулан",
+        batch_id="20260511-170000-078e",
+        msg_type="legacy_tail_reminder",
+        amount=739409.67,
+        credit=0.0,
+        debit=0.0,
+    )
+    _saved = _cdb_sticky.get_sticky_approval("Е Еркебулан") or {}
+    check("sticky state: persisted batch_id", _saved.get("batch_id") == "20260511-170000-078e")
+    check("sticky state: persisted mode", _saved.get("mode") == "send")
+    _cleared = _cdb_sticky.clear_missing_sticky_approvals({"М Ресторан Шама"})
+    check("sticky clear missing: 1 cleared", _cleared == 1, str(_cleared))
+    check("sticky clear missing: state removed", _cdb_sticky.get_sticky_approval("Е Еркебулан") is None)
+finally:
+    _cdb_sticky.STATE_PATH = _orig_state_path
+    shutil.rmtree(_sticky_tmp, ignore_errors=True)
+
+# ═══════════════════════════════════════════════════════════════
+# 27. CRM-игноры → штрафная система
+# ═══════════════════════════════════════════════════════════════
+section("27. CRM ignores → approval_penalty")
+
+import asyncio as _asyncio_crm
+from unittest.mock import AsyncMock as _AsyncMock_crm
+from datetime import timezone as _tz_mod, timedelta as _td
+_tz_utc = _tz_mod.utc
+from collector.approval_penalty import (
+    check_crm_ignores as _check_crm_ignores,
+    _miss_context_line,
+    _warn_context_line,
+    _notify_manager as _pen_notify_mgr,
+    _CRM_PENDING_PATH as _crm_pend_path,
+    _STATE_PATH as _pen_state_path,
+    CRM_IGNORE_MIN_AGE_HOURS as _crm_min_age,
+)
+
+# ── Текст уведомлений: wa vs crm ──────────────────────────────
+check("warn_line wa содержит 'согласования рассылки'",
+      "согласования рассылки" in _warn_context_line("11.05.2026", "wa"))
+check("warn_line crm содержит 'не внесли данные клиента'",
+      "не внесли данные клиента" in _warn_context_line("11.05.2026", "crm"))
+check("miss_line wa содержит 'согласования рассылки'",
+      "согласования рассылки" in _miss_context_line("11.05.2026", "wa"))
+check("miss_line crm содержит 'данные клиента не внесены'",
+      "данные клиента не внесены" in _miss_context_line("11.05.2026", "crm").lower())
+
+# ── _notify_manager(source='crm') отправляет CRM-текст ───────
+_crm_bot_warn = _AsyncMock_crm()
+_crm_bot_warn.send_message = _AsyncMock_crm()
+_asyncio_crm.run(_pen_notify_mgr("Тест", 123, 1, 0, 0, "11.05.2026", False, _crm_bot_warn, source="crm"))
+_crm_warn_text = str(_crm_bot_warn.send_message.call_args)
+check("crm warning содержит 'CRM-запрос'", "CRM-запрос" in _crm_warn_text)
+check("crm warning НЕ содержит 'рассылки'", "рассылки" not in _crm_warn_text)
+
+_crm_bot_pen = _AsyncMock_crm()
+_crm_bot_pen.send_message = _AsyncMock_crm()
+_asyncio_crm.run(_pen_notify_mgr("Тест", 123, 2, 2000, 2000, "11.05.2026", False, _crm_bot_pen, source="crm"))
+_crm_pen_text = str(_crm_bot_pen.send_message.call_args)
+check("crm штраф содержит 'CRM-запрос'", "CRM-запрос" in _crm_pen_text)
+check("crm штраф '2 000 тг' (пробел)", "2 000 тг" in _crm_pen_text)
+
+# ── check_crm_ignores: обнаруживает старую запись ─────────────
+_crm_tmp = Path(tempfile.mkdtemp())
+_crm_pend_file = _crm_tmp / "crm_pending_state.json"
+_crm_state_file = _crm_tmp / "approval_penalty_state.json"
+
+# Запись с last_sent 25 часов назад → должна стать игнором
+_old_ts = (datetime.now(_tz_utc) - _td(hours=25)).astimezone(ZoneInfo("Asia/Almaty")).isoformat()
+_crm_pend_file.write_text(json.dumps({
+    "123456": {
+        "manager": "Алена",
+        "client_key": "А ТД Сарыарка",
+        "state": "clarify_phone",
+        "last_sent": _old_ts,
+    }
+}), encoding="utf-8")
+
+import collector.approval_penalty as _pen_mod
+_orig_crm_path  = _pen_mod._CRM_PENDING_PATH
+_orig_state_path_pen = _pen_mod._STATE_PATH
+_pen_mod._CRM_PENDING_PATH = _crm_pend_file
+_pen_mod._STATE_PATH = _crm_state_file
+
+_crm_bot_check = _AsyncMock_crm()
+_crm_bot_check.send_message = _AsyncMock_crm()
+try:
+    _asyncio_crm.run(_check_crm_ignores(_crm_bot_check))
+    _pen_state_after = json.loads(_crm_state_file.read_text(encoding="utf-8"))
+    _mgr_ignores = _pen_state_after.get("managers", {}).get("Алена", {}).get("ignores", [])
+    check("crm_ignore: 1 запись в state",        len(_mgr_ignores) == 1, str(_mgr_ignores))
+    check("crm_ignore: source == 'crm'",          _mgr_ignores[0].get("source") == "crm")
+    check("crm_ignore: type == 'crm_no_response'", _mgr_ignores[0].get("type") == "crm_no_response")
+    check("crm_ignore: уведомление отправлено",   _crm_bot_check.send_message.called)
+    check("crm_ignore: batch_id начинается с 'crm-'",
+          _mgr_ignores[0].get("batch_id", "").startswith("crm-"))
+
+    # Повторный запуск — не дублирует
+    _crm_bot_check2 = _AsyncMock_crm()
+    _crm_bot_check2.send_message = _AsyncMock_crm()
+    _asyncio_crm.run(_check_crm_ignores(_crm_bot_check2))
+    _mgr_ignores2 = json.loads(_crm_state_file.read_text(encoding="utf-8")) \
+                        .get("managers", {}).get("Алена", {}).get("ignores", [])
+    check("crm_ignore: нет дублей при повторном запуске", len(_mgr_ignores2) == 1)
+    check("crm_ignore: повторно уведомление НЕ отправлено", not _crm_bot_check2.send_message.called)
+
+    # Свежая запись (2 часа назад) → не считается
+    _fresh_ts = (datetime.now(_tz_utc) - _td(hours=2)).astimezone(ZoneInfo("Asia/Almaty")).isoformat()
+    _crm_pend_file.write_text(json.dumps({
+        "789000": {
+            "manager": "Ергали",
+            "client_key": "Е Клиент",
+            "state": "clarify_phone",
+            "last_sent": _fresh_ts,
+        }
+    }), encoding="utf-8")
+    _crm_state_file.unlink(missing_ok=True)
+    _crm_bot_fresh = _AsyncMock_crm()
+    _crm_bot_fresh.send_message = _AsyncMock_crm()
+    _asyncio_crm.run(_check_crm_ignores(_crm_bot_fresh))
+    check("crm_ignore: свежая запись (2ч) не штрафуется", not _crm_bot_fresh.send_message.called)
+finally:
+    _pen_mod._CRM_PENDING_PATH = _orig_crm_path
+    _pen_mod._STATE_PATH = _orig_state_path_pen
+    shutil.rmtree(_crm_tmp, ignore_errors=True)
+
 total  = len(results)
 passed = sum(1 for _, ok in results if ok)
 failed = total - passed

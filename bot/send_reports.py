@@ -8006,7 +8006,7 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
         if action == "keep":
-            pending["display_name"] = client_key
+            pending["display_name"] = client_key[2:] if _crm_manager_from_prefix(client_key) else client_key
             pending["name_mode"] = "system"
             pending["name_review_needed"] = False
             pending["state"] = "clarify_phone"
@@ -10430,8 +10430,9 @@ def main():
         # ── Штрафные баллы за пропуск окна согласования ────────────────
         async def _job_approval_penalty_check(ctx):
             try:
-                from collector.approval_penalty import check_recent_batches
+                from collector.approval_penalty import check_recent_batches, check_crm_ignores
                 await check_recent_batches(ctx.bot)
+                await check_crm_ignores(ctx.bot)
             except Exception as e:
                 sched_logger.error("approval_penalty_check error: %s", e)
 

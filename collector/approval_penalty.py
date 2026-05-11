@@ -2,13 +2,16 @@
 # -*- coding: utf-8 -*-
 """
 collector/approval_penalty.py
-Штрафные баллы менеджеров за пропуск окна согласования WhatsApp-рассылки.
+Штрафные баллы менеджеров за пропуск окна согласования WhatsApp-рассылки
+и за неответ на CRM-запрос.
 
-v1.0.2 (2026-05-11)
+v1.1.0 (2026-05-11): check_crm_ignores() — CRM-игноры в единый счётчик штрафов.
+  CRM_IGNORE_MIN_AGE_HOURS (default 22): записи старше порога = игнор.
+  Уведомление: та же формула, текст отличается от WA-пропуска.
+  source: "wa" | "crm" в каждой записи ignores[].
 
-v1.0.2 (2026-05-11): форматирование чисел через _n() — пробел вместо запятой
-  (2 000, не 2,000); guard-ветки greeting/ack игнорируют suggested_reply от AI;
-  тесты на user-facing текст уведомлений.
+v1.0.2 (2026-05-11): форматирование чисел через _n(); guard-ветки greeting/ack
+  игнорируют suggested_reply; тесты на текст уведомлений.
 
 v1.0.1 (2026-05-11): предупреждение показывает сумму следующего штрафа через
   _penalty_amount(2) вместо хардкода.
@@ -16,15 +19,18 @@ v1.0.1 (2026-05-11): предупреждение показывает сумм�
 v1.0.0 (2026-05-11)
 
 Правила:
-  - 1-й пропуск в месяце:          предупреждение, штраф 0 тг
-  - 2-й пропуск:                   2 000 тг
-  - N-й пропуск (N ≥ 3):           N × 1 000 × 2 тг
-  - Частичный пропуск (-10%):      менеджер начал отвечать, но не завершил
+  - 1-й пропуск в месяце (WA или CRM): предупреждение, штраф 0 тг
+  - 2-й пропуск:                        2 000 тг
+  - N-й пропуск (N ≥ 3):               N × 1 000 × 2 тг
+  - Частичный WA-пропуск (-10%):        менеджер начал отвечать, но не завершил
 
 Период: календарный месяц (1–последний день).
 
-Триггер: вызывается после финализации батча.
-Отчёт: в последний день месяца — Саиде + админу таблица, менеджерам — их строка.
+Триггеры:
+  - WA: вызывается после финализации батча (process_batch_penalties)
+  - CRM: каждые 30 мин (check_crm_ignores) сканирует crm_pending_state.json
+  - Периодически: check_recent_batches — перепроверяет WA-батчи без уведомления
+  Отчёт: в последний день месяца — Саиде + админу таблица, менеджерам — их строка.
 
 State: logs/approval_penalty_state.json
 """
@@ -45,9 +51,12 @@ TZ              = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 ADMIN_CHAT_ID   = os.getenv("ADMIN_CHAT_ID", "")
 SAIDA_CHAT_ID   = int(os.getenv("SAIDA_CHAT_ID", "920236287"))
 
-_ROOT         = Path(__file__).resolve().parent.parent
-_BATCHES_PATH = _ROOT / "logs" / "wa_approval_batches.json"
-_STATE_PATH   = _ROOT / "logs" / "approval_penalty_state.json"
+_ROOT             = Path(__file__).resolve().parent.parent
+_BATCHES_PATH     = _ROOT / "logs" / "wa_approval_batches.json"
+_STATE_PATH       = _ROOT / "logs" / "approval_penalty_state.json"
+_CRM_PENDING_PATH = _ROOT / "logs" / "crm_pending_state.json"
+
+CRM_IGNORE_MIN_AGE_HOURS = float(os.getenv("CRM_IGNORE_MIN_AGE_HOURS", "22"))
 
 TERMINAL_STATUSES = {
     "too_late", "sent", "partially_sent", "send_failed",
@@ -129,6 +138,18 @@ def _classify_manager(mgr_data: Dict[str, Any]) -> Optional[str]:
 
 # ─── Уведомление менеджера ────────────────────────────────────────────────────
 
+def _miss_context_line(batch_date: str, source: str) -> str:
+    if source == "crm":
+        return f"Данные клиента не внесены в срок (CRM-запрос {batch_date})."
+    return f"Пропущено окно согласования рассылки {batch_date}."
+
+
+def _warn_context_line(batch_date: str, source: str) -> str:
+    if source == "crm":
+        return f"Вы не внесли данные клиента в срок (CRM-запрос {batch_date})."
+    return f"Вы не ответили в окне согласования рассылки {batch_date}."
+
+
 async def _notify_manager(
     manager: str,
     chat_id: int,
@@ -138,6 +159,8 @@ async def _notify_manager(
     batch_date: str,
     partial: bool,
     bot,
+    *,
+    source: str = "wa",
 ) -> None:
     if not chat_id:
         return
@@ -148,14 +171,14 @@ async def _notify_manager(
         next_penalty = _penalty_amount(2)
         text = (
             f"⚠️ <b>Предупреждение</b>\n\n"
-            f"Вы не ответили в окне согласования рассылки {batch_date}.\n"
+            f"{_warn_context_line(batch_date, source)}\n"
             f"Это первый пропуск в этом месяце — штраф не начисляется.\n\n"
             f"⚠️ Следующий пропуск: <b>{_n(next_penalty)} тг</b>"
         )
     else:
         text = (
             f"🔴 <b>Штраф: {_n(penalty)} тг</b>{partial_note}\n\n"
-            f"Пропущено окно согласования рассылки {batch_date}.\n"
+            f"{_miss_context_line(batch_date, source)}\n"
             f"Пропусков за месяц: <b>{ignore_num}</b>\n"
             f"Итого штрафов за месяц: <b>{_n(cumulative)} тг</b>"
         )
@@ -211,6 +234,7 @@ async def process_batch_penalties(batch: Dict[str, Any], bot) -> None:
             "batch_id":  batch_id,
             "date":      batch_date,
             "type":      ignore_type,
+            "source":    "wa",
             "penalty":   penalty,
             "partial":   partial,
             "notified":  False,
@@ -219,7 +243,7 @@ async def process_batch_penalties(batch: Dict[str, Any], bot) -> None:
 
         await _notify_manager(
             mgr_name, chat_id, ignore_num, penalty, cumulative,
-            batch_date, partial, bot,
+            batch_date, partial, bot, source="wa",
         )
         mgr["ignores"][-1]["notified"] = True
         _save_state(state)
@@ -268,6 +292,83 @@ async def check_recent_batches(bot) -> None:
             continue
 
         await process_batch_penalties(batch, bot)
+
+
+# ─── CRM-игноры: менеджер не ответил на запрос ────────────────────────────────
+
+async def check_crm_ignores(bot) -> None:
+    """
+    Запускается каждые 30 мин (вместе с check_recent_batches).
+    Сканирует crm_pending_state.json: записи с last_sent старше
+    CRM_IGNORE_MIN_AGE_HOURS считаются игнором, если не отмечены ранее.
+
+    Идентификатор игнора: crm-{chat_id}-{YYYYMMDD} — уникален на дату.
+    """
+    try:
+        with open(_CRM_PENDING_PATH, encoding="utf-8") as f:
+            pending: Dict[str, Any] = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return
+
+    if not pending:
+        return
+
+    now   = datetime.now(TZ)
+    month = _month_key()
+    state = _load_state()
+    _ensure_month(state, month)
+
+    for chat_id_str, entry in pending.items():
+        manager = entry.get("manager", "")
+        if not manager:
+            continue
+
+        ts_raw = entry.get("last_sent") or entry.get("created_at")
+        if not ts_raw:
+            continue
+        try:
+            ts = datetime.fromisoformat(ts_raw).astimezone(TZ)
+        except (ValueError, TypeError):
+            continue
+
+        age_hours = (now - ts).total_seconds() / 3600
+        if age_hours < CRM_IGNORE_MIN_AGE_HOURS:
+            continue
+
+        batch_id   = f"crm-{chat_id_str}-{ts.strftime('%Y%m%d')}"
+        batch_date = ts.strftime("%d.%m.%Y")
+        chat_id    = int(chat_id_str)
+
+        mgr = _mgr_state(state, manager, chat_id)
+        if any(e.get("batch_id") == batch_id for e in mgr["ignores"]):
+            continue
+
+        ignore_num = len(mgr["ignores"]) + 1
+        penalty    = _penalty_amount(ignore_num, partial=False)
+        cumulative = _cumulative_penalty(mgr["ignores"]) + penalty
+
+        mgr["ignores"].append({
+            "batch_id": batch_id,
+            "date":     batch_date,
+            "type":     "crm_no_response",
+            "source":   "crm",
+            "penalty":  penalty,
+            "partial":  False,
+            "notified": False,
+        })
+        _save_state(state)
+
+        await _notify_manager(
+            manager, chat_id, ignore_num, penalty, cumulative,
+            batch_date, False, bot, source="crm",
+        )
+        mgr["ignores"][-1]["notified"] = True
+        _save_state(state)
+
+        logger.info(
+            "approval_penalty: %s → CRM-игнор №%d, штраф %d тг (%s)",
+            manager, ignore_num, penalty, batch_id,
+        )
 
 
 # ─── Конец месяца: итоговый отчёт ────────────────────────────────────────────
