@@ -3772,9 +3772,65 @@ check("penalty штраф: содержит '2 000 тг' (пробел, не з�
       _pen_call_text2[:200])
 
 # ═══════════════════════════════════════════════════════════════
-# 25. ИТОГ
+# 25. CRM prefix detection (_crm_manager_from_prefix)
 # ═══════════════════════════════════════════════════════════════
-section("ИТОГ")  # секция 25
+section("25. CRM prefix detection")
+
+# send_reports нельзя импортировать напрямую (тяжёлые зависимости).
+# Тестируем логику inline + проверяем исходник текстом (как T12).
+
+_REPORTS_SRC = (ROOT / "bot" / "send_reports.py").read_text(encoding="utf-8")
+
+# ── Inline-реализация для unit-тестов логики ──────────────────
+_CRM_PREFIX_MAP_INLINE = {"А": "Алена", "Е": "Ергали", "М": "Магира", "О": "Оксана"}
+_CRM_SERVICE_KEYS_INLINE = frozenset({"без клиента", "недостача"})
+
+def _prefix_mgr_test(client_key: str):
+    if not client_key or len(client_key) < 3:
+        return None
+    ck_lower = client_key.lower().strip()
+    if ck_lower in _CRM_SERVICE_KEYS_INLINE or "зп" in ck_lower:
+        return None
+    if client_key[1] == " ":
+        return _CRM_PREFIX_MAP_INLINE.get(client_key[0].upper())
+    return None
+
+check("prefix А → Алена",   _prefix_mgr_test("А ТД Сарыарка СКЛАД") == "Алена")
+check("prefix Е → Ергали",  _prefix_mgr_test("Е ИП Иванов") == "Ергали")
+check("prefix М → Магира",  _prefix_mgr_test("М Магазин 101") == "Магира")
+check("prefix О → Оксана",  _prefix_mgr_test("О Торговый дом") == "Оксана")
+check("нет пробела на 2-й позиции → None",  _prefix_mgr_test("Алена Иванова") is None)
+check("ключ длиной 2 → None",               _prefix_mgr_test("А ") is None)
+check("пустая строка → None",               _prefix_mgr_test("") is None)
+check("служебный 'Без клиента' → None",     _prefix_mgr_test("Без клиента") is None)
+check("служебный 'Недостача' → None",       _prefix_mgr_test("Недостача") is None)
+check("зарплатный 'А Иванов ЗП' → None",   _prefix_mgr_test("А Иванов ЗП") is None)
+check("зарплатный зп нижний → None",        _prefix_mgr_test("А Иванов зп") is None)
+check("неизвестная буква → None",           _prefix_mgr_test("Б ТД Неизвестный") is None)
+
+# ── display_name = client_key[2:] (баг из d66560a исправлен) ──
+_k = "А ТД Сарыарка СКЛАД"
+_dn = _k[2:] if _prefix_mgr_test(_k) else ""
+check("display_name без префикса: 'А ТД Сарыарка СКЛАД'[2:] == 'ТД Сарыарка СКЛАД'",
+      _dn == "ТД Сарыарка СКЛАД")
+check("display_name не начинается с 'А '", not _dn.startswith("А "))
+
+_k2 = "О Торговый дом"
+_dn2 = _k2[2:] if _prefix_mgr_test(_k2) else ""
+check("display_name 'О Торговый дом'[2:] == 'Торговый дом'", _dn2 == "Торговый дом")
+
+# ── Статический анализ исходника: все три fast-path места используют [2:] ──
+import re as _re_crm
+_dn_matches = [m.group() for m in _re_crm.finditer(r'client_key\[2:\]|_client_key\[2:\]|next_key\[2:\]',
+                                                     _REPORTS_SRC)]
+check("fast-path: все три точки display_name используют [2:] (ожидаем ≥ 3 совпадения)",
+      len(_dn_matches) >= 3,
+      f"найдено: {_dn_matches}")
+
+# ═══════════════════════════════════════════════════════════════
+# 26. ИТОГ
+# ═══════════════════════════════════════════════════════════════
+section("ИТОГ")  # секция 26
 total  = len(results)
 passed = sum(1 for _, ok in results if ok)
 failed = total - passed
