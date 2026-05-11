@@ -1276,10 +1276,14 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
                 continue
             client_key = no_phone[0]
             total_no_phone = len(_crm_no_phone(manager, limit=500))
+            _has_prefix = _crm_manager_from_prefix(client_key) is not None
             _CRM_PHONE_PENDING[chat_id] = {
-                "state": "clarify_name",
+                "state": "clarify_phone" if _has_prefix else "clarify_name",
                 "client_key": client_key,
                 "original_name": client_key,
+                "display_name": client_key if _has_prefix else "",
+                "name_mode": "system" if _has_prefix else None,
+                "name_review_needed": False if _has_prefix else True,
                 "done_today": 0,
                 "daily_limit": CRM_DAILY_LIMIT,
                 "manager": manager,
@@ -1288,24 +1292,33 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
             }
             _crm_save_pending()
             try:
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=_crm_name_prompt_text(
-                        client_key=client_key,
-                        done_today=0,
-                        total=total_no_phone,
-                        daily_limit=CRM_DAILY_LIMIT,
-                    ),
-                    parse_mode="HTML",
-                    reply_markup=_crm_name_choice_kb(),
-                )
+                if _has_prefix:
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=_crm_phone_prompt_text(client_key),
+                        parse_mode="HTML",
+                        reply_markup=_crm_phone_choice_kb(client_key) or _crm_phone_help_only_kb(),
+                    )
+                else:
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=_crm_name_prompt_text(
+                            client_key=client_key,
+                            done_today=0,
+                            total=total_no_phone,
+                            daily_limit=CRM_DAILY_LIMIT,
+                        ),
+                        parse_mode="HTML",
+                        reply_markup=_crm_name_choice_kb(),
+                    )
             except Exception as _e:
                 _CRM_PHONE_PENDING.pop(chat_id, None)
                 _crm_save_pending()
                 crm_logger.warning("crm_daily_task: запрос данных %s: %s", manager, _e)
 
         # 4. Бесхозные клиенты — рассылаем всем участникам CRM: "чей клиент?"
-        #    До 3 штук в день чтобы не перегружать.
+        #    Если у клиента есть префикс менеджера (А/Е/М/О + пробел) — сразу
+        #    направляем тому менеджеру запрос на телефон, без broadcast'а.
         #    Исключаем служебные записи: "Без клиента", "Недостача", зарплатные авансы (*ЗП*/*зп*)
         _unowned = _crm_collect_unowned_claim_clients(limit=3)
         _active_claim_keys = {
@@ -1314,6 +1327,38 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
         _unowned = [k for k in _unowned if k not in _active_claim_keys]
         _participants = _all_crm_participants()
         for _client_key in _unowned:
+            _prefix_mgr = _crm_manager_from_prefix(_client_key)
+            if _prefix_mgr:
+                # Префикс известен — отправить напрямую тому менеджеру
+                _prefix_chat = _participants.get(_prefix_mgr)
+                if _prefix_chat and _prefix_chat not in _CRM_PHONE_PENDING:
+                    _CRM_PHONE_PENDING[_prefix_chat] = {
+                        "state": "clarify_phone",
+                        "client_key": _client_key,
+                        "original_name": _client_key,
+                        "display_name": _client_key,
+                        "name_mode": "system",
+                        "name_review_needed": False,
+                        "done_today": 0,
+                        "daily_limit": CRM_DAILY_LIMIT,
+                        "manager": _prefix_mgr,
+                        "total_no_phone": 1,
+                        "last_sent": datetime.now(TZ).isoformat(),
+                    }
+                    _crm_save_pending()
+                    try:
+                        await context.bot.send_message(
+                            chat_id=_prefix_chat,
+                            text=_crm_phone_prompt_text(_client_key),
+                            parse_mode="HTML",
+                            reply_markup=_crm_phone_choice_kb(_client_key) or _crm_phone_help_only_kb(),
+                        )
+                        crm_audit("prefix_autoassign", client_key=_client_key, manager=_prefix_mgr)
+                        crm_logger.info("CRM prefix-autoassign: «%s» → %s", _client_key, _prefix_mgr)
+                    except Exception as _pe:
+                        crm_logger.warning("CRM prefix-autoassign send error %s: %s", _client_key, _pe)
+                continue
+            # Нет префикса — broadcast "чей клиент?" всем
             _token = _crm_claim_token()
             _notified = []
             _kb = InlineKeyboardMarkup([[
@@ -6138,6 +6183,30 @@ async def _broadcast_reset_notice(bot) -> Tuple[int, int]:
     return sent, failed
 
 
+_CRM_PREFIX_MAP: Dict[str, str] = {
+    "А": "Алена",
+    "Е": "Ергали",
+    "М": "Магира",
+    "О": "Оксана",
+}
+_CRM_SERVICE_KEYS = frozenset({"без клиента", "недостача"})
+
+
+def _crm_manager_from_prefix(client_key: str) -> Optional[str]:
+    """Возвращает имя менеджера если client_key начинается с 'Х ' (буква + пробел).
+
+    Исключения: служебные записи (Без клиента, Недостача, *зп*) → None.
+    """
+    if not client_key or len(client_key) < 3:
+        return None
+    ck_lower = client_key.lower().strip()
+    if ck_lower in _CRM_SERVICE_KEYS or "зп" in ck_lower:
+        return None
+    if client_key[1] == " ":
+        return _CRM_PREFIX_MAP.get(client_key[0].upper())
+    return None
+
+
 def _crm_name_choice_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✏️ Ввести имя", callback_data="crm_name|edit")],
@@ -6926,10 +6995,14 @@ async def _crm_save_phone_and_continue(
         remaining = len(_crm_next(manager_name, limit=500))
         if next_list:
             next_key = next_list[0]
+            _next_has_prefix = _crm_manager_from_prefix(next_key) is not None
             _CRM_PHONE_PENDING[chat_id] = {
-                "state": "clarify_name",
+                "state": "clarify_phone" if _next_has_prefix else "clarify_name",
                 "client_key": next_key,
                 "original_name": next_key,
+                "display_name": next_key if _next_has_prefix else "",
+                "name_mode": "system" if _next_has_prefix else None,
+                "name_review_needed": False if _next_has_prefix else True,
                 "done_today": done_today,
                 "daily_limit": daily_limit,
                 "manager": manager_name,
@@ -6937,17 +7010,25 @@ async def _crm_save_phone_and_continue(
                 "last_sent": datetime.now(TZ).isoformat(),
             }
             _crm_save_pending()
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=_crm_name_prompt_text(
-                    client_key=next_key,
-                    done_today=done_today,
-                    total=remaining,
-                    daily_limit=daily_limit,
-                ),
-                parse_mode="HTML",
-                reply_markup=_crm_name_choice_kb(),
-            )
+            if _next_has_prefix:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=_crm_phone_prompt_text(next_key),
+                    parse_mode="HTML",
+                    reply_markup=_crm_phone_choice_kb(next_key) or _crm_phone_help_only_kb(),
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=_crm_name_prompt_text(
+                        client_key=next_key,
+                        done_today=done_today,
+                        total=remaining,
+                        daily_limit=daily_limit,
+                    ),
+                    parse_mode="HTML",
+                    reply_markup=_crm_name_choice_kb(),
+                )
             return
         await context.bot.send_message(
             chat_id=chat_id,
