@@ -1277,6 +1277,7 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
             client_key = no_phone[0]
             total_no_phone = len(_crm_no_phone(manager, limit=500))
             _has_prefix = _crm_manager_from_prefix(client_key) is not None
+            _now_iso = datetime.now(TZ).isoformat()
             _CRM_PHONE_PENDING[chat_id] = {
                 "state": "clarify_phone" if _has_prefix else "clarify_name",
                 "client_key": client_key,
@@ -1288,7 +1289,8 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
                 "daily_limit": CRM_DAILY_LIMIT,
                 "manager": manager,
                 "total_no_phone": total_no_phone,
-                "last_sent": datetime.now(TZ).isoformat(),
+                "created_at": _now_iso,
+                "last_sent": _now_iso,
             }
             _crm_save_pending()
             try:
@@ -1332,6 +1334,7 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
                 # Префикс известен — отправить напрямую тому менеджеру
                 _prefix_chat = _participants.get(_prefix_mgr)
                 if _prefix_chat and _prefix_chat not in _CRM_PHONE_PENDING:
+                    _unowned_now_iso = datetime.now(TZ).isoformat()
                     _CRM_PHONE_PENDING[_prefix_chat] = {
                         "state": "clarify_phone",
                         "client_key": _client_key,
@@ -1343,7 +1346,8 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
                         "daily_limit": CRM_DAILY_LIMIT,
                         "manager": _prefix_mgr,
                         "total_no_phone": 1,
-                        "last_sent": datetime.now(TZ).isoformat(),
+                        "created_at": _unowned_now_iso,
+                        "last_sent": _unowned_now_iso,
                     }
                     _crm_save_pending()
                     try:
@@ -6996,6 +7000,7 @@ async def _crm_save_phone_and_continue(
         if next_list:
             next_key = next_list[0]
             _next_has_prefix = _crm_manager_from_prefix(next_key) is not None
+            _next_now_iso = datetime.now(TZ).isoformat()
             _CRM_PHONE_PENDING[chat_id] = {
                 "state": "clarify_phone" if _next_has_prefix else "clarify_name",
                 "client_key": next_key,
@@ -7007,7 +7012,8 @@ async def _crm_save_phone_and_continue(
                 "daily_limit": daily_limit,
                 "manager": manager_name,
                 "total_no_phone": remaining,
-                "last_sent": datetime.now(TZ).isoformat(),
+                "created_at": _next_now_iso,
+                "last_sent": _next_now_iso,
             }
             _crm_save_pending()
             if _next_has_prefix:
@@ -8551,6 +8557,7 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             from bot.crm_clients import get_clients_without_phones as _crm_next2
             remaining = len(_crm_next2(claimer_name, limit=500))
+            _claimer_now_iso = datetime.now(TZ).isoformat()
             _CRM_PHONE_PENDING[claimer_chat_id] = {
                 "state": "clarify_name",
                 "client_key": client_key,
@@ -8559,7 +8566,8 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "daily_limit": 1,
                 "manager": claimer_name,
                 "total_no_phone": remaining,
-                "last_sent": datetime.now(TZ).isoformat(),
+                "created_at": _claimer_now_iso,
+                "last_sent": _claimer_now_iso,
             }
             _crm_save_pending()
             crm_audit("claim_phone_chain_started", client_key=client_key, claimer=claimer_name, remaining=remaining)
@@ -9934,6 +9942,7 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
                     remaining = len(_crm_next(manager_name, limit=500))
                     if next_list:
                         next_key = next_list[0]
+                        _voice_next_now_iso = datetime.now(TZ).isoformat()
                         _CRM_PHONE_PENDING[chat_id] = {
                             "state": "clarify_name",
                             "client_key": next_key,
@@ -9942,7 +9951,8 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
                             "daily_limit": daily_limit,
                             "manager": manager_name,
                             "total_no_phone": remaining,
-                            "last_sent": datetime.now(TZ).isoformat(),
+                            "created_at": _voice_next_now_iso,
+                            "last_sent": _voice_next_now_iso,
                         }
                         _crm_save_pending()
                         await update.message.reply_text(

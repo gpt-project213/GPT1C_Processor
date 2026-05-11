@@ -3932,14 +3932,20 @@ _crm_tmp = Path(tempfile.mkdtemp())
 _crm_pend_file = _crm_tmp / "crm_pending_state.json"
 _crm_state_file = _crm_tmp / "approval_penalty_state.json"
 
-# Запись с last_sent 25 часов назад → должна стать игнором
-_old_ts = (datetime.now(_tz_utc) - _td(hours=25)).astimezone(ZoneInfo("Asia/Almaty")).isoformat()
+# _now в рабочий день 14:00 Almaty — обходим guard 09–19 + выходные
+_crm_work_now = datetime(2026, 5, 12, 14, 0, tzinfo=ZoneInfo("Asia/Almaty"))  # понедельник 14:00
+
+# Запись с created_at 25 часов назад, last_sent 5 минут назад
+# (имитирует реальный цикл: напоминания обновляли last_sent, created_at неизменен)
+_old_created = (_crm_work_now - _td(hours=25)).isoformat()
+_recent_last_sent = (_crm_work_now - _td(minutes=5)).isoformat()
 _crm_pend_file.write_text(json.dumps({
     "123456": {
         "manager": "Алена",
         "client_key": "А ТД Сарыарка",
         "state": "clarify_phone",
-        "last_sent": _old_ts,
+        "created_at": _old_created,   # неизменяемый момент создания
+        "last_sent":  _recent_last_sent,  # свежее напоминание (не должно мешать)
     }
 }), encoding="utf-8")
 
@@ -3952,40 +3958,62 @@ _pen_mod._STATE_PATH = _crm_state_file
 _crm_bot_check = _AsyncMock_crm()
 _crm_bot_check.send_message = _AsyncMock_crm()
 try:
-    _asyncio_crm.run(_check_crm_ignores(_crm_bot_check))
+    _asyncio_crm.run(_check_crm_ignores(_crm_bot_check, _now=_crm_work_now))
     _pen_state_after = json.loads(_crm_state_file.read_text(encoding="utf-8"))
     _mgr_ignores = _pen_state_after.get("managers", {}).get("Алена", {}).get("ignores", [])
-    check("crm_ignore: 1 запись в state",        len(_mgr_ignores) == 1, str(_mgr_ignores))
-    check("crm_ignore: source == 'crm'",          _mgr_ignores[0].get("source") == "crm")
+    check("crm_ignore: 1 запись в state",         len(_mgr_ignores) == 1, str(_mgr_ignores))
+    check("crm_ignore: source == 'crm'",           _mgr_ignores[0].get("source") == "crm")
     check("crm_ignore: type == 'crm_no_response'", _mgr_ignores[0].get("type") == "crm_no_response")
-    check("crm_ignore: уведомление отправлено",   _crm_bot_check.send_message.called)
+    check("crm_ignore: уведомление отправлено",    _crm_bot_check.send_message.called)
     check("crm_ignore: batch_id начинается с 'crm-'",
           _mgr_ignores[0].get("batch_id", "").startswith("crm-"))
+
+    # Свежий last_sent не помешал: возраст считался от created_at
+    check("crm_ignore: возраст от created_at, не last_sent (recent last_sent не спас)",
+          _crm_bot_check.send_message.called)
 
     # Повторный запуск — не дублирует
     _crm_bot_check2 = _AsyncMock_crm()
     _crm_bot_check2.send_message = _AsyncMock_crm()
-    _asyncio_crm.run(_check_crm_ignores(_crm_bot_check2))
+    _asyncio_crm.run(_check_crm_ignores(_crm_bot_check2, _now=_crm_work_now))
     _mgr_ignores2 = json.loads(_crm_state_file.read_text(encoding="utf-8")) \
                         .get("managers", {}).get("Алена", {}).get("ignores", [])
     check("crm_ignore: нет дублей при повторном запуске", len(_mgr_ignores2) == 1)
     check("crm_ignore: повторно уведомление НЕ отправлено", not _crm_bot_check2.send_message.called)
 
-    # Свежая запись (2 часа назад) → не считается
-    _fresh_ts = (datetime.now(_tz_utc) - _td(hours=2)).astimezone(ZoneInfo("Asia/Almaty")).isoformat()
+    # Свежая created_at (2ч) → не считается игнором
+    _fresh_created = (_crm_work_now - _td(hours=2)).isoformat()
     _crm_pend_file.write_text(json.dumps({
         "789000": {
             "manager": "Ергали",
             "client_key": "Е Клиент",
             "state": "clarify_phone",
-            "last_sent": _fresh_ts,
+            "created_at": _fresh_created,
+            "last_sent":  (_crm_work_now - _td(minutes=3)).isoformat(),
         }
     }), encoding="utf-8")
     _crm_state_file.unlink(missing_ok=True)
     _crm_bot_fresh = _AsyncMock_crm()
     _crm_bot_fresh.send_message = _AsyncMock_crm()
-    _asyncio_crm.run(_check_crm_ignores(_crm_bot_fresh))
-    check("crm_ignore: свежая запись (2ч) не штрафуется", not _crm_bot_fresh.send_message.called)
+    _asyncio_crm.run(_check_crm_ignores(_crm_bot_fresh, _now=_crm_work_now))
+    check("crm_ignore: свежая created_at (2ч) не штрафуется", not _crm_bot_fresh.send_message.called)
+
+    # Guard: вне рабочих часов → ничего не происходит
+    _night_now = datetime(2026, 5, 12, 23, 0, tzinfo=ZoneInfo("Asia/Almaty"))
+    _crm_pend_file.write_text(json.dumps({
+        "123456": {
+            "manager": "Алена",
+            "client_key": "А ТД Сарыарка",
+            "state": "clarify_phone",
+            "created_at": (_night_now - _td(hours=30)).isoformat(),
+            "last_sent":  (_night_now - _td(hours=30)).isoformat(),
+        }
+    }), encoding="utf-8")
+    _crm_state_file.unlink(missing_ok=True)
+    _crm_bot_night = _AsyncMock_crm()
+    _crm_bot_night.send_message = _AsyncMock_crm()
+    _asyncio_crm.run(_check_crm_ignores(_crm_bot_night, _now=_night_now))
+    check("crm_ignore: ночью (23:00) guard блокирует штраф", not _crm_bot_night.send_message.called)
 finally:
     _pen_mod._CRM_PENDING_PATH = _orig_crm_path
     _pen_mod._STATE_PATH = _orig_state_path_pen

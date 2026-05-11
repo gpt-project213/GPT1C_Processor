@@ -296,14 +296,34 @@ async def check_recent_batches(bot) -> None:
 
 # ─── CRM-игноры: менеджер не ответил на запрос ────────────────────────────────
 
-async def check_crm_ignores(bot) -> None:
+async def check_crm_ignores(bot, _now: Optional[datetime] = None) -> None:
     """
     Запускается каждые 30 мин (вместе с check_recent_batches).
-    Сканирует crm_pending_state.json: записи с last_sent старше
+    Сканирует crm_pending_state.json: записи с created_at старше
     CRM_IGNORE_MIN_AGE_HOURS считаются игнором, если не отмечены ранее.
 
-    Идентификатор игнора: crm-{chat_id}-{YYYYMMDD} — уникален на дату.
+    Возраст считается от created_at (неизменяем), а НЕ от last_sent —
+    иначе crm_phone_reminder_task() обнулял бы таймер на каждом напоминании.
+
+    Проверка выполняется только в рабочие дни и окно 09–19 Almaty,
+    чтобы не штрафовать за выходные и ночное время.
+
+    _now: переопределить текущее время (для тестов).
+    Идентификатор игнора: crm-{chat_id}-{YYYYMMDD создания} — уникален на дату.
     """
+    now = _now or datetime.now(TZ)
+
+    # Только рабочие часы 09–19
+    if not (9 <= now.hour < 19):
+        return
+    # Только рабочие дни
+    try:
+        from bot.workday_checker import is_holiday_today
+        if is_holiday_today():
+            return
+    except Exception:
+        pass  # если модуль недоступен — продолжаем
+
     try:
         with open(_CRM_PENDING_PATH, encoding="utf-8") as f:
             pending: Dict[str, Any] = json.load(f)
@@ -313,7 +333,6 @@ async def check_crm_ignores(bot) -> None:
     if not pending:
         return
 
-    now   = datetime.now(TZ)
     month = _month_key()
     state = _load_state()
     _ensure_month(state, month)
@@ -323,7 +342,8 @@ async def check_crm_ignores(bot) -> None:
         if not manager:
             continue
 
-        ts_raw = entry.get("last_sent") or entry.get("created_at")
+        # Используем created_at; last_sent постоянно обновляется напоминаниями
+        ts_raw = entry.get("created_at") or entry.get("last_sent")
         if not ts_raw:
             continue
         try:
