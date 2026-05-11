@@ -24,20 +24,25 @@
 | `d66560a` | CRM-префикс: skip clarify_name, auto-assign unowned |
 | `b7ba36b` | fix: display_name = client_key[2:] — префикс не в CRM |
 | `b1e3961` | `approval_penalty.py` v1.1.0: `check_crm_ignores`; source="wa"\|"crm"; CRM-текст уведомлений |
+| `4a5eac4` | fix(penalty): CRM ignore timer → `created_at` (не last_sent); workday guard 09–19 |
+| `b205e1d` | fix(crm): `_normalize_system_display_name` в `set_client_details` — центральная защита от префикса |
+| `6bf3412` | feat(collector): sticky approval v1.5.3 — unchanged no-movement clients пропускают manager preview |
 
 ### Ключевые решения
 
 - `close_reason` + `setdefault(escalation_reason)` — оба поля для forensic
 - Threshold стопа: 100 тг; Саида подтверждает ПЕРЕД admin-меню
 - Формула штрафов: 1й=0, 2й=2000, N≥3: N×1000×2, partial -10%; WA и CRM в едином счётчике
-- CRM-префикс: «А ТД Сарыарка» → Алена, display_name без «А »; исключения: без клиента/недостача/зп
-- CRM_IGNORE_MIN_AGE_HOURS=22: запись в crm_pending старше 22ч = игнор
+- CRM-префикс: display_name = key[2:] в pending + `_normalize_system_display_name` в crm_clients.py как последний рубеж
+- CRM_IGNORE_MIN_AGE_HOURS=22, возраст от `created_at` (не last_sent), guard 09–19 рабочие дни
+- Sticky approval: если signature (amount/credit/debit/msg_type/stop_status) не изменилась → auto-send без переспрашивания менеджера
+- config/clients.json: 151 системный display_name очищен от префикса (в .gitignore, не версионируется)
 
 ### Что осталось открытым
 
 - Тесты для `_handle_saida_zeropay_confirm/deny`
-- Фильтр `no_movement` в `collections_engine.py` (стоп-клиенты без движений в WA-батче)
-- Боевой прогон: penalty_check, CRM-префикс, CRM-игноры
+- Боевой прогон: penalty_check, CRM-игноры, sticky approval
+- Тесты: 533/533
 
 ---
 
