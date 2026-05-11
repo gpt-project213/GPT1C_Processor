@@ -49,10 +49,15 @@ TERMINAL_STATUSES = {
 # ─── Формула штрафа ───────────────────────────────────────────────────────────
 
 def _penalty_amount(ignore_num: int, partial: bool = False) -> int:
-    """Штраф за ignore_num-й пропуск в месяце (1-based)."""
+    """Штраф за ignore_num-й пропуск в месяце (1-based).
+
+    1-й → 0 (предупреждение)
+    N-й (N ≥ 2) → 1 000 × N   (2й=2000, 3й=6000*, 4й=8000*, 5й=10000*)
+    * с 3-го дополнительно ×2
+    """
     if ignore_num <= 1:
         return 0
-    base = 1000 if ignore_num == 2 else 1000 * ignore_num * 2
+    base = 1000 * ignore_num * (2 if ignore_num >= 3 else 1)
     return int(base * 0.9) if partial else base
 
 
