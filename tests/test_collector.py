@@ -1870,7 +1870,8 @@ try:
         _handled10k is True
         and _after10k is not None
         and _after10k.get("status") == "too_late"
-        and _after10k.get("escalation_reason") == "send_window_missed"
+        and _after10k.get("close_reason") == "send_window_missed"
+        and _after10k.get("escalation_reason") == "send_window_missed"  # нет prior reason → setdefault
         and "Окно отправки закрыто" in _edit_text10k,
         str(_after10k),
     )
@@ -3547,6 +3548,65 @@ with _patch("collector.approval_flow._load_batches", return_value={"TEST-fresh-p
     _n3 = _expire_batches()
     check("expire_old_batches: свежий pending_admin → не трогается (count=0)", _n3 == 0)
     check("expire_old_batches: свежий pending_admin → _save_batches не вызван", len(_saved3) == 0)
+
+# ── 23c-5. escalation_reason не перезаписывается при финализации (tight_send_window) ──
+_pre_esc_batch = _make_batch("TEST-pre-esc", "pending_admin", -1.0)
+_pre_esc_batch["escalation_reason"] = "tight_send_window"
+_saved_esc: list = []
+
+with _patch("collector.approval_flow._load_batches", return_value={"TEST-pre-esc": _pre_esc_batch}), \
+     _patch("collector.approval_flow._save_batches", side_effect=lambda b: _saved_esc.append(b)):
+    _expire_batches()
+    _res_esc = _saved_esc[0]["TEST-pre-esc"] if _saved_esc else {}
+    check(
+        "expire_old_batches: tight_send_window не перезаписывается при too_late",
+        _res_esc.get("escalation_reason") == "tight_send_window",
+        str(_res_esc.get("escalation_reason")),
+    )
+    check(
+        "expire_old_batches: close_reason=send_window_missed при tight_send_window",
+        _res_esc.get("close_reason") == "send_window_missed",
+        str(_res_esc.get("close_reason")),
+    )
+
+# ── 23c-6. escalation_reason не перезаписывается (manager_silence_timeout) ──
+_pre_sil_batch = _make_batch("TEST-pre-sil", "pending_admin", -1.0)
+_pre_sil_batch["escalation_reason"] = "manager_silence_timeout"
+_saved_sil: list = []
+
+with _patch("collector.approval_flow._load_batches", return_value={"TEST-pre-sil": _pre_sil_batch}), \
+     _patch("collector.approval_flow._save_batches", side_effect=lambda b: _saved_sil.append(b)):
+    _expire_batches()
+    _res_sil = _saved_sil[0]["TEST-pre-sil"] if _saved_sil else {}
+    check(
+        "expire_old_batches: manager_silence_timeout не перезаписывается при too_late",
+        _res_sil.get("escalation_reason") == "manager_silence_timeout",
+        str(_res_sil.get("escalation_reason")),
+    )
+    check(
+        "expire_old_batches: close_reason=send_window_missed при manager_silence_timeout",
+        _res_sil.get("close_reason") == "send_window_missed",
+        str(_res_sil.get("close_reason")),
+    )
+
+# ── 23c-7. без prior escalation_reason → setdefault пишет send_window_missed ──
+_no_esc_batch = _make_batch("TEST-no-esc", "pending_admin", -1.0)
+_saved_no: list = []
+
+with _patch("collector.approval_flow._load_batches", return_value={"TEST-no-esc": _no_esc_batch}), \
+     _patch("collector.approval_flow._save_batches", side_effect=lambda b: _saved_no.append(b)):
+    _expire_batches()
+    _res_no = _saved_no[0]["TEST-no-esc"] if _saved_no else {}
+    check(
+        "expire_old_batches: без prior escalation_reason → escalation_reason=send_window_missed",
+        _res_no.get("escalation_reason") == "send_window_missed",
+        str(_res_no.get("escalation_reason")),
+    )
+    check(
+        "expire_old_batches: без prior escalation_reason → close_reason=send_window_missed",
+        _res_no.get("close_reason") == "send_window_missed",
+        str(_res_no.get("close_reason")),
+    )
 
 
 # ═══════════════════════════════════════════════════════════════
