@@ -1884,6 +1884,37 @@ finally:
     _af_mod._BATCHES_PATH = _orig_path
     _shutil_t3.rmtree(_tmp_dir10k, ignore_errors=True)
 
+# T10m: admin send по уже-просроченному батчу с prior escalation_reason → reason не перезаписывается
+_batch10m = create_batch({"Алена": _batch1_clients})
+_batch10m["status"] = "pending_admin"
+_batch10m["admin_status"] = "approved"
+_batch10m["escalation_reason"] = "tight_send_window"
+_tmp_dir10m = _tempfile.mkdtemp()
+_af_mod._BATCHES_PATH = Path(_tmp_dir10m) / "wa_approval_batches.json"
+try:
+    _cutoff_now10m = datetime.now(_af_mod.TZ).replace(second=0, microsecond=0)
+    _batch10m["expires_at"] = _cutoff_now10m.isoformat()
+    save_batch(_batch10m)
+    _mock_dt10m = MagicMock(wraps=datetime)
+    _mock_dt10m.now = MagicMock(return_value=_cutoff_now10m)
+    _mock_dt10m.fromisoformat = datetime.fromisoformat
+    with patch("collector.approval_flow.datetime", _mock_dt10m), \
+         patch("collector.approval_flow._tg_edit", new=AsyncMock()), \
+         patch("collector.collections_engine.send_approved_batch", new=AsyncMock()):
+        asyncio.run(handle_admin_callback("wa_appr_adm_send|" + _batch10m["batch_id"], 1, 2))
+    _after10m = load_batch(_batch10m["batch_id"])
+    check(
+        "APPROVAL T10m: prior tight_send_window не перезаписывается при admin send too_late",
+        _after10m is not None
+        and _after10m.get("status") == "too_late"
+        and _after10m.get("escalation_reason") == "tight_send_window"
+        and _after10m.get("close_reason") == "send_window_missed",
+        str(_after10m),
+    )
+finally:
+    _af_mod._BATCHES_PATH = _orig_path
+    _shutil_t3.rmtree(_tmp_dir10m, ignore_errors=True)
+
 _engine_src_v2 = (Path(__file__).parent.parent / "collector" / "collections_engine.py").read_text(encoding="utf-8")
 _approval_src_v2 = (Path(__file__).parent.parent / "collector" / "approval_flow.py").read_text(encoding="utf-8")
 check(
