@@ -2009,6 +2009,53 @@ send_reports.log — "Саиде предупреждение по X (1.2ч)" / 
 - local backups `config/clients.json.bak-*`
 - untracked `site/`
 
+## Handoff Update - 2026-05-11
+
+### Scope
+
+- Fixed collector dialog routing around false-positive payment readiness on short client replies.
+- No changes to approval-flow runtime in this session.
+
+### Code changes
+
+- `collector/client_dialog.py`
+  - version bumped to `1.1.5`
+  - removed duplicate `_is_greeting_only()` definition
+  - fixed `_normalize_text()` so words no longer split into per-character tokens
+  - unified greeting guard through normalized text
+  - connected `_is_acknowledgement_only()` into `soft_positive` routing
+  - extended neutral acknowledgement coverage with `да`, `ага`, `угу`
+  - removed dead `_PURE_GREETINGS` entry `ас-саляму алейкум`
+
+- `tests/test_collector.py`
+  - added helper coverage for greeting normalization edge-cases:
+    - `Здравствуйте?`
+    - `Добрый  день`
+    - `Добрый день)`
+  - added runtime regression for `soft_positive + greeting`
+  - added runtime regression for `soft_positive + acknowledgement`
+  - relaxed two checks from literal `is False` to semantic `is not True` for `awaiting_payment_proof`
+
+### Root cause
+
+- A duplicate `_is_greeting_only()` left the active runtime guard too narrow.
+- `_normalize_text()` had been in a broken form that could split words into character-spaced tokens, defeating normalized matching.
+- Neutral replies like `Хорошо` were not separated from actual payment intent inside the `soft_positive` branch.
+
+### Verification
+
+- `python -m py_compile collector/client_dialog.py` -> OK
+- `python -X utf8 tests/test_collector.py` -> `481/481`
+
+### Dirty files intentionally left alone
+
+- `artifacts/`
+- local backups `config/clients.json.bak-*`
+- untracked tools:
+  - `tools/build_monetization_doc.py`
+  - `tools/debug_batch_today.py`
+  - `tools/debug_batches.py`
+
 ## Handoff Update - 2026-05-07 11:05 +05:00
 
 ### Saida help / startup UX closure

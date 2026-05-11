@@ -4,7 +4,19 @@
 collector/client_dialog.py
 Управление диалогами с должниками через WhatsApp.
 
-Версия: 1.1.2 (2026-05-11)
+Версия: 1.1.5 (2026-05-11)
+
+v1.1.5 (2026-05-11): neutral acknowledgements в soft_positive больше не
+  трактуются как готовность платить; "Ок/Хорошо/Понял" теперь ведут к
+  уточняющему вопросу без эскалации и без ожидания чека.
+
+v1.1.4 (2026-05-11): исправлен _normalize_text: слова больше не распадаются на
+  отдельные символы, поэтому greeting-guard и связанные intent-checks снова
+  сравнивают нормализованный текст корректно.
+
+v1.1.3 (2026-05-11): unified greeting-guard via _normalize_text;
+  punctuation-only and double-space greeting variants no longer bypass
+  the soft_positive protection.
 
 v1.1.2 (2026-05-11): soft_positive-ветка защищена от преждевременного
   вывода о готовности платить: чистые приветствия (Здравствуйте, Добрый день
@@ -301,27 +313,13 @@ def _mentions_recent_unposted_payment(text: str) -> bool:
 
 def _normalize_text(text: str) -> str:
     lowered = str(text or "").lower().replace("\u0451", "\u0435")
-    return " ".join(
+    cleaned = "".join(
         ch if ch.isalnum() or ch.isspace() else " "
         for ch in lowered
-    ).strip()
+    )
+    return " ".join(cleaned.split())
 
 
-def _is_greeting_only(text: str) -> bool:
-    normalized = _normalize_text(text)
-    if not normalized:
-        return False
-    greetings = {
-        "\u0437\u0434\u0440\u0430\u0432\u0441\u0442\u0432\u0443\u0439\u0442\u0435",
-        "\u0437\u0434\u0440\u0430\u0441\u0442\u0432\u0443\u0439\u0442\u0435",
-        "\u0434\u043e\u0431\u0440\u044b\u0439 \u0434\u0435\u043d\u044c",
-        "\u0434\u043e\u0431\u0440\u044b\u0439 \u0432\u0435\u0447\u0435\u0440",
-        "\u0434\u043e\u0431\u0440\u043e\u0435 \u0443\u0442\u0440\u043e",
-        "\u043f\u0440\u0438\u0432\u0435\u0442",
-        "\u0441\u0430\u043b\u0430\u043c",
-        "\u0430\u0441\u0441\u0430\u043b\u0430\u0443\u043c\u0430\u0433\u0430\u043b\u0435\u0439\u043a\u0443\u043c",
-    }
-    return normalized in greetings
 
 
 def _is_acknowledgement_only(text: str) -> bool:
@@ -329,6 +327,9 @@ def _is_acknowledgement_only(text: str) -> bool:
     if not normalized:
         return False
     acknowledgements = {
+        "да",
+        "ага",
+        "угу",
         "\u043e\u043a",
         "\u043e\u043a\u0435\u0439",
         "\u0445\u043e\u0440\u043e\u0448\u043e",
@@ -415,11 +416,10 @@ _PURE_GREETINGS: frozenset[str] = frozenset({
     "ассалаумалейкум",
     "ассалам алейкум",
     "ассалам",
-    "саламалейкум",
-    "ассаляму алейкум",
-    "ас-саляму алейкум",
-    "ас саляму алейкум",
-    "ассаламу алейкум",
+        "саламалейкум",
+        "ассаляму алейкум",
+        "ас саляму алейкум",
+        "ассаламу алейкум",
     # Ответное приветствие
     "уалейкум ассалам",
     "уа алейкум ассалам",
@@ -434,8 +434,11 @@ _PURE_GREETINGS: frozenset[str] = frozenset({
 
 
 def _is_greeting_only(text: str) -> bool:
-    """True если текст — чистое приветствие без платёжного сигнала."""
-    return str(text or "").strip().lower().rstrip("!.,") in _PURE_GREETINGS
+    """True if text is a pure greeting without any payment signal."""
+    normalized = _normalize_text(text)
+    if not normalized:
+        return False
+    return normalized in _PURE_GREETINGS
 
 
 def _attachment_note_lines(attachment: Optional[Dict[str, Any]]) -> List[str]:
@@ -1047,6 +1050,14 @@ async def handle_incoming(phone: str, text: str, attachment: Optional[Dict[str, 
         if _is_greeting_only(text):
             reply = suggested_reply if suggested_reply else (
                 "Спасибо за ответ. Подскажите, пожалуйста, когда планируете ближайший платёж?"
+            )
+            dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
+            _set_client_dialog(phone_clean, dialog)
+            await _reply_to_client(phone_clean, reply)
+            return
+        if _is_acknowledgement_only(text):
+            reply = suggested_reply if suggested_reply else (
+                "Спасибо, понял. Подскажите, пожалуйста, когда планируете ближайший платёж?"
             )
             dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
             _set_client_dialog(phone_clean, dialog)

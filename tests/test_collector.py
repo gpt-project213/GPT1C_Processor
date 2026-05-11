@@ -812,6 +812,9 @@ check("_is_greeting_only: 'Assalamu aleykum' → True",          _is_greeting_on
 check("_is_greeting_only: 'Сәлеметсіз бе' → True",            _is_greeting_only("Сәлеметсіз бе"))
 check("_is_greeting_only: 'Саламатсызбе' → True",             _is_greeting_only("Саламатсызбе"))
 check("_is_greeting_only: 'Саламатсыз ба' → True",            _is_greeting_only("Саламатсыз ба"))
+check("_is_greeting_only: question mark -> True", _is_greeting_only("Здравствуйте?"))
+check("_is_greeting_only: double-space -> True", _is_greeting_only("Добрый  день"))
+check("_is_greeting_only: trailing paren -> True", _is_greeting_only("Добрый день)"))
 check("_is_greeting_only: 'Оплачу' → False",         not _is_greeting_only("Оплачу"))
 check("_is_greeting_only: 'Хорошо' → False",         not _is_greeting_only("Хорошо"))
 check("_is_greeting_only: 'Ок' → False",             not _is_greeting_only("Ок"))
@@ -1138,6 +1141,66 @@ try:
           "чек" in last_soft_commit.lower() and "первый плат" not in last_soft_commit.lower(),
           last_soft_commit)
     check("UX soft_positive commitment: менеджер уведомляется", mock_soft_commit_escalate.called)
+
+    asyncio.run(cd_mod.start_client_dialog(
+        phone="77011234579",
+        client_name="Аманат военный госпиталь",
+        manager_name="Магира",
+        manager_chat_id=123,
+        level=2,
+        days=11,
+        amount=140128.0,
+        message_text="Напоминание по задолженности.",
+    ))
+    with patch("collector.collection_agent._call_deepseek") as mock_soft_greeting:
+        mock_soft_greeting.return_value = '{"intent":"soft_positive","promise_date":null,"promise_amount":null,"requires_human":false,"suggested_reply":""}'
+        with patch("collector.client_dialog._reply_to_client") as mock_soft_greeting_reply:
+            mock_soft_greeting_reply.return_value = None
+            with patch("collector.client_dialog.escalate_to_manager") as mock_soft_greeting_escalate:
+                asyncio.run(cd_mod.handle_incoming("77011234579", "Здравствуйте?"))
+    d_soft_greeting = cd_mod._get_client_dialog("77011234579")
+    soft_greeting_replies = [ex["text"] for ex in d_soft_greeting.get("exchanges", []) if ex["role"] == "bot"]
+    last_soft_greeting = soft_greeting_replies[-1] if soft_greeting_replies else ""
+    check("UX soft_positive greeting: state=active", d_soft_greeting.get("state") == "active")
+    check("UX soft_positive greeting: awaiting_payment_proof=False",
+          d_soft_greeting.get("awaiting_payment_proof") is not True)
+    check("UX soft_positive greeting: no escalation", not mock_soft_greeting_escalate.called)
+    check("UX soft_positive greeting: asks clarifying payment question",
+          "когда" in last_soft_greeting.lower() and "оплат" in last_soft_greeting.lower(),
+          last_soft_greeting)
+    check("UX soft_positive greeting: no false commitment wording",
+          "ждем ближайшую оплату" not in last_soft_greeting.lower() and "ждём ближайшую оплату" not in last_soft_greeting.lower(),
+          last_soft_greeting)
+
+    asyncio.run(cd_mod.start_client_dialog(
+        phone="77011234580",
+        client_name="Петро Ритейл",
+        manager_name="Оксана",
+        manager_chat_id=123,
+        level=2,
+        days=13,
+        amount=335992.0,
+        message_text="Напоминание по задолженности.",
+    ))
+    with patch("collector.collection_agent._call_deepseek") as mock_soft_ack:
+        mock_soft_ack.return_value = '{"intent":"soft_positive","promise_date":null,"promise_amount":null,"requires_human":false,"suggested_reply":""}'
+        with patch("collector.client_dialog._reply_to_client") as mock_soft_ack_reply:
+            mock_soft_ack_reply.return_value = None
+            with patch("collector.client_dialog.escalate_to_manager") as mock_soft_ack_escalate:
+                asyncio.run(cd_mod.handle_incoming("77011234580", "Хорошо"))
+    d_soft_ack = cd_mod._get_client_dialog("77011234580")
+    soft_ack_replies = [ex["text"] for ex in d_soft_ack.get("exchanges", []) if ex["role"] == "bot"]
+    last_soft_ack = soft_ack_replies[-1] if soft_ack_replies else ""
+    check("UX soft_positive ack: state=active", d_soft_ack.get("state") == "active")
+    check("UX soft_positive ack: awaiting_payment_proof=False",
+          d_soft_ack.get("awaiting_payment_proof") is not True)
+    check("UX soft_positive ack: no escalation", not mock_soft_ack_escalate.called)
+    check("UX soft_positive ack: asks clarifying payment question",
+          "когда" in last_soft_ack.lower() and ("оплат" in last_soft_ack.lower() or "плат" in last_soft_ack.lower()),
+          last_soft_ack)
+    check("UX soft_positive ack: no false commitment wording",
+          "ждем ближайшую оплату" not in last_soft_ack.lower() and "ждём ближайшую оплату" not in last_soft_ack.lower(),
+          last_soft_ack)
 
     asyncio.run(cd_mod.start_client_dialog(
         phone="77011234578",
