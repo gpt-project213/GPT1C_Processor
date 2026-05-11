@@ -135,11 +135,12 @@ async def _notify_manager(
     partial_note = " (частичный ответ, −10%)" if partial else ""
 
     if ignore_num == 1:
+        next_penalty = _penalty_amount(2)
         text = (
             f"⚠️ <b>Предупреждение</b>\n\n"
             f"Вы не ответили в окне согласования рассылки {batch_date}.\n"
             f"Это первый пропуск в этом месяце — штраф не начисляется.\n\n"
-            f"⚠️ Следующий пропуск: <b>1 000 тг</b>"
+            f"⚠️ Следующий пропуск: <b>{next_penalty:,} тг</b>"
         )
     else:
         text = (
