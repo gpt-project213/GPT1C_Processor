@@ -810,6 +810,8 @@ check("_is_greeting_only: 'Ассаламалейкум!' → True",           _
 check("_is_greeting_only: 'Уалейкум ассалам' → True",          _is_greeting_only("Уалейкум ассалам"))
 check("_is_greeting_only: 'Assalamu aleykum' → True",          _is_greeting_only("Assalamu aleykum"))
 check("_is_greeting_only: 'Сәлеметсіз бе' → True",            _is_greeting_only("Сәлеметсіз бе"))
+check("_is_greeting_only: 'Саламатсызбе' → True",             _is_greeting_only("Саламатсызбе"))
+check("_is_greeting_only: 'Саламатсыз ба' → True",            _is_greeting_only("Саламатсыз ба"))
 check("_is_greeting_only: 'Оплачу' → False",         not _is_greeting_only("Оплачу"))
 check("_is_greeting_only: 'Хорошо' → False",         not _is_greeting_only("Хорошо"))
 check("_is_greeting_only: 'Ок' → False",             not _is_greeting_only("Ок"))
