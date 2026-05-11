@@ -10346,6 +10346,34 @@ def main():
         )
         sched_logger.info("📨 Настроен AI Коллектор: напоминания менеджерам каждые 30 мин")
 
+        # ── Штрафные баллы за пропуск окна согласования ────────────────
+        async def _job_approval_penalty_check(ctx):
+            try:
+                from collector.approval_penalty import check_recent_batches
+                await check_recent_batches(ctx.bot)
+            except Exception as e:
+                sched_logger.error("approval_penalty_check error: %s", e)
+
+        async def _job_approval_penalty_monthly(ctx):
+            try:
+                from collector.approval_penalty import send_monthly_penalty_report
+                await send_monthly_penalty_report(ctx.bot)
+            except Exception as e:
+                sched_logger.error("approval_penalty_monthly error: %s", e)
+
+        job_queue.run_repeating(
+            _job_approval_penalty_check,
+            interval=1800,
+            first=120,
+            name="approval_penalty_check",
+        )
+        job_queue.run_daily(
+            _job_approval_penalty_monthly,
+            time=__import__("datetime").time(23, 0, tzinfo=TZ),
+            name="approval_penalty_monthly",
+        )
+        sched_logger.info("💰 Штрафные баллы: проверка каждые 30 мин + отчёт в конце месяца в 23:00")
+
         job_queue.run_repeating(
             whatsapp_poller_task,
             interval=30,

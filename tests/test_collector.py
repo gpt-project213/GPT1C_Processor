@@ -3728,9 +3728,29 @@ with _patch("collector.approval_flow._load_batches", return_value={"TEST-no-esc"
 
 
 # ═══════════════════════════════════════════════════════════════
-# 24. ИТОГ
+# 24. approval_penalty — формула штрафа
 # ═══════════════════════════════════════════════════════════════
-section("ИТОГ")  # секция 24
+section("24. approval_penalty — формула штрафа")
+from collector.approval_penalty import _penalty_amount, _cumulative_penalty
+
+check("penalty: 1-й пропуск → 0 (предупреждение)",    _penalty_amount(1) == 0)
+check("penalty: 2-й пропуск → 1 000 тг",              _penalty_amount(2) == 1_000)
+check("penalty: 3-й пропуск → 6 000 тг",              _penalty_amount(3) == 6_000)
+check("penalty: 4-й пропуск → 8 000 тг",              _penalty_amount(4) == 8_000)
+check("penalty: 5-й пропуск → 10 000 тг",             _penalty_amount(5) == 10_000)
+check("penalty: частичный 2-й → 900 тг (-10%)",       _penalty_amount(2, partial=True) == 900)
+check("penalty: частичный 3-й → 5 400 тг (-10%)",     _penalty_amount(3, partial=True) == 5_400)
+_sample_ignores = [
+    {"penalty": 0},
+    {"penalty": 1_000},
+    {"penalty": 6_000},
+]
+check("cumulative: 0+1000+6000 = 7 000",               _cumulative_penalty(_sample_ignores) == 7_000)
+
+# ═══════════════════════════════════════════════════════════════
+# 25. ИТОГ
+# ═══════════════════════════════════════════════════════════════
+section("ИТОГ")  # секция 25
 total  = len(results)
 passed = sum(1 for _, ok in results if ok)
 failed = total - passed
