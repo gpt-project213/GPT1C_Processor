@@ -5,39 +5,39 @@
 
 ---
 
-## HANDOFF 2026-05-11 — forensic батчей, soft_positive, стоп-лист, штрафы, CRM-префикс
+## HANDOFF 2026-05-11 — forensic батчей, soft_positive, стоп-лист, штрафы, CRM-префикс, CRM-игноры
 
-### Что сделано (master, коммиты cba6fdf…d66560a)
+### Что сделано (master, коммиты cba6fdf…b1e3961)
 
-**Тесты: 491/491.**
+**Тесты: 531/531.**
 
 | Коммит | Что |
 |--------|-----|
 | `cba6fdf` | `close_reason` + `setdefault(escalation_reason)` в `approval_flow.py` — forensic observability |
-| `eabb62d` | `_normalize_text` fix (`"".join` не `" ".join`); `_is_greeting_only` без дубля; `_PURE_GREETINGS` 25+ вариантов |
-| `...` | soft_positive: guard ветки игнорируют `suggested_reply`, используют hardcoded safe text |
-| `...` | `client_dialog.py` v1.1.5: `_is_acknowledgement_only` подключена в soft_positive ветку |
-| `...` | `collection_agent.py` v1.1.1: AI-промпт требует платёжное слово для `soft_positive` |
-| `...` | `debt_stop_control.py` v1.0.15: `STOP_PAID_THRESHOLD`=100 тг; нормализация имён; Саида→Админ цепочка |
-| `...` | `approval_penalty.py` v1.0.2: новый модуль штрафов за пропуск окна согласования |
-| `...` | `send_reports.py`: 2 новые APScheduler джобы (penalty_check 30мин, penalty_monthly 23:00) |
-| `a6d0b52` | тесты 441→491: greeting/ack/E2E/penalty формула/числа |
-| `d66560a` | `send_reports.py`: CRM-префикс (А/Е/М/О+пробел) → skip clarify_name, auto-assign unowned |
+| `eabb62d` | `_normalize_text` fix (`"".join`); `_is_greeting_only` без дубля; `_PURE_GREETINGS` 25+ вариантов |
+| `...` | soft_positive: guard ветки игнорируют `suggested_reply`, hardcoded safe text |
+| `...` | `client_dialog.py` v1.1.5: `_is_acknowledgement_only` в soft_positive |
+| `...` | `collection_agent.py` v1.1.1: soft_positive требует платёжное слово |
+| `...` | `debt_stop_control.py` v1.0.15: threshold 100 тг; нормализация; Саида→Админ цепочка |
+| `...` | `approval_penalty.py` v1.0.2: штрафы WA; penalty_check 30мин; monthly 23:00 |
+| `a6d0b52` | тесты 441→491: greeting/ack/E2E/penalty |
+| `d66560a` | CRM-префикс: skip clarify_name, auto-assign unowned |
+| `b7ba36b` | fix: display_name = client_key[2:] — префикс не в CRM |
+| `b1e3961` | `approval_penalty.py` v1.1.0: `check_crm_ignores`; source="wa"\|"crm"; CRM-текст уведомлений |
 
 ### Ключевые решения
 
-- `close_reason` фиксирует финальное закрытие; `escalation_reason` — исходную причину (setdefault)
-- Threshold стопа: 5000 → 100 тг; Саида подтверждает ПЕРЕД admin-меню
-- Формула штрафов: 1й=0, 2й=2000, N≥3: N×1000×2, частичный -10%
-- CRM: клиент «А ТД Сарыарка» → менеджер Алена, сразу запрос телефона без «чей клиент?»
-- Исключения CRM-префикса: «Без клиента», «Недостача», содержит «зп»/«ЗП»
+- `close_reason` + `setdefault(escalation_reason)` — оба поля для forensic
+- Threshold стопа: 100 тг; Саида подтверждает ПЕРЕД admin-меню
+- Формула штрафов: 1й=0, 2й=2000, N≥3: N×1000×2, partial -10%; WA и CRM в едином счётчике
+- CRM-префикс: «А ТД Сарыарка» → Алена, display_name без «А »; исключения: без клиента/недостача/зп
+- CRM_IGNORE_MIN_AGE_HOURS=22: запись в crm_pending старше 22ч = игнор
 
 ### Что осталось открытым
 
-- Тесты для `_handle_saida_zeropay_confirm/deny` (новая stop-list цепочка)
-- CRM ignore → штрафная интеграция (`check_crm_ignores()` в `approval_penalty.py`)
-- Проверить фильтр `no_movement` в `collections_engine.py` (стоп-клиенты без движений)
-- Проверить в бою: penalty_check, новый стоп-маршрут, CRM-префикс
+- Тесты для `_handle_saida_zeropay_confirm/deny`
+- Фильтр `no_movement` в `collections_engine.py` (стоп-клиенты без движений в WA-батче)
+- Боевой прогон: penalty_check, CRM-префикс, CRM-игноры
 
 ---
 
