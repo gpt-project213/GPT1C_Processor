@@ -882,6 +882,16 @@ def set_client_phone(client_name: str, phone: str, manager: str = "",
     return True
 
 
+def _normalize_system_display_name(display_name: str, name_mode: str = "") -> str:
+    """Strips manager ownership prefix from system-generated CRM display names."""
+    value = str(display_name or "").strip()
+    if str(name_mode or "").strip() != "system":
+        return value
+    if len(value) >= 3 and value[1] == " " and value[0].upper() in {"А", "Е", "М", "О", "A", "E", "M", "O"}:
+        return value[2:].strip()
+    return value
+
+
 def set_client_details(client_name: str, display_name: str = "",
                         phone: str = "", address: str = "",
                         original_name: str = "", name_mode: str = "",
@@ -897,6 +907,7 @@ def set_client_details(client_name: str, display_name: str = "",
     if entry is None:
         logger.warning("set_client_details: клиент не найден: %s", client_name)
         return False
+    display_name = _normalize_system_display_name(display_name, name_mode)
     if original_name:
         entry["original_name"] = original_name.strip()
     if display_name:
