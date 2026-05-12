@@ -4020,6 +4020,43 @@ finally:
     shutil.rmtree(_crm_tmp, ignore_errors=True)
 
 # ═══════════════════════════════════════════════════════════════
+# 28a. payment_deferrals — логика отсрочки
+# ═══════════════════════════════════════════════════════════════
+section("28a. payment_deferrals")
+
+from collector.payment_deferrals import (
+    get_deferral_days, effective_overdue_days, has_deferral,
+)
+
+# Клиент из конфига
+check("deferral: Мастер-кондитер = 10 дней",
+      get_deferral_days("О ТОО МАСТЕР-КОНДИТЕР ул Жиенкулова 7/2") == 10)
+check("deferral: Румакс = 7 дней",
+      get_deferral_days("О lT UNIVERSITY  Румакс Мангелик ел 55/11блок С") == 7)
+check("deferral: неизвестный клиент = 0",
+      get_deferral_days("А Неизвестный клиент") == 0)
+check("has_deferral: True для Бородкин",
+      has_deferral("О ИП Бородкин ул Аблай хана 31"))
+check("has_deferral: False для произвольного",
+      not has_deferral("Кто-то без договора"))
+
+# effective_overdue_days
+check("eff_days: 9 факт, 10 отсрочка → 0 (ещё в сроке)",
+      effective_overdue_days("О ТОО МАСТЕР-КОНДИТЕР ул Жиенкулова 7/2", 9) == 0)
+check("eff_days: 10 факт, 10 отсрочка → 0 (в сроке)",
+      effective_overdue_days("О ТОО МАСТЕР-КОНДИТЕР ул Жиенкулова 7/2", 10) == 0)
+check("eff_days: 11 факт, 10 отсрочка → 1 (просрочен 1 день)",
+      effective_overdue_days("О ТОО МАСТЕР-КОНДИТЕР ул Жиенкулова 7/2", 11) == 1)
+check("eff_days: 15 факт, 10 отсрочка → 5",
+      effective_overdue_days("О ТОО МАСТЕР-КОНДИТЕР ул Жиенкулова 7/2", 15) == 5)
+check("eff_days: без отсрочки → actual_days без изменений",
+      effective_overdue_days("А Неизвестный", 25) == 25)
+check("eff_days: 7 факт, 7 отсрочка → 0",
+      effective_overdue_days("О lT UNIVERSITY  Румакс Мангелик ел 55/11блок С", 7) == 0)
+check("eff_days: 8 факт, 7 отсрочка → 1",
+      effective_overdue_days("О lT UNIVERSITY  Румакс Мангелик ел 55/11блок С", 8) == 1)
+
+# ═══════════════════════════════════════════════════════════════
 # 28. client_dialog routing — AI integration baseline
 #     Фиксируем ТЕКУЩЕЕ поведение маршрутизации по каждому intent.
 #     Цель: регрессионная защита перед правками «включить AI-ответ».

@@ -513,9 +513,41 @@ def _collector_candidate_decision(
     debit = float(client.get("debit", 0) or 0)
     credit = float(client.get("credit", 0) or 0)
     stop_status = str((stop_rec or {}).get("status") or "")
+    name = str(client.get("name") or client.get("client") or "")
 
     if amount <= 0:
         return {"action": "skip", "reason": "долг закрыт"}
+
+    # ── Договорная отсрочка платежа ───────────────────────────────────────────
+    try:
+        from collector.payment_deferrals import effective_overdue_days, get_deferral_days
+        _deferral = get_deferral_days(name)
+        if _deferral:
+            _eff_days = effective_overdue_days(name, days)
+            if _eff_days <= 0:
+                # Ещё в рамках договорного срока
+                return {
+                    "action": "skip",
+                    "reason": f"отсрочка {_deferral} дн: срок не истёк (факт {days} дн)",
+                    "deferral_days": _deferral,
+                }
+            # Граничный случай: срок истёк ровно 1 день назад.
+            # Коллектор в праздники не запускается (guard is_holiday_today в scheduler),
+            # поэтому если effective_days=1 и вчера был праздник, батч не создавался вовсе.
+            # Дополнительно: если долг впритык (eff=1), даём 1 день мягкого буфера.
+            if _eff_days == 1:
+                return {
+                    "action": "skip",
+                    "reason": (
+                        f"отсрочка {_deferral} дн: первый день просрочки — "
+                        "ждём подтверждения до следующего цикла"
+                    ),
+                    "deferral_days": _deferral,
+                }
+            # Просрочка уже есть — используем effective_days для уровня давления
+            days = _eff_days
+    except Exception as _de:
+        logger.warning("[%s] payment_deferrals check error: %s", name, _de)
 
     try:
         from collector.payment_hold import get_hold_for_client
