@@ -3253,6 +3253,27 @@ def _format_collector_batch_text() -> str:
     return "\n".join(lines)
 
 
+def _get_pending_admin_batch() -> Optional[Dict[str, Any]]:
+    """Возвращает батч в статусе pending_admin (ждёт утверждения администратора)."""
+    try:
+        from collector.approval_flow import _load_batches
+        from datetime import datetime as _dt
+        from zoneinfo import ZoneInfo as _ZI
+        _now = _dt.now(tz=_ZI("Asia/Almaty"))
+        for bid in sorted(_load_batches().keys(), reverse=True):
+            b = _load_batches().get(bid) or {}
+            if b.get("status") != "pending_admin":
+                continue
+            from collector.approval_flow import _parse_batch_dt
+            exp = _parse_batch_dt(b.get("expires_at"))
+            if exp and _now >= exp:
+                continue
+            return b
+    except Exception:
+        pass
+    return None
+
+
 def _collector_batch_keyboard() -> InlineKeyboardMarkup:
     rows = [
         [InlineKeyboardButton("🔄 Обновить", callback_data="collector_batch")],
@@ -3260,6 +3281,10 @@ def _collector_batch_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton("📋 Саида backlog", callback_data="collector_saida_stats")],
         [InlineKeyboardButton("🔸 Частичные оплаты", callback_data="collector_partial_stats")],
     ]
+    # Батч ждёт утверждения Администратора
+    pending = _get_pending_admin_batch()
+    if pending:
+        rows.append([InlineKeyboardButton("📋 Утвердить рассылку", callback_data="collector_resend_approval")])
     try:
         from collector.approval_flow import get_latest_send_ready_batch
         send_ready = get_latest_send_ready_batch()
@@ -5637,6 +5662,28 @@ async def cmd_devhelp(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=_dev_feedback_menu_kb(),
     )
 
+async def cmd_batch(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Вызов из меню или командой /batch — открывает экран коллектора.
+    Если есть pending_admin батч — сразу присылает сводку с кнопками утверждения.
+    """
+    chat_id = update.effective_chat.id
+    if not is_admin(chat_id):
+        await update.effective_chat.send_message("⛔ Доступ запрещён.")
+        return
+    pending = _get_pending_admin_batch()
+    if pending:
+        try:
+            from collector.approval_flow import send_admin_summary
+            await send_admin_summary(pending, context.bot)
+            return
+        except Exception as _e:
+            logger.error("cmd_batch send_admin_summary error: %s", _e)
+    # Нет pending_admin — показываем экран коллектора
+    text = _format_collector_batch_text()
+    kb   = _collector_batch_keyboard()
+    await update.effective_chat.send_message(text, reply_markup=kb, parse_mode="HTML")
+
+
 async def cmd_health(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     if not is_admin(chat_id):
@@ -7563,7 +7610,9 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             stats = get_stats()
             message = format_stats_message(stats)
-            await _send_auto(context, chat_id, message, parse_mode="Markdown")
+            # parse_mode=None — format_stats_message использует * для Markdown,
+            # но usernames с _ ломают парсер. Отправляем как plain text.
+            await _send_auto(context, chat_id, message, parse_mode=None)
             await q.answer("✅ Статистика отправлена")
         except Exception as e:
             logger.error(f"Ошибка в show_stats: {e}", exc_info=True)
@@ -7617,6 +7666,23 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             _menu_set(chat_id, msg.message_id)
         except Exception as _e:
             logger.error("collector_batch send error: %s", _e)
+        return
+
+    if data == "collector_resend_approval":
+        if user_role != "admin":
+            await q.answer("⛔ Доступ запрещён")
+            return
+        batch = _get_pending_admin_batch()
+        if not batch:
+            await q.answer("Нет батча, ожидающего утверждения")
+            return
+        await q.answer("Отправляю сводку для утверждения...")
+        try:
+            from collector.approval_flow import send_admin_summary
+            await send_admin_summary(batch, context.bot)
+        except Exception as _e:
+            logger.error("collector_resend_approval error: %s", _e)
+            await context.bot.send_message(chat_id=chat_id, text=f"⚠️ Ошибка: {_e}")
         return
 
     if data == "collector_send_latest":
@@ -10194,6 +10260,7 @@ def main():
             integration_logger.error("Telegram error: %s", err, exc_info=err)
     application.add_error_handler(_tg_error_handler)
 
+    application.add_handler(CommandHandler("batch", cmd_batch))
     application.add_handler(CommandHandler("start", cmd_start))
     # v9.4.12: Обработчик текстовых команд от persistent menu
     from telegram.ext import MessageHandler, filters
