@@ -30,6 +30,33 @@
 
 ---
 
+## HANDOFF 2026-05-12 (поздний вечер) — отсрочки, дубли WA, баги
+
+### Что сделано (master, коммиты 1a6622f…2d8516d)
+
+| Коммит | Что |
+|--------|-----|
+| `1a6622f` | fix(dialog): дубли WA — guard по state диалога в start_client_dialog + collections_engine |
+| `4b8b3fa` | invalid_phone:name_mismatch убран; show_stats HTML с html.escape |
+| `676dfc1` | /batch + collector_resend_approval + show_stats fix |
+| `657f47a` | feat(deferrals): payment_deferrals.py + config; 9 клиентов Оксаны |
+| `50d6a7a` | добавлен Navat Азия Парк |
+| `2d8516d` | deferral_level — отдельная шкала: eff=2→L1, eff=5→L3, eff=10→L5 |
+
+### Логика отсрочки (для ВСЕХ клиентов в deferrals.json)
+
+Для 10-дневной отсрочки: WA с 12-го дня (eff=2), настойчиво с 15-го (eff=5), критично с 20-го (eff=10).
+Для 7-дневной (Румакс): аналогично, отсчёт от 7-го дня.
+
+### Что осталось открытым
+
+- Статистика нарушений фин. дисциплины по клиентам с отсрочкой
+- Списки отсрочек от Алены / Ергали / Магиры (когда дадут)
+- exception stop_status → grace period
+- Перезапуск бота для активации всех фиксов
+
+---
+
 ## HANDOFF 2026-05-12 (вечер) — /batch, collector_resend_approval, show_stats Markdown
 
 ### Что сделано (master, коммит 676dfc1)
