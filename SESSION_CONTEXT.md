@@ -26,6 +26,25 @@
 
 - Живой тест WA-диалога с новыми платёжными словами
 - Тесты `_handle_saida_zeropay_confirm/deny`
+- exception stop_status: клиент снятый со стопа тут же появляется в WA-батче — возможно нужен grace period
+
+---
+
+## HANDOFF 2026-05-12 (вечер) — /batch, collector_resend_approval, show_stats Markdown
+
+### Что сделано (master, коммит 676dfc1)
+
+**Тесты: 563/563.**
+
+| Что | Фикс |
+|-----|------|
+| `/batch` команда | если pending_admin → сразу сводка с кнопками; иначе → экран коллектора |
+| `collector_resend_approval` | кнопка «📋 Утвердить рассылку» в меню 🤖 Коллектор при pending_admin батче |
+| `show_stats` Markdown | parse_mode Markdown → None; username с `_` ломал HTML-парсер |
+
+### Наблюдение (не баг)
+
+А ТД Сарыарка СКЛАД с `stop_status="exception"` попал в батч корректно — collections_engine обрабатывает exception как обычного должника. Возможно нужен grace period.
 
 ---
 
