@@ -4,7 +4,11 @@
 collector/client_dialog.py
 Управление диалогами с должниками через WhatsApp.
 
-Версия: 1.1.5 (2026-05-11)
+Версия: 1.1.6 (2026-05-12)
+
+v1.1.6 (2026-05-12): _is_service_request — regex с \b вместо substring; "расчет"
+  больше не ложно срабатывает как "счет". unclear второй раз отправляет
+  финальный ответ клиенту перед эскалацией.
 
 v1.1.5 (2026-05-11): neutral acknowledgements в soft_positive больше не
   трактуются как готовность платить; "Ок/Хорошо/Понял" теперь ведут к
@@ -47,6 +51,7 @@ v1.0.8 (2026-04-23): мягкая обработка ответов клиент
 import asyncio
 import json
 import logging
+import re
 from collector.logging_utils import get_collector_logger
 import os
 import tempfile
@@ -346,21 +351,24 @@ def _is_acknowledgement_only(text: str) -> bool:
     return normalized in acknowledgements
 
 
+_SERVICE_REQUEST_PATTERNS = [
+    r"\b\u0430\u043a\u0442\s+\u0441\u0432\u0435\u0440\u043a",   # \u0430\u043a\u0442 \u0441\u0432\u0435\u0440\u043a\u0438
+    r"\b\u0441\u0432\u0435\u0440\u043a",         # \u0441\u0432\u0435\u0440\u043a\u0430, \u0441\u0432\u0435\u0440\u0438\u043c
+    r"\b\u0430\u043a\u0442\b",         # \u0430\u043a\u0442 (\u043e\u0442\u0434\u0435\u043b\u044c\u043d\u043e\u0435 \u0441\u043b\u043e\u0432\u043e; \u043d\u0435 "\u0444\u0430\u043a\u0442")
+    r"\b\u0441\u0447\u0451\u0442\b",        # \u0441\u0447\u0451\u0442 (\u0441 \u0451)
+    r"\b\u0441\u0447\u0435\u0442\b",        # \u0441\u0447\u0435\u0442 (\u0431\u0435\u0437 \u0451) \u2014 \u041d\u0415 "\u0440\u0430\u0441\u0447\u0435\u0442" \u0431\u043b\u0430\u0433\u043e\u0434\u0430\u0440\u044f \b
+    r"\b\u0441\u0447\u0451\u0442\s+\u0444\u0430\u043a\u0442\u0443\u0440", # \u0441\u0447\u0451\u0442-\u0444\u0430\u043a\u0442\u0443\u0440\u0430
+    r"\b\u0441\u0447\u0435\u0442\s+\u0444\u0430\u043a\u0442\u0443\u0440",
+    r"\b\u043d\u0430\u043a\u043b\u0430\u0434\u043d",       # \u043d\u0430\u043a\u043b\u0430\u0434\u043d\u0430\u044f
+    r"\b\u0434\u043e\u0433\u043e\u0432\u043e\u0440",       # \u0434\u043e\u0433\u043e\u0432\u043e\u0440
+    r"\b\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442",      # \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u044b
+]
+
 def _is_service_request(text: str) -> bool:
     normalized = _normalize_text(text)
     if not normalized:
         return False
-    markers = (
-        "\u0430\u043a\u0442 \u0441\u0432\u0435\u0440",
-        "\u0441\u0432\u0435\u0440\u043a",
-        "\u0430\u043a\u0442",
-        "\u0441\u0447\u0435\u0442",
-        "\u0441\u0447\u0435\u0442 \u0444\u0430\u043a\u0442\u0443\u0440",
-        "\u043d\u0430\u043a\u043b\u0430\u0434\u043d",
-        "\u0434\u043e\u0433\u043e\u0432\u043e\u0440",
-        "\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442",
-    )
-    return any(marker in normalized for marker in markers)
+    return any(re.search(p, normalized) for p in _SERVICE_REQUEST_PATTERNS)
 
 
 def _shows_imminent_payment_commitment(text: str) -> bool:
@@ -1207,11 +1215,11 @@ async def handle_incoming(phone: str, text: str, attachment: Optional[Dict[str, 
         await _reply_to_client(phone_clean, reply)
         return
 
-    # intent == "unclear" — возможно off_topic
+    # intent == "unclear" — AI пробует ответить сам; при втором неясном — эскалирует
     off_topic_count = dialog.get("off_topic_count", 0)
     if off_topic_count == 0:
-        # Первый раз — мягко возвращаем к теме долга
-        reply = (
+        # Первый раз — используем AI-ответ если есть, иначе мягкий шаблон
+        reply = suggested_reply if suggested_reply else (
             "Благодарим за ответ. Вернёмся к вопросу задолженности — "
             "когда вы сможете произвести оплату?"
         )
@@ -1220,8 +1228,14 @@ async def handle_incoming(phone: str, text: str, attachment: Optional[Dict[str, 
         _set_client_dialog(phone_clean, dialog)
         await _reply_to_client(phone_clean, reply)
     else:
-        # Второй раз — эскалируем; пустой bot reply не сохраняем
+        # Второй раз — сообщаем клиенту и эскалируем менеджеру
+        reply = (
+            f"Понял. Передаю вас менеджеру {manager_name} — "
+            f"{pronoun} свяжется с вами напрямую."
+        )
+        dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
         _set_client_dialog(phone_clean, dialog)
+        await _reply_to_client(phone_clean, reply)
         await escalate_to_manager(
             dialog, "off_topic",
             "Клиент уклоняется от темы задолженности", phone_clean,

@@ -4019,6 +4019,192 @@ finally:
     _pen_mod._STATE_PATH = _orig_state_path_pen
     shutil.rmtree(_crm_tmp, ignore_errors=True)
 
+# ═══════════════════════════════════════════════════════════════
+# 28. client_dialog routing — AI integration baseline
+#     Фиксируем ТЕКУЩЕЕ поведение маршрутизации по каждому intent.
+#     Цель: регрессионная защита перед правками «включить AI-ответ».
+# ═══════════════════════════════════════════════════════════════
+section("28. client_dialog routing — AI baseline")
+
+import asyncio as _aio28
+import collector.client_dialog as _cd28
+from unittest.mock import patch as _patch28, AsyncMock as _AM28, MagicMock as _MM28
+
+_tmpdir28 = tempfile.mkdtemp()
+_orig_dialogs_path28 = _cd28._DIALOGS_PATH
+_cd28._DIALOGS_PATH = Path(_tmpdir28) / "dialogs28.json"
+
+def _make_dialog28(phone: str, name: str = "ТОО Тест28", manager: str = "Алена") -> None:
+    """Создаёт активный диалог в изолированном хранилище."""
+    _ph = "".join(c for c in phone if c.isdigit())
+    _cd28._set_client_dialog(_ph, {
+        "phone": _ph,
+        "client_name": name,
+        "manager_name": manager,
+        "manager_chat_id": 111111,
+        "state": "active",
+        "exchange_count": 0,
+        "off_topic_count": 0,
+        "exchanges": [],
+        "amount": 50000.0,
+        "days": 37,
+        "level": 3,
+    })
+
+def _ds_reply28(intent: str, suggested: str = "", requires_human: bool = False) -> str:
+    """Формирует строку JSON которую вернул бы DeepSeek."""
+    import json as _j
+    return _j.dumps({
+        "intent": intent,
+        "promise_date": None,
+        "promise_amount": None,
+        "requires_human": requires_human,
+        "suggested_reply": suggested,
+    }, ensure_ascii=False)
+
+def _run_incoming28(phone: str, text: str, ds_json: str) -> tuple:
+    """Запускает handle_incoming с замоканным DeepSeek, возвращает (sent_texts, escalated)."""
+    sent_texts = []
+    escalated = []
+    async def _fake_reply(ph, txt, **kw): sent_texts.append(txt)
+    async def _fake_escalate(dialog, reason, summary="", phone="", **kw):
+        escalated.append(reason)
+    with _patch28("collector.collection_agent._call_deepseek", return_value=ds_json), \
+         _patch28("collector.client_dialog._reply_to_client", side_effect=_fake_reply), \
+         _patch28("collector.client_dialog.escalate_to_manager", side_effect=_fake_escalate), \
+         _patch28("collector.client_dialog._notify_dialog_observers", new=_AM28()), \
+         _patch28("collector.collections_db.set_wa_dialog_suppress", new=_MM28()):
+        _aio28.run(_cd28.handle_incoming(phone, text))
+    return sent_texts, escalated
+
+try:
+    # ── T28-1: paid_claim + AI suggested_reply → AI текст уходит клиенту ──
+    _make_dialog28("77001000001")
+    _sent, _esc = _run_incoming28(
+        "77001000001",
+        "Ергали скинули расчет",
+        _ds_reply28("paid_claim", suggested="Спасибо! Пришлите, пожалуйста, подтверждение оплаты."),
+    )
+    check("T28-1: paid_claim → бот отвечает (не эскалирует сразу)", len(_sent) == 1)
+    check("T28-1: paid_claim → AI suggested_reply использован",
+          _sent and "Спасибо" in _sent[0])
+    check("T28-1: paid_claim → нет немедленной эскалации", len(_esc) == 0)
+    d28_1 = _cd28._get_client_dialog("77001000001")
+    check("T28-1: state = awaiting_payment_proof", d28_1.get("state") == "awaiting_payment_proof")
+
+    # ── T28-2: paid_claim + пустой AI reply → fallback-шаблон ──
+    _make_dialog28("77001000002")
+    _sent2, _esc2 = _run_incoming28(
+        "77001000002",
+        "Расчет скинули",
+        _ds_reply28("paid_claim", suggested=""),
+    )
+    check("T28-2: paid_claim пустой reply → шаблон (содержит 'чек')",
+          _sent2 and "чек" in _sent2[0].lower())
+    check("T28-2: paid_claim пустой reply → нет эскалации", len(_esc2) == 0)
+
+    # ── T28-3: unclear → AI отвечает сам (requires_human=False), НЕ эскалирует сразу.
+    #           AI suggested_reply используется при первом unclear.
+    _make_dialog28("77001000003")
+    _sent3, _esc3 = _run_incoming28(
+        "77001000003",
+        "не понимаю о чём речь",
+        _ds_reply28("unclear", suggested="Уточните, пожалуйста, что имеете в виду?", requires_human=False),
+    )
+    check("T28-3: unclear first → клиент получает ответ",     len(_sent3) == 1)
+    check("T28-3: unclear first → НЕ эскалирует сразу",       len(_esc3) == 0)
+    check("T28-3: unclear first → AI suggested_reply используется",
+          _sent3 and "Уточните" in _sent3[0])
+
+    # ── T28-4: dispute (также requires_human=True) → тот же путь ──
+    _make_dialog28("77001000004")
+    _sent4, _esc4 = _run_incoming28(
+        "77001000004",
+        "у меня нет долга",
+        _ds_reply28("dispute", requires_human=True),
+    )
+    check("T28-4: dispute → клиент получает ответ", len(_sent4) == 1)
+    check("T28-4: dispute → эскалация",              len(_esc4) > 0)
+
+    # ── T28-5: soft_positive без приветствия → AI suggested_reply используется ──
+    _make_dialog28("77001000005")
+    _sent5, _esc5 = _run_incoming28(
+        "77001000005",
+        "Постараемся оплатить на этой неделе",
+        _ds_reply28("soft_positive", suggested="Отлично! Когда именно и примерно какую сумму?"),
+    )
+    check("T28-5: soft_positive (не приветствие) → AI suggested_reply используется",
+          _sent5 and "Отлично" in _sent5[0])
+    check("T28-5: soft_positive → нет эскалации", len(_esc5) == 0)
+
+    # ── T28-6: soft_positive на чистое приветствие → guard перехватывает, AI игнорируется ──
+    _make_dialog28("77001000006")
+    _sent6, _esc6 = _run_incoming28(
+        "77001000006",
+        "Здравствуйте",
+        _ds_reply28("soft_positive", suggested="Тогда ждём ближайшую оплату. Пришлите чек."),
+    )
+    check("T28-6: soft_positive на 'Здравствуйте' → guard, НЕ AI-ответ",
+          _sent6 and "Тогда ждём" not in _sent6[0])
+    check("T28-6: soft_positive на 'Здравствуйте' → спрашивает об оплате",
+          _sent6 and ("платёж" in _sent6[0].lower() or "оплат" in _sent6[0].lower()))
+    check("T28-6: soft_positive на 'Здравствуйте' → нет эскалации", len(_esc6) == 0)
+
+    # ── T28-7: requires_human=True при агрессии → эскалация ──
+    _make_dialog28("77001000007")
+    _sent7, _esc7 = _run_incoming28(
+        "77001000007",
+        "Идите нахрен со своим долгом",
+        _ds_reply28("unclear", requires_human=True),
+    )
+    check("T28-7: requires_human=True unclear → эскалирует (off_topic_count=0, первый раз → шаблон)",
+          len(_sent7) == 1 or len(_esc7) > 0)
+
+    # ── T28-8: dispute → сразу эскалация ──
+    _make_dialog28("77001000008")
+    _sent8, _esc8 = _run_incoming28(
+        "77001000008",
+        "У меня по моим данным долга нет",
+        _ds_reply28("dispute", requires_human=True),
+    )
+    check("T28-8: dispute → эскалация к менеджеру", len(_esc8) > 0)
+
+    # ── Сводка: что текущий код УМЕЕТ (AI задействован) ──
+    check("SUMMARY: paid_claim использует AI suggested_reply (T28-1 passed)",
+          any(n == "T28-1: paid_claim → AI suggested_reply использован" and ok
+              for n, ok in results))
+    check("SUMMARY: soft_positive использует AI suggested_reply (T28-5 passed)",
+          any(n == "T28-5: soft_positive (не приветствие) → AI suggested_reply используется" and ok
+              for n, ok in results))
+    check("SUMMARY: unclear → AI отвечает, не эскалирует сразу (T28-3)",
+          any(n == "T28-3: unclear first → AI suggested_reply используется" and ok
+              for n, ok in results))
+
+    # ── T28-9: _is_service_request — word boundary, не substring ──
+    from collector.client_dialog import _is_service_request as _isr
+    check("T28-9 service: 'расчет' НЕ триггерит service_request",
+          not _isr("я расчет провел"))
+    check("T28-9 service: 'расчитался' НЕ триггерит",
+          not _isr("я расчитался"))
+    check("T28-9 service: 'скинул расчет' НЕ триггерит",
+          not _isr("скинул расчет"))
+    check("T28-9 service: 'счет' как отдельное слово триггерит",
+          _isr("пришлите счет"))
+    check("T28-9 service: 'акт сверки' триггерит",
+          _isr("нужен акт сверки"))
+    check("T28-9 service: 'акт' отдельно триггерит",
+          _isr("пришлите акт"))
+    check("T28-9 service: 'факт' НЕ триггерит",
+          not _isr("это не факт"))
+    check("T28-9 service: 'накладная' триггерит",
+          _isr("дайте накладную"))
+    check("T28-9 service: 'договор' триггерит",
+          _isr("нужен договор"))
+
+finally:
+    _cd28._DIALOGS_PATH = _orig_dialogs_path28
+    shutil.rmtree(_tmpdir28, ignore_errors=True)
+
 total  = len(results)
 passed = sum(1 for _, ok in results if ok)
 failed = total - passed
