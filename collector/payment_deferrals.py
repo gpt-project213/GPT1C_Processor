@@ -63,6 +63,27 @@ def all_deferred_clients() -> dict:
     return dict(_load())
 
 
+# Шкала давления для клиентов с договорной отсрочкой.
+# Считается от effective_days (фактические дни минус отсрочка).
+# Пороги тighter: effective=2 уже первое напоминание, effective=10 — критично.
+_DEFERRAL_LEVEL_THRESHOLDS = [
+    (10, 5),   # effective 10+ → критично
+    (7,  4),   # effective 7–9 → серьёзно
+    (5,  3),   # effective 5–6 → настойчиво
+    (3,  2),   # effective 3–4 → умеренное давление
+    (2,  1),   # effective 2   → первое напоминание
+    (0,  0),
+]
+
+
+def deferral_level(effective_days: int) -> int:
+    """Уровень давления для клиента с отсрочкой (по effective_days)."""
+    for threshold, level in _DEFERRAL_LEVEL_THRESHOLDS:
+        if effective_days >= threshold:
+            return level
+    return 0
+
+
 def reload() -> None:
     """Сбросить кэш (вызывается после изменения конфига)."""
     global _cache

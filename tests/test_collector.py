@@ -4056,6 +4056,22 @@ check("eff_days: 7 факт, 7 отсрочка → 0",
 check("eff_days: 8 факт, 7 отсрочка → 1",
       effective_overdue_days("О lT UNIVERSITY  Румакс Мангелик ел 55/11блок С", 8) == 1)
 
+# deferral_level — шкала давления для отсрочников
+from collector.payment_deferrals import deferral_level
+check("deferral_level: eff=1 → 0 (skip зоне)",     deferral_level(1) == 0)
+check("deferral_level: eff=2 → 1 (первое напомин.)", deferral_level(2) == 1)
+check("deferral_level: eff=4 → 2",                  deferral_level(4) == 2)
+check("deferral_level: eff=5 → 3 (настойчиво)",     deferral_level(5) == 3)
+check("deferral_level: eff=7 → 4",                  deferral_level(7) == 4)
+check("deferral_level: eff=10 → 5 (критично)",      deferral_level(10) == 5)
+check("deferral_level: eff=20 → 5",                 deferral_level(20) == 5)
+# Пример: Мастер-кондитер 15 факт. дней → eff=5 → L3
+check("Мастер-кондитер 15 дн факт → eff=5 → L3",
+      deferral_level(effective_overdue_days("О ТОО МАСТЕР-КОНДИТЕР ул Жиенкулова 7/2", 15)) == 3)
+# Мастер-кондитер 20 дн → eff=10 → L5
+check("Мастер-кондитер 20 дн факт → eff=10 → L5",
+      deferral_level(effective_overdue_days("О ТОО МАСТЕР-КОНДИТЕР ул Жиенкулова 7/2", 20)) == 5)
+
 # ═══════════════════════════════════════════════════════════════
 # 28. client_dialog routing — AI integration baseline
 #     Фиксируем ТЕКУЩЕЕ поведение маршрутизации по каждому intent.

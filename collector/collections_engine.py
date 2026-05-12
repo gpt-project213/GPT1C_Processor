@@ -544,8 +544,11 @@ def _collector_candidate_decision(
                     ),
                     "deferral_days": _deferral,
                 }
-            # Просрочка уже есть — используем effective_days для уровня давления
+            # Просрочка уже есть — используем effective_days и отдельную шкалу давления
+            from collector.payment_deferrals import deferral_level as _dlevel
             days = _eff_days
+            # Переопределяем level по шкале отсрочников (тighter пороги)
+            client = dict(client, level=_dlevel(_eff_days), deferral_days=_deferral)
     except Exception as _de:
         logger.warning("[%s] payment_deferrals check error: %s", name, _de)
 
