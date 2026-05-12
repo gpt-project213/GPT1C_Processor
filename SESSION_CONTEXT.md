@@ -42,6 +42,17 @@
 | `collector_resend_approval` | кнопка «📋 Утвердить рассылку» в меню 🤖 Коллектор при pending_admin батче |
 | `show_stats` Markdown | parse_mode Markdown → None; username с `_` ломал HTML-парсер |
 
+### HANDOFF 2026-05-12 (ночь) — invalid_phone:name_mismatch + show_stats HTML + /batch + штрафы сброшены
+
+| Коммит | Что |
+|--------|-----|
+| `676dfc1` | /batch + collector_resend_approval + show_stats Markdown→None |
+| `4b8b3fa` | invalid_phone:name_mismatch убран; show_stats HTML с html.escape |
+
+**approval_penalty_state.json сброшен вручную** — 12.05.2026 20:30.
+Бэкап: `logs/approval_penalty_state.json.bak-20260512-reset`.
+Учёт штрафов начинается заново с 13.05.2026 (следующий батч).
+
 ### Наблюдение (не баг)
 
 А ТД Сарыарка СКЛАД с `stop_status="exception"` попал в батч корректно — collections_engine обрабатывает exception как обычного должника. Возможно нужен grace period.
