@@ -1362,6 +1362,25 @@ async def _send_approved_client(client: Dict[str, Any]) -> Dict[str, Any]:
         result["reason"] = "already contacted today"
         return result
 
+    # Проверяем активный/эскалированный диалог по номеру телефона.
+    # Если клиент уже в диалоге с ботом или передан менеджеру —
+    # повторная отправка WA создаёт дублирование.
+    try:
+        from collector.client_dialog import _get_client_dialog, _DIALOG_ACTIVE_STATES
+        _phone_clean = "".join(c for c in phone if c.isdigit())
+        _existing_dlg = _get_client_dialog(_phone_clean)
+        if _existing_dlg:
+            _dlg_state = _existing_dlg.get("state", "")
+            if _dlg_state in (*_DIALOG_ACTIVE_STATES, "escalated"):
+                result["reason"] = f"dialog_exists:{_dlg_state}"
+                logger.info(
+                    "[%s] пропуск — диалог уже активен (state=%s)",
+                    name, _dlg_state,
+                )
+                return result
+    except Exception as _de:
+        logger.warning("[%s] dialog state check ошибка: %s", name, _de)
+
     amount = float(client.get("amount", 0) or 0)
     days = int(client.get("days", 0) or 0)
     level = int(client.get("level", 0) or 0)

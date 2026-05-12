@@ -4,7 +4,7 @@
 collector/client_dialog.py
 Управление диалогами с должниками через WhatsApp.
 
-Версия: 1.1.6 (2026-05-12)
+Версия: 1.1.7 (2026-05-12)
 
 v1.1.6 (2026-05-12): _is_service_request — regex с \b вместо substring; "расчет"
   больше не ложно срабатывает как "счет". unclear второй раз отправляет
@@ -665,6 +665,18 @@ async def start_client_dialog(
     """
     # Нормализуем телефон
     phone_clean = "".join(c for c in phone if c.isdigit())
+
+    # Не перезаписываем активный или эскалированный диалог —
+    # клиент уже в работе, повторная отправка создаёт дублирование.
+    existing = _get_client_dialog(phone_clean)
+    if existing:
+        existing_state = existing.get("state", "")
+        if existing_state in (*_DIALOG_ACTIVE_STATES, "escalated"):
+            logger.info(
+                "[%s] диалог уже существует (state=%s, phone=%s) — пропуск",
+                client_name, existing_state, phone_clean,
+            )
+            return
 
     now = _now_iso()
     dialog: Dict[str, Any] = {
