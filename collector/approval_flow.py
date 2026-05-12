@@ -409,9 +409,8 @@ def validate_production_phone(phone: str, client_name: str = "") -> Tuple[bool, 
     if len(set(key[-10:])) <= 2:
         return False, "invalid_phone:suspicious"
 
-    name_keys = _phone_keys_in_name(client_name)
-    if name_keys and key not in name_keys:
-        return False, "invalid_phone:name_mismatch"
+    # name_mismatch убран: телефон в 1С-имени — это адресная строка (напр. "тел 87014850191"),
+    # а не WhatsApp-контакт. CRM-телефон введён менеджером вручную и является правильным.
     return True, ""
 
 

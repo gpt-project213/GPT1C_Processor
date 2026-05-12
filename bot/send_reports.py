@@ -7610,9 +7610,7 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             stats = get_stats()
             message = format_stats_message(stats)
-            # parse_mode=None — format_stats_message использует * для Markdown,
-            # но usernames с _ ломают парсер. Отправляем как plain text.
-            await _send_auto(context, chat_id, message, parse_mode=None)
+            await _send_auto(context, chat_id, message, parse_mode="HTML")
             await q.answer("✅ Статистика отправлена")
         except Exception as e:
             logger.error(f"Ошибка в show_stats: {e}", exc_info=True)

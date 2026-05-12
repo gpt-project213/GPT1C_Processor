@@ -196,29 +196,29 @@ def format_stats_message(stats: Dict[str, Any]) -> str:
     Returns:
         Отформатированное сообщение для Telegram
     """
-    message_parts = ["📊 *СТАТИСТИКА БОТА AI 1C PRO*\n"]
-    
-    # Общая информация
-    message_parts.append(f"👥 Всего пользователей: *{stats['total_users']}*")
-    message_parts.append(f"⚡ Всего действий: *{stats['total_actions']}*")
-    
+    import html as _html
+    message_parts = ["📊 <b>СТАТИСТИКА БОТА AI 1C PRO</b>\n"]
+
+    message_parts.append(f"👥 Всего пользователей: <b>{stats['total_users']}</b>")
+    message_parts.append(f"⚡ Всего действий: <b>{stats['total_actions']}</b>")
+
     if stats['total_users'] > 0:
         avg = stats['total_actions'] / stats['total_users']
-        message_parts.append(f"📈 Среднее действий/пользователь: *{avg:.1f}*\n")
-    
-    # ТОП-5 активных пользователей
+        message_parts.append(f"📈 Среднее действий/пользователь: <b>{avg:.1f}</b>\n")
+
     if stats['users']:
-        message_parts.append("*🏆 ТОП-5 активных пользователей:*")
+        message_parts.append("<b>🏆 ТОП-5 активных пользователей:</b>")
         for i, user in enumerate(stats['users'][:5], 1):
-            username_str = f" (@{user['username']})" if user['username'] else ""
+            name = _html.escape(str(user.get('first_name') or ''))
+            uname = user.get('username') or ''
+            uname_str = f" (@{_html.escape(uname)})" if uname else ""
             message_parts.append(
-                f"{i}. {user['first_name']}{username_str} — {user['total_actions']} действий"
+                f"{i}. {name}{uname_str} — {user['total_actions']} действий"
             )
         message_parts.append("")
-    
-    # Популярные действия
+
     if stats['action_breakdown']:
-        message_parts.append("*📋 Популярные действия:*")
+        message_parts.append("<b>📋 Популярные действия:</b>")
         sorted_actions = sorted(
             stats['action_breakdown'].items(),
             key=lambda x: x[1],
@@ -226,16 +226,11 @@ def format_stats_message(stats: Dict[str, Any]) -> str:
         )
         for action, count in sorted_actions[:5]:
             action_emoji = {
-                "debt": "📊",
-                "sales": "🛒",
-                "gross": "💰",
-                "inventory": "📦",
-                "ai": "🤖",
-                "back": "◀️",
-                "menu": "📋"
+                "debt": "📊", "sales": "🛒", "gross": "💰",
+                "inventory": "📦", "ai": "🤖", "back": "◀️", "menu": "📋"
             }.get(action, "•")
-            message_parts.append(f"  {action_emoji} {action}: {count}")
-    
+            message_parts.append(f"  {action_emoji} {_html.escape(action)}: {count}")
+
     return "\n".join(message_parts)
 
 def get_user_info(user_id: int) -> Dict[str, Any]:
