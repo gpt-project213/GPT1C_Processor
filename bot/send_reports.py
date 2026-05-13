@@ -7481,32 +7481,6 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             from collector.approval_flow import handle_callback as _wa_appr_cb
             handled = await _wa_appr_cb(data, chat_id, q.message.message_id)
             if handled:
-                # Если менеджер выбрал "оплатил без документа" → создаём payment hold для Саиды
-                if "wa_appr_cli_paid_nodoc" in data:
-                    try:
-                        from collector.approval_flow import find_manager_waiting_state
-                        from collector.payment_hold import create_manager_payment_request
-                        parts = data.split("|")
-                        if len(parts) >= 4:
-                            batch_id_cb = parts[1]
-                            cli_idx_cb  = int(parts[3])
-                            from collector.approval_flow import _load_batches
-                            batch_cb = (_load_batches() or {}).get(batch_id_cb)
-                            if batch_cb:
-                                for mgr_n, mgr_s in batch_cb.get("managers", {}).items():
-                                    if mgr_s.get("chat_id") == chat_id:
-                                        clients_cb = mgr_s.get("clients", [])
-                                        if cli_idx_cb < len(clients_cb):
-                                            cl = clients_cb[cli_idx_cb]
-                                            create_manager_payment_request(
-                                                manager=mgr_n,
-                                                manager_chat_id=chat_id,
-                                                client=cl.get("name", ""),
-                                                debt=cl.get("amount", 0),
-                                                claimed_by_manager=True,
-                                            )
-                    except Exception as _ph_e:
-                        logger.warning("payment hold create error: %s", _ph_e)
                 return
         except Exception as e:
             logger.error("wa_appr callback error: %s", e)

@@ -4,7 +4,12 @@
 collector/approval_flow.py
 UX согласования рассылки WhatsApp — менеджер → администратор.
 
-Версия: 1.1.11 (2026-05-11)
+Версия: 1.1.12 (2026-05-13)
+
+v1.1.12 (2026-05-13): manager preview now shows the real response deadline
+  capped by batch.expires_at; stale manager callbacks explicitly clear inline
+  buttons; "paid without document" creates payment-hold only inside the
+  applied callback path.
 
 v1.1.10 (2026-05-11): forensics: поле close_reason фиксирует причину финальной
   закрытия батча (send_window_missed), а escalation_reason теперь не перезаписывается
@@ -217,6 +222,20 @@ def _send_window_cutoff(now: datetime) -> datetime:
     if cutoff <= now:
         cutoff += timedelta(days=1)
     return cutoff
+
+
+def _manager_response_deadline(batch: Optional[Dict[str, Any]]) -> Optional[datetime]:
+    """Фактический дедлайн ответа менеджера."""
+    if not batch:
+        return None
+    created_dt = _parse_batch_dt(batch.get("created_at"))
+    if not created_dt:
+        return None
+    deadline_dt = created_dt + timedelta(hours=MANAGER_SILENCE_TIMEOUT_HOURS)
+    expires_dt = _parse_batch_dt(batch.get("expires_at"))
+    if expires_dt:
+        return min(deadline_dt, expires_dt)
+    return deadline_dt
 
 
 def _batch_expires_at(now: datetime) -> datetime:
@@ -491,7 +510,7 @@ async def _tg_send(chat_id: int, text: str, markup=None, _retries: int = 3) -> O
         "text":       text,
         "parse_mode": "HTML",
     }
-    if markup:
+    if markup is not None:
         payload["reply_markup"] = markup
     for attempt in range(1, _retries + 1):
         try:
@@ -648,18 +667,8 @@ def _format_manager_preview_text(
             f"     Причина: {c.get('reason', '—')}"
             f"{phone_note}"
         )
-    deadline_str = ""
-    if batch:
-        created_raw = batch.get("created_at")
-        if created_raw:
-            try:
-                created_dt = datetime.fromisoformat(created_raw)
-                if created_dt.tzinfo is None:
-                    created_dt = created_dt.replace(tzinfo=TZ)
-                deadline_dt = created_dt + timedelta(hours=MANAGER_SILENCE_TIMEOUT_HOURS)
-                deadline_str = deadline_dt.strftime("%H:%M")
-            except (ValueError, TypeError):
-                pass
+    deadline_dt = _manager_response_deadline(batch)
+    deadline_str = deadline_dt.strftime("%H:%M") if deadline_dt else ""
     deadline_line = (
         f"⏰ Ответьте до <b>{deadline_str}</b>. Если не успеете — уведомления уйдут автоматически."
         if deadline_str
@@ -1075,7 +1084,12 @@ async def handle_manager_callback(
     batch = load_batch(batch_id)
     if not batch:
         logger.warning("handle_manager_callback: батч %s не найден", batch_id)
-        await _tg_edit(chat_id, message_id, "⚠️ Запрос устарел. Исходный список уже закрыт.")
+        await _tg_edit(
+            chat_id,
+            message_id,
+            "⚠️ Запрос устарел. Исходный список уже закрыт.",
+            {"inline_keyboard": []},
+        )
         return True
     if batch.get("status") != "pending_managers":
         logger.info(
@@ -1088,6 +1102,7 @@ async def handle_manager_callback(
             message_id,
             "⚠️ Этот запрос уже неактуален.\n\n"
             "Решение по нему уже передано администратору или сформирован новый список.",
+            {"inline_keyboard": []},
         )
         return True
 
@@ -1312,6 +1327,17 @@ async def handle_manager_callback(
             mgr_state["paid_no_doc_names"].append(client_name)
             mgr_state["waiting_for_proof"] = None
             save_batch(batch)
+            try:
+                from collector.payment_hold import create_manager_payment_request
+                create_manager_payment_request(
+                    manager=manager_name,
+                    manager_chat_id=chat_id,
+                    client=client_name,
+                    debt=clients[cli_idx].get("amount", 0),
+                    claimed_by_manager=True,
+                )
+            except Exception as hold_exc:
+                logger.error("[%s] payment_hold create error for %s: %s", batch_id, client_name, hold_exc)
             await _tg_send(
                 chat_id,
                 f"⚠️ <b>{client_name}</b> снят из рассылки.\n"

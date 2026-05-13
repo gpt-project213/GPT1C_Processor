@@ -5,6 +5,81 @@
 
 ---
 
+## HANDOFF 2026-05-13 — approval_penalty partial-timeout fix (Алена)
+
+### Что закрыто
+
+- Исправлена классификация partial WA-пропуска в `collector/approval_penalty.py`.
+- Раньше `timeout` считался `partial` только если был `approved_names`.
+- Из-за этого реальные частичные ответы менеджера через:
+  - `waiting_for_agreed`
+  - `paid_no_doc_names`
+  - другие non-approve decision ветки
+  ошибочно попадали в `full`, а не `partial`.
+
+### Подтверждённый боевой симптом
+
+- `logs/approval_penalty_state.json` по Алене содержал:
+  - `20260511-170000-078e` → `type=full`, `penalty=0`
+  - `20260512-170000-15b9` → `type=full`, `penalty=2000`
+- Но в `logs/wa_approval_batches.json` у Алены были реальные следы ответа:
+  - 11.05 → `waiting_for_agreed`
+  - 12.05 → `paid_no_doc_names`
+
+### Изменения
+
+- `collector/approval_penalty.py`
+  - `timeout` теперь считается `partial`, если есть любые признаки начатого manager-review:
+    - decision lists
+    - `waiting_for_proof`
+    - `waiting_for_agreed`
+    - `responded_at`
+- `tests/test_collector.py`
+  - добавлены регрессии:
+    - `timeout + waiting_for_agreed -> partial`
+    - `timeout + paid_no_doc_names -> partial`
+    - `timeout без действий -> full`
+
+### Проверка
+
+- `python -m py_compile collector/approval_penalty.py` -> OK
+- `python -X utf8 tests/test_collector.py` -> `587/587`
+
+### Важно
+
+- Это исправляет будущие начисления.
+- Текущее содержимое `logs/approval_penalty_state.json` не пересчитывается автоматически и при необходимости требует отдельной операционной корректировки.
+
+### Операционная корректировка
+
+- По прямому решению пользователя state штрафов был сброшен вручную:
+  - `logs/approval_penalty_state.json` -> `{ "month": "2026-05", "managers": {} }`
+  - бэкап сохранён: `logs/approval_penalty_state.json.bak-20260513-reset`
+
+### Follow-up code fix (same day)
+
+- Закрыты сопутствующие баги approval/preview для всех менеджеров:
+  - `collector/approval_flow.py`
+    - manager preview показывает реальный дедлайн ответа: `min(created_at + 1h, expires_at)`
+    - stale manager callback снимает inline-кнопки (`reply_markup=[]`)
+    - `paid_no_doc` создаёт payment hold только внутри реально применённого callback
+  - `bot/send_reports.py`
+    - удалён побочный `payment_hold` после любого `handled=True` по `wa_appr_cli_paid_nodoc`
+    - раньше это могло сработать даже после ответа `запрос уже неактуален`
+  - `collector/collections_engine.py`
+    - client with active/escalated `collector_client_dialogs.json` больше не попадает
+      в новый manager preview на следующий день
+
+### Проверка
+
+- `python -m py_compile collector/approval_flow.py` -> OK
+- `python -m py_compile collector/collections_engine.py` -> OK
+- `python -m py_compile bot/send_reports.py` -> OK
+- `python -m py_compile collector/approval_penalty.py` -> OK
+- `python -X utf8 tests/test_collector.py` -> `588/588`
+
+---
+
 ## HANDOFF 2026-05-12 — WA-диалог: платёжные слова, AI на unclear, _is_service_request
 
 ### Что сделано (master, коммит 8baa1ba)

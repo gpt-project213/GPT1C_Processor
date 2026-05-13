@@ -5,6 +5,11 @@ collector/approval_penalty.py
 Штрафные баллы менеджеров за пропуск окна согласования WhatsApp-рассылки
 и за неответ на CRM-запрос.
 
+v1.1.1 (2026-05-13): timeout после начатого manager-review теперь считается
+  partial, даже если менеджер не добавил никого в approved_names. Раньше
+  ветки "Договорились"/"Оплатил без документа"/ожидание деталей ошибочно
+  классифицировались как full ignore.
+
 v1.1.0 (2026-05-11): check_crm_ignores() — CRM-игноры в единый счётчик штрафов.
   CRM_IGNORE_MIN_AGE_HOURS (default 22): записи старше порога = игнор.
   Уведомление: та же формула, текст отличается от WA-пропуска.
@@ -130,9 +135,19 @@ def _classify_manager(mgr_data: Dict[str, Any]) -> Optional[str]:
     status = mgr_data.get("status", "")
     if status == "approved_all":
         return "ok"
-    approved = mgr_data.get("approved_names", [])
     if status == "timeout":
-        return "partial" if approved else "full"
+        decision_lists = (
+            "approved_names",
+            "rejected_names",
+            "postponed_names",
+            "agreed_names",
+            "paid_with_doc_names",
+            "paid_no_doc_names",
+        )
+        has_decision = any(bool(mgr_data.get(key)) for key in decision_lists)
+        waiting_for_followup = bool(mgr_data.get("waiting_for_proof")) or bool(mgr_data.get("waiting_for_agreed"))
+        has_response_marker = bool(mgr_data.get("responded_at"))
+        return "partial" if (has_decision or waiting_for_followup or has_response_marker) else "full"
     return None  # pending / manual_editing — ещё не закрыт
 
 

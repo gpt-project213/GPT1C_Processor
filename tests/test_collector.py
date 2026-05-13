@@ -737,6 +737,15 @@ try:
     _now_before = datetime(2026, 5, 9, 18, 44, 59, tzinfo=_tz)
     check("approval_flow >=: now==expires_at → rejected", _now_exact  >= _af_cutoff)
     check("approval_flow >=: now<expires_at  → allowed",  not (_now_before >= _af_cutoff))
+
+    _batch_deadline = {
+        "created_at": "2026-05-13T18:45:00+05:00",
+        "expires_at": "2026-05-13T19:30:00+05:00",
+    }
+    _mgr_deadline = _af._manager_response_deadline(_batch_deadline)
+    check("approval_flow manager deadline capped by expires_at",
+          _mgr_deadline is not None and _mgr_deadline.hour == 19 and _mgr_deadline.minute == 30,
+          str(_mgr_deadline))
 finally:
     comm.SEND_WINDOW_CUTOFF_HOUR   = _orig_comm_h
     comm.SEND_WINDOW_CUTOFF_MINUTE = _orig_comm_m
@@ -3733,7 +3742,7 @@ with _patch("collector.approval_flow._load_batches", return_value={"TEST-no-esc"
 # 24. approval_penalty — формула штрафа
 # ═══════════════════════════════════════════════════════════════
 section("24. approval_penalty — формула штрафа")
-from collector.approval_penalty import _penalty_amount, _cumulative_penalty
+from collector.approval_penalty import _penalty_amount, _cumulative_penalty, _classify_manager
 
 check("penalty: 1-й пропуск → 0 (предупреждение)",    _penalty_amount(1) == 0)
 check("penalty: 2-й пропуск → 2 000 тг",              _penalty_amount(2) == 2_000)
@@ -3742,6 +3751,25 @@ check("penalty: 4-й пропуск → 8 000 тг",              _penalty_amoun
 check("penalty: 5-й пропуск → 10 000 тг",             _penalty_amount(5) == 10_000)
 check("penalty: частичный 2-й → 1 800 тг (-10%)",     _penalty_amount(2, partial=True) == 1_800)
 check("penalty: частичный 3-й → 5 400 тг (-10%)",     _penalty_amount(3, partial=True) == 5_400)
+check("penalty classify: timeout + waiting_for_agreed -> partial",
+      _classify_manager({
+          "status": "timeout",
+          "approved_names": [],
+          "waiting_for_agreed": {"client_name": "ТОО Тест"},
+      }) == "partial")
+check("penalty classify: timeout + paid_no_doc_names -> partial",
+      _classify_manager({
+          "status": "timeout",
+          "approved_names": [],
+          "paid_no_doc_names": ["ТОО Тест"],
+      }) == "partial")
+check("penalty classify: timeout без действий -> full",
+      _classify_manager({
+          "status": "timeout",
+          "approved_names": [],
+          "paid_no_doc_names": [],
+          "waiting_for_agreed": None,
+      }) == "full")
 _sample_ignores = [
     {"penalty": 0},
     {"penalty": 2_000},

@@ -1876,6 +1876,22 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
             )
             continue
 
+        if _phone:
+            try:
+                from collector.client_dialog import _get_client_dialog, _DIALOG_ACTIVE_STATES
+                _phone_clean = "".join(ch for ch in _phone if ch.isdigit())
+                _existing_dlg = _get_client_dialog(_phone_clean)
+                if _existing_dlg:
+                    _dlg_state = str(_existing_dlg.get("state") or "")
+                    if _dlg_state in (*_DIALOG_ACTIVE_STATES, "escalated"):
+                        logger.info(
+                            "run_approval_preview: [%s] skip — existing client dialog state=%s",
+                            name, _dlg_state,
+                        )
+                        continue
+            except Exception as dlg_exc:
+                logger.warning("run_approval_preview: [%s] client dialog precheck error: %s", name, dlg_exc)
+
         manager_name = (contact or {}).get("manager", "").strip()
         if not manager_name:
             manager_name = str((stop_rec or {}).get("manager") or "").strip()
