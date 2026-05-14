@@ -3245,7 +3245,7 @@ def _format_collector_batch_text() -> str:
     # Send results если уже отправлено
     send_results = batch.get("send_results")
     if send_results:
-        sent_ok    = sum(1 for r in send_results if r.get("sent"))
+        sent_ok    = sum(1 for r in send_results if r.get("sent") or r.get("status") == "sent")
         sent_total = len(send_results)
         lines.append("")
         lines.append(f"<b>Результат отправки:</b> {sent_ok}/{sent_total} доставлено")

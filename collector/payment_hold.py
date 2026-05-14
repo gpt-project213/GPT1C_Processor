@@ -14,7 +14,10 @@ import os
 from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from contextlib import contextmanager
 from typing import Any, Dict, Iterable, Optional
+
+import portalocker
 
 ROOT = Path(__file__).resolve().parents[1]
 TZ_NAME = os.getenv("TZ", "Asia/Almaty")
@@ -31,6 +34,23 @@ SAIDA_BYPASS_HOURS = int(os.getenv("SAIDA_BYPASS_HOURS", "2"))
 
 ACTIVE_STATUSES = {"confirmed_full", "confirmed_partial"}
 OPEN_STATUSES = {"pending_saida", *ACTIVE_STATUSES}
+
+_LOCK_FILE = PAYMENT_HOLD_PATH.with_suffix(".lock")
+
+
+@contextmanager
+def _hold_lock():
+    """Exclusive cross-process lock for payment holds read-modify-write."""
+    _LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with portalocker.Lock(str(_LOCK_FILE), timeout=5, flags=portalocker.LOCK_EX):
+            yield
+    except portalocker.LockException:
+        import logging as _lock_log
+        _lock_log.getLogger(__name__).warning(
+            "payment_hold: lock timeout — proceeding without exclusive lock"
+        )
+        yield
 
 
 def _now() -> datetime:
@@ -91,28 +111,29 @@ def create_manager_payment_request(
     claimed_by_manager: bool = False,  # True когда менеджер заявил оплату в WA approval
 ) -> Dict[str, Any]:
     """Create or refresh a manager-to-Saida payment check request."""
-    data = _load()
     token = _token(manager, client)
-    current = data.get(token, {})
-    if current.get("status") in ACTIVE_STATUSES:
-        return current
+    with _hold_lock():
+        data = _load()
+        current = data.get(token, {})
+        if current.get("status") in ACTIVE_STATUSES:
+            return current
 
-    record = {
-        "token": token,
-        "status": "pending_saida",
-        "manager": manager,
-        "client": client,
-        "client_norm": normalize_client_name(client),
-        "debt": float(debt or 0.0),
-        "debt_str": debt_str,
-        "manager_chat_id": int(manager_chat_id or 0),
-        "claimed_by_manager": claimed_by_manager,
-        "created_at": current.get("created_at") or _now_iso(),
-        "updated_at": _now_iso(),
-    }
-    data[token] = record
-    _save(data)
-    return record
+        record = {
+            "token": token,
+            "status": "pending_saida",
+            "manager": manager,
+            "client": client,
+            "client_norm": normalize_client_name(client),
+            "debt": float(debt or 0.0),
+            "debt_str": debt_str,
+            "manager_chat_id": int(manager_chat_id or 0),
+            "claimed_by_manager": claimed_by_manager,
+            "created_at": current.get("created_at") or _now_iso(),
+            "updated_at": _now_iso(),
+        }
+        data[token] = record
+        _save(data)
+        return record
 
 
 _CONFIRMED_STATUSES = {"confirmed_full", "confirmed_partial", "rejected"}
@@ -124,25 +145,26 @@ def confirm_by_saida(token: str, status: str) -> Optional[Dict[str, Any]]:
     Returns None if already confirmed (idempotent — prevents double notifications
     when Saida both presses a button and writes a text reply).
     """
-    data = _load()
-    record = data.get(token)
-    if not isinstance(record, dict):
-        return None
-    if record.get("status") in _CONFIRMED_STATUSES:
-        return None  # already answered — caller must not send notifications again
-    if status == "full":
-        record["status"] = "confirmed_full"
-    elif status == "partial":
-        record["status"] = "confirmed_partial"
-    elif status == "none":
-        record["status"] = "rejected"
-    else:
-        return None
-    record["saida_confirmed_at"] = _now_iso()
-    record["updated_at"] = _now_iso()
-    data[token] = record
-    _save(data)
-    return record
+    with _hold_lock():
+        data = _load()
+        record = data.get(token)
+        if not isinstance(record, dict):
+            return None
+        if record.get("status") in _CONFIRMED_STATUSES:
+            return None  # already answered — caller must not send notifications again
+        if status == "full":
+            record["status"] = "confirmed_full"
+        elif status == "partial":
+            record["status"] = "confirmed_partial"
+        elif status == "none":
+            record["status"] = "rejected"
+        else:
+            return None
+        record["saida_confirmed_at"] = _now_iso()
+        record["updated_at"] = _now_iso()
+        data[token] = record
+        _save(data)
+        return record
 
 
 def get_request(token: str) -> Optional[Dict[str, Any]]:
@@ -304,6 +326,9 @@ def get_hold_for_client(client: str) -> Optional[Dict[str, Any]]:
         if record.get("client_norm") != client_norm:
             continue
         status = record.get("status")
+        if status not in OPEN_STATUSES:
+            continue
+        # TTL только для подтверждённых холдов; pending_saida блокирует без TTL
         if status in ACTIVE_STATUSES:
             created_raw = record.get("saida_confirmed_at") or record.get("updated_at") or record.get("created_at")
             try:
@@ -318,8 +343,8 @@ def get_hold_for_client(client: str) -> Optional[Dict[str, Any]]:
                 data[token] = record
                 changed = True
                 continue
-            found = record
-            break
+        found = record
+        break
     if changed:
         _save(data)
     return found
@@ -336,19 +361,20 @@ def sync_holds_with_debtors(debtors: Iterable[Dict[str, Any]]) -> int:
         for d in debtors
         if isinstance(d, dict) and (d.get("name") or d.get("client"))
     }
-    data = _load()
-    changed = 0
-    for token, record in list(data.items()):
-        if not isinstance(record, dict) or record.get("status") not in ACTIVE_STATUSES:
-            continue
-        norm = record.get("client_norm", "")
-        if norm and debt_by_norm.get(norm, 0.0) <= 0:
-            record["status"] = "cleared_by_1c"
-            record["cleared_at"] = _now_iso()
-            data[token] = record
-            changed += 1
-    if changed:
-        _save(data)
+    with _hold_lock():
+        data = _load()
+        changed = 0
+        for token, record in list(data.items()):
+            if not isinstance(record, dict) or record.get("status") not in ACTIVE_STATUSES:
+                continue
+            norm = record.get("client_norm", "")
+            if norm and debt_by_norm.get(norm, 0.0) <= 0:
+                record["status"] = "cleared_by_1c"
+                record["cleared_at"] = _now_iso()
+                data[token] = record
+                changed += 1
+        if changed:
+            _save(data)
     return changed
 
 

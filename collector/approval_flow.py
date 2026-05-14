@@ -2788,7 +2788,7 @@ async def handle_manager_proof(
     client_name = state["wait_data"].get("client_name", "—")
 
     mgr_state["waiting_for_proof"] = None
-    _save_batches({state["batch_id"]: batch} | _load_batches())
+    _save_batches(_load_batches() | {state["batch_id"]: batch})
 
     # Пересылаем директору
     caption = (

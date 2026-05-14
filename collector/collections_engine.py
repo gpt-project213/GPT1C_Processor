@@ -357,7 +357,7 @@ def _exception_grace_active(stop_rec: Optional[Dict[str, Any]]) -> Tuple[bool, s
         or _parse_registry_date(stop_rec.get("approved_at"))
     )
     if not anchor:
-        return False, ""
+        anchor = datetime.now(TZ).date()
 
     age_days = (datetime.now(TZ).date() - anchor).days
     if age_days < 0:

@@ -961,6 +961,9 @@ async def handle_incoming(phone: str, text: str, attachment: Optional[Dict[str, 
 
     # ─── Маршрутизация по намерению ──────────────────────────────────────────
 
+    if intent and intent not in ("unclear", "off_topic"):
+        dialog["off_topic_count"] = 0
+
     if exchange_count >= 5:
         # Лимит обменов — передаём менеджеру
         reply = (
