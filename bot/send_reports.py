@@ -1294,7 +1294,8 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
                 "created_at": _now_iso,
                 "last_sent": _now_iso,
             }
-            _crm_save_pending()
+            if not _crm_save_pending():
+                crm_logger.error("crm_state_lock_timeout: daily_task init save failed (in-memory only)")
             try:
                 if _has_prefix:
                     await context.bot.send_message(
@@ -1317,7 +1318,8 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
                     )
             except Exception as _e:
                 _CRM_PHONE_PENDING.pop(chat_id, None)
-                _crm_save_pending()
+                if not _crm_save_pending():
+                    crm_logger.error("crm_state_lock_timeout: daily_task cleanup save failed (in-memory only)")
                 crm_logger.warning("crm_daily_task: запрос данных %s: %s", manager, _e)
 
         # 4. Бесхозные клиенты — рассылаем всем участникам CRM: "чей клиент?"
@@ -1351,7 +1353,8 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
                         "created_at": _unowned_now_iso,
                         "last_sent": _unowned_now_iso,
                     }
-                    _crm_save_pending()
+                    if not _crm_save_pending():
+                        crm_logger.error("crm_state_lock_timeout: prefix-direct save failed (in-memory only)")
                     try:
                         await context.bot.send_message(
                             chat_id=_prefix_chat,
@@ -1391,7 +1394,8 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
                 "claimed": False,
                 "created_at": datetime.now(TZ).isoformat(),
             }
-            _crm_save_claim_pending()
+            if not _crm_save_claim_pending():
+                crm_logger.error("crm_state_lock_timeout: claim broadcast save failed (in-memory only)")
             crm_audit("claim_broadcast", client_key=_client_key, notified_count=len(_notified), token=_token)
             crm_logger.info("CRM claim: разослано по %d участникам для «%s»", len(_notified), _client_key)
 
@@ -6646,12 +6650,17 @@ def _cleanup_legacy_collector_pending_state() -> None:
         save_state(state)
 
 
+class CrmStateLockError(RuntimeError):
+    """Exclusive lock not acquired within timeout — caller must not proceed with save."""
+
+
 @contextmanager
 def _crm_state_lock(path: Path):
     """Exclusive cross-process lock for CRM state read-modify-write.
 
-    LOCK_EX|LOCK_NB + retry-loop — единственный режим, где portalocker
-    timeout реально работает на Windows. Аналог collector/payment_hold._hold_lock.
+    Hard-fail policy: при недоступности lock поднимает CrmStateLockError.
+    Callers-save должны вернуть False. Callers-load — только логировать и продолжать
+    (startup tolerant).
     """
     lock_file = path.with_suffix(".lock")
     lock_file.parent.mkdir(parents=True, exist_ok=True)
@@ -6664,15 +6673,13 @@ def _crm_state_lock(path: Path):
         ):
             yield
     except (portalocker.LockException, PermissionError, OSError) as _le:
-        state_logger.warning(
-            "crm_state: lock unavailable for %s (%s) — proceeding without exclusive lock",
-            path.name, _le,
-        )
-        yield
+        raise CrmStateLockError(
+            f"crm_state_lock_timeout: {path.name} — {_le}"
+        ) from _le
 
 
-def _crm_save_pending() -> None:
-    """Сохраняет _CRM_PHONE_PENDING на диск — переживает перезапуск бота."""
+def _crm_save_pending() -> bool:
+    """Сохраняет _CRM_PHONE_PENDING на диск. Возвращает False при ошибке lock или записи."""
     try:
         with _crm_state_lock(CRM_PENDING_PATH):
             _crm_cleanup_pending()
@@ -6682,8 +6689,13 @@ def _crm_save_pending() -> None:
                           _f, ensure_ascii=False, indent=2)
             tmp.replace(CRM_PENDING_PATH)
             state_logger.debug("CRM pending saved: %d", len(_CRM_PHONE_PENDING))
+            return True
+    except CrmStateLockError as _le:
+        state_logger.error("crm_state_lock_timeout: pending — %s", _le)
+        return False
     except Exception as _e:
         state_logger.warning("_crm_save_pending error: %s", _e)
+        return False
 
 
 def _crm_load_pending() -> None:
@@ -6698,6 +6710,8 @@ def _crm_load_pending() -> None:
             _CRM_PHONE_PENDING.update({int(k): v for k, v in data.items()})
             _crm_cleanup_pending()
             state_logger.info("CRM pending restored: %d managers", len(_CRM_PHONE_PENDING))
+    except CrmStateLockError as _le:
+        state_logger.error("crm_state_lock_timeout: pending load — %s", _le)
     except Exception as _e:
         state_logger.warning("_crm_load_pending error: %s", _e)
     _cleanup_legacy_collector_pending_state()
@@ -6750,17 +6764,26 @@ def _crmdup_cleanup_pending(now_dt: Optional[datetime] = None) -> None:
         _CRM_DUP_REVIEW_AWAITING_TEXT.pop(chat_id, None)
 
 
-def _crmdup_save_pending() -> None:
-    CRM_DUP_REVIEW_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with _crm_state_lock(CRM_DUP_REVIEW_PATH):
-        _crmdup_cleanup_pending()
-        tmp = CRM_DUP_REVIEW_PATH.with_suffix(".tmp")
-        payload = {
-            "reviews": _CRM_DUP_REVIEW_PENDING,
-            "awaiting_text": {str(k): v for k, v in _CRM_DUP_REVIEW_AWAITING_TEXT.items()},
-        }
-        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        os.replace(tmp, CRM_DUP_REVIEW_PATH)
+def _crmdup_save_pending() -> bool:
+    """Возвращает False при ошибке lock или записи."""
+    try:
+        CRM_DUP_REVIEW_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with _crm_state_lock(CRM_DUP_REVIEW_PATH):
+            _crmdup_cleanup_pending()
+            tmp = CRM_DUP_REVIEW_PATH.with_suffix(".tmp")
+            payload = {
+                "reviews": _CRM_DUP_REVIEW_PENDING,
+                "awaiting_text": {str(k): v for k, v in _CRM_DUP_REVIEW_AWAITING_TEXT.items()},
+            }
+            tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            os.replace(tmp, CRM_DUP_REVIEW_PATH)
+            return True
+    except CrmStateLockError as _le:
+        state_logger.error("crm_state_lock_timeout: dup_review — %s", _le)
+        return False
+    except Exception as _e:
+        state_logger.warning("_crmdup_save_pending error: %s", _e)
+        return False
 
 
 def _crmdup_load_pending() -> None:
@@ -6779,6 +6802,8 @@ def _crmdup_load_pending() -> None:
                 _CRM_DUP_REVIEW_AWAITING_TEXT.update({int(k): v for k, v in awaiting_text.items()})
             _crmdup_cleanup_pending()
             state_logger.info("CRM duplicate review restored: %d records", len(_CRM_DUP_REVIEW_PENDING))
+    except CrmStateLockError as _le:
+        state_logger.error("crm_state_lock_timeout: dup_review load — %s", _le)
     except Exception as _e:
         state_logger.warning("_crmdup_load_pending error: %s", _e)
 
@@ -6821,12 +6846,21 @@ def _crmdup_ambiguous_count() -> int:
     return sum(1 for v in _CRM_AMBIGUOUS.values() if v.get("status") == "pending")
 
 
-def _crmdup_save_ambiguous() -> None:
-    CRM_AMBIGUOUS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with _crm_state_lock(CRM_AMBIGUOUS_PATH):
-        tmp = CRM_AMBIGUOUS_PATH.with_suffix(".tmp")
-        tmp.write_text(json.dumps(_CRM_AMBIGUOUS, ensure_ascii=False, indent=2), encoding="utf-8")
-        os.replace(tmp, CRM_AMBIGUOUS_PATH)
+def _crmdup_save_ambiguous() -> bool:
+    """Возвращает False при ошибке lock или записи."""
+    try:
+        CRM_AMBIGUOUS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with _crm_state_lock(CRM_AMBIGUOUS_PATH):
+            tmp = CRM_AMBIGUOUS_PATH.with_suffix(".tmp")
+            tmp.write_text(json.dumps(_CRM_AMBIGUOUS, ensure_ascii=False, indent=2), encoding="utf-8")
+            os.replace(tmp, CRM_AMBIGUOUS_PATH)
+            return True
+    except CrmStateLockError as _le:
+        state_logger.error("crm_state_lock_timeout: ambiguous — %s", _le)
+        return False
+    except Exception as _e:
+        state_logger.warning("_crmdup_save_ambiguous error: %s", _e)
+        return False
 
 
 def _crmdup_load_ambiguous() -> None:
@@ -6839,6 +6873,8 @@ def _crmdup_load_ambiguous() -> None:
             if isinstance(data, dict):
                 _CRM_AMBIGUOUS.update(data)
             state_logger.info("CRM ambiguous conflicts restored: %d records", len(_CRM_AMBIGUOUS))
+    except CrmStateLockError as _le:
+        state_logger.error("crm_state_lock_timeout: ambiguous load — %s", _le)
     except Exception as _e:
         state_logger.warning("_crmdup_load_ambiguous error: %s", _e)
 
@@ -6863,8 +6899,10 @@ def _crmdup_queue_ambiguous(conflict: Dict[str, Any]) -> None:
         "added_at": datetime.now(TZ).isoformat(),
         "status": "pending",
     }
-    _crmdup_save_ambiguous()
-    crm_logger.info("CRM ambiguous queued: %s managers=%s", sig[:50], managers)
+    if not _crmdup_save_ambiguous():
+        crm_logger.error("CRM ambiguous queue: save failed for sig=%s (in-memory only)", sig[:50])
+    else:
+        crm_logger.info("CRM ambiguous queued: %s managers=%s", sig[:50], managers)
 
 
 def _crmdup_try_finalize_ambiguous(sig: str, *, ok: bool, reviewer: str, resolution: str) -> bool:
@@ -6882,7 +6920,13 @@ def _crmdup_try_finalize_ambiguous(sig: str, *, ok: bool, reviewer: str, resolut
             "resolution": resolution,
         }
     )
-    _crmdup_save_ambiguous()
+    if not _crmdup_save_ambiguous():
+        state_logger.error("crm_state_lock_timeout: finalize_ambiguous failed, rolling back in-memory")
+        entry.update({"status": "pending"})
+        entry.pop("resolved_at", None)
+        entry.pop("resolved_by", None)
+        entry.pop("resolution", None)
+        return False
     crm_audit("ambiguous_conflict_resolved", reviewer=reviewer, signature=sig, resolution=resolution)
     return True
 
@@ -6985,7 +7029,8 @@ async def _crmdup_broadcast_once(context: ContextTypes.DEFAULT_TYPE, limit: int 
         _CRM_DUP_REVIEW_PENDING[token] = review
         crm_audit("duplicate_phone_conflict_sent", manager=manager, token=token, client_keys=[item.get("client_key", "") for item in review["items"]])
         sent += 1
-    _crmdup_save_pending()
+    if not _crmdup_save_pending():
+        crm_logger.error("crm_state_lock_timeout: dup_review broadcast save failed (in-memory only)")
     crm_logger.info("CRM duplicate review broadcast: sent=%d skipped=%d", sent, skipped)
     return {"sent": sent, "skipped": skipped, "total": len(conflicts)}
 
@@ -7013,14 +7058,23 @@ def _crm_cleanup_claim_pending(now_dt: Optional[datetime] = None) -> None:
         _CRM_CLAIM_PENDING.pop(token, None)
 
 
-def _crm_save_claim_pending() -> None:
-    CRM_CLAIM_PENDING_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with _crm_state_lock(CRM_CLAIM_PENDING_PATH):
-        _crm_cleanup_claim_pending()
-        tmp = CRM_CLAIM_PENDING_PATH.with_suffix(".tmp")
-        payload = {k: v for k, v in _CRM_CLAIM_PENDING.items()}
-        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        os.replace(tmp, CRM_CLAIM_PENDING_PATH)
+def _crm_save_claim_pending() -> bool:
+    """Возвращает False при ошибке lock или записи."""
+    try:
+        CRM_CLAIM_PENDING_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with _crm_state_lock(CRM_CLAIM_PENDING_PATH):
+            _crm_cleanup_claim_pending()
+            tmp = CRM_CLAIM_PENDING_PATH.with_suffix(".tmp")
+            payload = {k: v for k, v in _CRM_CLAIM_PENDING.items()}
+            tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            os.replace(tmp, CRM_CLAIM_PENDING_PATH)
+            return True
+    except CrmStateLockError as _le:
+        state_logger.error("crm_state_lock_timeout: claim — %s", _le)
+        return False
+    except Exception as _e:
+        state_logger.warning("_crm_save_claim_pending error: %s", _e)
+        return False
 
 
 def _crm_load_claim_pending() -> None:
@@ -7034,6 +7088,8 @@ def _crm_load_claim_pending() -> None:
                 _CRM_CLAIM_PENDING.update(data)
             _crm_cleanup_claim_pending()
             state_logger.info("CRM claim pending restored: %d records", len(_CRM_CLAIM_PENDING))
+    except CrmStateLockError as _le:
+        state_logger.error("crm_state_lock_timeout: claim load — %s", _le)
     except Exception as _e:
         state_logger.warning("_crm_load_claim_pending error: %s", _e)
 
@@ -7255,7 +7311,8 @@ async def _crm_save_phone_and_continue(
 
     done_today = pending.get("done_today", 0) + 1
     _CRM_PHONE_PENDING.pop(chat_id, None)
-    _crm_save_pending()
+    if not _crm_save_pending():
+        crm_logger.error("crm_state_lock_timeout: phone save (post-CRM-write) failed (in-memory only)")
 
     await context.bot.send_message(
         chat_id=chat_id,
@@ -7288,7 +7345,8 @@ async def _crm_save_phone_and_continue(
                 "created_at": _next_now_iso,
                 "last_sent": _next_now_iso,
             }
-            _crm_save_pending()
+            if not _crm_save_pending():
+                crm_logger.error("crm_state_lock_timeout: next-client chain save failed (in-memory only)")
             if _next_has_prefix:
                 await context.bot.send_message(
                     chat_id=chat_id,
@@ -8108,7 +8166,13 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             review["resolution"] = "pick"
             review["chosen_phone"] = chosen.get("phone", "")
             _CRM_DUP_REVIEW_AWAITING_TEXT.pop(chat_id, None)
-            _crmdup_save_pending()
+            if not _crmdup_save_pending():
+                review.pop("resolved_at", None)
+                review.pop("resolution", None)
+                review.pop("chosen_phone", None)
+                _CRM_DUP_REVIEW_AWAITING_TEXT[chat_id] = token
+                await q.answer("⚠️ Временная ошибка сохранения, попробуйте ещё раз.", show_alert=True)
+                return
             await q.answer("Сохранено.")
             try:
                 await q.message.edit_text(
@@ -8126,7 +8190,10 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if action == "custom":
             _CRM_DUP_REVIEW_AWAITING_TEXT[chat_id] = token
-            _crmdup_save_pending()
+            if not _crmdup_save_pending():
+                _CRM_DUP_REVIEW_AWAITING_TEXT.pop(chat_id, None)
+                await q.answer("⚠️ Временная ошибка сохранения, попробуйте ещё раз.", show_alert=True)
+                return
             await q.answer("Жду новый номер.")
             await context.bot.send_message(
                 chat_id=chat_id,
@@ -8148,7 +8215,12 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             review["resolved_at"] = datetime.now(TZ).isoformat()
             review["resolution"] = "distinct"
             _CRM_DUP_REVIEW_AWAITING_TEXT.pop(chat_id, None)
-            _crmdup_save_pending()
+            if not _crmdup_save_pending():
+                review.pop("resolved_at", None)
+                review.pop("resolution", None)
+                _CRM_DUP_REVIEW_AWAITING_TEXT[chat_id] = token
+                await q.answer("⚠️ Временная ошибка сохранения, попробуйте ещё раз.", show_alert=True)
+                return
             await q.answer("Отмечено.")
             try:
                 await q.message.edit_text(
@@ -8362,7 +8434,10 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         if action == "edit":
             pending["awaiting_name_text"] = True
-            _crm_save_pending()
+            if not _crm_save_pending():
+                pending.pop("awaiting_name_text", None)
+                await q.answer("⚠️ Временная ошибка сохранения, попробуйте ещё раз.", show_alert=True)
+                return
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=(
@@ -8378,7 +8453,9 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pending["name_mode"] = "system"
             pending["name_review_needed"] = False
             pending["state"] = "clarify_phone"
-            _crm_save_pending()
+            if not _crm_save_pending():
+                await q.answer("⚠️ Временная ошибка сохранения, попробуйте ещё раз.", show_alert=True)
+                return
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=_crm_phone_prompt_text(client_key),
@@ -8391,7 +8468,9 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pending["name_review_needed"] = True
             pending["state"] = "clarify_phone"
             pending["paused_until"] = (datetime.now(TZ) + timedelta(hours=24)).isoformat()
-            _crm_save_pending()
+            if not _crm_save_pending():
+                await q.answer("⚠️ Временная ошибка сохранения, попробуйте ещё раз.", show_alert=True)
+                return
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=(
@@ -8426,7 +8505,9 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             pass
         if action == "edit":
-            _crm_save_pending()
+            if not _crm_save_pending():
+                await q.answer("⚠️ Временная ошибка сохранения, попробуйте ещё раз.", show_alert=True)
+                return
             await context.bot.send_message(
                 chat_id=chat_id,
                 text="Введите другой телефон WhatsApp:\n<code>+7XXXXXXXXXX</code>",
@@ -8855,7 +8936,8 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # F-16: stale-токен (без created_at или просроченный) — снять кнопку и ответить как устаревший
         if claim and not claim.get("claimed") and _crm_claim_is_stale(claim):
             _CRM_CLAIM_PENDING.pop(token, None)
-            _crm_save_claim_pending()
+            if not _crm_save_claim_pending():
+                crm_logger.error("crm_claim: stale cleanup save failed (in-memory only)")
             try:
                 await q.message.edit_reply_markup(reply_markup=None)
             except Exception:
@@ -8886,7 +8968,12 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         claim["claimed"] = True
         claim["claimed_by"] = claimer_name
         claim["claimed_at"] = datetime.now(TZ).isoformat()
-        _crm_save_claim_pending()
+        if not _crm_save_claim_pending():
+            claim["claimed"] = False
+            claim.pop("claimed_by", None)
+            claim.pop("claimed_at", None)
+            await q.answer("⚠️ Временная ошибка сохранения, попробуйте ещё раз.", show_alert=True)
+            return
 
         _crm_write_ok = False
         try:
@@ -8915,7 +9002,8 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             claim["claimed"] = False
             claim.pop("claimed_by", None)
             claim.pop("claimed_at", None)
-            _crm_save_claim_pending()
+            if not _crm_save_claim_pending():
+                crm_logger.error("crm_claim: rollback save also failed — in-memory rollback only")
 
         if not _crm_write_ok:
             await q.answer("⚠️ Не удалось сохранить — попробуйте ещё раз.")
@@ -8958,7 +9046,8 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "created_at": _claimer_now_iso,
                 "last_sent": _claimer_now_iso,
             }
-            _crm_save_pending()
+            if not _crm_save_pending():
+                crm_logger.error("crm_state_lock_timeout: claim phone chain save failed (in-memory only)")
             crm_audit("claim_phone_chain_started", client_key=client_key, claimer=claimer_name, remaining=remaining)
             await context.bot.send_message(
                 chat_id=claimer_chat_id,
@@ -9768,7 +9857,8 @@ async def crm_phone_reminder_task(context: ContextTypes.DEFAULT_TYPE):
             pending["remind_count"] = remind_count
             pending["last_sent"] = now.isoformat()
             await _crm_notify_admin_unresolved(context, chat_id, pending, remind_count)
-            _crm_save_pending()
+            if not _crm_save_pending():
+                crm_logger.error("crm_state_lock_timeout: reminder save failed (in-memory only)")
             crm_logger.info("CRM escalating reminder → chat_id=%s client=%s count=%d", chat_id, client_key, remind_count)
         except Exception as e:
             crm_logger.warning("crm_phone_reminder_task chat_id=%s: %s", chat_id, e)
@@ -10160,7 +10250,8 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
         review = _CRM_DUP_REVIEW_PENDING.get(dup_token)
         if not review:
             _CRM_DUP_REVIEW_AWAITING_TEXT.pop(chat_id, None)
-            _crmdup_save_pending()
+            if not _crmdup_save_pending():
+                crm_logger.error("crm_state_lock_timeout: dup cleanup save failed (in-memory only)")
         else:
             import re as _re
             # Безопасный выход для менеджера который не знает телефон
@@ -10171,7 +10262,8 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
             )
             if any(p in _norm_text for p in _give_up_phrases):
                 _CRM_DUP_REVIEW_AWAITING_TEXT.pop(chat_id, None)
-                _crmdup_save_pending()
+                if not _crmdup_save_pending():
+                    crm_logger.error("crm_state_lock_timeout: dup give-up save failed (in-memory only)")
                 await update.message.reply_text(
                     "Понял. Запрос закрыт без изменений — "
                     "телефон в CRM не обновлялся.\n\n"
@@ -10217,7 +10309,13 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
             review["resolution"] = "custom"
             review["chosen_phone"] = "+" + phone_digits
             _CRM_DUP_REVIEW_AWAITING_TEXT.pop(chat_id, None)
-            _crmdup_save_pending()
+            if not _crmdup_save_pending():
+                review.pop("resolved_at", None)
+                review.pop("resolution", None)
+                review.pop("chosen_phone", None)
+                _CRM_DUP_REVIEW_AWAITING_TEXT[chat_id] = dup_token
+                await update.message.reply_text("⚠️ Временная ошибка сохранения, попробуйте ещё раз.")
+                return
             await update.message.reply_text(
                 (
                     "✅ Сохранено.\n\n"
@@ -10267,7 +10365,9 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
                 pending.pop("awaiting_name_text", None)
                 pending["state"] = "clarify_phone"
                 pending["last_sent"] = datetime.now(TZ).isoformat()
-                _crm_save_pending()
+                if not _crm_save_pending():
+                    await update.message.reply_text("⚠️ Временная ошибка сохранения, попробуйте ещё раз.")
+                    return
                 await update.message.reply_text(
                     _crm_phone_prompt_text(client_key),
                     parse_mode="HTML",
@@ -10316,7 +10416,8 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
                 daily_limit  = pending.get("daily_limit", CRM_DAILY_LIMIT)
                 manager_name = pending.get("manager", "")
                 _CRM_PHONE_PENDING.pop(chat_id, None)
-                _crm_save_pending()
+                if not _crm_save_pending():
+                    crm_logger.error("crm_state_lock_timeout: address save failed (in-memory only)")
 
                 if ok:
                     await update.message.reply_text(
@@ -10345,7 +10446,8 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
                             "created_at": _voice_next_now_iso,
                             "last_sent": _voice_next_now_iso,
                         }
-                        _crm_save_pending()
+                        if not _crm_save_pending():
+                            crm_logger.error("crm_state_lock_timeout: address-chain next save failed (in-memory only)")
                         await update.message.reply_text(
                             _crm_name_prompt_text(
                                 client_key=next_key,

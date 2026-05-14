@@ -533,12 +533,37 @@ class StabilizationRegressionTests(unittest.TestCase):
         claim = {"client_key": "C", "claimed": False, "created_at": fresh}
         self.assertFalse(sr._crm_claim_is_stale(claim))
 
-    # ── F-11: CRM state lock context manager ─────────────────────────────────
+    # ── F-11: CRM state lock — hard-fail policy ───────────────────────────────
     def test_crm_state_lock_creates_lock_file_and_yields(self):
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "test.json"
             with sr._crm_state_lock(path):
                 self.assertTrue((Path(td) / "test.lock").exists())
+
+    def test_crm_state_lock_raises_on_contention(self):
+        """Hard-fail: при занятом lock должен подняться CrmStateLockError (не yield)."""
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "test.json"
+            import portalocker as _pl
+            lock_file = path.with_suffix(".lock")
+            lock_file.parent.mkdir(parents=True, exist_ok=True)
+            # Удерживаем эксклюзивный lock извне — имитируем contention
+            with _pl.Lock(str(lock_file), flags=_pl.LOCK_EX | _pl.LOCK_NB):
+                with self.assertRaises(sr.CrmStateLockError):
+                    with sr._crm_state_lock(path):
+                        pass  # не должно дойти
+
+    def test_crm_save_pending_returns_false_on_lock_fail(self):
+        """save при недоступном lock возвращает False, не raise."""
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "crm_pending_state.json"
+            import portalocker as _pl
+            lock_file = path.with_suffix(".lock")
+            lock_file.parent.mkdir(parents=True, exist_ok=True)
+            with _pl.Lock(str(lock_file), flags=_pl.LOCK_EX | _pl.LOCK_NB):
+                with patch.object(sr, "CRM_PENDING_PATH", path):
+                    result = sr._crm_save_pending()
+                    self.assertFalse(result)
 
     def test_crm_save_and_reload_pending_preserves_data(self):
         # Smoke: save_pending → load_pending не теряет запись (lock-discipline ОК)
