@@ -45,14 +45,23 @@ def _state_lock(timeout: float = 10.0) -> Generator:
     Использует отдельный .lock-файл рядом с STATE_PATH, чтобы не конфликтовать
     с атомарной записью через tempfile. Блокировка эксклюзивная (LOCK_EX).
     При таймауте — WARNING в лог, исключение пробрасывается вверх.
+
+    LOCK_NB: non-blocking attempt с retry каждые 100 мс — единственный режим
+    где timeout= реально работает на Windows (чистый LOCK_EX blocking игнорирует
+    timeout и не бросает LockException при недоступности).
     """
     lock_path = STATE_PATH.with_suffix(".lock")
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        with portalocker.Lock(str(lock_path), timeout=timeout) as lf:
+        with portalocker.Lock(
+            str(lock_path),
+            timeout=timeout,
+            check_interval=0.1,
+            flags=portalocker.LOCK_EX | portalocker.LOCK_NB,
+        ) as lf:
             yield lf
-    except portalocker.LockException as e:
-        logger.warning("_state_lock: таймаут %.1fs — другой процесс держит блокировку: %s", timeout, e)
+    except (portalocker.LockException, PermissionError, OSError) as e:
+        logger.warning("_state_lock: блокировка недоступна (%.1fs): %s", timeout, e)
         raise
 
 
