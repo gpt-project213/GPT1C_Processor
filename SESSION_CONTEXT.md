@@ -19,7 +19,7 @@
 
 #### Исправлено (`approval_flow.py`)
 
-`_format_admin_detail_text`: ветка `status == "timeout"` теперь проверяет `waiting_for_agreed` и `waiting_for_proof`:
+`_format_admin_summary_text` (`approval_flow.py:1416`): ветка `status == "timeout"` теперь проверяет `waiting_for_agreed` и `waiting_for_proof`:
 
 - `waiting_for_agreed` → `"⏳ начал — не написал детали по «Клиент X» → авто (N кл.)"`
 - `waiting_for_proof`  → `"⏳ начал — не прислал документ по «Клиент X» → авто (N кл.)"`
