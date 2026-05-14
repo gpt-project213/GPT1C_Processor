@@ -30,10 +30,12 @@ import os
 import re
 import shutil
 import tempfile
+from contextlib import contextmanager
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+import portalocker
 from dotenv import load_dotenv
 from zoneinfo import ZoneInfo
 from bot.crm_audit_log import audit as crm_audit
@@ -53,6 +55,10 @@ CONTACTS_XLSX_BACKUP_DIR = ROOT_DIR / "backups" / "contacts_xlsx"
 
 logger = get_runtime_logger(__name__, system="CRM", component="STORE")
 _UNKNOWN_MANAGERS = {"", "Не определён", "?", "-", "—"}
+
+
+class CrmClientsLockError(RuntimeError):
+    """Exclusive lock on clients.json not acquired within timeout."""
 
 PHONE_IN_NAME_RE = re.compile(
     r"(?<!\d)(?:\+?7|8)[\s\-\(\)]*\d{3}[\s\-\(\)]*\d{3}[\s\-]*\d{2}[\s\-]*\d{2}(?!\d)"
@@ -104,21 +110,44 @@ def load_clients() -> Dict[str, Any]:
         return {"clients": {}}
 
 
-def save_clients(data: Dict[str, Any]) -> None:
-    """Атомарная запись config/clients.json."""
+@contextmanager
+def _clients_state_lock(path: Path):
+    """Hard-fail lock for config/clients.json writes on Windows."""
+    lock_file = path.with_suffix(".lock")
+    lock_file.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with portalocker.Lock(
+            str(lock_file),
+            timeout=5,
+            check_interval=0.1,
+            flags=portalocker.LOCK_EX | portalocker.LOCK_NB,
+        ):
+            yield
+    except (portalocker.LockException, PermissionError, OSError) as exc:
+        raise CrmClientsLockError(f"clients_lock_timeout: {path.name} — {exc}") from exc
+
+
+def save_clients(data: Dict[str, Any]) -> bool:
+    """Атомарная запись config/clients.json. Возвращает False при lock/write error."""
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     try:
-        tmp = tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8",
-            dir=CONFIG_DIR, suffix=".tmp", delete=False,
-        )
-        json.dump(data, tmp, ensure_ascii=False, indent=2)
-        tmp.close()
-        os.replace(tmp.name, CLIENTS_PATH)
+        with _clients_state_lock(CLIENTS_PATH):
+            tmp = tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8",
+                dir=CONFIG_DIR, suffix=".tmp", delete=False,
+            )
+            json.dump(data, tmp, ensure_ascii=False, indent=2)
+            tmp.close()
+            os.replace(tmp.name, CLIENTS_PATH)
         logger.debug("clients.json сохранён (%d клиентов)", len(data.get("clients", {})))
         refresh_contacts_xlsx_mirror(reason="save_clients")
+        return True
+    except CrmClientsLockError as e:
+        logger.error("Ошибка lock clients.json: %s", e)
+        return False
     except OSError as e:
         logger.error("Ошибка записи clients.json: %s", e)
+        return False
 
 
 def _backup_contacts_xlsx_once_per_day() -> Optional[Path]:
@@ -447,7 +476,9 @@ def resolve_phone_conflict(
         _merge_client_entries(clients_db, keep_key, other_key)
 
     data["clients"] = clients_db
-    save_clients(data)
+    if not save_clients(data):
+        logger.error("resolve_phone_conflict: clients.json не сохранён")
+        return False
     crm_audit(
         "duplicate_phone_conflict_resolved",
         reviewer=reviewer,
@@ -482,7 +513,9 @@ def mark_phone_conflict_distinct(client_keys: List[str], reviewer: str = "") -> 
     if not changed:
         return False
     data["clients"] = clients_db
-    save_clients(data)
+    if not save_clients(data):
+        logger.error("mark_phone_conflict_distinct: clients.json не сохранён")
+        return False
     crm_audit("duplicate_phone_conflict_marked_distinct", reviewer=reviewer, client_keys=client_keys)
     logger.info("CRM duplicate conflict marked distinct: keys=%d reviewer=%s", len(client_keys), reviewer or "-")
     return True
@@ -742,7 +775,9 @@ def update_from_reports() -> Dict[str, List[str]]:
             new_by_manager.setdefault(manager, []).append(name)
 
     data["clients"] = clients_db
-    save_clients(data)
+    if not save_clients(data):
+        logger.error("update_from_reports: clients.json не сохранён")
+        return {}
 
     total_new = sum(len(v) for v in new_by_manager.values())
     crm_audit("crm_sync_complete", total_clients=len(clients_db), total_new=total_new)
@@ -877,7 +912,9 @@ def set_client_phone(client_name: str, phone: str, manager: str = "",
         logger.info("display_name сохранён: %s → «%s»", client_name, alias)
 
     data["clients"] = clients_db
-    save_clients(data)
+    if not save_clients(data):
+        logger.error("set_client_phone: clients.json не сохранён для %s", client_name)
+        return False
     crm_audit("phone_set", client_key=entry_key or client_name, phone=phone, manager=entry.get("manager", manager), phone_source=phone_source or "")
     logger.info("Телефон записан: %s → %s", client_name, phone)
     return True
@@ -927,7 +964,9 @@ def set_client_details(client_name: str, display_name: str = "",
     if name_review_needed is not None:
         entry["name_review_needed"] = bool(name_review_needed)
     data["clients"] = clients_db
-    save_clients(data)
+    if not save_clients(data):
+        logger.error("set_client_details: clients.json не сохранён для %s", client_name)
+        return False
     crm_audit("client_details_set", client_key=client_name, display_name=display_name or "", phone=phone or "", address=address or "", mode=name_mode or "")
     logger.info("Данные обновлены: %s (name=%r phone=%r address=%r original=%r mode=%r review=%r)",
                 client_name, display_name or "-", phone or "-", address or "-",
@@ -948,7 +987,9 @@ def set_client_alias(client_name: str, alias: str) -> bool:
         return False
     entry["display_name"] = alias.strip()
     data["clients"] = clients_db
-    save_clients(data)
+    if not save_clients(data):
+        logger.error("set_client_alias: clients.json не сохранён для %s", client_name)
+        return False
     crm_audit("alias_set", client_key=client_name, alias=alias)
     logger.info("Псевдоним сохранён: %s → «%s»", client_name, alias)
     return True

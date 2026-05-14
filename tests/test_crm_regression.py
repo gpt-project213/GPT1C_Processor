@@ -581,6 +581,46 @@ class StabilizationRegressionTests(unittest.TestCase):
                 self.assertIn(1001, sr._CRM_PHONE_PENDING)
                 self.assertEqual(sr._CRM_PHONE_PENDING[1001]["client_key"], "X")
 
+    def test_set_client_details_returns_false_when_clients_save_fails(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            config_dir = root / "config"
+            config_dir.mkdir(parents=True)
+            clients_path = config_dir / "clients.json"
+            clients_path.write_text(
+                json.dumps({"clients": {"Тест": {"manager": "Оксана"}}}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            with patch.object(crm, "CONFIG_DIR", config_dir), \
+                 patch.object(crm, "CLIENTS_PATH", clients_path), \
+                 patch.object(crm, "save_clients", return_value=False):
+                self.assertFalse(crm.set_client_details("Тест", phone="+77015554433"))
+
+    def test_resolve_phone_conflict_returns_false_when_clients_save_fails(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            config_dir = root / "config"
+            config_dir.mkdir(parents=True)
+            clients_path = config_dir / "clients.json"
+            clients_path.write_text(
+                json.dumps(
+                    {
+                        "clients": {
+                            "A": {"manager": "Магира", "whatsapp": ""},
+                            "B": {"manager": "Магира", "whatsapp": ""},
+                        }
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            with patch.object(crm, "CONFIG_DIR", config_dir), \
+                 patch.object(crm, "CLIENTS_PATH", clients_path), \
+                 patch.object(crm, "save_clients", return_value=False):
+                self.assertFalse(
+                    crm.resolve_phone_conflict(["A", "B"], "+77015554433", chosen_key="A", reviewer="Магира")
+                )
+
     # ── F-12: deterministic keep-key для custom phone в dup-review ──────────
     def test_dup_review_custom_phone_chosen_key_is_order_independent(self):
         keys_a = ["М Клиент 2", "М Клиент 1"]

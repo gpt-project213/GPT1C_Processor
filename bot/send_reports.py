@@ -191,7 +191,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.77/14.05.2026"
+__VERSION__ = "v9.4.78/14.05.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
@@ -7310,9 +7310,15 @@ async def _crm_save_phone_and_continue(
         return
 
     done_today = pending.get("done_today", 0) + 1
+    old_pending = dict(pending)
     _CRM_PHONE_PENDING.pop(chat_id, None)
     if not _crm_save_pending():
-        crm_logger.error("crm_state_lock_timeout: phone save (post-CRM-write) failed (in-memory only)")
+        _CRM_PHONE_PENDING[chat_id] = old_pending
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="⚠️ Временная ошибка сохранения, попробуйте ещё раз.",
+        )
+        return
 
     await context.bot.send_message(
         chat_id=chat_id,
@@ -7346,7 +7352,12 @@ async def _crm_save_phone_and_continue(
                 "last_sent": _next_now_iso,
             }
             if not _crm_save_pending():
-                crm_logger.error("crm_state_lock_timeout: next-client chain save failed (in-memory only)")
+                _CRM_PHONE_PENDING.pop(chat_id, None)
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="⚠️ Следующий клиент не сохранён в очереди. Откройте CRM снова.",
+                )
+                return
             if _next_has_prefix:
                 await context.bot.send_message(
                     chat_id=chat_id,
@@ -9047,7 +9058,12 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "last_sent": _claimer_now_iso,
             }
             if not _crm_save_pending():
-                crm_logger.error("crm_state_lock_timeout: claim phone chain save failed (in-memory only)")
+                _CRM_PHONE_PENDING.pop(claimer_chat_id, None)
+                await context.bot.send_message(
+                    chat_id=claimer_chat_id,
+                    text="⚠️ Временная ошибка сохранения, откройте CRM снова.",
+                )
+                return
             crm_audit("claim_phone_chain_started", client_key=client_key, claimer=claimer_name, remaining=remaining)
             await context.bot.send_message(
                 chat_id=claimer_chat_id,
@@ -10415,9 +10431,12 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
                 done_today   = pending.get("done_today", 0) + 1
                 daily_limit  = pending.get("daily_limit", CRM_DAILY_LIMIT)
                 manager_name = pending.get("manager", "")
+                old_pending = dict(pending)
                 _CRM_PHONE_PENDING.pop(chat_id, None)
                 if not _crm_save_pending():
-                    crm_logger.error("crm_state_lock_timeout: address save failed (in-memory only)")
+                    _CRM_PHONE_PENDING[chat_id] = old_pending
+                    await update.message.reply_text("⚠️ Временная ошибка сохранения, попробуйте ещё раз.")
+                    return
 
                 if ok:
                     await update.message.reply_text(
@@ -10447,7 +10466,9 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
                             "last_sent": _voice_next_now_iso,
                         }
                         if not _crm_save_pending():
-                            crm_logger.error("crm_state_lock_timeout: address-chain next save failed (in-memory only)")
+                            _CRM_PHONE_PENDING.pop(chat_id, None)
+                            await update.message.reply_text("⚠️ Следующий клиент не сохранён в очереди. Откройте CRM снова.")
+                            return
                         await update.message.reply_text(
                             _crm_name_prompt_text(
                                 client_key=next_key,

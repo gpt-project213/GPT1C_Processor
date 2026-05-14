@@ -373,15 +373,18 @@ def _save_contact(client_name: str, contact: Dict[str, Any]) -> None:
         if display_name:
             clients_db[client_name]["display_name"] = display_name
         data["clients"] = clients_db
-        save_clients(data)
+        if not save_clients(data):
+            logger.error("CRM: не удалось сохранить нового клиента через диалог — %s", client_name)
+            return
         logger.info("CRM: добавлен новый клиент через диалог — %s", client_name)
         return
 
-    set_client_details(
+    if not set_client_details(
         client_name,
         display_name=display_name,
         phone=primary_phone,
-    )
+    ):
+        logger.error("CRM: не удалось обновить контакт через диалог — %s", client_name)
 
 
 # ─── WhatsApp + Notification ──────────────────────────────────────────────────

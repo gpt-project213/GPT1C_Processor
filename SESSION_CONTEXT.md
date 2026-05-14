@@ -5,6 +5,59 @@
 
 ---
 
+## HANDOFF 2026-05-14 — CRM/collector integration safety: clients.json lock + hard-fail propagation
+
+### Что сделано
+
+- `bot/crm_clients.py`
+  - добавлен hard-fail lock для `config/clients.json` через `portalocker LOCK_EX|LOCK_NB`
+  - `save_clients(data)` теперь возвращает `bool`
+  - write-helpers больше не считают запись успешной, если `clients.json` не сохранился:
+    - `set_client_phone(...)`
+    - `set_client_details(...)`
+    - `set_client_alias(...)`
+    - `resolve_phone_conflict(...)`
+    - `mark_phone_conflict_distinct(...)`
+  - `update_from_reports()` при fail-save больше не делает вид, что CRM успешно обновлена
+
+- `collector/manager_dialog.py`
+  - `_save_contact(...)` теперь логирует и не считает CRM-update успешным, если `clients.json` не записался
+
+- `bot/send_reports.py`
+  - добиты callback/text paths, где `False` от CRM state-save раньше только логировался:
+    - post-save phone flow
+    - next-client chain
+    - claim phone chain
+    - address save / address next-client chain
+  - при fail-save теперь:
+    - rollback in-memory where needed
+    - user получает `⚠️ Временная ошибка...`
+    - flow не идёт дальше как при успехе
+
+### Проверка
+
+- `python -m py_compile bot\crm_clients.py` → OK
+- `python -m py_compile bot\send_reports.py` → OK
+- `python -m py_compile collector\manager_dialog.py` → OK
+- `python -X utf8 tests\test_crm_regression.py` → `30/30`
+
+### Новые регрессии
+
+- `set_client_details()` возвращает `False`, если save `clients.json` не удался
+- `resolve_phone_conflict()` возвращает `False`, если save `clients.json` не удался
+
+### Что это закрывает
+
+- основной межконтурный риск CRM ↔ collector по `clients.json` без lock
+- ложные success-path после fail-save в ряде CRM callback/text flows
+
+### Что ещё остаётся
+
+- полный live smoke-test после рестарта бота
+- при желании: довести те же строгие save-fail semantics до оставшихся background-only CRM save paths, где сейчас достаточно логирования
+
+---
+
 ## HANDOFF 2026-05-14 — стабилизация Collector + CRM (P2/P3 + cleanup)
 
 ### Что сделано (master, коммиты `0f412ae`–`4da07ef`)
