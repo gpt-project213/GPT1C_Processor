@@ -4,7 +4,10 @@
 collector/approval_flow.py
 UX согласования рассылки WhatsApp — менеджер → администратор.
 
-Версия: 1.1.12 (2026-05-13)
+Версия: 1.1.13 (2026-05-13)
+
+v1.1.13 (2026-05-13): manager preview now separates debt age from effective
+  overdue for deferred-payment clients, including "still within deferral" cases.
 
 v1.1.12 (2026-05-13): manager preview now shows the real response deadline
   capped by batch.expires_at; stale manager callbacks explicitly clear inline
@@ -596,8 +599,17 @@ def _inline_kb(rows: List[List[Tuple[str, str]]]) -> Dict[str, Any]:
 
 
 def _debt_age_text(c: Dict[str, Any]) -> str:
-    days = c.get("days", 0)
-    text = f"Возраст остатка: {days} дн."
+    days = int(c.get("days", 0) or 0)
+    debt_age_days = int(c.get("debt_age_days", days) or 0)
+    deferral_days = int(c.get("deferral_days", 0) or 0)
+    effective_overdue_days = int(c.get("effective_overdue_days", days) or 0)
+    text = f"Возраст остатка: {debt_age_days} дн."
+    if deferral_days > 0:
+        text += f" · Отсрочка: {deferral_days} дн."
+        if effective_overdue_days > 0:
+            text += f" · Просрочка по отсрочке: {effective_overdue_days} дн."
+        else:
+            text += " · По отсрочке еще в срок"
     oldest = c.get("oldest_unpaid_date")
     if oldest:
         text += f" · Остаток с: {oldest}"

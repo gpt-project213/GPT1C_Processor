@@ -4,7 +4,11 @@
 collector/client_dialog.py
 Управление диалогами с должниками через WhatsApp.
 
-Версия: 1.1.7 (2026-05-12)
+Версия: 1.1.8 (2026-05-13)
+
+v1.1.8 (2026-05-13): escalation text now separates debt age, contractual
+  deferral and effective overdue so deferred clients are not described as
+  overdue before their payment term expires.
 
 v1.1.6 (2026-05-12): _is_service_request — regex с \b вместо substring; "расчет"
   больше не ложно срабатывает как "счет". unclear второй раз отправляет
@@ -529,6 +533,9 @@ def _build_escalation_text(
     name = dialog.get("client_name", "—")
     amount = dialog.get("amount", 0)
     days = dialog.get("days", 0)
+    debt_age_days = int(dialog.get("debt_age_days", days) or 0)
+    deferral_days = int(dialog.get("deferral_days", 0) or 0)
+    effective_overdue_days = int(dialog.get("effective_overdue_days", days) or 0)
     exchanges = dialog.get("exchanges", [])
     exchange_count = dialog.get("exchange_count", 0)
     manager_name = dialog.get("manager_name", "менеджеру")
@@ -575,9 +582,21 @@ def _build_escalation_text(
     }
     intent_desc = intent_map.get(reason, reason)
 
+    if deferral_days > 0:
+        debt_line = (
+            f"💰 {_fmt_amount(amount)} тг | Возраст долга: {debt_age_days} дн. "
+            f"| Отсрочка: {deferral_days} дн."
+        )
+        if effective_overdue_days > 0:
+            debt_line += f" | Просрочка по отсрочке: {effective_overdue_days} дн."
+        else:
+            debt_line += " | По отсрочке еще в срок."
+    else:
+        debt_line = f"💰 {_fmt_amount(amount)} тг | {days} дн. просрочки"
+
     return (
         f"📋 <b>{name}</b> — требуется участие {manager_name}\n\n"
-        f"💰 {_fmt_amount(amount)} тг | {days} дн. просрочки{promise_line}{schedule_line}\n"
+        f"{debt_line}{promise_line}{schedule_line}\n"
         f"📌 {intent_desc}\n\n"
         f"💬 Переписка:\n{exchanges_block}\n\n"
         f"⚠️ {summary}"
@@ -650,6 +669,9 @@ async def start_client_dialog(
     amount: float,
     message_text: str,
     report_date: str = "",
+    debt_age_days: int = 0,
+    deferral_days: int = 0,
+    effective_overdue_days: int = 0,
 ) -> None:
     """Регистрирует диалог с клиентом после отправки WhatsApp-сообщения.
 
@@ -685,6 +707,9 @@ async def start_client_dialog(
         "manager_chat_id":   manager_chat_id,
         "level":             level,
         "days":              days,
+        "debt_age_days":     debt_age_days or days,
+        "deferral_days":     deferral_days,
+        "effective_overdue_days": effective_overdue_days or days,
         "amount":            amount,
         "report_date":       report_date,
         "exchanges": [

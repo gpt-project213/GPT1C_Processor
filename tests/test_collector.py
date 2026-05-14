@@ -2491,7 +2491,13 @@ check("H4 T1: create_batch сохраняет msg_type=stoplist_reminder",
       str(_h4_client_in_batch.get("msg_type")))
 
 # Step 2: admin approve path copies client dict including msg_type
-_h4_approved_client = {**_h4_client_in_batch, "manager": "Ергали"}
+_h4_approved_client = {
+    **_h4_client_in_batch,
+    "manager": "Ергали",
+    "debt_age_days": 10,
+    "deferral_days": 7,
+    "effective_overdue_days": 3,
+}
 check("H4 T2: approved_clients сохраняет msg_type после {**c, 'manager': mgr_name}",
       _h4_approved_client.get("msg_type") == "stoplist_reminder",
       str(_h4_approved_client.get("msg_type")))
@@ -2502,11 +2508,13 @@ from collector.collections_engine import _send_approved_client
 
 _captured_msg_type = []
 _captured_report_date = []
+_captured_generate_kwargs = []
 _captured_start_dialog = []
 
 def _mock_generate_message(**kwargs):
     _captured_msg_type.append(kwargs.get("msg_type", "__NOT_SET__"))
     _captured_report_date.append(kwargs.get("report_date", "__NOT_SET__"))
+    _captured_generate_kwargs.append(kwargs)
     return "тестовое сообщение"
 
 async def _mock_start_client_dialog(**kwargs):
@@ -2526,9 +2534,21 @@ check("H4 T3: _send_approved_client передаёт msg_type=stoplist_reminder 
 check("H4 T3b: _send_approved_client передаёт дату отчёта в generate_message",
       _captured_report_date == ["2026-04-05"],
       f"captured: {_captured_report_date}")
+check("H4 T3c: _send_approved_client передаёт deferral поля в generate_message",
+      _captured_generate_kwargs
+      and _captured_generate_kwargs[0].get("debt_age_days") == 10
+      and _captured_generate_kwargs[0].get("deferral_days") == 7
+      and _captured_generate_kwargs[0].get("effective_overdue_days") == 3,
+      f"captured generate args: {_captured_generate_kwargs}")
 check("H4 T4: _send_approved_client сохраняет дату отчёта в клиентский диалог",
       _captured_start_dialog
       and _captured_start_dialog[0].get("report_date") == "2026-04-05",
+      f"captured: {_captured_start_dialog}")
+check("H4 T4b: _send_approved_client сохраняет deferral поля в клиентский диалог",
+      _captured_start_dialog
+      and _captured_start_dialog[0].get("debt_age_days") == 10
+      and _captured_start_dialog[0].get("deferral_days") == 7
+      and _captured_start_dialog[0].get("effective_overdue_days") == 3,
       f"captured: {_captured_start_dialog}")
 
 
@@ -4055,6 +4075,7 @@ section("28a. payment_deferrals")
 from collector.payment_deferrals import (
     get_deferral_days, effective_overdue_days, has_deferral,
 )
+from collector.collections_engine import _apply_deferral_metrics, _collector_candidate_decision
 
 # Клиент из конфига
 check("deferral: Мастер-кондитер = 10 дней",
@@ -4099,6 +4120,144 @@ check("Мастер-кондитер 15 дн факт → eff=5 → L3",
 # Мастер-кондитер 20 дн → eff=10 → L5
 check("Мастер-кондитер 20 дн факт → eff=10 → L5",
       deferral_level(effective_overdue_days("О ТОО МАСТЕР-КОНДИТЕР ул Жиенкулова 7/2", 20)) == 5)
+
+_def_client_name = "О ТОО МАСТЕР-КОНДИТЕР ул Жиенкулова 7/2"
+_norm0 = _apply_deferral_metrics({"name": _def_client_name, "days": 10, "level": 1})
+check("deferral normalize: debt_age_days сохраняется отдельно",
+      _norm0.get("debt_age_days") == 10)
+check("deferral normalize: days становится effective overdue",
+      _norm0.get("days") == 0 and _norm0.get("effective_overdue_days") == 0,
+      str(_norm0))
+check("deferral normalize: level пересчитан по effective overdue",
+      _norm0.get("level") == 0,
+      str(_norm0))
+
+_norm4 = _apply_deferral_metrics({"name": _def_client_name, "days": 14, "level": 2})
+check("deferral normalize: 14 raw дн при отсрочке 10 → effective 4",
+      _norm4.get("days") == 4 and _norm4.get("effective_overdue_days") == 4,
+      str(_norm4))
+check("deferral normalize: 14 raw дн при отсрочке 10 → level 2",
+      _norm4.get("level") == 2,
+      str(_norm4))
+
+_decision_def1 = _collector_candidate_decision(
+    {"name": _def_client_name, "amount": 120000.0, "days": 11, "level": 2},
+    {"manager": "Оксана"},
+    {},
+)
+check("deferral decision: first effective overdue day still skipped",
+      _decision_def1.get("action") == "skip"
+      and "первый день просрочки" in str(_decision_def1.get("reason", "")).lower(),
+      str(_decision_def1))
+
+# 28b. payment_deferrals — мониторинг финдисциплины
+section("28b. payment_deferrals discipline stats")
+
+import collector.payment_deferrals as _pdef
+_tmp_def = tempfile.mkdtemp()
+_orig_vpath = _pdef._VIOLATIONS_PATH
+_pdef._VIOLATIONS_PATH = Path(_tmp_def) / "deferral_violations.json"
+try:
+    _client_def = "О ТОО МАСТЕР-КОНДИТЕР ул Жиенкулова 7/2"
+    _base_debtor = {
+        "name": _client_def,
+        "manager": "Оксана",
+        "amount": 150000.0,
+    }
+    # Цикл 1: был в срок → нарушил → исчез из debt snapshot = закрыт с нарушением
+    _pdef.sync_deferral_discipline([dict(_base_debtor, days=9)])
+    _pdef.sync_deferral_discipline([dict(_base_debtor, days=12)])
+    _pdef.sync_deferral_discipline([])
+    _stats1 = _pdef.get_deferral_discipline_stats()
+    _row1 = next((r for r in _stats1["clients"] if r["client_name"] == _client_def), {})
+    check("deferral_discipline: tracked client recorded",
+          _stats1["totals"]["tracked_clients"] == 1)
+    check("deferral_discipline: closed_with_violation += 1",
+          _row1.get("cycles_closed_with_violation") == 1)
+    check("deferral_discipline: violation_count += 1",
+          _row1.get("violation_count") == 1)
+    check("deferral_discipline: avg_delay_days from violated cycle",
+          abs(float(_row1.get("avg_delay_days", 0.0)) - 2.0) < 0.001,
+          str(_row1))
+
+    # Цикл 2: весь срок в норме → закрыт в срок
+    _pdef.sync_deferral_discipline([dict(_base_debtor, days=10)])
+    _pdef.sync_deferral_discipline([])
+    _stats2 = _pdef.get_deferral_discipline_stats()
+    _row2 = next((r for r in _stats2["clients"] if r["client_name"] == _client_def), {})
+    check("deferral_discipline: closed_in_term += 1",
+          _row2.get("cycles_closed_in_term") == 1)
+    check("deferral_discipline: no active cycles after disappearance",
+          _stats2["totals"]["open_now"] == 0)
+    _text2 = _pdef.format_deferral_discipline_stats_text()
+    check("deferral_discipline text: heading present",
+          "Финдисциплина по отсрочкам" in _text2)
+    check("deferral_discipline text: client manager appears",
+          "Оксана" in _text2 and "МАСТЕР-КОНДИТЕР" in _text2,
+          _text2)
+finally:
+    _pdef._VIOLATIONS_PATH = _orig_vpath
+    shutil.rmtree(_tmp_def, ignore_errors=True)
+
+section("28c. deferred overdue presentation")
+
+import collector.client_dialog as _cd_def
+import collector.collection_agent as _ca_def
+
+_preview_def = _p5_debt_age_text({
+    "days": 0,
+    "debt_age_days": 10,
+    "deferral_days": 10,
+    "effective_overdue_days": 0,
+    "oldest_unpaid_date": "2026-05-02",
+})
+check("deferred preview: показывает возраст остатка",
+      "Возраст остатка: 10 дн." in _preview_def,
+      _preview_def)
+check("deferred preview: показывает что отсрочка еще не истекла",
+      "По отсрочке еще в срок" in _preview_def,
+      _preview_def)
+
+_esc_def = _cd_def._build_escalation_text(
+    {
+        "client_name": "О Цех ТОО High product ул МОЙЫНТЫ 18",
+        "manager_name": "Оксана",
+        "amount": 304316.10,
+        "days": 0,
+        "debt_age_days": 10,
+        "deferral_days": 10,
+        "effective_overdue_days": 0,
+        "exchanges": [{"role": "client", "text": "Передал информацию"}],
+        "exchange_count": 1,
+    },
+    "soft_positive",
+    "Клиент готов платить, но точную сумму или график не назвал",
+)
+check("deferred escalation: не пишет ложные 10 дн. просрочки",
+      "10 дн. просрочки" not in _esc_def,
+      _esc_def)
+check("deferred escalation: показывает возраст долга и отсрочку",
+      "Возраст долга: 10 дн." in _esc_def and "Отсрочка: 10 дн." in _esc_def,
+      _esc_def)
+
+_msg_def = _ca_def.generate_message(
+    client_name="О Цех ТОО High product ул МОЙЫНТЫ 18",
+    debt_amount=304316.10,
+    days_overdue=0,
+    level=1,
+    manager_name="Оксана",
+    msg_type="soft_reminder",
+    report_date="2026-05-12",
+    debt_age_days=10,
+    deferral_days=10,
+    effective_overdue_days=0,
+)
+check("deferred fallback message: не завышает просрочку до 10 дней",
+      "10 дней" not in _msg_def or "возраст остатка" in _msg_def.lower(),
+      _msg_def)
+check("deferred fallback message: объясняет срок отсрочки",
+      "отсрочки 10 дн" in _msg_def.lower(),
+      _msg_def)
 
 # ═══════════════════════════════════════════════════════════════
 # 28. client_dialog routing — AI integration baseline

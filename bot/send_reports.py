@@ -189,7 +189,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.75/07.05.2026"
+__VERSION__ = "v9.4.76/13.05.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
@@ -3280,6 +3280,7 @@ def _collector_batch_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton("🤝 Обещания менеджеров", callback_data="collector_agreed_stats")],
         [InlineKeyboardButton("📋 Саида backlog", callback_data="collector_saida_stats")],
         [InlineKeyboardButton("🔸 Частичные оплаты", callback_data="collector_partial_stats")],
+        [InlineKeyboardButton("⏱ Отсрочки", callback_data="collector_deferral_stats")],
     ]
     # Батч ждёт утверждения Администратора
     pending = _get_pending_admin_batch()
@@ -3321,6 +3322,15 @@ def _format_collector_partial_stats_text() -> str:
         return format_partial_payment_stats_text()
     except Exception as exc:
         return f"⚠️ Не удалось загрузить статистику частичных оплат: {exc}"
+
+
+def _format_collector_deferral_stats_text() -> str:
+    """Формирует read-only сводку финдисциплины по отсрочкам."""
+    try:
+        from collector.payment_deferrals import format_deferral_discipline_stats_text
+        return format_deferral_discipline_stats_text()
+    except Exception as exc:
+        return f"⚠️ Не удалось загрузить статистику по отсрочкам: {exc}"
 
 
 def kb_debt_menu(user_role: str) -> InlineKeyboardMarkup:
@@ -7751,6 +7761,27 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             _menu_set(chat_id, msg.message_id)
         except Exception as _e:
             logger.error("collector_partial_stats send error: %s", _e)
+        return
+
+    if data == "collector_deferral_stats":
+        if user_role != "admin":
+            await q.answer("⛔ Доступ запрещён")
+            return
+        await q.answer()
+        text = _format_collector_deferral_stats_text()
+        kb_back = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔄 Обновить", callback_data="collector_deferral_stats")],
+            [InlineKeyboardButton("↩️ К батчу", callback_data="collector_batch")],
+            [InlineKeyboardButton("🔙 Главное меню", callback_data="back_main")],
+        ])
+        await hide_main_menu(context, chat_id)
+        try:
+            msg = await context.bot.send_message(
+                chat_id=chat_id, text=text, reply_markup=kb_back, parse_mode="HTML"
+            )
+            _menu_set(chat_id, msg.message_id)
+        except Exception as _e:
+            logger.error("collector_deferral_stats send error: %s", _e)
         return
 
     # 🆕 v9.4.9: Аналитика

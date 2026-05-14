@@ -1,7 +1,7 @@
 # SESSION CONTEXT — АРХИВ
 
 > **ВНИМАНИЕ:** Этот файл содержит исторические сессии (2026-04-09…2026-05-11, 2026-05-12).
-> Многие "OPEN" пункты уже закрыты коммитами. **Актуальный статус → `gpt1c.md`.**
+> Многие "OPEN" пункты уже закрыты коммитами. Актуальный рабочий набор документации: `AGENTS.md`, `PROJECT_ENCYCLOPEDIA.md`, `SESSION_CONTEXT.md`.
 
 ---
 
@@ -2684,3 +2684,75 @@ approval_penalty.py v1.0.2 (новый модуль)
 1. Проверить в бою (12.05, следующий рабочий день)
 2. collections_engine.py: фильтр стоп-клиентов без движений в WA-батче
 3. Тест для _handle_saida_zeropay_confirm/deny
+
+---
+
+## HANDOFF 2026-05-13 - deferral discipline monitoring
+
+������: �������� �����������, �� ��������� �� ������ handoff.
+
+��� ���������:
+- `collector/payment_deferrals.py` v1.0.1: read-only ���������� �������� � ���������� ��������� � `logs/deferral_violations.json` � ������ �������� ������ `� ����` / `� ����������`, `violation_count`, ������� � ������� ��������.
+- `collector/collections_engine.py` v1.5.3: `sync_deferral_discipline(debtors)` ���������� ����� `classify_debtors(...)` � `run()`, `run_approval_preview()` � refresh-path `--send-approved`.
+- `bot/send_reports.py` v9.4.76: � ���� ���������� ��������� ������ `? ��������` (`collector_deferral_stats`) � admin-������� �� ���������� � ��������.
+- `tests/test_collector.py`: �������� ������������� �������� �� 2 ������ ������ deferred-�������: ���� � ���������� � ���� ��� ���������.
+
+��������:
+- `python -m py_compile collector\\payment_deferrals.py` -> OK
+- `python -m py_compile collector\\collections_engine.py` -> OK
+- `python -m py_compile bot\\send_reports.py` -> OK
+- `python -X utf8 tests\\test_collector.py` -> `596/596`
+
+��������� ��� ���������:
+- ��������� `config/clients.json.bak-*`
+- `artifacts/`
+- `tools/debug_batch_today.py`
+- `tools/debug_batches.py`
+- `tools/build_monetization_doc.py`
+
+��������� ���:
+- ������ � ��� ����� �������� ���� � ������� ��������� debt-snapshot: ��������� ���������� `logs/deferral_violations.json` � admin-����� `? ��������`.
+
+---
+
+## HANDOFF 2026-05-14 - deferral overdue propagation fix
+
+Статус: локально проверено, готово к commit/push.
+
+Что исправлено:
+- `collector/collections_engine.py` v1.5.4: для клиентов с отсрочкой raw возраст долга (`debt_age_days`) отделён от фактической просрочки по отсрочке (`effective_overdue_days`); эти поля теперь проходят через preview, approved-batch и client dialog/send path без потери.
+- `collector/client_dialog.py` v1.1.8: escalation-текст менеджеру больше не врёт `N дн. просрочки` для клиентов, которые ещё в сроке по отсрочке; теперь отдельно показываются возраст долга, отсрочка и effective overdue.
+- `collector/collection_agent.py` v1.1.2: fallback client templates учитывают отсрочку и не завышают просрочку в тексте.
+- `collector/approval_flow.py` v1.1.13: manager preview показывает `Возраст остатка`, `Отсрочка` и `Просрочка по отсрочке` / `По отсрочке еще в срок`.
+- `tests/test_collector.py`: добавлены регрессии на нормализацию deferred-клиента, первый effective overdue day, manager preview/escalation text и fallback client copy.
+
+Доказательства:
+- кейс `О Цех ТОО High product ул МОЙЫНТЫ 18` теперь покрыт тестами как deferred-case:
+  - raw age `10`
+  - deferral `10`
+  - effective overdue `0`
+  - тексты больше не содержат ложное `10 дн. просрочки`
+- `_send_approved_client()` теперь передаёт `debt_age_days`, `deferral_days`, `effective_overdue_days` и в `generate_message(...)`, и в `start_client_dialog(...)`.
+
+Проверки:
+- `python -m py_compile collector\collections_engine.py` -> OK
+- `python -m py_compile collector\client_dialog.py` -> OK
+- `python -m py_compile collector\collection_agent.py` -> OK
+- `python -m py_compile collector\approval_flow.py` -> OK
+- `python -m py_compile collector\payment_deferrals.py` -> OK
+- `python -m py_compile bot\send_reports.py` -> OK
+- `python -X utf8 tests\test_collector.py` -> `610/610`
+- `python -X utf8 tests\test_phase2_safe_send.py` -> `PHASE2 SAFE SEND TESTS PASSED`
+
+Важно:
+- при первом прогоне `tests/test_collector.py` тест-харнесс временно дотронулся до `logs/saida_payment_holds.json`, но второй прогон прошёл чисто и SHA watcher подтвердил, что prod state больше не менялся во время suite.
+
+Оставлено без изменений:
+- локальные `config/clients.json.bak-*`
+- `artifacts/`
+- `tools/debug_batch_today.py`
+- `tools/debug_batches.py`
+- `tools/build_monetization_doc.py`
+
+Операционный следующий шаг:
+- рестарт бота, чтобы боевой runtime подхватил фиксы deferral overdue / preview text.

@@ -4,7 +4,14 @@
 collections/collections_engine.py
 Главный оркестратор AI-Коллектора долгов.
 
-Версия: 1.5.2 (2026-05-07)
+Версия: 1.5.4 (2026-05-13)
+
+v1.5.4 (2026-05-13): contractual deferral overdue now propagates through
+  preview/send-approved payloads and dialog/message generators; debt_age_days
+  is kept separately from effective overdue for truthful manager/client copy.
+
+v1.5.3 (2026-05-13): sync deferral discipline monitoring on collector debt
+  snapshots, so deferred clients get read-only cycle statistics by manager.
 
 v1.5.2 (2026-05-07): import-time runtime logging больше не переинициализируется.
   При импорте из approval callback модуль не закрывает root handlers живого
@@ -247,6 +254,40 @@ def _apply_collector_day_policy(client: Dict[str, Any], name: str, *, use_first_
     return dict(client, level=level, days=max(days_source, real_days))
 
 
+def _apply_deferral_metrics(client: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize debt age vs contractual overdue for deferred-payment clients."""
+    out = dict(client)
+    raw_days = int(out.get("debt_age_days", out.get("days", 0)) or 0)
+    out["debt_age_days"] = raw_days
+    out["effective_overdue_days"] = raw_days
+    out["deferral_days"] = int(out.get("deferral_days", 0) or 0)
+
+    name = str(out.get("name") or out.get("client") or "").strip()
+    if not name:
+        return out
+
+    try:
+        from collector.payment_deferrals import (
+            deferral_level as _deferral_level,
+            effective_overdue_days as _effective_overdue_days,
+            get_deferral_days,
+        )
+
+        deferral_days = int(get_deferral_days(name) or 0)
+        out["deferral_days"] = deferral_days
+        if deferral_days <= 0:
+            return out
+
+        effective_days = int(_effective_overdue_days(name, raw_days) or 0)
+        out["effective_overdue_days"] = effective_days
+        out["days"] = effective_days
+        out["level"] = _deferral_level(effective_days)
+        return out
+    except Exception as exc:
+        logger.warning("[%s] payment_deferrals normalize error: %s", name, exc)
+        return out
+
+
 def _get_client_manager_from_crm(client_name: str) -> str:
     """Ищет менеджера клиента в clients.json когда контакт не найден в contacts."""
     try:
@@ -476,6 +517,9 @@ def _build_preview_client_payload(
         "name":               client["name"],
         "amount":             client.get("amount", 0),
         "days":               client.get("days", 0),
+        "debt_age_days":      client.get("debt_age_days", client.get("days", 0)),
+        "effective_overdue_days": client.get("effective_overdue_days", client.get("days", 0)),
+        "deferral_days":      int(client.get("deferral_days", 0) or 0),
         "level":              int(client.get("level", 0) or 0),
         "opening":            client.get("opening", 0) or 0,
         "debit":              client.get("debit", 0) or 0,
@@ -507,8 +551,11 @@ def _collector_candidate_decision(
     This is intentionally separate from debt_stop_control: stop-list still blocks
     shipment, but it is not a collector skip reason when debt remains open.
     """
+    client = _apply_deferral_metrics(client)
+
     amount = float(client.get("amount", 0) or 0)
     days = int(client.get("days", 0) or 0)
+    debt_age_days = int(client.get("debt_age_days", days) or 0)
     opening = float(client.get("opening", 0) or 0)
     debit = float(client.get("debit", 0) or 0)
     credit = float(client.get("credit", 0) or 0)
@@ -518,39 +565,28 @@ def _collector_candidate_decision(
     if amount <= 0:
         return {"action": "skip", "reason": "долг закрыт"}
 
-    # ── Договорная отсрочка платежа ───────────────────────────────────────────
-    try:
-        from collector.payment_deferrals import effective_overdue_days, get_deferral_days
-        _deferral = get_deferral_days(name)
-        if _deferral:
-            _eff_days = effective_overdue_days(name, days)
-            if _eff_days <= 0:
-                # Ещё в рамках договорного срока
-                return {
-                    "action": "skip",
-                    "reason": f"отсрочка {_deferral} дн: срок не истёк (факт {days} дн)",
-                    "deferral_days": _deferral,
-                }
-            # Граничный случай: срок истёк ровно 1 день назад.
-            # Коллектор в праздники не запускается (guard is_holiday_today в scheduler),
-            # поэтому если effective_days=1 и вчера был праздник, батч не создавался вовсе.
-            # Дополнительно: если долг впритык (eff=1), даём 1 день мягкого буфера.
-            if _eff_days == 1:
-                return {
-                    "action": "skip",
-                    "reason": (
-                        f"отсрочка {_deferral} дн: первый день просрочки — "
-                        "ждём подтверждения до следующего цикла"
-                    ),
-                    "deferral_days": _deferral,
-                }
-            # Просрочка уже есть — используем effective_days и отдельную шкалу давления
-            from collector.payment_deferrals import deferral_level as _dlevel
-            days = _eff_days
-            # Переопределяем level по шкале отсрочников (тighter пороги)
-            client = dict(client, level=_dlevel(_eff_days), deferral_days=_deferral)
-    except Exception as _de:
-        logger.warning("[%s] payment_deferrals check error: %s", name, _de)
+    deferral_days = int(client.get("deferral_days", 0) or 0)
+    if deferral_days > 0:
+        if days <= 0:
+            return {
+                "action": "skip",
+                "reason": (
+                    f"отсрочка {deferral_days} дн: срок не истёк "
+                    f"(возраст остатка {debt_age_days} дн)"
+                ),
+                "deferral_days": deferral_days,
+                "client": client,
+            }
+        if days == 1:
+            return {
+                "action": "skip",
+                "reason": (
+                    f"отсрочка {deferral_days} дн: первый день просрочки "
+                    f"(возраст остатка {debt_age_days} дн) — ждём подтверждения до следующего цикла"
+                ),
+                "deferral_days": deferral_days,
+                "client": client,
+            }
 
     try:
         from collector.payment_hold import get_hold_for_client
@@ -562,12 +598,13 @@ def _collector_candidate_decision(
             "action": "skip",
             "reason": "Саида подтвердила оплату, ждём разноски в 1С",
             "payment_hold_status": hold.get("status", ""),
+            "client": client,
         }
 
     if _flag_enabled(contact, "do_not_notify", "do_not_write", "do_not_contact", "collector_skip"):
-        return {"action": "skip", "reason": "ручной запрет уведомления в CRM"}
+        return {"action": "skip", "reason": "ручной запрет уведомления в CRM", "client": client}
     if _flag_enabled(stop_rec, "do_not_notify", "do_not_write", "do_not_contact", "collector_skip"):
-        return {"action": "skip", "reason": "ручной запрет уведомления в stop-registry"}
+        return {"action": "skip", "reason": "ручной запрет уведомления в stop-registry", "client": client}
 
     if stop_status in ("stopped", "auto_stopped"):
         if _is_legacy_tail_client(client):
@@ -582,12 +619,14 @@ def _collector_candidate_decision(
                 "msg_type": msg_type,
                 "reason": f"{stop_status}: {detail}",
                 "stop_status": stop_status,
+                "client": client,
             }
         return {
             "action": "client_approval",
             "msg_type": "stoplist_reminder",
             "reason": f"{stop_status}: долг {_fmt_amount(amount)} тг не закрыт",
             "stop_status": stop_status,
+            "client": client,
         }
 
     if stop_status in ("pending_clearance", "conditional"):
@@ -596,6 +635,7 @@ def _collector_candidate_decision(
             "msg_type": "payment_plan_control",
             "reason": f"{stop_status}: нужен ручной контроль перед сообщением клиенту",
             "stop_status": stop_status,
+            "client": client,
         }
 
     if credit > 0 and amount < 100_000 and amount <= credit * 0.10:
@@ -605,6 +645,7 @@ def _collector_candidate_decision(
                 f"малый остаток после крупной оплаты: "
                 f"оплата {_fmt_amount(credit)} тг, остаток {_fmt_amount(amount)} тг"
             ),
+            "client": client,
         }
 
     # Healthy payer heuristic: paying at least as much as current shipments and
@@ -619,6 +660,7 @@ def _collector_candidate_decision(
                 f"отгрузки {_fmt_amount(debit)} тг, оплаты {_fmt_amount(credit)} тг, "
                 f"остаток {_fmt_amount(amount)} тг"
             ),
+            "client": client,
         }
 
     if credit > 0 and debit == 0:
@@ -631,8 +673,9 @@ def _collector_candidate_decision(
                     f"есть оплата {_fmt_amount(credit)} тг ({pct:.0f}% от долга), "
                     f"но остаток {_fmt_amount(amount)} тг не закрыт"
                 ),
+                "client": client,
             }
-        return {"action": "skip", "reason": "есть существенная оплата, мягкий контроль пока не нужен"}
+        return {"action": "skip", "reason": "есть существенная оплата, мягкий контроль пока не нужен", "client": client}
 
     if debit > 0:
         if credit > 0:
@@ -644,17 +687,20 @@ def _collector_candidate_decision(
                     f"отгрузки {_fmt_amount(debit)} тг, оплаты {_fmt_amount(credit)} тг, "
                     f"остаток {_fmt_amount(amount)} тг"
                 ),
+                "client": client,
             }
         return {
             "action": "manager_review",
             "msg_type": "strict_reminder",
             "reason": f"есть отгрузки {_fmt_amount(debit)} тг при незакрытом долге",
+            "client": client,
         }
 
     return {
         "action": "client_approval",
         "msg_type": "strict_reminder",
         "reason": f"{days}д просрочки, оплат и отгрузок нет, долг {_fmt_amount(amount)} тг",
+        "client": client,
     }
 
 
@@ -899,6 +945,9 @@ async def _process_single(
         manager_name=manager_name,
         msg_type=msg_type,
         report_date=report_date,
+        debt_age_days=int(client.get("debt_age_days", days) or 0),
+        deferral_days=int(client.get("deferral_days", 0) or 0),
+        effective_overdue_days=int(client.get("effective_overdue_days", days) or 0),
         previous_promise=_prev_promise,
     )
     logger.info("[%s] level=%d days=%d | текст: %s...", name, level, days, text[:60])
@@ -965,6 +1014,9 @@ async def _process_single(
                         amount=amount,
                         message_text=text,
                         report_date=report_date,
+                        debt_age_days=int(client.get("debt_age_days", days) or 0),
+                        deferral_days=int(client.get("deferral_days", 0) or 0),
+                        effective_overdue_days=int(client.get("effective_overdue_days", days) or 0),
                     )
                 except Exception as e:
                     logger.error("[%s] start_client_dialog ошибка: %s", name, e)
@@ -1053,6 +1105,11 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
         return
 
     debtors = classify_debtors(debt_data)
+    try:
+        from collector.payment_deferrals import sync_deferral_discipline
+        sync_deferral_discipline(debtors)
+    except Exception as _e:
+        logger.debug("deferral discipline sync skipped: %s", _e)
     try:
         from collector.payment_hold import sync_holds_with_debtors
         sync_holds_with_debtors(debtors)
@@ -1148,6 +1205,7 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
         name = client["name"]
 
         client = _apply_collector_day_policy(client, name, use_first_seen=not dry_run)
+        client = _apply_deferral_metrics(client)
         level = int(client.get("level", 0) or 0)
 
         # Фильтр по одному клиенту если задан
@@ -1438,6 +1496,9 @@ async def _send_approved_client(client: Dict[str, Any]) -> Dict[str, Any]:
         manager_name=manager_name,
         msg_type=msg_type,
         report_date=report_date,
+        debt_age_days=int(client.get("debt_age_days", days) or 0),
+        deferral_days=int(client.get("deferral_days", 0) or 0),
+        effective_overdue_days=int(client.get("effective_overdue_days", days) or 0),
         previous_promise=_prev_promise2,
     )
 
@@ -1463,6 +1524,9 @@ async def _send_approved_client(client: Dict[str, Any]) -> Dict[str, Any]:
             amount=amount,
             message_text=text,
             report_date=report_date,
+            debt_age_days=int(client.get("debt_age_days", days) or 0),
+            deferral_days=int(client.get("deferral_days", 0) or 0),
+            effective_overdue_days=int(client.get("effective_overdue_days", days) or 0),
         )
     except Exception as e:
         logger.error("[%s] start_client_dialog after approved send error: %s", name, e)
@@ -1493,6 +1557,11 @@ def _prepare_current_approved_clients(
 
     debtors = classify_debtors(debt_data)
     try:
+        from collector.payment_deferrals import sync_deferral_discipline
+        sync_deferral_discipline(debtors)
+    except Exception as _e:
+        logger.debug("deferral discipline sync skipped: %s", _e)
+    try:
         from collector.payment_hold import sync_holds_with_debtors
         sync_holds_with_debtors(debtors)
     except Exception as e:
@@ -1513,6 +1582,7 @@ def _prepare_current_approved_clients(
             continue
 
         client = _apply_collector_day_policy(raw_client, name, use_first_seen=True)
+        client = _apply_deferral_metrics(client)
         level = int(client.get("level", 0) or 0)
         if level == 0 or float(client.get("amount", 0) or 0) <= 0:
             continue
@@ -1522,6 +1592,8 @@ def _prepare_current_approved_clients(
         decision = _collector_candidate_decision(client, contact, stop_rec)
         if decision.get("action") != "client_approval":
             continue
+        client = decision.get("client", client)
+        level = int(client.get("level", level) or 0)
 
         phone = ((contact or {}).get("whatsapp") or (contact or {}).get("phone") or "").strip()
         manager_name = (contact or {}).get("manager", "").strip()
@@ -1541,6 +1613,9 @@ def _prepare_current_approved_clients(
             "phone": phone,
             "amount": float(client.get("amount", 0) or 0),
             "days": int(client.get("days", 0) or 0),
+            "debt_age_days": int(client.get("debt_age_days", client.get("days", 0)) or 0),
+            "effective_overdue_days": int(client.get("effective_overdue_days", client.get("days", 0)) or 0),
+            "deferral_days": int(client.get("deferral_days", 0) or 0),
             "level": level,
             "opening": float(client.get("opening", 0) or 0),
             "debit": float(client.get("debit", 0) or 0),
@@ -1804,6 +1879,11 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
 
     debtors = classify_debtors(debt_data)
     try:
+        from collector.payment_deferrals import sync_deferral_discipline
+        sync_deferral_discipline(debtors)
+    except Exception as _e:
+        logger.debug("deferral discipline sync skipped: %s", _e)
+    try:
         from collector.payment_hold import sync_holds_with_debtors
         sync_holds_with_debtors(debtors)
     except Exception as _e:
@@ -1830,6 +1910,7 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
         name = client["name"]
 
         client = _apply_collector_day_policy(client, name, use_first_seen=True)
+        client = _apply_deferral_metrics(client)
         level = int(client.get("level", 0) or 0)
 
         if single_client and single_client.lower() not in name.lower():
@@ -1875,6 +1956,8 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
                 name,
             )
             continue
+        client = decision.get("client", client)
+        level = int(client.get("level", level) or 0)
 
         if _phone:
             try:

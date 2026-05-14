@@ -4,7 +4,11 @@
 collections/collection_agent.py
 AI-диалоговый агент взыскания долгов через DeepSeek.
 
-Версия: 1.1.1 (2026-05-11)
+Версия: 1.1.2 (2026-05-13)
+
+v1.1.2 (2026-05-13): fallback templates now distinguish debt age from
+  effective overdue under payment deferrals, so client copy does not overstate
+  overdue status before the contractual term expires.
 
 v1.1.1 (2026-05-11): уточнено определение soft_positive в AI-промпте —
   теперь требуется хотя бы одно платёжное слово; чистые приветствия
@@ -135,7 +139,12 @@ def _get_fallback_template(msg_type: str, **kwargs) -> str:
         **kwargs,
         "report_date_part": _report_date_part(kwargs.get("report_date", "")),
         "report_date": _format_report_date(kwargs.get("report_date", "")),
-        "days_text": _format_days_text(kwargs.get("days", 0)),
+        "days_text": _format_overdue_context(
+            kwargs.get("days", 0),
+            debt_age_days=kwargs.get("debt_age_days"),
+            deferral_days=int(kwargs.get("deferral_days", 0) or 0),
+            effective_overdue_days=kwargs.get("effective_overdue_days"),
+        ),
     }
     try:
         return template.format(**kwargs)
@@ -174,6 +183,27 @@ def _format_days_text(days: int) -> str:
     else:
         word = "дней"
     return f"{days} {word}"
+
+
+def _format_overdue_context(
+    days: int,
+    debt_age_days: Optional[int] = None,
+    deferral_days: int = 0,
+    effective_overdue_days: Optional[int] = None,
+) -> str:
+    debt_age = days if debt_age_days is None else debt_age_days
+    effective = days if effective_overdue_days is None else effective_overdue_days
+    if deferral_days <= 0:
+        return _format_days_text(days)
+    if int(effective or 0) <= 0:
+        return (
+            f"в рамках отсрочки {deferral_days} дн."
+            f" (возраст остатка — {_format_days_text(debt_age)})"
+        )
+    return (
+        f"{_format_days_text(effective)} с учетом отсрочки {deferral_days} дн."
+        f" (возраст остатка — {_format_days_text(debt_age)})"
+    )
 
 
 def _call_deepseek(system_prompt: str, user_prompt: str, max_tokens: int = 500) -> str:
@@ -286,6 +316,9 @@ def generate_message(
     manager_name: str = "",
     msg_type: str = "",
     report_date: str = "",
+    debt_age_days: Optional[int] = None,
+    deferral_days: int = 0,
+    effective_overdue_days: Optional[int] = None,
 ) -> str:
     """Генерирует персонализированный текст первого сообщения должнику через DeepSeek.
 
@@ -315,6 +348,9 @@ def generate_message(
             company=company, client_name=client_name,
             manager_name=mgr, amount=amount_str, days=days_overdue,
             report_date=report_date,
+            debt_age_days=debt_age_days,
+            deferral_days=deferral_days,
+            effective_overdue_days=effective_overdue_days,
         )
 
     promise_note = ""
@@ -357,9 +393,14 @@ def generate_message(
 
     result = _call_deepseek(system_prompt, user_prompt, max_tokens=400)
     if not result:
-        result = _get_fallback_template(msg_type).format(
+        result = _get_fallback_template(
+            msg_type,
             company=company, client_name=client_name,
             manager_name=mgr, amount=amount_str, days=days_overdue,
+            report_date=report_date,
+            debt_age_days=debt_age_days,
+            deferral_days=deferral_days,
+            effective_overdue_days=effective_overdue_days,
         )
     return result
 
