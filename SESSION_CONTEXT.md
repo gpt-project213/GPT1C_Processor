@@ -5,6 +5,105 @@
 
 ---
 
+## HANDOFF 2026-05-14 — CRM-аудит + исправление P0/P1 багов
+
+### Что сделано (master, коммиты `cc2004c`, `fe50b96`)
+
+Проведён полный технический аудит CRM-контура согласно ТЗ.  
+Полный отчёт: `AUDIT_CRM_BOT_2026-05-14.md` (в корне проекта).  
+ТЗ: `AUDIT_CRM_BOT_TZ_2026-05-14.md`.
+
+**Тесты: 631/631 + 14/14 CRM regression.**
+
+#### Исправлено (коммиты `cc2004c`, `fe50b96`)
+
+| Finding | Файл | Что исправлено |
+|---|---|---|
+| F-02 | `crm_clients.py:968` | `load_contacts_compat` раскрывает aliases → alias-клиенты видны коллектору |
+| F-03 | `crm_clients.py:324` | `_merge_client_entries` переносит `whatsapp`/`phone`/`telegram_id` при merge |
+| F-01 | `crm_clients.py:906` | `set_client_details` использует `_find_existing_client_key` вместо прямого get |
+| F-04 | `send_reports.py:7048` | При `ok=False` pending остаётся в очереди, цепочка не движется |
+| F-05 | `approval_penalty.py:345` | `paused_until` проверяется в `check_crm_ignores` → нет штрафа за "Позже" |
+| F-06 | `send_reports.py:6866` | `_crm_collect_unowned_claim_clients` режет `is_vendor`/`do_not_call` |
+| F-07 | `send_reports.py:8695` | `_crm_write_ok` gate: success-path (уведомления, phone-chain) только при успешном CRM write; rollback при ошибке |
+| F-08 | `send_reports.py:6461` | TTL phone-pending от `created_at`, не `last_sent` |
+| F-09 | `send_reports.py:6339` | `_crm_key_token` в callback_data CRM-кнопок — stale кнопка отклоняется |
+
+### Верификация F-07
+
+Первый коммит (`cc2004c`) сделал rollback state в except, но success-path продолжался безусловно — менеджеры получали ложное "✅ Взяли!" даже при ошибке CRM write. Второй коммит (`fe50b96`) добавил `_crm_write_ok` флаг — весь success-path выполняется только при подтверждённой записи в CRM.
+
+### Ключевые ответы по аудиту
+
+**Может ли бот записать телефон не в ту карточку?**  
+→ Раньше да (F-01 тихий fail, F-09 stale callback). Оба исправлены.
+
+**Теряется ли телефон при merge?**  
+→ Раньше да (F-03). Исправлено.
+
+**Alias-клиенты видны коллектору?**  
+→ Раньше нет (F-02). Исправлено.
+
+**Ложный штраф при "Позже"?**  
+→ Раньше да (F-05). Исправлено.
+
+### Что осталось открытым (не блокирует runtime)
+
+| Finding | Суть |
+|---|---|
+| F-11 | Нет portalocker на CRM state-файлах (в отличие от collections_db) |
+| F-12 | Custom phone в dup-review фиксирует keep_key=client_keys[0] произвольно |
+| F-13 | Resolved ambiguous-конфликт не переоткрывается при повторном возникновении |
+| F-14 | Stale claim-кнопки не убираются после TTL |
+| F-16 | Claim-токен без created_at никогда не вычищается |
+| UI | Admin не видит CRM backlog в реальном времени |
+| Design | Три несогласованных хранилища контактов: clients.json / debtors_contacts.json / batch snapshot |
+
+### Перезапуск бота нужен для активации всех фиксов в production
+
+---
+
+## HANDOFF 2026-05-14 — добавлено ТЗ на полный аудит CRM-бота
+
+### Что сделано
+
+- Создан новый документ: `AUDIT_CRM_BOT_TZ_2026-05-14.md`
+- Это не результаты аудита, а именно подробное ТЗ на будущий комплексный CRM audit pass
+
+### Что зафиксировано в ТЗ
+
+- полный объект проверки:
+  - `bot/crm_clients.py`
+  - `bot/crm_audit_log.py`
+  - CRM-части `bot/send_reports.py`
+  - `config/clients.json`
+  - `contacts.xlsx`
+  - CRM state/log files
+  - CRM↔collector integration
+- обязательные направления:
+  - phone pending flow
+  - claim-flow
+  - duplicate / ambiguous conflict review
+  - reminder / escalation / penalty logic
+  - ACL
+  - state integrity / concurrency
+  - UI / observability
+  - test coverage gap analysis
+- формат итогового CRM-аудита:
+  - executive summary
+  - architecture map
+  - findings with evidence
+  - separate issue registries
+  - remediation plan P0/P1/P2/P3
+
+### Важно
+
+- Код продукта не менялся
+- Тесты не запускались: правка только документационная
+- Документ опирается на текущий HEAD `71ae45c` и текущее устройство CRM-контура, а не на старые аудиты как источник истины
+
+---
+
 ## HANDOFF 2026-05-14 (финал) — технический долг закрыт, коллектор в боевом строю
 
 ### Что сделано (master, коммиты `e6307bb`, `1cb789e`)
