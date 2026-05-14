@@ -2464,6 +2464,54 @@ check("freshness gate stale client: skipped result returned",
 check("freshness gate stale client: admin notified", _notify_stale.await_count == 1)
 check("freshness gate stale client: record_send_results called", _record_stale.called)
 
+section("15.6 send-approved keeps manager_review clients")
+
+_mgr_review_client = {
+    "name": "О ТОО Чайхана Navat ул Достык 13 тел 87014850191",
+    "manager": "Оксана",
+    "phone": "77759505005",
+    "amount": 55196.5,
+    "days": 11,
+    "level": 1,
+    "language": "ru",
+    "msg_type": "strict_reminder",
+    "report_date": "2026-05-13",
+    "review_action": "manager_review",
+}
+
+with patch("collector.approval_flow.is_ready_for_send", return_value=True), \
+     patch("collector.approval_flow.get_approved_clients", return_value=[dict(_mgr_review_client)]), \
+     patch("collector.approval_flow.load_batch", return_value={"batch_id": "batch-review", "created_at": "2026-05-13T17:00:00+05:00"}), \
+     patch("collector.approval_flow.save_batch"), \
+     patch("collector.approval_flow.record_send_results") as _record_mgr_review, \
+     patch("collector.collections_engine._live_send_allowed", return_value=True), \
+     patch("collector.collections_engine.load_latest_debt_json", return_value={"clients": [{"name": _mgr_review_client["name"]}]}), \
+     patch("collector.collections_engine.classify_debtors", return_value=[{
+         "name": _mgr_review_client["name"],
+         "amount": 55196.5,
+         "days": 11,
+         "level": 1,
+         "opening": -0.26,
+         "debit": 55196.76,
+         "credit": 0.0,
+         "report_date": "2026-05-13",
+     }]), \
+     patch("collector.collections_engine._apply_collector_day_policy", side_effect=lambda c, name, use_first_seen: c), \
+     patch("collector.collections_engine.match_client", return_value={"manager": "Оксана", "whatsapp": "77759505005", "language": "ru"}), \
+     patch("collector.collections_engine._get_stop_record", return_value={}), \
+     patch("collector.collections_engine._collector_candidate_decision", return_value={"action": "manager_review", "msg_type": "strict_reminder", "reason": "active turnover"}), \
+     patch("collector.collections_engine._send_approved_client", new=AsyncMock(return_value={"name": _mgr_review_client["name"], "status": "sent", "reason": "ok"})) as _send_mgr_review, \
+     patch("collector.collections_engine.notify_admin", new=AsyncMock()):
+    _mgr_review_results = asyncio.run(ce_mod.send_approved_batch("batch-review"))
+
+check("manager_review refresh: client is still sent after admin-approved batch",
+      _send_mgr_review.await_count == 1,
+      str(_mgr_review_results))
+check("manager_review refresh: record_send_results called", _record_mgr_review.called)
+check("manager_review refresh: result contains sent",
+      any(r.get("status") == "sent" for r in _mgr_review_results),
+      str(_mgr_review_results))
+
 import asyncio
 from unittest.mock import patch, MagicMock
 from collector.approval_flow import create_batch
@@ -2641,6 +2689,69 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as _td_hold:
           _hold_send_result.get("status") == "skipped" and not _send_mock.called,
           str(_hold_send_result))
     _payment_hold.PAYMENT_HOLD_PATH = _orig_hold_path
+
+
+section("Saida / dialog suppress and exception grace")
+
+from collector import collections_db as _cdb_guard
+
+_guard_tmp = Path(tempfile.mkdtemp(prefix="collector_guard_"))
+_guard_state_path = _guard_tmp / "collector_state.json"
+_orig_guard_state_path = _cdb_guard.STATE_PATH
+_cdb_guard.STATE_PATH = _guard_state_path
+try:
+    _future_until = (date.today() + timedelta(days=2)).isoformat()
+    _cdb_guard.set_wa_dialog_suppress("ТОО Пауза", "escalated_promise", _future_until)
+    _guard_decision = _collector_candidate_decision(
+        {
+            "name": "ТОО Пауза",
+            "amount": 125000.0,
+            "days": 14,
+            "opening": 125000.0,
+            "debit": 0.0,
+            "credit": 0.0,
+        },
+        {"whatsapp": "+77771234567"},
+        {},
+    )
+    check("guard T1: active wa_dialog_suppress blocks preview decision",
+          _guard_decision.get("action") == "skip" and "WA pause active" in _guard_decision.get("reason", ""),
+          str(_guard_decision))
+finally:
+    _cdb_guard.STATE_PATH = _orig_guard_state_path
+    shutil.rmtree(_guard_tmp, ignore_errors=True)
+
+_exception_now = _collector_candidate_decision(
+    {
+        "name": "ТОО Exception",
+        "amount": 150000.0,
+        "days": 15,
+        "opening": 150000.0,
+        "debit": 0.0,
+        "credit": 0.0,
+    },
+    {"whatsapp": "+77771230000"},
+    {"status": "exception", "approved_at": date.today().isoformat()},
+)
+check("guard T2: recent exception gets grace skip",
+      _exception_now.get("action") == "skip" and "exception grace" in _exception_now.get("reason", ""),
+      str(_exception_now))
+
+_exception_old = _collector_candidate_decision(
+    {
+        "name": "ТОО Exception",
+        "amount": 150000.0,
+        "days": 15,
+        "opening": 150000.0,
+        "debit": 0.0,
+        "credit": 0.0,
+    },
+    {"whatsapp": "+77771230000"},
+    {"status": "exception", "approved_at": (date.today() - timedelta(days=5)).isoformat()},
+)
+check("guard T3: old exception leaves collector decision active",
+      _exception_old.get("action") == "client_approval",
+      str(_exception_old))
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -4444,6 +4555,45 @@ try:
 finally:
     _cd28._DIALOGS_PATH = _orig_dialogs_path28
     shutil.rmtree(_tmpdir28, ignore_errors=True)
+
+section("28d. escalation suppress + actual batch UI")
+
+_tmpdir28d = tempfile.mkdtemp()
+_orig_dialogs_path28d = _cd28._DIALOGS_PATH
+_orig_state_path28d = _cdb_guard.STATE_PATH
+_cd28._DIALOGS_PATH = Path(_tmpdir28d) / "dialogs28d.json"
+_cdb_guard.STATE_PATH = Path(_tmpdir28d) / "collector_state28d.json"
+try:
+    _dialog28d = {
+        "client_name": "ТОО Эскалация",
+        "manager_name": "Оксана",
+        "manager_chat_id": 111111,
+        "state": "active",
+        "days": 12,
+        "amount": 88000.0,
+        "debt_age_days": 12,
+        "deferral_days": 0,
+        "effective_overdue_days": 12,
+        "exchanges": [],
+        "exchange_count": 1,
+    }
+    with patch("collector.client_dialog._notify_dialog_observers", new=AsyncMock()):
+        asyncio.run(_cd28.escalate_to_manager(_dialog28d, "promise", "Клиент обещал оплату", "77009998877"))
+    _saved_suppress28d = _cdb_guard.get_wa_dialog_suppress("ТОО Эскалация") or {}
+    check("T28d-1: escalate_to_manager ставит suppress после promise",
+          str(_saved_suppress28d.get("reason", "")).startswith("escalated_promise"),
+          str(_saved_suppress28d))
+    check("T28d-2: escalate_to_manager переводит диалог в escalated",
+          (_cd28._get_client_dialog("77009998877") or {}).get("state") == "escalated")
+finally:
+    _cd28._DIALOGS_PATH = _orig_dialogs_path28d
+    _cdb_guard.STATE_PATH = _orig_state_path28d
+    shutil.rmtree(_tmpdir28d, ignore_errors=True)
+
+check("T28d-3: send_reports содержит кнопку актуального батча",
+      "collector_actual_batch" in _REPORTS_SRC and "Актуальный батч" in _REPORTS_SRC)
+check("T28d-4: send_reports содержит helper актуального режима батча",
+      "def _get_actual_collector_batch_mode()" in _REPORTS_SRC)
 
 total  = len(results)
 passed = sum(1 for _, ok in results if ok)

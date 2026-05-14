@@ -682,3 +682,10 @@ State-файлы:
 Проверка на текущем HEAD:
 - `python -m py_compile collector/client_dialog.py` -> OK
 - `python -X utf8 tests/test_collector.py` -> `481/481`
+
+## Collector update 2026-05-14
+
+- Актуальный collector-path: только --preview и --send-approved; refresh перед отправкой обязан сохранять семантику preview и не выбрасывать manager_review-клиентов, если они остаются актуальны в свежем shortlist.
+- Повторный заход клиента в новый WA-цикл должен блокироваться не только active-dialog, но и wa_dialog_suppress.
+- stop_status="exception" нельзя сразу возвращать в следующий WA-цикл: нужен короткий grace-period.
+- Для admin-навигации актуальный actionable экран теперь определяется кнопкой 🧭 Актуальный батч.

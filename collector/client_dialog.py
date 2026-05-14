@@ -6,6 +6,10 @@ collector/client_dialog.py
 
 Версия: 1.1.8 (2026-05-13)
 
+v1.1.9 (2026-05-14): escalated client dialogs now set a short
+  wa_dialog_suppress cooldown by default, so promise/soft-positive/manual
+  handoff cases do not re-enter the next preview cycle immediately.
+
 v1.1.8 (2026-05-13): escalation text now separates debt age, contractual
   deferral and effective overdue so deferred clients are not described as
   overdue before their payment term expires.
@@ -60,7 +64,7 @@ from collector.logging_utils import get_collector_logger
 import os
 import tempfile
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -76,6 +80,7 @@ load_dotenv(
 TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 _TEST_MODE = os.getenv("COLLECTOR_TEST_MODE", "0").lower() in ("1", "true", "yes")
 COMPANY_NAME = os.getenv("COMPANY_NAME", "Минбаракат")
+ESCALATION_SUPPRESS_DAYS = int(os.getenv("COLLECTOR_ESCALATION_SUPPRESS_DAYS", "2"))
 
 _ROOT = Path(__file__).resolve().parent.parent
 _DIALOGS_PATH = _ROOT / "logs" / "collector_client_dialogs.json"
@@ -98,6 +103,17 @@ def _audit(event: str, **kwargs: Any) -> None:
         _collector_audit(event, **kwargs)
     except Exception as exc:
         logger.debug("audit skipped %s: %s", event, exc)
+
+
+def _set_dialog_followup_suppress(client_name: str, reason: str, days: int) -> None:
+    if days <= 0:
+        return
+    try:
+        from collector.collections_db import set_wa_dialog_suppress
+        until = (datetime.now(TZ).date() + timedelta(days=days)).isoformat()
+        set_wa_dialog_suppress(client_name, reason, until)
+    except Exception as exc:
+        logger.warning("wa_dialog_suppress (%s): %s", reason, exc)
 
 
 def _schedule_tg_deletion(chat_id: int, message_id: int, delay_hours: int = 24) -> None:
@@ -622,6 +638,11 @@ async def escalate_to_manager(
     # Обновляем состояние диалога
     if dialog.get("state") not in {"awaiting_payment_proof", "awaiting_manager"}:
         dialog["state"] = "escalated"
+    _set_dialog_followup_suppress(
+        str(dialog.get("client_name") or ""),
+        f"escalated_{reason}",
+        ESCALATION_SUPPRESS_DAYS,
+    )
     _set_client_dialog(phone, dialog)
 
     text = _build_escalation_text(dialog, reason, summary)

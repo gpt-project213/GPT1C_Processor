@@ -6,6 +6,11 @@ collections/collections_engine.py
 
 Версия: 1.5.4 (2026-05-13)
 
+v1.5.5 (2026-05-14): send-approved refresh now keeps both client_approval
+  and manager_review clients aligned with preview semantics; collector
+  decision also respects wa_dialog_suppress and a short grace-period for
+  stop_status=exception to prevent next-day repeat pressure.
+
 v1.5.4 (2026-05-13): contractual deferral overdue now propagates through
   preview/send-approved payloads and dialog/message generators; debt_age_days
   is kept separately from effective overdue for truthful manager/client copy.
@@ -82,7 +87,7 @@ import json
 import logging
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 # Windows: принудительно UTF-8 для stdout/stderr
 if hasattr(sys.stdout, "buffer"):
@@ -128,6 +133,7 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 DUPLICATE_DIALOG_HOURS = float(os.getenv("COLLECTOR_DUPLICATE_DIALOG_HOURS", "24"))
 SEND_APPROVED_LOCK_MINUTES = int(os.getenv("COLLECTOR_SEND_LOCK_MINUTES", "15"))
+COLLECTOR_EXCEPTION_GRACE_DAYS = int(os.getenv("COLLECTOR_EXCEPTION_GRACE_DAYS", "2"))
 
 from collector.debt_monitor import (
     classify_debtors,
@@ -326,6 +332,44 @@ def _get_stop_record(name: str, registry: Dict[str, Any]) -> Dict[str, Any]:
     return {}
 
 
+def _parse_registry_date(value: Any) -> Optional[date]:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    for fmt in ("%Y-%m-%d", "%d.%m.%Y"):
+        try:
+            return datetime.strptime(raw[:10], fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _exception_grace_active(stop_rec: Optional[Dict[str, Any]]) -> Tuple[bool, str]:
+    if not isinstance(stop_rec, dict):
+        return False, ""
+    if str(stop_rec.get("status") or "") != "exception":
+        return False, ""
+    if COLLECTOR_EXCEPTION_GRACE_DAYS <= 0:
+        return False, ""
+
+    anchor = (
+        _parse_registry_date(stop_rec.get("cleared_at"))
+        or _parse_registry_date(stop_rec.get("approved_at"))
+    )
+    if not anchor:
+        return False, ""
+
+    age_days = (datetime.now(TZ).date() - anchor).days
+    if age_days < 0:
+        age_days = 0
+    if age_days < COLLECTOR_EXCEPTION_GRACE_DAYS:
+        return True, (
+            f"exception grace {COLLECTOR_EXCEPTION_GRACE_DAYS} дн. после решения "
+            f"от {_fmt_date_ru(anchor.isoformat())}"
+        )
+    return False, ""
+
+
 def _flag_enabled(data: Optional[Dict[str, Any]], *keys: str) -> bool:
     if not isinstance(data, dict):
         return False
@@ -478,6 +522,7 @@ _STICKY_MSG_TYPES = {
     "legacy_tail_reminder",
     "partial_tail_reminder",
 }
+_SEND_APPROVED_ACTIONS = {"client_approval", "manager_review"}
 
 
 def _sticky_approval_eligible(client: Dict[str, Any], decision: Dict[str, Any]) -> bool:
@@ -598,6 +643,30 @@ def _collector_candidate_decision(
             "action": "skip",
             "reason": "Саида подтвердила оплату, ждём разноски в 1С",
             "payment_hold_status": hold.get("status", ""),
+            "client": client,
+        }
+
+    try:
+        from collector.collections_db import get_wa_dialog_suppress
+        suppress = get_wa_dialog_suppress(name)
+    except Exception:
+        suppress = None
+    if suppress:
+        return {
+            "action": "skip",
+            "reason": (
+                f"WA pause active: {suppress.get('reason', 'manual')} "
+                f"до {suppress.get('until', '—')}"
+            ),
+            "client": client,
+        }
+
+    grace_active, grace_reason = _exception_grace_active(stop_rec)
+    if grace_active:
+        return {
+            "action": "skip",
+            "reason": grace_reason,
+            "stop_status": stop_status,
             "client": client,
         }
 
@@ -1590,7 +1659,7 @@ def _prepare_current_approved_clients(
         contact = match_client(name, contacts)
         stop_rec = _get_stop_record(name, stop_registry)
         decision = _collector_candidate_decision(client, contact, stop_rec)
-        if decision.get("action") != "client_approval":
+        if decision.get("action") not in _SEND_APPROVED_ACTIONS:
             continue
         client = decision.get("client", client)
         level = int(client.get("level", level) or 0)

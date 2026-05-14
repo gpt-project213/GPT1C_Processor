@@ -2689,29 +2689,29 @@ approval_penalty.py v1.0.2 (РЅРѕРІС‹Р№ РјРѕРґСѓР»СЊ)
 
 ## HANDOFF 2026-05-13 - deferral discipline monitoring
 
-Статус: локально реализовано, не коммичено на момент handoff.
+пїЅпїЅпїЅпїЅпїЅпїЅ: пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ, пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ handoff.
 
-Что добавлено:
-- `collector/payment_deferrals.py` v1.0.1: read-only мониторинг клиентов с договорной отсрочкой в `logs/deferral_violations.json` с учётом закрытых циклов `в срок` / `с нарушением`, `violation_count`, средней и текущей задержки.
-- `collector/collections_engine.py` v1.5.3: `sync_deferral_discipline(debtors)` вызывается после `classify_debtors(...)` в `run()`, `run_approval_preview()` и refresh-path `--send-approved`.
-- `bot/send_reports.py` v9.4.76: в меню коллектора добавлена кнопка `? Отсрочки` (`collector_deferral_stats`) с admin-сводкой по менеджерам и клиентам.
-- `tests/test_collector.py`: добавлен регрессионный сценарий по 2 циклам одного deferred-клиента: цикл с нарушением и цикл без нарушения.
+пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ:
+- `collector/payment_deferrals.py` v1.0.1: read-only пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ `logs/deferral_violations.json` пїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ `пїЅ пїЅпїЅпїЅпїЅ` / `пїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ`, `violation_count`, пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ.
+- `collector/collections_engine.py` v1.5.3: `sync_deferral_discipline(debtors)` пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ `classify_debtors(...)` пїЅ `run()`, `run_approval_preview()` пїЅ refresh-path `--send-approved`.
+- `bot/send_reports.py` v9.4.76: пїЅ пїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ `? пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ` (`collector_deferral_stats`) пїЅ admin-пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ.
+- `tests/test_collector.py`: пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ 2 пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ deferred-пїЅпїЅпїЅпїЅпїЅпїЅпїЅ: пїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ.
 
-Проверки:
+пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ:
 - `python -m py_compile collector\\payment_deferrals.py` -> OK
 - `python -m py_compile collector\\collections_engine.py` -> OK
 - `python -m py_compile bot\\send_reports.py` -> OK
 - `python -X utf8 tests\\test_collector.py` -> `596/596`
 
-Оставлено без изменений:
-- локальные `config/clients.json.bak-*`
+пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ:
+- пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ `config/clients.json.bak-*`
 - `artifacts/`
 - `tools/debug_batch_today.py`
 - `tools/debug_batches.py`
 - `tools/build_monetization_doc.py`
 
-Следующий шаг:
-- приёмка в бою после рестарта бота и первого реального debt-snapshot: проверить заполнение `logs/deferral_violations.json` и admin-экран `? Отсрочки`.
+пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ:
+- пїЅпїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ debt-snapshot: пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ `logs/deferral_violations.json` пїЅ admin-пїЅпїЅпїЅпїЅпїЅ `? пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ`.
 
 ---
 
@@ -2756,3 +2756,27 @@ approval_penalty.py v1.0.2 (РЅРѕРІС‹Р№ РјРѕРґСѓР»СЊ)
 
 РћРїРµСЂР°С†РёРѕРЅРЅС‹Р№ СЃР»РµРґСѓСЋС‰РёР№ С€Р°Рі:
 - СЂРµСЃС‚Р°СЂС‚ Р±РѕС‚Р°, С‡С‚РѕР±С‹ Р±РѕРµРІРѕР№ runtime РїРѕРґС…РІР°С‚РёР» С„РёРєСЃС‹ deferral overdue / preview text.
+
+## HANDOFF 2026-05-14 вЂ” collector batch hardening after production audit
+
+### Р§С‚Рѕ Р·Р°РєСЂС‹С‚Рѕ
+
+- send-approved refresh Р±РѕР»СЊС€Рµ РЅРµ С‚РµСЂСЏРµС‚ admin-approved РєР»РёРµРЅС‚РѕРІ СЃ eview_action="manager_review".
+- Preview/send-approved decision С‚РµРїРµСЂСЊ СѓС‡РёС‚С‹РІР°РµС‚ wa_dialog_suppress РµС‰С‘ РґРѕ live-send.
+- Р”Р»СЏ stop_status="exception" РІРІРµРґС‘РЅ grace-period С‡РµСЂРµР· COLLECTOR_EXCEPTION_GRACE_DAYS.
+- РџРѕСЃР»Рµ escalate_to_manager(...) СЃС‚Р°РІРёС‚СЃСЏ РєРѕСЂРѕС‚РєРёР№ suppress-cooldown.
+- Р’ admin UI РґРѕР±Р°РІР»РµРЅР° РєРЅРѕРїРєР° рџ§­ РђРєС‚СѓР°Р»СЊРЅС‹Р№ Р±Р°С‚С‡.
+
+### РџСЂРѕРІРµСЂРєР°
+
+- python -m py_compile collector\collections_engine.py -> OK
+- python -m py_compile collector\client_dialog.py -> OK
+- python -m py_compile bot\send_reports.py -> OK
+- $env:WHATSAPP_ENABLED='0'; ='0'; python -X utf8 tests\test_collector.py -> 620/620
+- $env:WHATSAPP_ENABLED='0'; ='0'; python -X utf8 tests\test_phase2_safe_send.py -> passed
+- python -X utf8 tests\test_project.py -> 110/110
+
+### Root cause
+
+- Preview path РґРѕРїСѓСЃРєР°Р» manager_review, Р° send-refresh С„РёР»СЊС‚СЂРѕРІР°Р» С‚РѕР»СЊРєРѕ client_approval.
+- Р—Р°С‰РёС‚Р° РѕС‚ РїРѕРІС‚РѕСЂРЅРѕРіРѕ Р·Р°С…РѕРґР° РєР»РёРµРЅС‚Р° РґРµСЂР¶Р°Р»Р°СЃСЊ РЅР° active-dialog Рё РЅРµ РїРѕРєСЂС‹РІР°Р»Р° escalation cooldown + exception-РєРµР№СЃС‹.

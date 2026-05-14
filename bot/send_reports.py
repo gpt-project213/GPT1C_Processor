@@ -189,7 +189,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.76/13.05.2026"
+__VERSION__ = "v9.4.77/14.05.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
@@ -3277,6 +3277,7 @@ def _get_pending_admin_batch() -> Optional[Dict[str, Any]]:
 def _collector_batch_keyboard() -> InlineKeyboardMarkup:
     rows = [
         [InlineKeyboardButton("🔄 Обновить", callback_data="collector_batch")],
+        [InlineKeyboardButton("🧭 Актуальный батч", callback_data="collector_actual_batch")],
         [InlineKeyboardButton("🤝 Обещания менеджеров", callback_data="collector_agreed_stats")],
         [InlineKeyboardButton("📋 Саида backlog", callback_data="collector_saida_stats")],
         [InlineKeyboardButton("🔸 Частичные оплаты", callback_data="collector_partial_stats")],
@@ -3295,6 +3296,20 @@ def _collector_batch_keyboard() -> InlineKeyboardMarkup:
         rows.append([InlineKeyboardButton("📤 Готовый список", callback_data="collector_send_latest")])
     rows.append([InlineKeyboardButton("🔙 Главное меню", callback_data="back_main")])
     return InlineKeyboardMarkup(rows)
+
+
+def _get_actual_collector_batch_mode() -> str:
+    """Returns the most actionable collector batch view for admin UI."""
+    pending = _get_pending_admin_batch()
+    if pending:
+        return "pending_admin"
+    try:
+        from collector.approval_flow import get_latest_send_ready_batch
+        if get_latest_send_ready_batch():
+            return "send_ready"
+    except Exception:
+        pass
+    return "status"
 
 
 def _format_collector_agreed_stats_text() -> str:
@@ -7648,6 +7663,66 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             _menu_set(chat_id, msg.message_id)
         except Exception as _e:
             logger.error("collector_batch send error: %s", _e)
+        return
+
+    if data == "collector_actual_batch":
+        if user_role != "admin":
+            await q.answer("⛔ Доступ запрещён")
+            return
+        mode = _get_actual_collector_batch_mode()
+        if mode == "pending_admin":
+            await q.answer("Открываю батч на утверждение...")
+            try:
+                from collector.approval_flow import send_admin_summary
+                batch = _get_pending_admin_batch()
+                if not batch:
+                    await _send_auto(context, chat_id, "⚠️ Актуальный батч уже изменился. Обновите экран.")
+                    return
+                await send_admin_summary(batch, context.bot)
+            except Exception as _e:
+                logger.error("collector_actual_batch pending_admin error: %s", _e)
+                await context.bot.send_message(chat_id=chat_id, text=f"⚠️ Ошибка: {_e}")
+            return
+        if mode == "send_ready":
+            await q.answer("Открываю готовый список...")
+            try:
+                from collector.approval_flow import (
+                    get_latest_send_ready_batch,
+                    _format_admin_summary_text,
+                    _admin_send_now_keyboard,
+                )
+                batch = get_latest_send_ready_batch()
+                if not batch:
+                    await _send_auto(context, chat_id, "⚠️ Нет готового списка для отправки.")
+                    return
+                batch_id = str(batch.get("batch_id") or "—")
+                text = (
+                    f"📤 <b>Готовый список ждёт отправки</b>\n"
+                    f"Batch: <code>{batch_id}</code>\n\n"
+                    f"{_format_admin_summary_text(batch)}"
+                )
+                await _send_auto(
+                    context,
+                    chat_id,
+                    text,
+                    parse_mode="HTML",
+                    reply_markup=InlineKeyboardMarkup(_admin_send_now_keyboard(batch_id)["inline_keyboard"]),
+                )
+            except Exception as _e:
+                logger.error("collector_actual_batch send_ready error: %s", _e, exc_info=True)
+                await context.bot.send_message(chat_id=chat_id, text=f"⚠️ Ошибка: {_e}")
+            return
+        await q.answer("Показываю текущий статус...")
+        text = _format_collector_batch_text()
+        kb_back = _collector_batch_keyboard()
+        await hide_main_menu(context, chat_id)
+        try:
+            msg = await context.bot.send_message(
+                chat_id=chat_id, text=text, reply_markup=kb_back, parse_mode="HTML"
+            )
+            _menu_set(chat_id, msg.message_id)
+        except Exception as _e:
+            logger.error("collector_actual_batch status error: %s", _e)
         return
 
     if data == "collector_resend_approval":
