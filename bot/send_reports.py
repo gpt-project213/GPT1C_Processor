@@ -3213,7 +3213,19 @@ def _format_collector_batch_text() -> str:
                 "approved": "✅", "rejected": "❌",
                 "partial": "🔸", "timeout": "⌛",
             }.get(mgr_status, "⏳")
-            lines.append(f"  {status_icon} {mgr_name}: {mgr_status} ({clients_count} кл.)")
+            status_detail = mgr_status
+            if mgr_status == "timeout":
+                _wa = mgr_data.get("waiting_for_agreed") or {}
+                _wp = mgr_data.get("waiting_for_proof") or {}
+                if isinstance(_wa, dict) and _wa.get("client_name"):
+                    status_icon = "⏳"
+                    status_detail = f"начал — не написал детали по «{_wa['client_name']}»"
+                elif isinstance(_wp, dict) and _wp.get("client_name"):
+                    status_icon = "⏳"
+                    status_detail = f"начал — не прислал документ по «{_wp['client_name']}»"
+                else:
+                    status_detail = "не ответил"
+            lines.append(f"  {status_icon} {mgr_name}: {status_detail} ({clients_count} кл.)")
 
     # Список клиентов — одобренные или из pending
     client_list: list = []

@@ -459,6 +459,64 @@ class PreviewFreshnessFormattingHermeticTests(unittest.TestCase):
         self.assertIn("Ергали", text)
 
 
+class TimeoutLabelHermeticTests(unittest.TestCase):
+    """Regression: timeout не должен молча показывать «не ответил»,
+    если менеджер успел нажать кнопку и оставил bot в waiting_for_*.
+    """
+
+    def _make_batch(self, mgr_name: str = "Магира"):
+        return approval_flow.create_batch({
+            mgr_name: [{
+                "name": "Е Тестовый Клиент",
+                "amount": 100000.0,
+                "days": 12,
+                "level": 3,
+                "debit": 0.0,
+                "credit": 0.0,
+                "phone": "77001112233",
+                "msg_type": "reminder",
+                "reason": "просрочка",
+            }]
+        })
+
+    def test_timeout_with_waiting_for_agreed_shows_started_label(self):
+        batch = self._make_batch("Магира")
+        mgr_state = batch["managers"]["Магира"]
+        mgr_state["status"] = "timeout"
+        mgr_state["waiting_for_agreed"] = {
+            "client_name": "Е Тестовый Клиент",
+            "batch_id":    batch["batch_id"],
+            "cli_idx":     0,
+        }
+        text = approval_flow._format_admin_summary_text(batch)
+        self.assertIn("начал — не написал детали", text)
+        self.assertIn("Е Тестовый Клиент", text)
+        self.assertNotIn("🔇 не ответил", text)
+
+    def test_timeout_with_waiting_for_proof_shows_started_label(self):
+        batch = self._make_batch("Оксана")
+        mgr_state = batch["managers"]["Оксана"]
+        mgr_state["status"] = "timeout"
+        mgr_state["waiting_for_proof"] = {
+            "client_name": "Е Тестовый Клиент",
+            "batch_id":    batch["batch_id"],
+            "cli_idx":     0,
+        }
+        text = approval_flow._format_admin_summary_text(batch)
+        self.assertIn("начал — не прислал документ", text)
+        self.assertIn("Е Тестовый Клиент", text)
+        self.assertNotIn("🔇 не ответил", text)
+
+    def test_timeout_without_waiting_keeps_silent_label(self):
+        batch = self._make_batch("Ергали")
+        mgr_state = batch["managers"]["Ергали"]
+        mgr_state["status"] = "timeout"
+        text = approval_flow._format_admin_summary_text(batch)
+        self.assertIn("🔇 не ответил", text)
+        self.assertNotIn("начал — не написал", text)
+        self.assertNotIn("начал — не прислал", text)
+
+
 class WhatsAppPollerHermeticTests(unittest.IsolatedAsyncioTestCase):
     async def test_poll_once_passes_attachment_metadata_to_client_dialog(self):
         payload = {
