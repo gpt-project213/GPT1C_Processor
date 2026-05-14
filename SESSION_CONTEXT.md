@@ -5,6 +5,84 @@
 
 ---
 
+## HANDOFF 2026-05-14 — стабилизация Collector + CRM (P2/P3 + cleanup)
+
+### Что сделано (master, коммиты `0f412ae`–`4da07ef`)
+
+Закрыты все 5 направлений ТЗ на стабилизацию. Порядок выполнения: 1→3→2→4→5.
+
+#### 1. Dead-code removal (`0f412ae`)
+
+- Удалена `_format_admin_detail_text` (`approval_flow.py:1542`) — определена, никем не вызывалась.
+- F-10 в `AUDIT_COLLECTOR_2026-05-14.md` помечен OBSOLETE.
+- Тесты: 18/18 `test_collector_regression_hermetic`.
+
+#### 2. Lock + atomic discipline для CRM state-файлов (`605edc0`)
+
+Добавлен `_crm_state_lock(path)` — параметризованный context-manager по образцу `collector/payment_hold._hold_lock`. `LOCK_EX|LOCK_NB + retry-loop` (единственный режим с рабочим timeout на Windows).
+
+Покрыты 4 пары save/load:
+- `_crm_save_pending` / `_crm_load_pending` (phone-pending)
+- `_crm_save_claim_pending` / `_crm_load_claim_pending` (claim queue)
+- `_crmdup_save_pending` / `_crmdup_load_pending` (dup review)
+- `_crmdup_save_ambiguous` / `_crmdup_load_ambiguous` (ambiguous conflicts)
+
+#### 3. Stale CRM claim tokens (`72f4141`)
+
+- F-16: `_crm_cleanup_claim_pending` — токены без `created_at` ранее `continue`-лись (никогда не удалялись). Исправлено: вынесен helper `_crm_claim_is_stale(claim)`, stale = без created_at | невалидная дата | TTL истёк.
+- Callback `crm_claim|...`: явная TTL-проверка на конкретный токен до обработки → если stale, удалить, снять кнопку, ответить «запрос устарел».
+
+#### 4. Dup-review / ambiguous хвосты (`7c6be03`)
+
+**F-12** (deterministic keep-key):
+- В custom-phone path: `client_keys[0]` → `sorted([k for k in client_keys if k])[0]`.
+- Результат не зависит от порядка items в review при пересборке.
+
+**F-13** (ambiguous reopen):
+- `_ambiguous_signature` теперь чувствителен к телефонам: `sorted("client_key#normalized_phone")` вместо `sorted(client_keys)`.
+- Если у тех же пар изменились phones → новый signature → новая pending-запись создаётся автоматически (reopen). Старая resolved остаётся как audit-trail.
+
+#### 5. Admin CRM backlog (`579e4a5`)
+
+Новый экран `📋 CRM бэклог` в admin-меню (callback `crm_backlog`):
+- 4 категории с counts + top 5 кейсов и timestamp-возраст (м/ч/д).
+- 📞 Phone pending, ✋ Claim pending (+N stale), 🔀 Duplicate review, ❓ Ambiguous (+N resolved в истории).
+- Кнопки: Обновить, Ambiguous-очередь, Главное меню.
+- `_format_crm_backlog_text()` + `_crm_backlog_keyboard()`.
+
+#### 6. Регрессионные тесты (`4da07ef`)
+
+Добавлен `StabilizationRegressionTests` (12 тестов) в `test_crm_regression.py`:
+- stale claim: без created_at / expired / fresh / cleanup
+- lock: context-manager создаёт lock-file; save+load round-trip
+- F-12: deterministic keep-key order-independent
+- F-13: signature reacts to phone-change; order-independent; reopen via new sig
+- backlog: counts по 4 очередям; stale claims отдельной подписью
+
+### Финальный прогон (по критериям ТЗ)
+
+```
+py_compile bot/send_reports.py, crm_clients.py, crm_audit_log.py  ✅
+test_crm_regression:              26/26  ✅  (+12 новых)
+test_collector_regression_hermetic: 18/18  ✅
+test_project:                     110/110 ✅
+```
+
+### Что осталось открытым
+
+| Finding | Суть |
+|---|---|
+| dead `_format_admin_detail_text` | ✅ удалён |
+| F-11 (lock) | ✅ закрыт |
+| F-12 (keep-key) | ✅ закрыт |
+| F-13 (ambiguous reopen) | ✅ закрыт |
+| F-14 (stale claim TTL) | ✅ закрыт |
+| F-16 (claim без created_at) | ✅ закрыт |
+| Admin CRM backlog | ✅ закрыт |
+| Design | Три несогласованных хранилища: clients.json / debtors_contacts.json / batch snapshot — отложено |
+
+---
+
 ## HANDOFF 2026-05-14 — live-инцидент: «Договорились» + потонувший превью
 
 ### Что сделано (master, коммит `7603db9`)
