@@ -3260,8 +3260,9 @@ def _get_pending_admin_batch() -> Optional[Dict[str, Any]]:
         from datetime import datetime as _dt
         from zoneinfo import ZoneInfo as _ZI
         _now = _dt.now(tz=_ZI("Asia/Almaty"))
-        for bid in sorted(_load_batches().keys(), reverse=True):
-            b = _load_batches().get(bid) or {}
+        _all_batches = _load_batches()
+        for bid in sorted(_all_batches.keys(), reverse=True):
+            b = _all_batches.get(bid) or {}
             if b.get("status") != "pending_admin":
                 continue
             from collector.approval_flow import _parse_batch_dt

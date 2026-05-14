@@ -40,16 +40,19 @@ except Exception:  # pragma: no cover - defensive fallback
     TZ = None
 
 _cache: dict = {}
+_cache_mtime: float = 0.0
 
 
 def _load() -> dict:
-    global _cache
-    if _cache:
-        return _cache
+    global _cache, _cache_mtime
     try:
+        mtime = _DEFERRALS_PATH.stat().st_mtime
+        if _cache and mtime == _cache_mtime:
+            return _cache
         with open(_DEFERRALS_PATH, encoding="utf-8") as f:
             data = json.load(f)
         _cache = data.get("deferrals", {})
+        _cache_mtime = mtime
         logger.info("payment_deferrals: загружено %d записей", len(_cache))
     except (OSError, json.JSONDecodeError) as e:
         logger.warning("payment_deferrals: ошибка загрузки: %s", e)

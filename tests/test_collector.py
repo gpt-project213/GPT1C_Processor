@@ -4595,6 +4595,115 @@ check("T28d-3: send_reports содержит кнопку актуального
 check("T28d-4: send_reports содержит helper актуального режима батча",
       "def _get_actual_collector_batch_mode()" in _REPORTS_SRC)
 
+# ═══════════════════════════════════════════════════════════════
+section("29. Zeropay confirm/deny (Саида подтверждает нулевой остаток)")
+# ═══════════════════════════════════════════════════════════════
+
+_zeropay_tmp = Path(tempfile.mkdtemp())
+_orig_zeropay_saida_id = _dstop.SAIDA_CHAT_ID
+_orig_zeropay_registry = _dstop.REGISTRY_FILE
+_dstop.REGISTRY_FILE = _zeropay_tmp / "registry_zp.json"
+_dstop.SAIDA_CHAT_ID = 9000001
+
+_zp_client = "О ТОО ЗероПейТест"
+_zp_registry = {
+    _zp_client: {
+        "status": "pending_clearance_saida",
+        "manager": "Тест",
+        "manager_chat_id": 0,
+        "added_at": "2026-05-14",
+    }
+}
+import json as _json_zp
+_dstop.REGISTRY_FILE.write_text(_json_zp.dumps(_zp_registry), encoding="utf-8")
+
+try:
+    # T1: Неверный chat_id → отказ
+    _zp_resp_bad = asyncio.run(_dstop._handle_saida_zeropay_confirm(_zp_client[:26], 9999, _FakeDstopBot()))
+    check("ZEROPAY T1: неверный chat_id → отказ",
+          "⛔" in _zp_resp_bad, f"got: {_zp_resp_bad!r}")
+
+    # Сбрасываем статус на pending_clearance_saida для следующего теста
+    _dstop.REGISTRY_FILE.write_text(_json_zp.dumps(_zp_registry), encoding="utf-8")
+
+    # T2: Правильный chat_id → статус → pending_clearance_admin
+    _zp_bot = _FakeDstopBot()
+    _zp_orig_admin = _dstop.ADMIN_CHAT_ID if hasattr(_dstop, "ADMIN_CHAT_ID") else None
+    _zp_resp_ok = asyncio.run(_dstop._handle_saida_zeropay_confirm(_zp_client[:26], 9000001, _zp_bot))
+    _zp_reg_after = _dstop.load_registry()
+    check("ZEROPAY T2: подтверждение Саидой → статус pending_clearance_admin",
+          _zp_reg_after.get(_zp_client, {}).get("status") == "pending_clearance_admin",
+          f"status={_zp_reg_after.get(_zp_client, {}).get('status')!r}")
+    check("ZEROPAY T3: подтверждение Саидой → ответ содержит ✅",
+          "✅" in _zp_resp_ok or "Подтверждено" in _zp_resp_ok, f"got: {_zp_resp_ok!r}")
+
+    # T4: deny — неверный chat_id
+    _dstop.REGISTRY_FILE.write_text(_json_zp.dumps(_zp_registry), encoding="utf-8")
+    _zp_deny_bad = asyncio.run(_dstop._handle_saida_zeropay_deny(_zp_client[:26], 9999, _FakeDstopBot()))
+    check("ZEROPAY T4: deny — неверный chat_id → отказ",
+          "⛔" in _zp_deny_bad, f"got: {_zp_deny_bad!r}")
+
+    # T5: deny — правильный chat_id → статус → stopped
+    _dstop.REGISTRY_FILE.write_text(_json_zp.dumps(_zp_registry), encoding="utf-8")
+    _zp_deny_ok = asyncio.run(_dstop._handle_saida_zeropay_deny(_zp_client[:26], 9000001, _FakeDstopBot()))
+    _zp_reg_after_deny = _dstop.load_registry()
+    check("ZEROPAY T5: deny → статус stopped",
+          _zp_reg_after_deny.get(_zp_client, {}).get("status") == "stopped",
+          f"status={_zp_reg_after_deny.get(_zp_client, {}).get('status')!r}")
+    check("ZEROPAY T6: deny → ответ содержит ❌",
+          "❌" in _zp_deny_ok, f"got: {_zp_deny_ok!r}")
+
+    # T7: повторный confirm после смены статуса → idempotent "уже изменён"
+    _zp_idempotent = asyncio.run(_dstop._handle_saida_zeropay_confirm(_zp_client[:26], 9000001, _FakeDstopBot()))
+    check("ZEROPAY T7: повторный confirm после deny → idempotent ответ",
+          "изменён" in _zp_idempotent or "ℹ️" in _zp_idempotent,
+          f"got: {_zp_idempotent!r}")
+
+finally:
+    _dstop.SAIDA_CHAT_ID = _orig_zeropay_saida_id
+    _dstop.REGISTRY_FILE = _orig_zeropay_registry
+    shutil.rmtree(_zeropay_tmp, ignore_errors=True)
+
+# ═══════════════════════════════════════════════════════════════
+section("29b. Audit bug regressions: F-01 exception grace / F-05 pending_saida")
+# ═══════════════════════════════════════════════════════════════
+
+# F-01: exception без anchor date → grace активна (anchor = сегодня)
+from collector.collections_engine import _exception_grace_active as _ega
+_f01_no_anchor = _ega({"status": "exception"})
+check("F-01 regression: exception без anchor → grace активна первые 2 дня",
+      _f01_no_anchor[0] is True,
+      f"got: {_f01_no_anchor}")
+
+# F-01: exception с anchor = 3 дня назад → grace истекла
+import datetime as _dt_mod
+_old_date = (_dt_mod.date.today() - _dt_mod.timedelta(days=3)).isoformat()
+_f01_old_anchor = _ega({"status": "exception", "approved_at": _old_date})
+check("F-01 regression: exception с anchor=3 дня назад → grace НЕ активна",
+      _f01_old_anchor[0] is False,
+      f"got: {_f01_old_anchor}")
+
+# F-05: pending_saida блокирует collector shortlist
+import collector.payment_hold as _ph_reg
+_ph_reg_orig = _ph_reg.PAYMENT_HOLD_PATH
+with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as _td_f05:
+    _ph_reg.PAYMENT_HOLD_PATH = Path(_td_f05) / "holds.json"
+    _ph_reg._LOCK_FILE = _ph_reg.PAYMENT_HOLD_PATH.with_suffix(".lock")
+    _ph_reg.create_manager_payment_request("Менеджер", "Ф05 Тест", debt=50000.0)
+    _f05_hold = _ph_reg.get_hold_for_client("Ф05 Тест")
+    check("F-05 regression: pending_saida возвращается get_hold_for_client",
+          _f05_hold is not None and _f05_hold.get("status") == "pending_saida",
+          f"hold={_f05_hold!r}")
+    _f05_decision = _collector_candidate_decision(
+        {"name": "Ф05 Тест", "amount": 50000.0, "days": 15, "opening": 0.0, "debit": 0.0, "credit": 0.0},
+        None, {},
+    )
+    check("F-05 regression: pending_saida блокирует collector shortlist",
+          _f05_decision.get("action") == "skip" and "Саид" in _f05_decision.get("reason", ""),
+          str(_f05_decision))
+    _ph_reg.PAYMENT_HOLD_PATH = _ph_reg_orig
+    _ph_reg._LOCK_FILE = _ph_reg.PAYMENT_HOLD_PATH.with_suffix(".lock")
+
 total  = len(results)
 passed = sum(1 for _, ok in results if ok)
 failed = total - passed

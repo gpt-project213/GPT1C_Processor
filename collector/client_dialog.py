@@ -375,10 +375,8 @@ _SERVICE_REQUEST_PATTERNS = [
     r"\b\u0430\u043a\u0442\s+\u0441\u0432\u0435\u0440\u043a",   # \u0430\u043a\u0442 \u0441\u0432\u0435\u0440\u043a\u0438
     r"\b\u0441\u0432\u0435\u0440\u043a",         # \u0441\u0432\u0435\u0440\u043a\u0430, \u0441\u0432\u0435\u0440\u0438\u043c
     r"\b\u0430\u043a\u0442\b",         # \u0430\u043a\u0442 (\u043e\u0442\u0434\u0435\u043b\u044c\u043d\u043e\u0435 \u0441\u043b\u043e\u0432\u043e; \u043d\u0435 "\u0444\u0430\u043a\u0442")
-    r"\b\u0441\u0447\u0451\u0442\b",        # \u0441\u0447\u0451\u0442 (\u0441 \u0451)
     r"\b\u0441\u0447\u0435\u0442\b",        # \u0441\u0447\u0435\u0442 (\u0431\u0435\u0437 \u0451) \u2014 \u041d\u0415 "\u0440\u0430\u0441\u0447\u0435\u0442" \u0431\u043b\u0430\u0433\u043e\u0434\u0430\u0440\u044f \b
-    r"\b\u0441\u0447\u0451\u0442\s+\u0444\u0430\u043a\u0442\u0443\u0440", # \u0441\u0447\u0451\u0442-\u0444\u0430\u043a\u0442\u0443\u0440\u0430
-    r"\b\u0441\u0447\u0435\u0442\s+\u0444\u0430\u043a\u0442\u0443\u0440",
+    r"\b\u0441\u0447\u0435\u0442\s+\u0444\u0430\u043a\u0442\u0443\u0440",  # \u0441\u0447\u0435\u0442-\u0444\u0430\u043a\u0442\u0443\u0440\u0430
     r"\b\u043d\u0430\u043a\u043b\u0430\u0434\u043d",       # \u043d\u0430\u043a\u043b\u0430\u0434\u043d\u0430\u044f
     r"\b\u0434\u043e\u0433\u043e\u0432\u043e\u0440",       # \u0434\u043e\u0433\u043e\u0432\u043e\u0440
     r"\b\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442",      # \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u044b
@@ -856,7 +854,15 @@ async def handle_incoming(phone: str, text: str, attachment: Optional[Dict[str, 
         return
 
     if _is_greeting_only(text):
+        _greeting_count = dialog.get("off_topic_count", 0)
+        if _greeting_count >= 1:
+            await escalate_to_manager(
+                dialog, "repeated_greeting",
+                "Клиент повторно пишет только приветствия — нужен живой менеджер", phone_clean,
+            )
+            return
         reply = "Здравствуйте. Подскажите, пожалуйста, когда ожидать ближайшую оплату?"
+        dialog["off_topic_count"] = _greeting_count + 1
         dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
         _set_client_dialog(phone_clean, dialog)
         await _reply_to_client(phone_clean, reply)
@@ -1252,7 +1258,7 @@ async def handle_incoming(phone: str, text: str, attachment: Optional[Dict[str, 
         return
 
     if intent == "promise_without_date":
-        if _is_brief_reply(text, max_words=2, max_chars=18):
+        if _is_brief_reply(text, max_words=2, max_chars=18) or exchange_count >= 2:
             reply = (
                 "Понял вас. Тогда ждём ближайшую оплату. "
                 "Как оплатите — пришлите, пожалуйста, чек."

@@ -1564,6 +1564,9 @@ def _format_admin_detail_text(batch: Dict[str, Any]) -> str:
             type_label = _MSG_TYPE_LABELS.get(c.get("msg_type", ""), c.get("msg_type", ""))
             total_all += 1
 
+            agreed_set   = set(mgr_state.get("agreed_names", []))
+            paid_set     = set(mgr_state.get("paid_with_doc_names", [])) | set(mgr_state.get("paid_no_doc_names", []))
+
             if name in approved_set:
                 icon = "✅"
                 total_ready += 1
@@ -1571,6 +1574,10 @@ def _format_admin_detail_text(batch: Dict[str, Any]) -> str:
                 icon = "❌"
             elif name in postponed_set:
                 icon = "⏸"
+            elif name in agreed_set:
+                icon = "🤝"
+            elif name in paid_set:
+                icon = "💰"
             else:
                 icon = "◯"
 
@@ -2224,7 +2231,8 @@ async def handle_admin_callback(
         text = (
             "⏸ <b>Рассылка отложена.</b>\n\n"
             "Вы можете вернуться к этому запросу в течение дня.\n"
-            "Батч будет активен до конца рабочего дня."
+            "Батч будет активен до конца рабочего дня.\n\n"
+            "⚠️ Если до 17:00 придёт новый датасет — этот батч будет заменён автоматически."
         )
         await _tg_edit(chat_id, message_id, text)
         logger.info("[%s] Администратор отложил решение", batch_id)
@@ -2260,7 +2268,7 @@ def is_ready_for_send(batch_id: str) -> bool:
         return False
     return (
         batch.get("admin_status") == "approved"
-        and batch.get("status") in ("admin_approved", "partially_sent", "sent")
+        and batch.get("status") in ("admin_approved", "partially_sent")
     )
 
 

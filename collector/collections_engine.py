@@ -1272,6 +1272,7 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
 
     for client in debtors:
         name = client["name"]
+        contact = None  # сбрасываем per-iteration; реальное значение ниже через match_client
 
         client = _apply_collector_day_policy(client, name, use_first_seen=not dry_run)
         client = _apply_deferral_metrics(client)
@@ -1673,6 +1674,14 @@ def _prepare_current_approved_clients(
         if not manager_name:
             continue
 
+        manager_chat_id = _get_manager_chat_id(manager_name) if manager_name else None
+        if not manager_chat_id:
+            logger.warning(
+                "_prepare_current_approved_clients: [%s] менеджер '%s' без chat_id — "
+                "WA будет отправлен без Telegram-уведомления менеджеру",
+                name, manager_name,
+            )
+
         if not phone:
             continue
 
@@ -2036,11 +2045,26 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
                 if _existing_dlg:
                     _dlg_state = str(_existing_dlg.get("state") or "")
                     if _dlg_state in (*_DIALOG_ACTIVE_STATES, "escalated"):
-                        logger.info(
-                            "run_approval_preview: [%s] skip — existing client dialog state=%s",
-                            name, _dlg_state,
-                        )
-                        continue
+                        # awaiting_payment_proof: снимаем guard если suppress (3 дн.) уже истёк
+                        _skip = True
+                        if _dlg_state == "awaiting_payment_proof":
+                            _last_act = _existing_dlg.get("last_activity") or _existing_dlg.get("created", "")
+                            try:
+                                _act_dt = datetime.fromisoformat(str(_last_act))
+                                if (datetime.now(TZ) - _act_dt).days >= 3:
+                                    logger.info(
+                                        "run_approval_preview: [%s] awaiting_payment_proof устарел (>3 дн.) — guard снят",
+                                        name,
+                                    )
+                                    _skip = False
+                            except Exception:
+                                pass
+                        if _skip:
+                            logger.info(
+                                "run_approval_preview: [%s] skip — existing client dialog state=%s",
+                                name, _dlg_state,
+                            )
+                            continue
             except Exception as dlg_exc:
                 logger.warning("run_approval_preview: [%s] client dialog precheck error: %s", name, dlg_exc)
 
@@ -2104,6 +2128,12 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
         )
     if active_batch:
         batch["replaced_batch_id"] = active_batch.get("batch_id")
+        if active_batch.get("admin_status") == "postponed":
+            logger.warning(
+                "run_approval_preview: ОТЛОЖЕННЫЙ батч %s вытеснен новым %s — "
+                "директор мог не принять решение по отложенному батчу",
+                active_batch.get("batch_id"), batch["batch_id"],
+            )
         supersede_batch(active_batch, superseded_by=batch["batch_id"])
         await close_manager_previews(
             active_batch,
