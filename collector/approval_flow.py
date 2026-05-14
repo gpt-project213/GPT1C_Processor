@@ -1463,7 +1463,20 @@ def _format_admin_summary_text(batch: Dict[str, Any]) -> str:
             n_pnd  = len(paid_ndoc)
             status_label = f"✏️ выбрал: ✅{n_send} 🤝{n_agr} 💰{n_pd}+{n_pnd}"
         elif status == "timeout":
-            status_label = f"🔇 не ответил → авто ({len(auto_included)} кл.)"
+            _wa = mgr_state.get("waiting_for_agreed") or {}
+            _wp = mgr_state.get("waiting_for_proof") or {}
+            if isinstance(_wa, dict) and _wa.get("client_name"):
+                status_label = (
+                    f"⏳ начал — не написал детали по «{_wa['client_name']}»"
+                    f" → авто ({len(auto_included)} кл.)"
+                )
+            elif isinstance(_wp, dict) and _wp.get("client_name"):
+                status_label = (
+                    f"⏳ начал — не прислал документ по «{_wp['client_name']}»"
+                    f" → авто ({len(auto_included)} кл.)"
+                )
+            else:
+                status_label = f"🔇 не ответил → авто ({len(auto_included)} кл.)"
         else:
             status_label = status
 
