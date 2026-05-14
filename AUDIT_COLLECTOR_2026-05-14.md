@@ -423,24 +423,10 @@ await escalate_to_manager(dialog, "paid_claim", "Клиент утверждае
 
 ---
 
-### F-10 | MEDIUM | Visual ghost: agreed/paid клиенты показываются как нерассмотренные
+### F-10 | OBSOLETE | Visual ghost: agreed/paid клиенты показываются как нерассмотренные
 
-**Symptom:** В подробном списке директора (`_format_admin_detail_text`) клиенты, снятые менеджером через `agreed`/`paid`, показываются с иконкой `◯` (нерассмотренный), хотя менеджер их обработал.
-
-**Root cause:** `approval_flow.py:1543–1575` проверяет только `approved_set`, `rejected_set`, `postponed_set`. Поля `agreed_names`, `paid_with_doc_names`, `paid_no_doc_names` не проверяются.
-
-**Code location:** `collector/approval_flow.py:1543–1575`
-
-**Impact:** Директор видит искажённую картину ответов менеджеров.
-
-**Proposed fix:**
-```python
-agreed_set = set(mgr_state.get("agreed_names", []))
-paid_set = set(mgr_state.get("paid_with_doc_names", [])) | set(mgr_state.get("paid_no_doc_names", []))
-# в цикле:
-elif name in agreed_set: icon = "🤝"
-elif name in paid_set: icon = "💰"
-```
+> **Статус:** функция `_format_admin_detail_text` удалена как dead-code — никем не вызывалась.
+> Финальный admin-вью даёт `_format_admin_summary_text`, который уже корректно учитывает agreed/paid.
 
 ---
 
