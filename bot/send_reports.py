@@ -6872,20 +6872,25 @@ async def _crmdup_broadcast_once(context: ContextTypes.DEFAULT_TYPE, limit: int 
     return {"sent": sent, "skipped": skipped, "total": len(conflicts)}
 
 
+def _crm_claim_is_stale(claim: Dict[str, Any], now_dt: Optional[datetime] = None) -> bool:
+    """True если claim-токен невалиден: без created_at, нечитаемая дата или TTL истёк."""
+    now_dt = now_dt or datetime.now(TZ)
+    created_raw = claim.get("created_at")
+    if not created_raw:
+        return True
+    try:
+        created_dt = datetime.fromisoformat(created_raw)
+    except (TypeError, ValueError):
+        return True
+    return (now_dt - created_dt).total_seconds() > CRM_CLAIM_TTL_HOURS * 3600
+
+
 def _crm_cleanup_claim_pending(now_dt: Optional[datetime] = None) -> None:
     now_dt = now_dt or datetime.now(TZ)
-    stale_tokens = []
-    for token, claim in list(_CRM_CLAIM_PENDING.items()):
-        created_raw = claim.get("created_at")
-        if not created_raw:
-            continue
-        try:
-            created_dt = datetime.fromisoformat(created_raw)
-        except Exception:
-            stale_tokens.append(token)
-            continue
-        if (now_dt - created_dt).total_seconds() > CRM_CLAIM_TTL_HOURS * 3600:
-            stale_tokens.append(token)
+    stale_tokens = [
+        token for token, claim in list(_CRM_CLAIM_PENDING.items())
+        if _crm_claim_is_stale(claim, now_dt)
+    ]
     for token in stale_tokens:
         _CRM_CLAIM_PENDING.pop(token, None)
 
@@ -8712,6 +8717,15 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data.startswith("crm_claim|"):
         token = data.split("|", 1)[1]
         claim = _CRM_CLAIM_PENDING.get(token)
+        # F-16: stale-токен (без created_at или просроченный) — снять кнопку и ответить как устаревший
+        if claim and not claim.get("claimed") and _crm_claim_is_stale(claim):
+            _CRM_CLAIM_PENDING.pop(token, None)
+            _crm_save_claim_pending()
+            try:
+                await q.message.edit_reply_markup(reply_markup=None)
+            except Exception:
+                pass
+            claim = None
         if not claim:
             await q.answer("?????? ??????? ??? ??? ?????????.")
             return
