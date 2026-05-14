@@ -8692,6 +8692,7 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         claim["claimed_at"] = datetime.now(TZ).isoformat()
         _crm_save_claim_pending()
 
+        _crm_write_ok = False
         try:
             from bot.crm_clients import load_clients as _cc_load, save_clients as _cc_save, canonicalize_client_key
             _cc_data = _cc_load()
@@ -8711,6 +8712,7 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             _cc_save(_cc_data)
             crm_logger.info("CRM claim: %s -> manager %s (aliases=%d)", client_key, claimer_name, len(_updated_keys))
             crm_audit("claim_taken", client_key=client_key, claimer=claimer_name, aliases=_updated_keys, token=token)
+            _crm_write_ok = True
         except Exception as _e:
             crm_logger.error("crm_claim save error: %s", _e)
             # F-07: откат claim state — клиент снова доступен для broadcast
@@ -8718,6 +8720,10 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             claim.pop("claimed_by", None)
             claim.pop("claimed_at", None)
             _crm_save_claim_pending()
+
+        if not _crm_write_ok:
+            await q.answer("⚠️ Не удалось сохранить — попробуйте ещё раз.")
+            return
 
         await q.answer("✅ Взяли!")
         try:
