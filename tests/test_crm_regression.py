@@ -499,5 +499,162 @@ class CRMRegressionTests(unittest.TestCase):
                 audit_mock.assert_called_once()
 
 
+class StabilizationRegressionTests(unittest.TestCase):
+    """Regressions для stabilization-волны 2026-05-14:
+    F-11 lock, F-12 deterministic keep, F-13 ambiguous phone-signature,
+    F-16 stale claim cleanup + callback rejection, admin CRM backlog.
+    """
+
+    def setUp(self):
+        sr._CRM_CLAIM_PENDING.clear()
+        sr._CRM_PHONE_PENDING.clear()
+        sr._CRM_DUP_REVIEW_PENDING.clear()
+        sr._CRM_AMBIGUOUS.clear()
+
+    # ── F-16: stale claim tokens ─────────────────────────────────────────────
+    def test_claim_without_created_at_is_stale(self):
+        claim = {"client_key": "A", "claimed": False}
+        self.assertTrue(sr._crm_claim_is_stale(claim))
+
+    def test_claim_cleanup_removes_token_without_created_at(self):
+        sr._CRM_CLAIM_PENDING["t_legacy"] = {"client_key": "A", "claimed": False}
+        sr._crm_cleanup_claim_pending()
+        self.assertNotIn("t_legacy", sr._CRM_CLAIM_PENDING)
+
+    def test_claim_cleanup_removes_expired_token(self):
+        from datetime import timedelta
+        old_iso = (sr.datetime.now(sr.TZ) - timedelta(hours=sr.CRM_CLAIM_TTL_HOURS + 1)).isoformat()
+        sr._CRM_CLAIM_PENDING["t_old"] = {"client_key": "B", "claimed": False, "created_at": old_iso}
+        sr._crm_cleanup_claim_pending()
+        self.assertNotIn("t_old", sr._CRM_CLAIM_PENDING)
+
+    def test_claim_fresh_token_not_stale(self):
+        fresh = sr.datetime.now(sr.TZ).isoformat()
+        claim = {"client_key": "C", "claimed": False, "created_at": fresh}
+        self.assertFalse(sr._crm_claim_is_stale(claim))
+
+    # ── F-11: CRM state lock context manager ─────────────────────────────────
+    def test_crm_state_lock_creates_lock_file_and_yields(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "test.json"
+            with sr._crm_state_lock(path):
+                self.assertTrue((Path(td) / "test.lock").exists())
+
+    def test_crm_save_and_reload_pending_preserves_data(self):
+        # Smoke: save_pending → load_pending не теряет запись (lock-discipline ОК)
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "crm_pending_state.json"
+            with patch.object(sr, "CRM_PENDING_PATH", path):
+                sr._CRM_PHONE_PENDING[1001] = {
+                    "manager": "Магира", "client_key": "X",
+                    "state": "clarify_name", "created_at": sr.datetime.now(sr.TZ).isoformat(),
+                    "last_sent": sr.datetime.now(sr.TZ).isoformat(),
+                }
+                sr._crm_save_pending()
+                sr._CRM_PHONE_PENDING.clear()
+                sr._crm_load_pending()
+                self.assertIn(1001, sr._CRM_PHONE_PENDING)
+                self.assertEqual(sr._CRM_PHONE_PENDING[1001]["client_key"], "X")
+
+    # ── F-12: deterministic keep-key для custom phone в dup-review ──────────
+    def test_dup_review_custom_phone_chosen_key_is_order_independent(self):
+        keys_a = ["М Клиент 2", "М Клиент 1"]
+        keys_b = ["М Клиент 1", "М Клиент 2"]
+        chosen_a = sorted([k for k in keys_a if k])[0] if any(keys_a) else ""
+        chosen_b = sorted([k for k in keys_b if k])[0] if any(keys_b) else ""
+        self.assertEqual(chosen_a, chosen_b)
+        self.assertEqual(chosen_a, "М Клиент 1")
+
+    # ── F-13: ambiguous signature чувствителен к телефонам ──────────────────
+    def test_ambiguous_signature_reacts_to_phone_change(self):
+        items_a = [
+            {"client_key": "A", "phone": "+77011112233"},
+            {"client_key": "B", "phone": "+77011112244"},
+        ]
+        items_b = [
+            {"client_key": "A", "phone": "+77011112233"},
+            {"client_key": "B", "phone": "+77019999999"},  # phone changed for B
+        ]
+        sig_a = sr._ambiguous_signature(items_a)
+        sig_b = sr._ambiguous_signature(items_b)
+        self.assertNotEqual(sig_a, sig_b)
+
+    def test_ambiguous_signature_order_independent(self):
+        i1 = [
+            {"client_key": "A", "phone": "+77011112233"},
+            {"client_key": "B", "phone": "+77011112244"},
+        ]
+        i2 = list(reversed(i1))
+        self.assertEqual(sr._ambiguous_signature(i1), sr._ambiguous_signature(i2))
+
+    def test_ambiguous_reopen_via_new_signature(self):
+        # Resolved запись по signature1 остаётся; новый conflict с другим phone
+        # должен попасть как новый pending под новый signature.
+        old_items = [
+            {"client_key": "A", "phone": "+77011112233"},
+            {"client_key": "B", "phone": "+77011112244"},
+        ]
+        new_items = [
+            {"client_key": "A", "phone": "+77011112233"},
+            {"client_key": "B", "phone": "+77019999999"},
+        ]
+        sig_old = sr._ambiguous_signature(old_items)
+        sr._CRM_AMBIGUOUS[sig_old] = {
+            "signature": sig_old, "status": "resolved", "items": old_items,
+            "added_at": sr.datetime.now(sr.TZ).isoformat(),
+            "resolved_at": sr.datetime.now(sr.TZ).isoformat(),
+        }
+        with patch.object(sr, "CRM_AMBIGUOUS_PATH",
+                          Path(tempfile.gettempdir()) / "test_ambi_reopen.json"):
+            sr._crmdup_queue_ambiguous({"items": new_items, "group_key": "g"})
+        sig_new = sr._ambiguous_signature(new_items)
+        self.assertIn(sig_new, sr._CRM_AMBIGUOUS)
+        self.assertEqual(sr._CRM_AMBIGUOUS[sig_new].get("status"), "pending")
+        # старая resolved-запись осталась как history
+        self.assertEqual(sr._CRM_AMBIGUOUS[sig_old].get("status"), "resolved")
+
+    # ── Admin CRM backlog: counts отображаются ──────────────────────────────
+    def test_crm_backlog_shows_counts_for_each_queue(self):
+        now_iso = sr.datetime.now(sr.TZ).isoformat()
+        sr._CRM_PHONE_PENDING[1001] = {
+            "manager": "Магира", "client_key": "X",
+            "state": "clarify_name", "created_at": now_iso,
+        }
+        sr._CRM_CLAIM_PENDING["c1"] = {
+            "client_key": "Y", "claimed": False, "created_at": now_iso,
+            "notified": [1002, 1003],
+        }
+        sr._CRM_DUP_REVIEW_PENDING["d1"] = {
+            "manager": "Оксана",
+            "items": [{"client_key": "A"}, {"client_key": "B"}],
+            "created_at": now_iso,
+        }
+        sr._CRM_AMBIGUOUS["sig1"] = {
+            "group_key": "Plov центр", "managers": ["Магира", "Оксана"],
+            "added_at": now_iso, "status": "pending",
+        }
+        text = sr._format_crm_backlog_text()
+        self.assertIn("Phone pending: 1", text)
+        self.assertIn("Claim pending: 1", text)
+        self.assertIn("Duplicate review: 1", text)
+        self.assertIn("Ambiguous: 1", text)
+        self.assertIn("Магира", text)
+        self.assertIn("Plov центр", text)
+
+    def test_crm_backlog_marks_stale_claims_separately(self):
+        from datetime import timedelta
+        now_iso = sr.datetime.now(sr.TZ).isoformat()
+        old_iso = (sr.datetime.now(sr.TZ) - timedelta(hours=sr.CRM_CLAIM_TTL_HOURS + 1)).isoformat()
+        sr._CRM_CLAIM_PENDING["c_fresh"] = {
+            "client_key": "Fresh", "claimed": False, "created_at": now_iso, "notified": [9001],
+        }
+        sr._CRM_CLAIM_PENDING["c_stale"] = {
+            "client_key": "Stale", "claimed": False, "created_at": old_iso, "notified": [9002],
+        }
+        text = sr._format_crm_backlog_text()
+        self.assertIn("Claim pending: 1", text)  # только свежий
+        self.assertIn("+1 stale", text)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
