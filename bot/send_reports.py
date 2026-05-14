@@ -3103,6 +3103,7 @@ def kb_main(user_role: str, chat_id: int = 0) -> InlineKeyboardMarkup:
             [InlineKeyboardButton("📈 АНАЛИТИКА", callback_data="menu_analytics")],
             [InlineKeyboardButton("🔔 Уведомления сейчас", callback_data="menu_notify")],
             [InlineKeyboardButton("🤖 Коллектор", callback_data="collector_batch")],
+            [InlineKeyboardButton("📋 CRM бэклог", callback_data="crm_backlog")],
             [InlineKeyboardButton(_crm_label, callback_data="crm_ambiguous_queue")],
             [InlineKeyboardButton("🗄️ Архив", callback_data="archive|root")],
             [InlineKeyboardButton("📈 Статистика", callback_data="show_stats")],
@@ -3277,6 +3278,107 @@ def _format_collector_batch_text() -> str:
             lines.append(f"  ... ещё {total_skipped - 10}")
 
     return "\n".join(lines)
+
+
+def _format_crm_backlog_text(top_limit: int = 5) -> str:
+    """Сводка по CRM-очередям для администратора.
+
+    4 категории: phone-pending, claim-pending, duplicate review, ambiguous.
+    На каждую — count + top N кейсов (по умолчанию 5), отдельно помечается stale.
+    """
+    now_dt = datetime.now(TZ)
+
+    def _age_label(raw: Any) -> str:
+        if not raw:
+            return "—"
+        try:
+            ts = datetime.fromisoformat(str(raw))
+        except (TypeError, ValueError):
+            return "—"
+        delta = now_dt - ts
+        if delta.days >= 1:
+            return f"{delta.days}д"
+        hours = int(delta.total_seconds() // 3600)
+        if hours >= 1:
+            return f"{hours}ч"
+        minutes = int(delta.total_seconds() // 60)
+        return f"{minutes}м"
+
+    lines: List[str] = ["📋 <b>CRM бэклог</b>\n"]
+
+    # ── 1. Phone pending ──────────────────────────────────────────────────────
+    phone_items = list(_CRM_PHONE_PENDING.items())
+    lines.append(f"📞 <b>Phone pending: {len(phone_items)}</b>")
+    if phone_items:
+        phone_items.sort(key=lambda kv: str((kv[1] or {}).get("created_at", "")))
+        for _chat_id, entry in phone_items[:top_limit]:
+            manager = entry.get("manager", "?")
+            client  = entry.get("client_key", "?")
+            state   = entry.get("state", "?")
+            age     = _age_label(entry.get("created_at"))
+            lines.append(f"  • {manager} → {client} ({state}, {age})")
+        if len(phone_items) > top_limit:
+            lines.append(f"  ... ещё {len(phone_items) - top_limit}")
+    lines.append("")
+
+    # ── 2. Claim pending ──────────────────────────────────────────────────────
+    open_claims = [
+        (tok, c) for tok, c in _CRM_CLAIM_PENDING.items()
+        if not c.get("claimed") and not _crm_claim_is_stale(c, now_dt)
+    ]
+    stale_claims = sum(1 for c in _CRM_CLAIM_PENDING.values() if _crm_claim_is_stale(c, now_dt))
+    suffix = f" (+{stale_claims} stale)" if stale_claims else ""
+    lines.append(f"✋ <b>Claim pending: {len(open_claims)}</b>{suffix}")
+    if open_claims:
+        open_claims.sort(key=lambda kv: str((kv[1] or {}).get("created_at", "")))
+        for _tok, claim in open_claims[:top_limit]:
+            client = claim.get("client_key", "?")
+            age    = _age_label(claim.get("created_at"))
+            n_notified = len(claim.get("notified") or [])
+            lines.append(f"  • {client} (разослан {n_notified} мгр, {age})")
+        if len(open_claims) > top_limit:
+            lines.append(f"  ... ещё {len(open_claims) - top_limit}")
+    lines.append("")
+
+    # ── 3. Duplicate review ───────────────────────────────────────────────────
+    dup_items = [(tok, r) for tok, r in _CRM_DUP_REVIEW_PENDING.items() if not r.get("resolved_at")]
+    lines.append(f"🔀 <b>Duplicate review: {len(dup_items)}</b>")
+    if dup_items:
+        dup_items.sort(key=lambda kv: str((kv[1] or {}).get("created_at", "")))
+        for _tok, review in dup_items[:top_limit]:
+            manager = review.get("manager", "?")
+            items   = review.get("items", []) or []
+            pair    = " ↔ ".join((it.get("client_key", "?") or "?") for it in items[:2])
+            age     = _age_label(review.get("created_at"))
+            lines.append(f"  • {manager}: {pair} ({age})")
+        if len(dup_items) > top_limit:
+            lines.append(f"  ... ещё {len(dup_items) - top_limit}")
+    lines.append("")
+
+    # ── 4. Ambiguous conflicts ────────────────────────────────────────────────
+    amb_pending = [(sig, v) for sig, v in _CRM_AMBIGUOUS.items() if v.get("status") == "pending"]
+    amb_resolved = sum(1 for v in _CRM_AMBIGUOUS.values() if v.get("status") == "resolved")
+    suffix = f" (+{amb_resolved} resolved в истории)" if amb_resolved else ""
+    lines.append(f"❓ <b>Ambiguous: {len(amb_pending)}</b>{suffix}")
+    if amb_pending:
+        amb_pending.sort(key=lambda kv: str((kv[1] or {}).get("added_at", "")))
+        for _sig, entry in amb_pending[:top_limit]:
+            group   = entry.get("group_key", "?")
+            mgrs    = entry.get("managers", []) or []
+            age     = _age_label(entry.get("added_at"))
+            lines.append(f"  • {group} (менеджеры: {', '.join(mgrs) or '—'}, {age})")
+        if len(amb_pending) > top_limit:
+            lines.append(f"  ... ещё {len(amb_pending) - top_limit}")
+
+    return "\n".join(lines)
+
+
+def _crm_backlog_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔄 Обновить", callback_data="crm_backlog")],
+        [InlineKeyboardButton("🟡 Ambiguous-очередь", callback_data="crm_ambiguous_queue")],
+        [InlineKeyboardButton("🔙 Главное меню", callback_data="back_main")],
+    ])
 
 
 def _get_pending_admin_batch() -> Optional[Dict[str, Any]]:
@@ -8063,6 +8165,23 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         await q.answer("Неизвестное действие CRM duplicate review.")
+        return
+
+    # ── CRM backlog: единый экран по всем CRM-очередям ────────────────────────
+    if data == "crm_backlog":
+        if not is_admin(chat_id):
+            await q.answer("Только для администратора.")
+            return
+        await q.answer()
+        text = _format_crm_backlog_text()
+        kb   = _crm_backlog_keyboard()
+        try:
+            await q.edit_message_text(text=text, parse_mode="HTML", reply_markup=kb)
+        except Exception as _e:
+            crm_logger.error("crm_backlog show error: %s", _e)
+            await context.bot.send_message(
+                chat_id=chat_id, text=text, parse_mode="HTML", reply_markup=kb
+            )
         return
 
     # ── Ambiguous (multi-manager) CRM conflict queue ──────────────────────────
