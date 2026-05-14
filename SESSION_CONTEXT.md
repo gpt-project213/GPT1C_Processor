@@ -5,6 +5,47 @@
 
 ---
 
+## HANDOFF 2026-05-14 (финал) — технический долг закрыт, коллектор в боевом строю
+
+### Что сделано (master, коммиты `e6307bb`, `1cb789e`)
+
+Закрыты три оставшихся инженерных замечания после основного аудита.
+
+#### portalocker timeout fix (коммит `e6307bb`)
+
+- `LOCK_EX` (blocking mode) игнорирует `timeout=` на Windows → graceful fallback не работал
+- Заменено на `LOCK_EX | LOCK_NB` + `check_interval=0.1, timeout=5` — retry-loop с реальным таймаутом
+- `except` расширен: `(LockException, PermissionError, OSError)` — WinError 5 теперь перехватывается
+
+#### WinError 5 + skip_summary UI (коммит `1cb789e`)
+
+**WinError 5 root cause:**
+- `_LOCK_FILE` был frozen module-level константой → при redirect `PAYMENT_HOLD_PATH` в тестах lock-файл создавался в реальном `logs/` → WinError 5 при cleanup temp-dir
+- Исправлено: `lock_file = PAYMENT_HOLD_PATH.with_suffix(".lock")` вычисляется динамически в момент вызова → следует за redirect автоматически
+
+**skip_summary UI:**
+- `run_approval_preview()` собирает `_skipped[{name, reason}]` на каждом `continue`-пути
+- `batch["skip_summary"] = _skipped[:20]` сохраняется в структуру батча
+- `_format_collector_batch_text()` показывает блок "Пропущено (N):" с причинами — директор видит куда исчезли остальные клиенты
+
+### Итоговое состояние коллектора
+
+**Тесты: 631/631.**
+
+- Все P0/P1 из аудита закрыты: `bb33f46`, `9af1127`
+- portalocker timeout: `e6307bb`
+- WinError 5 + skip_summary: `1cb789e`
+- Формулировка: **коллектор в боевом строю по критерию P0/P1**
+- Нет открытых блокирующих или high-severity замечаний
+
+### Что остаётся (не блокирует runtime)
+
+- `wa_appr_adm_later` supersede: warning в лог добавлен, TG-уведомление директору при вытеснении — не реализовано
+- Zeropay flow не прогонялся в бою (тесты есть, боевого прогона нет)
+- **Перезапуск бота** нужен для активации всех фиксов в production
+
+---
+
 ## HANDOFF 2026-05-14 — Комплексный аудит collector + исправление всех найденных багов
 
 ### Что сделано (master, коммиты `bb33f46`, `9af1127`)
