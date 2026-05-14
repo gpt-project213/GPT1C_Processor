@@ -5,6 +5,81 @@
 
 ---
 
+## HANDOFF 2026-05-14 — Комплексный аудит collector + исправление всех найденных багов
+
+### Что сделано (master, коммиты `bb33f46`, `9af1127`)
+
+Проведён полный технический аудит контура `collector/` согласно ТЗ.
+Полный отчёт: `AUDIT_COLLECTOR_2026-05-14.md` (в корне проекта).
+Верификация findings: раздел 1.1 в том же файле.
+
+**Тесты: 620 → 631/631.**
+
+#### P0/P1 фиксы (коммит `bb33f46`)
+
+| Finding | Файл:строка | Что исправлено |
+|---|---|---|
+| F-06 | `send_reports.py:3248` | `sent_ok` теперь считает `status=="sent"` — UI показывал `0/N` |
+| F-05 | `payment_hold.py:307` | `pending_saida` блокирует collector shortlist; TTL только для confirmed |
+| F-03 | `payment_hold.py` | `portalocker` (`_hold_lock`) на write-функции: race condition устранён |
+| F-01 | `collections_engine.py:360` | exception без anchor date → `anchor = today`, grace period гарантирован |
+| F-08 | `client_dialog.py:963` | `off_topic_count = 0` при любом продуктивном intent |
+| F-02 | `approval_flow.py:2791` | merge order fix: `_load_batches() | {batch_id: batch}` |
+
+#### P2/P3 фиксы (коммит `9af1127`)
+
+| Finding | Файл | Что исправлено |
+|---|---|---|
+| F-10 | `approval_flow.py` | visual ghost: agreed/paid → иконки 🤝💰 вместо ◯ |
+| F-11 | `approval_flow.py` | убран `"sent"` из `is_ready_for_send` (CLI re-send protection) |
+| F-09 | `approval_flow.py` + `collections_engine.py` | warning при supersede отложенного батча; текст с предупреждением |
+| F-12 | `collections_engine.py` | `contact = None` в начале каждой итерации loop |
+| F-07 | `collections_engine.py` | `awaiting_payment_proof` TTL 3 дня — guard снимается автоматически |
+| F-13 | `collections_engine.py` | warning при нет chat_id в send-approved refresh |
+| F-15 | `client_dialog.py` | повторный greeting → escalate вместо бесконечного ответа |
+| F-16 | `client_dialog.py` | `promise_without_date` + `exchange_count >= 2` → escalate |
+| F-17 | `client_dialog.py` | мёртвые ё-паттерны в `_SERVICE_REQUEST_PATTERNS` удалены |
+| F-14 | `payment_deferrals.py` | mtime-based cache invalidation |
+| Low | `send_reports.py` | `_get_pending_admin_batch` читает JSON один раз вместо двух |
+| F-04 | `tests/test_collector.py` | секция 29: 7 тестов zeropay + 4 regression для F-01/F-05 |
+
+### Ключевые ответы на оперативные вопросы
+
+**Почему клиенты повторно лезут в WA:**
+- `pending_saida` не блокировал shortlist — исправлено (F-05)
+- `exception` без anchor date — grace не считался — исправлено (F-01)
+- `awaiting_payment_proof` зависал вечно — теперь TTL 3 дня (F-07)
+
+**Куда исчезли "остальные клиенты" 13.05:**
+- 7 — active dialog state (штатно)
+- 2 — Саида подтвердила hold (штатно)
+- 1 — малый остаток после оплаты (штатно)
+- Причины skip в `collector.log`, в UI не отображаются (operational gap)
+
+**Врёт ли UI:**
+- Да, `0/N доставлено` — исправлено (F-06)
+
+### Что осталось открытым
+
+- Zeropay тесты написаны (F-04 закрыт), но zeropay flow не тестировался в бою
+- `wa_appr_adm_later` supersede: предупреждение добавлено, но уведомление в TG директору при вытеснении — не реализовано (отложено)
+- UI не показывает пропущенных клиентов в Telegram — operational gap, требует архитектурного решения (`skip_summary` в batch)
+- Перезапуск бота нужен для активации всех фиксов в production
+
+### Проверка
+
+```
+python -m py_compile collector/approval_flow.py   → OK
+python -m py_compile collector/collections_engine.py → OK
+python -m py_compile collector/client_dialog.py   → OK
+python -m py_compile collector/payment_deferrals.py → OK
+python -m py_compile collector/payment_hold.py    → OK
+python -m py_compile bot/send_reports.py          → OK
+python -X utf8 tests/test_collector.py            → 631/631
+```
+
+---
+
 ## HANDOFF 2026-05-13 — approval_penalty partial-timeout fix (Алена)
 
 ### Что закрыто

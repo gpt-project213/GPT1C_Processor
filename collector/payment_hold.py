@@ -40,15 +40,25 @@ _LOCK_FILE = PAYMENT_HOLD_PATH.with_suffix(".lock")
 
 @contextmanager
 def _hold_lock():
-    """Exclusive cross-process lock for payment holds read-modify-write."""
+    """Exclusive cross-process lock for payment holds read-modify-write.
+
+    LOCK_EX|LOCK_NB: non-blocking attempt with retry loop every 100 ms up to
+    5 seconds — the only mode where portalocker's timeout parameter is effective
+    on Windows (pure LOCK_EX blocking mode ignores timeout entirely).
+    """
     _LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
     try:
-        with portalocker.Lock(str(_LOCK_FILE), timeout=5, flags=portalocker.LOCK_EX):
+        with portalocker.Lock(
+            str(_LOCK_FILE),
+            timeout=5,
+            check_interval=0.1,
+            flags=portalocker.LOCK_EX | portalocker.LOCK_NB,
+        ):
             yield
     except portalocker.LockException:
         import logging as _lock_log
         _lock_log.getLogger(__name__).warning(
-            "payment_hold: lock timeout — proceeding without exclusive lock"
+            "payment_hold: lock timeout (5 s) — proceeding without exclusive lock"
         )
         yield
 
