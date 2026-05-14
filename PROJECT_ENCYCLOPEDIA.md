@@ -2,9 +2,9 @@
 
 Актуальная единая база знаний по `GPT1C_Processor_analitica`.
 
-Статус: актуально на `2026-05-06`  
+Статус: актуально на `2026-05-14`  
 Текущая базовая ветка: `master`  
-Подтвержденный merge-коммит: `2a8ca12`
+Последний коммит: `81013aa`
 
 ---
 
@@ -214,7 +214,7 @@ Debt levels:
 Что теперь считается нормой:
 - просто `убрать` без причины больше не считается хорошей моделью
 - `Оплатил` и `Договорились` — это отдельные бизнес-сценарии
-- `Договорились` требует деталей
+- `Договорились` требует деталей; если нажал кнопку и не написал — бот ждёт
 - обещание имеет дедлайн
 - сорванное обещание автоматически возвращает клиента в WA
 - повторная бесконечная отмена менеджером не считается корректной логикой
@@ -227,6 +227,12 @@ Debt levels:
 - tight send window / cutoff / честный expires_at
 - немедленная эскалация при позднем батче
 - расписание без конфликтов stop-list vs collector
+
+Admin summary — актуально на 2026-05-14:
+- `_format_admin_summary_text` (`approval_flow.py`) — единственная живая функция admin summary
+- `_format_admin_detail_text` удалена как dead-code (коммит `0f412ae`)
+- timeout + `waiting_for_agreed` → `"⏳ начал — не написал детали по «X»"` (не «🔇 не ответил»)
+- timeout + `waiting_for_proof` → `"⏳ начал — не прислал документ по «X»"` (аналогично)
 
 ### 7.3. Stop/payment-контур
 
@@ -275,19 +281,26 @@ State-файлы:
 - части `bot/send_reports.py`
 - `bot/crm_audit_log.py`
 
-Что уже стабилизировано:
-- canonical client key
-- alias-варианты имён
-- restart-safe `crm_claim`
-- `logs/crm_claim_pending_state.json`
-- `logs/crm_audit.jsonl`
-- защита от ряда duplicate/claim-state поломок
+State-файлы (все 4 покрыты lock-discipline на 2026-05-14):
+- `logs/crm_pending_state.json` — phone-pending очередь
+- `logs/crm_claim_pending_state.json` — claim-рассылка
+- `logs/crm_duplicate_review_state.json` — dup-review
+- `logs/crm_ambiguous_conflicts.json` — ambiguous conflicts
 
-Что важно понимать про текущий статус:
-- баг “Чей клиент?” сильно улучшен
-- но ambiguous multi-manager ownership-конфликты сейчас не решаются идеально
-- в спорных кейсах часть конфликтов просто не поднимается лишний раз не тому менеджеру
-- это лучше старого шума, но тема ownership полностью не исчерпана
+Что стабилизировано к 2026-05-14:
+- canonical client key + alias-expansion в load_contacts_compat
+- restart-safe `crm_claim` + `_crm_write_ok` gate (F-07)
+- `crm_audit.jsonl` audit trail
+- portalocker lock-discipline (`_crm_state_lock`) для всех 4 CRM state-файлов — **best-effort**: при `LockException/PermissionError/OSError` логируется warning и save продолжается без exclusive lock
+- stale claim tokens: `_crm_claim_is_stale` — без `created_at` или просроченные удаляются при cleanup; callback `crm_claim|...` явно отклоняет expired (снимает кнопку)
+- deterministic keep-key в dup-review custom phone: `sorted(client_keys)[0]` вместо `client_keys[0]`
+- phone-aware ambiguous signature: `sorted(“client_key#normalized_phone”)` — если phone изменился, signature новый → reopen автоматически через новую pending-запись
+- admin CRM backlog screen: кнопка `📋 CRM бэклог` в admin menu (callback `crm_backlog`), formatter `_format_crm_backlog_text` — 4 категории, top-5, age-label, stale-count
+
+Что ещё не закрыто:
+- lock — best-effort, не жёсткая гарантия при реальном contention
+- stale dup-review callback: отвечает «запрос устарел», но без full cleanup-строгости как у claim
+- три несогласованных хранилища: `clients.json` / `debtors_contacts.json` / batch snapshot
 
 ---
 
@@ -350,21 +363,18 @@ State-файлы:
 
 ## 11. Тестовая матрица
 
-Актуальный рабочий набор к `2026-05-06`:
+Актуальный рабочий набор к `2026-05-14`:
 
-| Тест | Результат |
-|---|---|
-| `tests/test_project.py` | `110/110` |
-| `tests/test_collector.py` | `330/330` |
-| `tests/test_crm_regression.py` | `13/13` |
-| `tests/test_parsers.py` | `69/69` |
-| `tests/test_audit_reports_20260414.py` | `8/8` |
-| `tests/test_phase2_safe_send.py` | green |
-| `tests/test_log_monitor.py` | `9/9` |
-
-Для collector важны также:
-- hermetic regression suites
-- approval / audit / phase tests
+| Тест | Результат | Примечание |
+|---|---|---|
+| `tests/test_project.py` | `110/110` | |
+| `tests/test_collector.py` | `330/330` | |
+| `tests/test_collector_regression_hermetic.py` | `18/18` | +3 TimeoutLabelHermeticTests (2026-05-14) |
+| `tests/test_crm_regression.py` | `26/26` | +12 StabilizationRegressionTests (2026-05-14) |
+| `tests/test_parsers.py` | `69/69` | |
+| `tests/test_audit_reports_20260414.py` | `8/8` | |
+| `tests/test_phase2_safe_send.py` | green | |
+| `tests/test_log_monitor.py` | `9/9` | |
 
 ---
 
@@ -385,10 +395,19 @@ State-файлы:
 - freshness-aware collector behavior
 - proof-поток для оплат и suppress-логика
 - diff-notice перед admin approve
+- dead `_format_admin_detail_text` удалён (2026-05-14)
+- timeout-label в admin summary различает waiting_for_agreed / waiting_for_proof (2026-05-14)
+- portalocker lock-discipline для 4 CRM state-файлов — best-effort (2026-05-14)
+- stale claim tokens cleanup + callback reject (F-16, 2026-05-14)
+- deterministic keep-key в dup-review custom phone (F-12, 2026-05-14)
+- phone-aware ambiguous signature для reopen (F-13, 2026-05-14)
+- admin CRM backlog screen `📋 CRM бэклог` (2026-05-14)
 
 ### 12.2. Закрыто частично / не считать идеальным
 
-- CRM ownership ambiguity
+- CRM lock — best-effort, fallback без exclusive lock при недоступности (см. раздел 8)
+- CRM ownership ambiguity — значительно улучшено (signature, deterministic keep), но не исчерпано
+- stale dup-review callback — базовый ответ есть, full cleanup как у claim ещё не сделан
 - часть legacy/architectural duplication
 - часть broad `except Exception` по проекту
 
@@ -403,7 +422,10 @@ State-файлы:
 - качество менеджерских обещаний можно дальше усиливать политиками и репортингом
 
 ### CRM
-- ambiguous multi-manager ownership-конфликты решены не до конца
+- lock best-effort → решить политику hard-fail vs proceed-without-lock при contention
+- stale dup-review callback: дать полную cleanup-строгость как у claim
+- ambiguous multi-manager ownership: значительно улучшено, но не исчерпано
+- три несогласованных хранилища контактов: clients.json / debtors_contacts.json / batch snapshot
 
 ### Architecture
 - `txt_to_html` duplication
