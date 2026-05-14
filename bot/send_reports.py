@@ -183,6 +183,8 @@ import shutil
 import subprocess
 from tempfile import NamedTemporaryFile
 from pathlib import Path
+from contextlib import contextmanager
+import portalocker
 
 # --- Path bootstrap: allow importing project-root modules when running as bot/send_reports.py ---
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -6542,16 +6544,42 @@ def _cleanup_legacy_collector_pending_state() -> None:
         save_state(state)
 
 
+@contextmanager
+def _crm_state_lock(path: Path):
+    """Exclusive cross-process lock for CRM state read-modify-write.
+
+    LOCK_EX|LOCK_NB + retry-loop — единственный режим, где portalocker
+    timeout реально работает на Windows. Аналог collector/payment_hold._hold_lock.
+    """
+    lock_file = path.with_suffix(".lock")
+    lock_file.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with portalocker.Lock(
+            str(lock_file),
+            timeout=5,
+            check_interval=0.1,
+            flags=portalocker.LOCK_EX | portalocker.LOCK_NB,
+        ):
+            yield
+    except (portalocker.LockException, PermissionError, OSError) as _le:
+        state_logger.warning(
+            "crm_state: lock unavailable for %s (%s) — proceeding without exclusive lock",
+            path.name, _le,
+        )
+        yield
+
+
 def _crm_save_pending() -> None:
     """Сохраняет _CRM_PHONE_PENDING на диск — переживает перезапуск бота."""
     try:
-        _crm_cleanup_pending()
-        tmp = CRM_PENDING_PATH.with_suffix(".tmp")
-        with open(tmp, "w", encoding="utf-8") as _f:
-            json.dump({str(k): v for k, v in _CRM_PHONE_PENDING.items()},
-                      _f, ensure_ascii=False, indent=2)
-        tmp.replace(CRM_PENDING_PATH)
-        state_logger.debug("CRM pending saved: %d", len(_CRM_PHONE_PENDING))
+        with _crm_state_lock(CRM_PENDING_PATH):
+            _crm_cleanup_pending()
+            tmp = CRM_PENDING_PATH.with_suffix(".tmp")
+            with open(tmp, "w", encoding="utf-8") as _f:
+                json.dump({str(k): v for k, v in _CRM_PHONE_PENDING.items()},
+                          _f, ensure_ascii=False, indent=2)
+            tmp.replace(CRM_PENDING_PATH)
+            state_logger.debug("CRM pending saved: %d", len(_CRM_PHONE_PENDING))
     except Exception as _e:
         state_logger.warning("_crm_save_pending error: %s", _e)
 
@@ -6562,11 +6590,12 @@ def _crm_load_pending() -> None:
         _cleanup_legacy_collector_pending_state()
         return
     try:
-        with open(CRM_PENDING_PATH, encoding="utf-8") as _f:
-            data = json.load(_f)
-        _CRM_PHONE_PENDING.update({int(k): v for k, v in data.items()})
-        _crm_cleanup_pending()
-        state_logger.info("CRM pending restored: %d managers", len(_CRM_PHONE_PENDING))
+        with _crm_state_lock(CRM_PENDING_PATH):
+            with open(CRM_PENDING_PATH, encoding="utf-8") as _f:
+                data = json.load(_f)
+            _CRM_PHONE_PENDING.update({int(k): v for k, v in data.items()})
+            _crm_cleanup_pending()
+            state_logger.info("CRM pending restored: %d managers", len(_CRM_PHONE_PENDING))
     except Exception as _e:
         state_logger.warning("_crm_load_pending error: %s", _e)
     _cleanup_legacy_collector_pending_state()
@@ -6621,14 +6650,15 @@ def _crmdup_cleanup_pending(now_dt: Optional[datetime] = None) -> None:
 
 def _crmdup_save_pending() -> None:
     CRM_DUP_REVIEW_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _crmdup_cleanup_pending()
-    tmp = CRM_DUP_REVIEW_PATH.with_suffix(".tmp")
-    payload = {
-        "reviews": _CRM_DUP_REVIEW_PENDING,
-        "awaiting_text": {str(k): v for k, v in _CRM_DUP_REVIEW_AWAITING_TEXT.items()},
-    }
-    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    os.replace(tmp, CRM_DUP_REVIEW_PATH)
+    with _crm_state_lock(CRM_DUP_REVIEW_PATH):
+        _crmdup_cleanup_pending()
+        tmp = CRM_DUP_REVIEW_PATH.with_suffix(".tmp")
+        payload = {
+            "reviews": _CRM_DUP_REVIEW_PENDING,
+            "awaiting_text": {str(k): v for k, v in _CRM_DUP_REVIEW_AWAITING_TEXT.items()},
+        }
+        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(tmp, CRM_DUP_REVIEW_PATH)
 
 
 def _crmdup_load_pending() -> None:
@@ -6637,15 +6667,16 @@ def _crmdup_load_pending() -> None:
     if not CRM_DUP_REVIEW_PATH.exists():
         return
     try:
-        payload = json.loads(CRM_DUP_REVIEW_PATH.read_text(encoding="utf-8"))
-        reviews = payload.get("reviews", {}) if isinstance(payload, dict) else {}
-        awaiting_text = payload.get("awaiting_text", {}) if isinstance(payload, dict) else {}
-        if isinstance(reviews, dict):
-            _CRM_DUP_REVIEW_PENDING.update(reviews)
-        if isinstance(awaiting_text, dict):
-            _CRM_DUP_REVIEW_AWAITING_TEXT.update({int(k): v for k, v in awaiting_text.items()})
-        _crmdup_cleanup_pending()
-        state_logger.info("CRM duplicate review restored: %d records", len(_CRM_DUP_REVIEW_PENDING))
+        with _crm_state_lock(CRM_DUP_REVIEW_PATH):
+            payload = json.loads(CRM_DUP_REVIEW_PATH.read_text(encoding="utf-8"))
+            reviews = payload.get("reviews", {}) if isinstance(payload, dict) else {}
+            awaiting_text = payload.get("awaiting_text", {}) if isinstance(payload, dict) else {}
+            if isinstance(reviews, dict):
+                _CRM_DUP_REVIEW_PENDING.update(reviews)
+            if isinstance(awaiting_text, dict):
+                _CRM_DUP_REVIEW_AWAITING_TEXT.update({int(k): v for k, v in awaiting_text.items()})
+            _crmdup_cleanup_pending()
+            state_logger.info("CRM duplicate review restored: %d records", len(_CRM_DUP_REVIEW_PENDING))
     except Exception as _e:
         state_logger.warning("_crmdup_load_pending error: %s", _e)
 
@@ -6674,9 +6705,10 @@ def _crmdup_ambiguous_count() -> int:
 
 def _crmdup_save_ambiguous() -> None:
     CRM_AMBIGUOUS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    tmp = CRM_AMBIGUOUS_PATH.with_suffix(".tmp")
-    tmp.write_text(json.dumps(_CRM_AMBIGUOUS, ensure_ascii=False, indent=2), encoding="utf-8")
-    os.replace(tmp, CRM_AMBIGUOUS_PATH)
+    with _crm_state_lock(CRM_AMBIGUOUS_PATH):
+        tmp = CRM_AMBIGUOUS_PATH.with_suffix(".tmp")
+        tmp.write_text(json.dumps(_CRM_AMBIGUOUS, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(tmp, CRM_AMBIGUOUS_PATH)
 
 
 def _crmdup_load_ambiguous() -> None:
@@ -6684,10 +6716,11 @@ def _crmdup_load_ambiguous() -> None:
     if not CRM_AMBIGUOUS_PATH.exists():
         return
     try:
-        data = json.loads(CRM_AMBIGUOUS_PATH.read_text(encoding="utf-8"))
-        if isinstance(data, dict):
-            _CRM_AMBIGUOUS.update(data)
-        state_logger.info("CRM ambiguous conflicts restored: %d records", len(_CRM_AMBIGUOUS))
+        with _crm_state_lock(CRM_AMBIGUOUS_PATH):
+            data = json.loads(CRM_AMBIGUOUS_PATH.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                _CRM_AMBIGUOUS.update(data)
+            state_logger.info("CRM ambiguous conflicts restored: %d records", len(_CRM_AMBIGUOUS))
     except Exception as _e:
         state_logger.warning("_crmdup_load_ambiguous error: %s", _e)
 
@@ -6859,11 +6892,12 @@ def _crm_cleanup_claim_pending(now_dt: Optional[datetime] = None) -> None:
 
 def _crm_save_claim_pending() -> None:
     CRM_CLAIM_PENDING_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _crm_cleanup_claim_pending()
-    tmp = CRM_CLAIM_PENDING_PATH.with_suffix(".tmp")
-    payload = {k: v for k, v in _CRM_CLAIM_PENDING.items()}
-    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    os.replace(tmp, CRM_CLAIM_PENDING_PATH)
+    with _crm_state_lock(CRM_CLAIM_PENDING_PATH):
+        _crm_cleanup_claim_pending()
+        tmp = CRM_CLAIM_PENDING_PATH.with_suffix(".tmp")
+        payload = {k: v for k, v in _CRM_CLAIM_PENDING.items()}
+        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(tmp, CRM_CLAIM_PENDING_PATH)
 
 
 def _crm_load_claim_pending() -> None:
@@ -6871,11 +6905,12 @@ def _crm_load_claim_pending() -> None:
     if not CRM_CLAIM_PENDING_PATH.exists():
         return
     try:
-        data = json.loads(CRM_CLAIM_PENDING_PATH.read_text(encoding="utf-8"))
-        if isinstance(data, dict):
-            _CRM_CLAIM_PENDING.update(data)
-        _crm_cleanup_claim_pending()
-        state_logger.info("CRM claim pending restored: %d records", len(_CRM_CLAIM_PENDING))
+        with _crm_state_lock(CRM_CLAIM_PENDING_PATH):
+            data = json.loads(CRM_CLAIM_PENDING_PATH.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                _CRM_CLAIM_PENDING.update(data)
+            _crm_cleanup_claim_pending()
+            state_logger.info("CRM claim pending restored: %d records", len(_CRM_CLAIM_PENDING))
     except Exception as _e:
         state_logger.warning("_crm_load_claim_pending error: %s", _e)
 
