@@ -321,7 +321,8 @@ def _merge_client_entries(clients_db: Dict[str, Any], keep_key: str, drop_key: s
         if source not in keep_sources:
             keep_sources.append(source)
 
-    for field in ("display_name", "original_name", "address", "phone_source", "name_mode"):
+    for field in ("display_name", "original_name", "address", "phone_source", "name_mode",
+                  "whatsapp", "phone", "telegram_id"):
         if not keep.get(field) and drop.get(field):
             keep[field] = drop[field]
     if keep.get("name_review_needed") is None and drop.get("name_review_needed") is not None:
@@ -903,10 +904,13 @@ def set_client_details(client_name: str, display_name: str = "",
     """
     data = load_clients()
     clients_db = data.get("clients", {})
-    entry = clients_db.get(client_name)
+    # F-01: нормализуем ключ — прямой get не находит клиента при расхождении пробелов/регистра
+    _entry_key = _find_existing_client_key(clients_db, client_name)
+    entry = clients_db.get(_entry_key) if _entry_key else None
     if entry is None:
         logger.warning("set_client_details: клиент не найден: %s", client_name)
         return False
+    client_name = _entry_key  # используем нормализованный ключ для аудита и save
     display_name = _normalize_system_display_name(display_name, name_mode)
     if original_name:
         entry["original_name"] = original_name.strip()
@@ -969,13 +973,19 @@ def load_contacts_compat() -> Dict[str, Any]:
     for name, info in clients_db.items():
         if not isinstance(info, dict):
             continue
-        result[name] = {
+        contact_entry = {
             "whatsapp": info.get("whatsapp", ""),
             "telegram_id": info.get("telegram_id", ""),
             "manager": info.get("manager", ""),
             "language": info.get("language", "ru"),
             "do_not_call": info.get("do_not_call", False),
         }
+        result[name] = contact_entry
+        # F-02: раскрываем aliases — collector ищет по именам из 1С,
+        # которые могут быть старыми ключами после canonical merge
+        for alias in info.get("aliases", []):
+            if alias and alias not in result:
+                result[alias] = contact_entry
 
     return result
 

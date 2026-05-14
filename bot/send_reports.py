@@ -6336,17 +6336,26 @@ def _crm_phone_prompt_text(client_key: str, suggestions: Optional[List[str]] = N
     )
 
 
+def _crm_key_token(client_key: str) -> str:
+    """Короткий хэш client_key для верификации callback-кнопок (F-09)."""
+    import hashlib
+    return hashlib.sha1(client_key.encode("utf-8")).hexdigest()[:8]
+
+
 def _crm_phone_choice_kb(client_key: str) -> Optional[InlineKeyboardMarkup]:
     suggestions = _crm_phone_suggestions(client_key)
     if not suggestions:
         return None
+    # F-09: включаем token клиента в callback_data — при нажатии старой кнопки
+    # можно обнаружить что pending уже для другого клиента
+    tok = _crm_key_token(client_key)
     rows = []
     if len(suggestions) == 1:
-        rows.append([InlineKeyboardButton("✅ Да, записать", callback_data="crm_phone|suggest|0")])
+        rows.append([InlineKeyboardButton("✅ Да, записать", callback_data=f"crm_phone|suggest|0|{tok}")])
     else:
         for idx, phone in enumerate(suggestions[:5]):
-            rows.append([InlineKeyboardButton(f"✅ Записать {phone}", callback_data=f"crm_phone|suggest|{idx}")])
-    rows.append([InlineKeyboardButton("✏️ Указать другой номер", callback_data="crm_phone|edit")])
+            rows.append([InlineKeyboardButton(f"✅ Записать {phone}", callback_data=f"crm_phone|suggest|{idx}|{tok}")])
+    rows.append([InlineKeyboardButton("✏️ Указать другой номер", callback_data=f"crm_phone|edit|{tok}")])
     rows.append([InlineKeyboardButton("❓ Не понимаю, что ответить", callback_data="crm_help")])
     return InlineKeyboardMarkup(rows)
 
@@ -6458,7 +6467,9 @@ def _crm_cleanup_pending() -> None:
             state_logger.info("CRM cleanup: removing service entry '%s' (chat_id=%s)", ck, chat_id)
             stale_chat_ids.append(chat_id)
             continue
-        ts_raw = pending.get("last_sent") or pending.get("created_at")
+        # F-08: TTL считаем от created_at (неизменяем), а не last_sent
+        # last_sent сбрасывается каждым напоминанием → pending никогда не истекал
+        ts_raw = pending.get("created_at") or pending.get("last_sent")
         if not ts_raw:
             continue
         try:
@@ -6864,17 +6875,18 @@ def _crm_claim_token() -> str:
 
 
 def _crm_collect_unowned_claim_clients(limit: int = 3) -> List[str]:
-    _CRM_CLAIM_EXCLUDED = {"Без клиента", "Недостача"}
-
-    def _is_service_entry(name: str) -> bool:
-        nl = name.lower()
-        return nl in {s.lower() for s in _CRM_CLAIM_EXCLUDED} or "зп" in nl
-
-    from bot.crm_clients import load_clients as _crm_load, canonicalize_client_key
+    # F-06: используем полный фильтр из crm_clients + проверяем is_vendor/do_not_call
+    from bot.crm_clients import (
+        load_clients as _crm_load,
+        canonicalize_client_key,
+        is_service_client_name as _is_svc,
+    )
     _crm_data = _crm_load()
     grouped: Dict[str, List[Tuple[str, Dict[str, Any]]]] = {}
     for key, value in _crm_data.get("clients", {}).items():
         if not isinstance(value, dict):
+            continue
+        if value.get("is_vendor") or value.get("do_not_call"):
             continue
         grouped.setdefault(canonicalize_client_key(key), []).append((key, value))
 
@@ -6883,7 +6895,7 @@ def _crm_collect_unowned_claim_clients(limit: int = 3) -> List[str]:
         owned = any((item.get("manager") or "") not in ("", "Не определён", "?", "-", "—") for _, item in items)
         if owned:
             continue
-        candidate = next((k for k, _ in items if not _is_service_entry(k)), None)
+        candidate = next((k for k, _ in items if not _is_svc(k)), None)
         if candidate:
             result.append(candidate)
         if len(result) >= limit:
@@ -7059,24 +7071,30 @@ async def _crm_save_phone_and_continue(
         address="-",
     )
 
-    done_today = pending.get("done_today", 0) + 1
-    daily_limit = pending.get("daily_limit", CRM_DAILY_LIMIT)
     manager_name = pending.get("manager", "")
+    daily_limit = pending.get("daily_limit", CRM_DAILY_LIMIT)
+    label = display_name or original_name
+
+    if not ok:
+        # F-04: при ошибке сохранения — оставляем клиента в очереди, не двигаем цепочку
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="⚠️ Не удалось сохранить: клиент не найден в CRM. Введите номер ещё раз.",
+        )
+        return
+
+    done_today = pending.get("done_today", 0) + 1
     _CRM_PHONE_PENDING.pop(chat_id, None)
     _crm_save_pending()
 
-    label = display_name or original_name
-    if ok:
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text=(
-                f"✅ Сохранено: <b>{label}</b> · {phone}\n"
-                f"Адрес можно заполнить позже."
-            ),
-            parse_mode="HTML",
-        )
-    else:
-        await context.bot.send_message(chat_id=chat_id, text="⚠️ Не удалось сохранить. Клиент не найден.")
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=(
+            f"✅ Сохранено: <b>{label}</b> · {phone}\n"
+            f"Адрес можно заполнить позже."
+        ),
+        parse_mode="HTML",
+    )
 
     if done_today < daily_limit:
         from bot.crm_clients import get_clients_without_phones as _crm_next
@@ -8208,6 +8226,13 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parts = data.split("|")
         action = parts[1] if len(parts) > 1 else ""
         client_key = pending.get("client_key", "?")
+        # F-09: если кнопка содержит token — верифицируем что pending не сменился
+        cb_token = parts[-1] if len(parts) >= 4 or (action == "edit" and len(parts) == 3) else ""
+        if cb_token and len(cb_token) == 8:
+            expected = _crm_key_token(pending.get("client_key", ""))
+            if cb_token != expected:
+                await q.answer("Устаревшая кнопка — в очереди уже другой клиент.")
+                return
         pending["last_sent"] = datetime.now(TZ).isoformat()
         try:
             await q.message.edit_reply_markup(reply_markup=None)
@@ -8688,8 +8713,13 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             crm_audit("claim_taken", client_key=client_key, claimer=claimer_name, aliases=_updated_keys, token=token)
         except Exception as _e:
             crm_logger.error("crm_claim save error: %s", _e)
+            # F-07: откат claim state — клиент снова доступен для broadcast
+            claim["claimed"] = False
+            claim.pop("claimed_by", None)
+            claim.pop("claimed_at", None)
+            _crm_save_claim_pending()
 
-        await q.answer("? ?????????!")
+        await q.answer("✅ Взяли!")
         try:
             await q.message.edit_text(
                 f"? <b>{client_key}</b>\n????: <b>{claimer_name}</b>",

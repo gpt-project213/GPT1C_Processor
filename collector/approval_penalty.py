@@ -366,6 +366,16 @@ async def check_crm_ignores(bot, _now: Optional[datetime] = None) -> None:
         except (ValueError, TypeError):
             continue
 
+        # F-05: менеджер явно нажал "Позже" — не штрафуем до истечения paused_until
+        paused_raw = entry.get("paused_until")
+        if paused_raw:
+            try:
+                paused_dt = datetime.fromisoformat(paused_raw).astimezone(TZ)
+                if now < paused_dt:
+                    continue
+            except (ValueError, TypeError):
+                pass
+
         age_hours = (now - ts).total_seconds() / 3600
         if age_hours < CRM_IGNORE_MIN_AGE_HOURS:
             continue
