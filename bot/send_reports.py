@@ -3250,6 +3250,18 @@ def _format_collector_batch_text() -> str:
         lines.append("")
         lines.append(f"<b>Результат отправки:</b> {sent_ok}/{sent_total} доставлено")
 
+    # Пропущенные клиенты
+    skip_summary = batch.get("skip_summary") or []
+    if skip_summary:
+        total_skipped = len(skip_summary)
+        more = "+" if total_skipped >= 20 else ""
+        lines.append("")
+        lines.append(f"<b>Пропущено ({total_skipped}{more}):</b>")
+        for item in skip_summary[:10]:
+            lines.append(f"  — {item.get('name', '?')}: {item.get('reason', '?')}")
+        if total_skipped > 10:
+            lines.append(f"  ... ещё {total_skipped - 10}")
+
     return "\n".join(lines)
 
 

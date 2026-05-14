@@ -47,18 +47,20 @@ def _hold_lock():
     on Windows (pure LOCK_EX blocking mode ignores timeout entirely).
     """
     _LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
+    lock_file = PAYMENT_HOLD_PATH.with_suffix(".lock")
+    lock_file.parent.mkdir(parents=True, exist_ok=True)
     try:
         with portalocker.Lock(
-            str(_LOCK_FILE),
+            str(lock_file),
             timeout=5,
             check_interval=0.1,
             flags=portalocker.LOCK_EX | portalocker.LOCK_NB,
         ):
             yield
-    except portalocker.LockException:
+    except (portalocker.LockException, PermissionError, OSError) as _le:
         import logging as _lock_log
         _lock_log.getLogger(__name__).warning(
-            "payment_hold: lock timeout (5 s) — proceeding without exclusive lock"
+            "payment_hold: lock unavailable (%s) — proceeding without exclusive lock", _le
         )
         yield
 

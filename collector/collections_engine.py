@@ -1982,6 +1982,7 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
     # They become explicit business reasons shown to manager/admin.
     debtors_by_manager: Dict[str, List[Dict]] = {}
     sticky_auto_clients: List[Dict[str, Any]] = []
+    _skipped: List[Dict[str, str]] = []
     stop_registry = _load_stop_registry_safe()
 
     for client in debtors:
@@ -1997,10 +1998,12 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
             continue
 
         if client.get("amount", 0) <= 0:
+            _skipped.append({"name": name, "reason": "остаток ≤ 0"})
             continue
 
         # Уже контактировали сегодня
         if already_contacted_today(name):
+            _skipped.append({"name": name, "reason": "контактировали сегодня"})
             continue
 
         # Ищем контакты
@@ -2008,10 +2011,12 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
         stop_rec = _get_stop_record(name, stop_registry)
         decision = _collector_candidate_decision(client, contact, stop_rec)
         if decision.get("action") == "skip":
+            _skip_reason = decision.get("reason", "skip")
             logger.info(
                 "run_approval_preview: [%s] skip — %s",
-                name, decision.get("reason", ""),
+                name, _skip_reason,
             )
+            _skipped.append({"name": name, "reason": _skip_reason})
             continue
 
         _phone = ((contact or {}).get("whatsapp") or (contact or {}).get("phone", "")).strip()
@@ -2033,6 +2038,7 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
                 "run_approval_preview: [%s] no phone/telegram — manager warning requested",
                 name,
             )
+            _skipped.append({"name": name, "reason": "нет телефона/TG"})
             continue
         client = decision.get("client", client)
         level = int(client.get("level", level) or 0)
@@ -2064,6 +2070,7 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
                                 "run_approval_preview: [%s] skip — existing client dialog state=%s",
                                 name, _dlg_state,
                             )
+                            _skipped.append({"name": name, "reason": f"диалог: {_dlg_state}"})
                             continue
             except Exception as dlg_exc:
                 logger.warning("run_approval_preview: [%s] client dialog precheck error: %s", name, dlg_exc)
@@ -2079,6 +2086,7 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
                 "Добавьте менеджера в CRM (config/clients.json) через бот.",
                 name,
             )
+            _skipped.append({"name": name, "reason": "нет менеджера в CRM"})
             continue
 
         # HIGH-3 fix: менеджер без chat_id не может получить preview → batch зависнет.
@@ -2090,6 +2098,7 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
                 "для менеджера %s",
                 name, manager_name,
             )
+            _skipped.append({"name": name, "reason": f"нет chat_id ({manager_name})"})
             continue
 
         payload = _build_preview_client_payload(client, contact, decision, stop_rec)
@@ -2116,6 +2125,7 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
     active_batch = load_latest_batch()
     batch = create_batch(debtors_by_manager)
     batch["sticky_auto_clients"] = sticky_auto_clients
+    batch["skip_summary"] = _skipped[:20]
     batch["debt_snapshot"] = _summarize_debt_freshness(
         debt_data,
         list(debtors_by_manager.keys()),
