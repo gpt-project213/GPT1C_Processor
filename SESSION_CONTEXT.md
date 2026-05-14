@@ -27,6 +27,8 @@
 - `_crmdup_save_pending` / `_crmdup_load_pending` (dup review)
 - `_crmdup_save_ambiguous` / `_crmdup_load_ambiguous` (ambiguous conflicts)
 
+⚠️ **Важный нюанс**: lock — best-effort. При недоступности (`LockException/PermissionError/OSError`) код логирует warning и продолжает без exclusive lock (`yield` в except-ветке, `bot/send_reports.py:6650`). Жёсткой гарантии отсутствия lost update при реальном contention нет — но дисциплина внедрена и покрывает нормальный путь.
+
 #### 3. Stale CRM claim tokens (`72f4141`)
 
 - F-16: `_crm_cleanup_claim_pending` — токены без `created_at` ранее `continue`-лись (никогда не удалялись). Исправлено: вынесен helper `_crm_claim_is_stale(claim)`, stale = без created_at | невалидная дата | TTL истёк.
@@ -73,7 +75,7 @@ test_project:                     110/110 ✅
 | Finding | Суть |
 |---|---|
 | dead `_format_admin_detail_text` | ✅ удалён |
-| F-11 (lock) | ✅ закрыт |
+| F-11 (lock) | ✅ закрыт — best-effort, fallback без exclusive lock при LockException |
 | F-12 (keep-key) | ✅ закрыт |
 | F-13 (ambiguous reopen) | ✅ закрыт |
 | F-14 (stale claim TTL) | ✅ закрыт |
