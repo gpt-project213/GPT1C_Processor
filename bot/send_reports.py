@@ -6690,8 +6690,24 @@ def _crmdup_token() -> str:
 # ── Ambiguous (multi-manager) CRM conflicts ───────────────────────────────────
 
 def _ambiguous_signature(items: List[Dict[str, Any]]) -> str:
-    """Stable signature: sorted client_keys joined. Order-independent."""
-    return "|".join(sorted(item.get("client_key", "") for item in items[:4]))
+    """Stable signature: (client_key, normalized_phone) parts отсортированы.
+
+    Order-independent + sensitive к изменению телефонов: если у тех же пар клиентов
+    реально изменился набор конфликтных телефонов — signature будет другой, и
+    F-13 reopen сработает автоматически (новый ключ в _CRM_AMBIGUOUS, новая
+    pending-запись попадёт в admin backlog и broadcast).
+    """
+    def _norm_phone(raw: Any) -> str:
+        if not raw:
+            return ""
+        return "".join(ch for ch in str(raw) if ch.isdigit())
+
+    parts = []
+    for item in items[:4]:
+        key = item.get("client_key", "")
+        phone = _norm_phone(item.get("phone", ""))
+        parts.append(f"{key}#{phone}")
+    return "|".join(sorted(parts))
 
 
 def _ambiguous_token() -> str:
@@ -10061,12 +10077,14 @@ async def handle_persistent_menu(update: Update, context: ContextTypes.DEFAULT_T
                 return
             reviewer = _chat_to_manager(chat_id) or ("Вадим" if is_admin(chat_id) else "")
             client_keys = [item.get("client_key", "") for item in review.get("items", [])]
+            # F-12: deterministic keep-key — alphabetical sort вместо случайного client_keys[0]
+            chosen_key = sorted([k for k in client_keys if k])[0] if any(client_keys) else ""
             try:
                 from bot.crm_clients import resolve_phone_conflict
                 ok = resolve_phone_conflict(
                     client_keys=client_keys,
                     chosen_phone="+" + phone_digits,
-                    chosen_key=client_keys[0] if client_keys else "",
+                    chosen_key=chosen_key,
                     reviewer=reviewer,
                     phone_source="manager_duplicate_review_manual",
                 )
