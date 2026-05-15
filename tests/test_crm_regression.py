@@ -533,6 +533,23 @@ class StabilizationRegressionTests(unittest.TestCase):
         claim = {"client_key": "C", "claimed": False, "created_at": fresh}
         self.assertFalse(sr._crm_claim_is_stale(claim))
 
+    def test_dup_review_without_created_at_is_stale(self):
+        review = {"items": [{"client_key": "A"}]}
+        self.assertTrue(sr._crmdup_review_is_stale(review))
+
+    def test_dup_review_cleanup_removes_expired_review_and_awaiting_text(self):
+        from datetime import timedelta
+        old_iso = (sr.datetime.now(sr.TZ) - timedelta(hours=sr.CRM_DUP_REVIEW_TTL_HOURS + 1)).isoformat()
+        sr._CRM_DUP_REVIEW_PENDING["dup_old"] = {
+            "manager": "Магира",
+            "items": [{"client_key": "A"}, {"client_key": "B"}],
+            "created_at": old_iso,
+        }
+        sr._CRM_DUP_REVIEW_AWAITING_TEXT[1001] = "dup_old"
+        sr._crmdup_cleanup_pending()
+        self.assertNotIn("dup_old", sr._CRM_DUP_REVIEW_PENDING)
+        self.assertNotIn(1001, sr._CRM_DUP_REVIEW_AWAITING_TEXT)
+
     # ── F-11: CRM state lock — hard-fail policy ───────────────────────────────
     def test_crm_state_lock_creates_lock_file_and_yields(self):
         with tempfile.TemporaryDirectory() as td:

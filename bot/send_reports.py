@@ -191,7 +191,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.79/15.05.2026"
+__VERSION__ = "v9.4.80/15.05.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
@@ -6753,16 +6753,7 @@ def _crmdup_cleanup_pending(now_dt: Optional[datetime] = None) -> None:
     stale_tokens = []
     stale_chats = []
     for token, review in list(_CRM_DUP_REVIEW_PENDING.items()):
-        created_raw = review.get("created_at")
-        if not created_raw:
-            stale_tokens.append(token)
-            continue
-        try:
-            created_dt = datetime.fromisoformat(created_raw)
-        except (TypeError, ValueError):
-            stale_tokens.append(token)
-            continue
-        if (now_dt - created_dt).total_seconds() > CRM_DUP_REVIEW_TTL_HOURS * 3600:
+        if _crmdup_review_is_stale(review, now_dt):
             stale_tokens.append(token)
     for token in stale_tokens:
         _CRM_DUP_REVIEW_PENDING.pop(token, None)
@@ -6771,6 +6762,19 @@ def _crmdup_cleanup_pending(now_dt: Optional[datetime] = None) -> None:
             stale_chats.append(chat_id)
     for chat_id in stale_chats:
         _CRM_DUP_REVIEW_AWAITING_TEXT.pop(chat_id, None)
+
+
+def _crmdup_review_is_stale(review: Dict[str, Any], now_dt: Optional[datetime] = None) -> bool:
+    """True если duplicate-review token невалиден: без created_at, битая дата или TTL истёк."""
+    now_dt = now_dt or datetime.now(TZ)
+    created_raw = review.get("created_at")
+    if not created_raw:
+        return True
+    try:
+        created_dt = datetime.fromisoformat(created_raw)
+    except (TypeError, ValueError):
+        return True
+    return (now_dt - created_dt).total_seconds() > CRM_DUP_REVIEW_TTL_HOURS * 3600
 
 
 def _crmdup_save_pending() -> bool:
@@ -8205,6 +8209,18 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         action = parts[1] if len(parts) > 1 else ""
         token = parts[2] if len(parts) > 2 else ""
         review = _CRM_DUP_REVIEW_PENDING.get(token)
+        if review and _crmdup_review_is_stale(review):
+            _CRM_DUP_REVIEW_PENDING.pop(token, None)
+            stale_chats = [cid for cid, tok in list(_CRM_DUP_REVIEW_AWAITING_TEXT.items()) if tok == token]
+            for cid in stale_chats:
+                _CRM_DUP_REVIEW_AWAITING_TEXT.pop(cid, None)
+            if not _crmdup_save_pending():
+                crm_logger.error("crmdup stale cleanup save failed (in-memory only)")
+            try:
+                await q.message.edit_reply_markup(reply_markup=None)
+            except Exception:
+                pass
+            review = None
         if not review:
             await q.answer("Запрос сверки устарел.")
             return

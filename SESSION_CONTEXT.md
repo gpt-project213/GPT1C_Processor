@@ -3385,3 +3385,11 @@ approval_penalty.py v1.0.2 (РЅРѕРІС‹Р№ РјРѕРґСѓР»СЊ)
   - `python -m py_compile collector\approval_penalty.py` OK
   - `python -X utf8 tests\test_collector.py` -> `643/643`
 - Note: no commit yet in this step.
+
+## 2026-05-15 20:30 - CRM tails cleanup
+- Закрыт stale dup-review callback в `bot/send_reports.py`: введён `_crmdup_review_is_stale()`, callback `crmdup|...` теперь чистит просроченный token, удаляет awaiting-text и снимает inline-кнопки перед ответом `Запрос сверки устарел`.
+- `bot/send_reports.py` версия: `v9.4.80/15.05.2026`.
+- В `tests/test_crm_regression.py` добавлены регрессии на stale duplicate-review cleanup.
+- Выполнен one-shot backfill `config/clients.json`: 6 legacy placeholder-записей `Частное лицо*` помечены `is_vendor=True` + `do_not_call=True`.
+- Backup: `config/clients.json.bak-private-person-backfill-20260515-202931-2`.
+- Проверка: `python -m py_compile bot\send_reports.py` -> OK; `python -X utf8 tests\test_crm_regression.py` -> `38/38`.

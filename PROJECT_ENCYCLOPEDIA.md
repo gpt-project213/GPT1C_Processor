@@ -2,9 +2,9 @@
 
 Актуальная единая база знаний по `GPT1C_Processor_analitica`.
 
-Статус: актуально на `2026-05-15`  
+Статус: актуально на `2026-05-15` (вечер)  
 Текущая базовая ветка: `master`  
-Последний коммит: `785bc55`
+Последний коммит: `89600e5`
 
 ---
 
@@ -252,6 +252,30 @@ Penalty reset — актуально на 2026-05-15:
 - Admin UI: кнопка `♻️ Сброс штрафов` в экране 🤖 Коллектор (confirm-step, admin only).
   После подтверждения показывает: месяц, WA floor, CRM floor, имя backup-файла.
 
+Promise-tracking — три системы (актуально на 2026-05-15 вечер, F-B1):
+1. **Manager-promise** (через «Договорились» в admin batch) → `logs/wa_agreed_promises.json` →
+   handler `check_broken_agreed_deadlines` (`collector/approval_flow.py:2571`) ежедневно в 10:30
+   (job `wa_agreed_deadline_check` в `bot/send_reports.py:10962`).
+2. **Legacy state-promise** → `logs/collector_state.json` (`promise_date` поле) →
+   handler `check_promises` (`collector/collections_engine.py:1463`) ежедневно в 10:00.
+3. **Client-promise** (от ответа клиента в WA-диалоге) → `logs/collector_client_dialogs.json`
+   (`promise_date` внутри dialog) → синхронизируется в **wa_agreed_promises.json** через
+   `record_client_promise()` (`collector/approval_flow.py`) — handler 10:30 подхватывает.
+
+Client-dialog promise-sync (`collector/client_dialog.py:1.1.11`):
+- Helper `_sync_promise_to_agreed(dialog, promise_date, details)` — единая точка вызова
+  `record_client_promise()` с критическим `_TEST_MODE` guard.
+- Вызывается из двух intent-веток в `handle_incoming`: `intent="promise"` и `intent="promise_schedule"`.
+- `record_client_promise()`: не перезаписывает активный manager-promise (manager главнее),
+  обновляет существующий client-promise при уточнении, reopens после broken/fulfilled.
+- `source="client_dialog"` + `batch_id="client_dialog"` для forensic-различия.
+
+Защита от контаминации боевого state из тестов:
+- `_TEST_MODE` guard в `_sync_promise_to_agreed` — при `COLLECTOR_TEST_MODE=1` запись пропускается.
+- Прецедент 2026-05-15: без guard юнит-тесты записали `"Кайрбек"` с `deadline=2026-04-22` в
+  боевой `wa_agreed_promises.json`. Запись была обнаружена и немедленно удалена.
+- Регрессия: `test_sync_helper_skipped_in_test_mode` + проверка `_PROMISES_PATH` замокан перед записью.
+
 ### 7.3. Stop/payment-контур
 
 Это отдельный контур, не равный collector.
@@ -314,10 +338,16 @@ State-файлы (все 4 покрыты lock-discipline на 2026-05-14):
 - deterministic keep-key в dup-review custom phone: `sorted(client_keys)[0]` вместо `client_keys[0]`
 - phone-aware ambiguous signature: `sorted(“client_key#normalized_phone”)` — если phone изменился, signature новый → reopen автоматически через новую pending-запись
 - admin CRM backlog screen: кнопка `📋 CRM бэклог` в admin menu (callback `crm_backlog`), formatter `_format_crm_backlog_text` — 4 категории, top-5, age-label, stale-count
+- **"Частное лицо" placeholder filter (2026-05-15 вечер)**: keywords `"частное лицо"`, `"физическое лицо"`, `"физлицо"` добавлены в `_VENDOR_NAME_KEYWORDS` (`bot/crm_clients.py:74-94`). Закрывает все 4 CRM-пути через единый `is_service_client_name()`: update_from_reports, get_clients_without_phones, _crm_collect_unowned_claim_clients, get_phone_conflict_groups. Root cause — 1С регулярно выгружает placeholder-имена ("Частное лицо 1" и т.п.), которые попадали в claim broadcast.
+
+Audit-документы:
+- `AUDIT_CRM_PRIVATE_PERSON_2026-05-15.md` — Block A, placeholder filter
+- `AUDIT_COLLECTOR_RUNTIME_2026-05-15.md` — Block B, фактический runtime после рестарта v9.4.79
 
 Что ещё не закрыто:
 - stale dup-review callback: отвечает «запрос устарел», но без full cleanup-строгости как у claim
 - три несогласованных хранилища: `clients.json` / `debtors_contacts.json` / batch snapshot
+- backfill 6 существующих placeholder-записей ("Частное лицо*") как `is_vendor=True` — optional, не блокирует runtime
 
 ---
 
@@ -385,9 +415,9 @@ State-файлы (все 4 покрыты lock-discipline на 2026-05-14):
 | Тест | Результат | Примечание |
 |---|---|---|
 | `tests/test_project.py` | `110/110` | |
-| `tests/test_collector.py` | `643/643` | +13 (silent dialog + penalty reset, 2026-05-15) |
-| `tests/test_collector_regression_hermetic.py` | `18/18` | +3 TimeoutLabelHermeticTests (2026-05-14) |
-| `tests/test_crm_regression.py` | `28/28` | +14 StabilizationRegressionTests + lock contention (2026-05-15) |
+| `tests/test_collector.py` | `641/643` | +13 silent dialog + penalty reset; 2 pre-existing fails (P4 T10/T10b — prod state Еркебулан) |
+| `tests/test_collector_regression_hermetic.py` | `23/24` | +8 ClientPromiseRecord (F-B1 + TEST_MODE guard), +3 TimeoutLabel; 1 pre-existing fail (legacy_tail prod state) |
+| `tests/test_crm_regression.py` | `36/36` | +14 Stabilization + lock contention + 6 PrivatePersonPlaceholder (2026-05-15) |
 | `tests/test_parsers.py` | `69/69` | |
 | `tests/test_audit_reports_20260414.py` | `8/8` | |
 | `tests/test_phase2_safe_send.py` | green | |
@@ -422,6 +452,9 @@ State-файлы (все 4 покрыты lock-discipline на 2026-05-14):
 - CRM lock hard-fail: `CrmStateLockError` + save `→ bool` + rollback в callback-callers (2026-05-15)
 - stale silent dialogs разблокированы: `dialog_blocks_new_outreach()` + `stale_silent_active` (2026-05-15)
 - admin penalty reset: `♻️ Сброс штрафов` + floor-marks + backup (2026-05-15)
+- **"Частное лицо" placeholder filter** (Block A, 2026-05-15 вечер): keywords в `_VENDOR_NAME_KEYWORDS`, закрывает claim broadcast по placeholder из 1С
+- **F-B1 client-promise sync**: `record_client_promise()` + `_sync_promise_to_agreed()` helper в `client_dialog.py` v1.1.11 — dialog-promise теперь попадает в `wa_agreed_promises.json` и handler 10:30 его подхватывает (2026-05-15 вечер)
+- **`_TEST_MODE` guard для promise-sync**: защита боевого `wa_agreed_promises.json` от контаминации юнит-тестами (2026-05-15)
 
 ### 12.2. Закрыто частично / не считать идеальным
 
@@ -441,13 +474,11 @@ State-файлы (все 4 покрыты lock-discipline на 2026-05-14):
 - качество менеджерских обещаний можно дальше усиливать политиками и репортингом
 
 ### CRM
-- stale dup-review callback: дать полную cleanup-строгость как у claim
-- ambiguous multi-manager ownership: значительно улучшено, но не исчерпано
-- три несогласованных хранилища контактов: clients.json / debtors_contacts.json / batch snapshot
+- ambiguous multi-manager ownership: ??????????? ????????, ?? ?? ?????????
+- ??? ??????????????? ????????? ?????????: clients.json / debtors_contacts.json / batch snapshot
 
 ### Collector
-- `build_reset_state()` / `reset_penalty_state()` подключены к admin UI; при необходимости расширить до CLI-утилиты
-- `COLLECTOR_SILENT_ACTIVE_RESEND_HOURS` env по умолчанию 24ч — проверить достаточность порога в бою
+- ??????????? open-item'?? ?? runtime-?????? ???: stale silent resend, penalty reset floors, timeout labels ? client-promise sync ??? ???????
 
 ### Architecture
 - `txt_to_html` duplication
