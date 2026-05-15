@@ -4,7 +4,10 @@
 collections/collections_engine.py
 Главный оркестратор AI-Коллектора долгов.
 
-Версия: 1.5.6 (2026-05-15)
+Версия: 1.5.7 (2026-05-15)
+
+v1.5.7 (2026-05-15): collector contact reads now use one CRM-primary
+adapter with read-only legacy fallback, instead of ad-hoc split reads.
 
 v1.5.6 (2026-05-15): stale silent client dialogs (active, zero replies,
   24h+) no longer block the next daily preview/send-approved cycle forever;
@@ -509,6 +512,15 @@ def _freshness_notice_lines(summary: Dict[str, Any]) -> List[str]:
         suffix = f" и ещё {len(warn_managers) - 5}" if len(warn_managers) > 5 else ""
         lines.append(f"⚠️ Старые данные: {', '.join(warn_managers[:5])}{suffix}")
     return lines
+
+
+def _load_collector_contacts() -> Dict[str, Any]:
+    """Loads collector contacts through the CRM-primary compatibility adapter."""
+    try:
+        from bot.crm_clients import load_contacts_for_collector as _crm_contacts
+        return _crm_contacts()
+    except Exception:
+        return load_contacts()
 
 
 def _is_legacy_tail_client(client: Dict[str, Any]) -> bool:
@@ -1188,12 +1200,8 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
         sync_holds_with_debtors(debtors)
     except Exception as _e:
         logger.debug("payment hold sync skipped: %s", _e)
-    # CRM: объединяем clients.json + debtors_contacts.json для поиска телефонов
-    try:
-        from bot.crm_clients import load_contacts_compat as _crm_contacts
-        contacts = _crm_contacts()
-    except Exception:
-        contacts = load_contacts()
+    # Контакты: CRM primary, legacy debtors_contacts.json only as fallback.
+    contacts = _load_collector_contacts()
     processed: List[Dict] = []
 
     # Уведомления о нарушениях: отгрузка при наличии долга — вина менеджера
@@ -1419,7 +1427,7 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
             logger.info("[%s] уже обработан сегодня — пропуск", name)
             continue
 
-        # Ищем контакты (из CRM — clients.json + debtors_contacts.json)
+        # Ищем контакты (CRM primary, legacy fallback only)
         contact = match_client(name, contacts)
 
         # Случай 1: клиент вообще не найден в базе контактов
@@ -1468,11 +1476,7 @@ async def check_promises() -> None:
         return
 
     logger.info("Просроченных обещаний: %d", len(pending))
-    try:
-        from bot.crm_clients import load_contacts_compat as _crm_contacts
-        contacts = _crm_contacts()
-    except Exception:
-        contacts = load_contacts()
+    contacts = _load_collector_contacts()
 
     for item in pending:
         name = item["name"]
@@ -1642,11 +1646,7 @@ def _prepare_current_approved_clients(
     except Exception as e:
         logger.debug("payment hold sync skipped during send-approved refresh: %s", e)
 
-    try:
-        from bot.crm_clients import load_contacts_compat as _crm_contacts
-        contacts = _crm_contacts()
-    except Exception:
-        contacts = load_contacts()
+    contacts = _load_collector_contacts()
 
     stop_registry = _load_stop_registry_safe()
     prepared: Dict[str, Dict[str, Any]] = {}
@@ -1971,11 +1971,7 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
         sync_holds_with_debtors(debtors)
     except Exception as _e:
         logger.debug("payment hold sync skipped: %s", _e)
-    try:
-        from bot.crm_clients import load_contacts_compat as _crm_contacts
-        contacts = _crm_contacts()
-    except Exception:
-        contacts = load_contacts()
+    contacts = _load_collector_contacts()
     active_client_names = {
         str(client.get("name") or "").strip()
         for client in debtors

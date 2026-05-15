@@ -26,9 +26,74 @@ with patch("logging.FileHandler", _NoopFileHandler):
     import bot.crm_clients as crm
     import bot.send_reports as sr
     import bot.crm_audit_log as crm_audit
+    import collector.registry_manager as registry_manager
 
 
 class CRMRegressionTests(unittest.TestCase):
+    def test_load_contacts_for_collector_prefers_crm_and_keeps_legacy_fallback(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            config_dir = root / "config"
+            config_dir.mkdir(parents=True)
+            clients_path = config_dir / "clients.json"
+            legacy_path = config_dir / "debtors_contacts.json"
+            clients_path.write_text(
+                json.dumps(
+                    {
+                        "clients": {
+                            "CRM Клиент": {
+                                "whatsapp": "+77011111111",
+                                "telegram_id": "123",
+                                "manager": "Оксана",
+                                "language": "ru",
+                                "do_not_call": False,
+                                "aliases": ["CRM Алиас"],
+                            }
+                        }
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            legacy_path.write_text(
+                json.dumps(
+                    {
+                        "_comment": "legacy",
+                        "CRM Клиент": {"whatsapp": "+77099999999", "manager": "Legacy"},
+                        "Legacy Клиент": {"whatsapp": "+77022222222", "manager": "Ергали"},
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            with patch.object(crm, "CONFIG_DIR", config_dir), patch.object(crm, "CLIENTS_PATH", clients_path), patch.object(crm, "LEGACY_CONTACTS_PATH", legacy_path):
+                result = crm.load_contacts_for_collector()
+            self.assertEqual(result["CRM Клиент"]["whatsapp"], "+77011111111")
+            self.assertEqual(result["CRM Клиент"]["_source"], "crm")
+            self.assertEqual(result["CRM Алиас"]["_source"], "crm")
+            self.assertEqual(result["Legacy Клиент"]["whatsapp"], "+77022222222")
+            self.assertEqual(result["Legacy Клиент"]["_source"], "legacy_fallback")
+
+    def test_registry_manager_update_client_phone_uses_crm_helper(self):
+        with patch.object(registry_manager, "set_client_phone", return_value=True) as mocked, patch.object(registry_manager, "export_registry_excel", return_value=True):
+            ok = registry_manager.update_client_phone("ТОО Альфа", "+77073334455")
+        self.assertTrue(ok)
+        mocked.assert_called_once_with("ТОО Альфа", "+77073334455", reviewer="registry_manager")
+
+    def test_registry_manager_auto_register_client_writes_to_clients_json(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            config_dir = root / "config"
+            config_dir.mkdir(parents=True)
+            clients_path = config_dir / "clients.json"
+            clients_path.write_text(json.dumps({"clients": {}}, ensure_ascii=False), encoding="utf-8")
+            with patch.object(crm, "CONFIG_DIR", config_dir), patch.object(crm, "CLIENTS_PATH", clients_path), patch.object(registry_manager, "crm_load_clients", side_effect=crm.load_clients), patch.object(registry_manager, "crm_save_clients", side_effect=crm.save_clients), patch.object(registry_manager, "export_registry_excel", return_value=True):
+                ok = registry_manager.auto_register_client("ТОО Бета", manager="Магира", amount=12000.0, days=11)
+                data = crm.load_clients()
+            self.assertTrue(ok)
+            self.assertIn("ТОО Бета", data["clients"])
+            self.assertEqual(data["clients"]["ТОО Бета"]["manager"], "Магира")
+
     def test_update_from_reports_merges_canonical_duplicate(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

@@ -4,7 +4,7 @@
 bot/crm_clients.py
 Универсальная база клиентов Минбаракат (CRM).
 
-Версия: 1.1.0 (2026-04-30)
+Версия: 1.1.1 (2026-05-15)
 Изменения v1.0.5:
   - Fix S1: список менеджеров читается из config/managers.json (single source of truth).
     Раньше был хардкод ("Алена", "Ергали", "Магира", "Оксана"); fallback — тот же
@@ -50,6 +50,7 @@ ROOT_DIR   = Path(__file__).resolve().parent.parent
 JSON_DIR   = ROOT_DIR / "reports" / "json"
 CONFIG_DIR = ROOT_DIR / "config"
 CLIENTS_PATH = CONFIG_DIR / "clients.json"
+LEGACY_CONTACTS_PATH = CONFIG_DIR / "debtors_contacts.json"
 CONTACTS_XLSX_PATH = ROOT_DIR / "contacts.xlsx"
 CONTACTS_XLSX_BACKUP_DIR = ROOT_DIR / "backups" / "contacts_xlsx"
 
@@ -1031,6 +1032,53 @@ def load_contacts_compat() -> Dict[str, Any]:
             if alias and alias not in result:
                 result[alias] = contact_entry
 
+    return result
+
+
+def _load_legacy_contacts_fallback() -> Dict[str, Any]:
+    """Best-effort reader for legacy debtors_contacts.json."""
+    if not LEGACY_CONTACTS_PATH.exists():
+        return {}
+    try:
+        with open(LEGACY_CONTACTS_PATH, encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            return {}
+        data.pop("_comment", None)
+        result: Dict[str, Any] = {}
+        for name, info in data.items():
+            if not isinstance(name, str) or not isinstance(info, dict):
+                continue
+            result[name] = {
+                "whatsapp": str(info.get("whatsapp", "") or info.get("phone", "") or "").strip(),
+                "telegram_id": str(info.get("telegram_id", "") or "").strip(),
+                "manager": str(info.get("manager", "") or "").strip(),
+                "language": str(info.get("language", "ru") or "ru").strip() or "ru",
+                "do_not_call": bool(info.get("do_not_call", False)),
+                "_source": "legacy_fallback",
+            }
+        return result
+    except (OSError, json.JSONDecodeError) as e:
+        logger.warning("Legacy contacts fallback unreadable: %s", e)
+        return {}
+
+
+def load_contacts_for_collector(include_legacy_fallback: bool = True) -> Dict[str, Any]:
+    """
+    Unified collector contact view: CRM is primary, debtors_contacts.json is
+    read-only fallback for keys absent in CRM.
+    """
+    crm_contacts = load_contacts_compat()
+    result: Dict[str, Any] = {
+        name: {**info, "_source": "crm"}
+        for name, info in crm_contacts.items()
+        if isinstance(info, dict)
+    }
+    if not include_legacy_fallback:
+        return result
+
+    for name, info in _load_legacy_contacts_fallback().items():
+        result.setdefault(name, info)
     return result
 
 

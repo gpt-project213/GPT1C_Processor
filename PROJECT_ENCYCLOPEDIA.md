@@ -764,3 +764,21 @@ Audit-документы:
 - Повторный заход клиента в новый WA-цикл должен блокироваться не только active-dialog, но и wa_dialog_suppress.
 - stop_status="exception" нельзя сразу возвращать в следующий WA-цикл: нужен короткий grace-period.
 - Для admin-навигации актуальный actionable экран теперь определяется кнопкой 🧭 Актуальный батч.
+
+---
+
+## 16. 2026-05-15 Architecture Stabilization Notes
+
+- Contact truth for collector is now explicit:
+  - primary source: `config/clients.json`
+  - fallback only: `config/debtors_contacts.json`
+  - batch snapshot is historical evidence, not an active source of contact truth
+- Runtime path:
+  - `bot/crm_clients.py` -> `load_contacts_for_collector()`
+  - `collector/collections_engine.py` -> `_load_collector_contacts()`
+- Legacy compatibility path:
+  - `collector/registry_manager.py` no longer writes `debtors_contacts.json`
+  - registry mutations now go to CRM (`clients.json`)
+- Safety/rollback:
+  - pre-change backup: `config/clients.json.bak-arch-stabilization-20260515-205838`
+  - if rollback is needed, restore that backup and revert the architecture commit

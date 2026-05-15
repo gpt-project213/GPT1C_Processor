@@ -3393,3 +3393,34 @@ approval_penalty.py v1.0.2 (РЅРѕРІС‹Р№ РјРѕРґСѓР»СЊ)
 - Выполнен one-shot backfill `config/clients.json`: 6 legacy placeholder-записей `Частное лицо*` помечены `is_vendor=True` + `do_not_call=True`.
 - Backup: `config/clients.json.bak-private-person-backfill-20260515-202931-2`.
 - Проверка: `python -m py_compile bot\send_reports.py` -> OK; `python -X utf8 tests\test_crm_regression.py` -> `38/38`.
+
+## 2026-05-15 20:58 - Contact truth stabilization (CRM primary / legacy fallback)
+- Goal: remove the last active split contact read/write path without broad refactor.
+- Data safety:
+  - checked `config/debtors_contacts.json` before change: file absent, no live legacy data to migrate;
+  - fresh backup created before architecture patch:
+    - `config/clients.json.bak-arch-stabilization-20260515-205838`
+- Code changes:
+  - `bot/crm_clients.py`
+    - added `LEGACY_CONTACTS_PATH`
+    - added `_load_legacy_contacts_fallback()`
+    - added `load_contacts_for_collector()` = CRM primary + read-only legacy fallback with `_source`
+  - `collector/collections_engine.py`
+    - added `_load_collector_contacts()`
+    - all collector runtime contact reads now go through one adapter
+  - `collector/registry_manager.py`
+    - compatibility shim now writes only to CRM
+    - `auto_register_client()` writes to `clients.json`
+    - `update_client_phone()` delegates to `set_client_phone(..., reviewer="registry_manager")`
+    - `update_client_display_name()` delegates to `set_client_alias()`
+    - `update_client_language()` updates CRM directly
+- Verification:
+  - `python -m py_compile bot\\crm_clients.py` -> OK
+  - `python -m py_compile collector\\collections_engine.py` -> OK
+  - `python -m py_compile collector\\registry_manager.py` -> OK
+  - `python -X utf8 tests\\test_crm_regression.py` -> `41/41`
+  - `python -X utf8 tests\\test_collector.py` -> `641/643` (2 pre-existing legacy-tail failures: P4 T10/T10b)
+- Rollback:
+  - code: revert the commit for this architecture patch
+  - data: restore `config/clients.json` from `config/clients.json.bak-arch-stabilization-20260515-205838`
+  - no legacy `debtors_contacts.json` rollback needed because the file was absent before the patch
