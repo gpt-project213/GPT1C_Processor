@@ -5,6 +5,55 @@
 
 ---
 
+## HANDOFF 2026-05-15 вЂ” hard-fail lock + stale dialogs + penalty reset
+
+### Р§С‚Рѕ СЃРґРµР»Р°РЅРѕ (master, РєРѕРјРјРёС‚С‹ `0c8561e`, `d4ae395`, `f7f1d13`, `167069a`)
+
+#### CRM state lock вЂ” hard-fail policy (`0c8561e`)
+
+Р—Р°РјРµРЅС‘РЅ best-effort yield РЅР° `CrmStateLockError` + СЏРІРЅС‹Р№ РєРѕРЅС‚СЂР°РєС‚ РґР»СЏ callers:
+- `_crm_state_lock()` в†’ raise `CrmStateLockError` РїСЂРё РЅРµРґРѕСЃС‚СѓРїРЅРѕСЃС‚Рё lock (РЅРµ yield)
+- Р’СЃРµ 4 save-С„СѓРЅРєС†РёРё в†’ `bool`; РїСЂРё `CrmStateLockError` в†’ `crm_state_lock_timeout` Р»РѕРі + `return False`
+- Load-С„СѓРЅРєС†РёРё: startup tolerant, С‚РѕР»СЊРєРѕ error-Р»РѕРі
+- Callback callers (claim, dup pick/distinct/custom, crm_name/phone): if not save в†’ rollback in-memory + `"вљ пёЏ Р’СЂРµРјРµРЅРЅР°СЏ РѕС€РёР±РєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ"`
+- Rollback/scheduler callers: log error, proceed
+- РўРµСЃС‚С‹ (+2): `test_crm_state_lock_raises_on_contention`, `test_crm_save_pending_returns_false_on_lock_fail`
+
+#### Stale silent dialogs СѓРЅР±Р»РѕРєРёСЂРѕРІР°РЅС‹ (`d4ae395`)
+
+РџСЂРёС‡РёРЅР°: РЁР°С…РёРЅ, РўСЏРЅ, Р•СЂРєРµР±СѓР»Р°РЅ Р·Р°Р»РёРїР»Рё РІ `active, exchange_count=0` вЂ” РЅРёРєРѕРіРґР° РЅРµ РїРѕРїР°РґР°Р»Рё РІ СЃР»РµРґСѓСЋС‰РёР№ batch.
+
+- `collector/client_dialog.py` v1.1.10: `dialog_blocks_new_outreach(dialog)` вЂ” РµРґРёРЅС‹Р№ РїСЂРµРґРёРєР°С‚
+  - `active` + 0 РѕС‚РІРµС‚РѕРІ + 24h+ в†’ `False, "stale_silent_active"` (СЂР°Р·Р±Р»РѕРєРёСЂРѕРІР°С‚СЊ)
+  - `awaiting_payment_proof` + 72h+ в†’ `False, "stale_payment_proof"`
+  - РёРЅР°С‡Рµ в†’ `True, state`
+- `start_client_dialog()` РїСЂРё supersede stale-РґРёР°Р»РѕРіР° РїСЂРѕР±СЂР°СЃС‹РІР°РµС‚ `phone_silent_cycles`
+- `collections_engine.py` (preview + send-approved): РїРµСЂРµРІРµРґС‘РЅ РЅР° `dialog_blocks_new_outreach()`; legacy TTL-РІРµС‚РєР° СѓРґР°Р»РµРЅР° РёР· РѕР±РѕРёС… РїСѓС‚РµР№
+- `collector/approval_penalty.py` v1.1.2: `build_reset_state()` + `wa_reset_floor`/`crm_reset_floor` floor-РјРµС‚РєРё: Р±Р°С‚С‡Рё/CRM-Р·Р°РїРёСЃРё СЃС‚Р°СЂС€Рµ floor РїСЂРё reset РЅРµ РїРѕР»СѓС‡Р°СЋС‚ С€С‚СЂР°С„ РїСЂРё backfill
+
+#### Admin penalty reset button (`f7f1d13`)
+
+- `collector/approval_penalty.py`: `reset_penalty_state()` вЂ” backup + `build_reset_state()` + write
+- `bot/send_reports.py`: РєРЅРѕРїРєР° `в™»пёЏ РЎР±СЂРѕСЃ С€С‚СЂР°С„РѕРІ` РІ СЌРєСЂР°РЅРµ рџ¤– РљРѕР»Р»РµРєС‚РѕСЂ; confirm-step (admin only); РїРѕСЃР»Рµ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ РїРѕРєР°Р·С‹РІР°РµС‚ РјРµСЃСЏС†, WA floor, CRM floor, РёРјСЏ backup
+
+### РўРµСЃС‚С‹
+
+| Suite | Р РµР·СѓР»СЊС‚Р°С‚ |
+|---|---|
+| `test_crm_regression.py` | 28/28 (+2 lock contention) |
+| `test_collector.py` | 643/643 (+13: silent dialog + penalty reset) |
+| `test_collector_regression_hermetic.py` | 18/18 |
+| `test_project.py` | 110/110 |
+
+### Р§С‚Рѕ РѕСЃС‚Р°С‘С‚СЃСЏ РѕС‚РєСЂС‹С‚С‹Рј
+
+- live smoke-test РїРѕСЃР»Рµ СЂРµСЃС‚Р°СЂС‚Р° Р±РѕС‚Р°
+- stale dup-review callback: full cleanup-СЃС‚СЂРѕРіРѕСЃС‚СЊ РєР°Рє Сѓ claim (minor)
+- `COLLECTOR_SILENT_ACTIVE_RESEND_HOURS` (default 24h) вЂ” РїСЂРѕРІРµСЂРёС‚СЊ РїРѕСЂРѕРі РІ Р±РѕСЋ
+- `reset_penalty_state()` РїРѕРґРєР»СЋС‡РµРЅР° Рє UI; РїСЂРё РЅРµРѕР±С…РѕРґРёРјРѕСЃС‚Рё СЂР°СЃС€РёСЂРёС‚СЊ РґРѕ CLI-СѓС‚РёР»РёС‚С‹
+
+---
+
 ## HANDOFF 2026-05-14 вЂ” CRM/collector integration safety: clients.json lock + hard-fail propagation
 
 ### Р§С‚Рѕ СЃРґРµР»Р°РЅРѕ
@@ -3180,53 +3229,53 @@ approval_penalty.py v1.0.2 (РЅРѕРІС‹Р№ РјРѕРґСѓР»СЊ)
 
 ---
 
-## HANDOFF 2026-05-14 — approval_penalty reset floor: старые WA/CRM штрафы не должны оживать после ручного сброса
+## HANDOFF 2026-05-14 пїЅ approval_penalty reset floor: пїЅпїЅпїЅпїЅпїЅпїЅ WA/CRM пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ
 
 ### Root cause
 
-- Ручной reset очищал только `logs/approval_penalty_state.json`.
-- Затем periodic job `check_recent_batches()` заново перечитывал все terminal WA-батчи текущего месяца из `logs/wa_approval_batches.json`.
-- Аналогично `check_crm_ignores()` мог повторно поднять старые CRM pending-записи.
-- Из-за этого после операционного сброса штрафы возвращались из старья.
+- пїЅпїЅпїЅпїЅпїЅпїЅ reset пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ `logs/approval_penalty_state.json`.
+- пїЅпїЅпїЅпїЅпїЅ periodic job `check_recent_batches()` пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ terminal WA-пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ `logs/wa_approval_batches.json`.
+- пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ `check_crm_ignores()` пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ CRM pending-пїЅпїЅпїЅпїЅпїЅпїЅ.
+- пїЅпїЅ-пїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ.
 
-### Что сделано
+### пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ
 
 - `collector/approval_penalty.py`
-  - добавлен `build_reset_state()`:
+  - пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ `build_reset_state()`:
     - `{month, managers={}, wa_reset_floor, crm_reset_floor}`
-  - `process_batch_penalties(...)` теперь пропускает batch, если его `created_at < wa_reset_floor`
-  - `check_recent_batches(...)` не backfill-ит WA-батчи старше `wa_reset_floor`
-  - `check_crm_ignores(...)` не штрафует CRM pending-записи старше `crm_reset_floor`
+  - `process_batch_penalties(...)` пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ batch, пїЅпїЅпїЅпїЅ пїЅпїЅпїЅ `created_at < wa_reset_floor`
+  - `check_recent_batches(...)` пїЅпїЅ backfill-пїЅпїЅ WA-пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ `wa_reset_floor`
+  - `check_crm_ignores(...)` пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ CRM pending-пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ `crm_reset_floor`
 
 - `tests/test_collector.py`
-  - добавлены регрессии:
-    - старый WA batch не реанимируется после reset
-    - direct `process_batch_penalties(...)` тоже не поднимает старый batch
-    - старый CRM pending не штрафуется после reset
-    - новый WA batch после reset продолжает считаться нормально
+  - пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ:
+    - пїЅпїЅпїЅпїЅпїЅпїЅ WA batch пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ reset
+    - direct `process_batch_penalties(...)` пїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ batch
+    - пїЅпїЅпїЅпїЅпїЅпїЅ CRM pending пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ reset
+    - пїЅпїЅпїЅпїЅпїЅ WA batch пїЅпїЅпїЅпїЅпїЅ reset пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
 
-### Операционное действие
+### пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
 
-- `logs/approval_penalty_state.json` повторно сброшен вручную в новом формате:
+- `logs/approval_penalty_state.json` пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ:
   - `month = 2026-05`
   - `managers = {}`
   - `wa_reset_floor = 2026-05-14T21:49:19.309486+05:00`
   - `crm_reset_floor = 2026-05-14T21:49:19.309486+05:00`
-- бэкап состояния до сброса:
+- пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ:
   - `logs/approval_penalty_state.json.bak-20260514-reset2`
 
-### Проверка
+### пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
 
 - `python -m py_compile collector\approval_penalty.py` -> OK
 - `python -X utf8 tests\test_collector.py` -> `635/635`
 
-### Важно
+### пїЅпїЅпїЅпїЅпїЅ
 
-- Чтобы боевой runtime подхватил кодовый фикс, нужен рестарт бота.
-- Сам сброс state уже выполнен на диске, но без рестарта текущий процесс продолжит жить со старым импортом модуля.
+- пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ runtime пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ, пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ.
+- пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ state пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅ, пїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ.
 
-## 2026-05-15 12:20 — silent active dialogs no longer block daily resend
-- Problem: clients like Еркебулан / Шахин / Шама-Тян were skipped from preview with reason `диалог: active` because old client dialogs from 2026-05-12 stayed in `state=active` with `exchange_count=0` and no TTL.
+## 2026-05-15 12:20 пїЅ silent active dialogs no longer block daily resend
+- Problem: clients like пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ / пїЅпїЅпїЅпїЅпїЅ / пїЅпїЅпїЅпїЅ-пїЅпїЅпїЅ were skipped from preview with reason `пїЅпїЅпїЅпїЅпїЅпїЅ: active` because old client dialogs from 2026-05-12 stayed in `state=active` with `exchange_count=0` and no TTL.
 - Root cause: collector only had expiry for `awaiting_payment_proof > 3d`; plain `active` dialogs with zero client replies blocked preview/send-approved forever.
 - Fix:
   - `collector/client_dialog.py`: added `dialog_blocks_new_outreach()` and `SILENT_ACTIVE_RESEND_HOURS=24`; stale silent `active` dialogs (`exchange_count=0`, 24h+) no longer block a fresh send; `start_client_dialog()` supersedes them and increments `phone_silent_cycles`.
@@ -3238,8 +3287,8 @@ approval_penalty.py v1.0.2 (РЅРѕРІС‹Р№ РјРѕРґСѓР»СЊ)
   - `python -X utf8 tests\test_collector.py` -> `640/640`
 - Operational note: runtime restart is required for the new daily-resend policy to take effect in the live bot.
 
-## 2026-05-15 12:45 — admin button for penalty reset
-- Added admin-only collector UI action `?? Сброс штрафов` in `bot/send_reports.py`.
+## 2026-05-15 12:45 пїЅ admin button for penalty reset
+- Added admin-only collector UI action `?? пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ` in `bot/send_reports.py`.
 - Flow:
   - `collector_penalty_reset_prompt` shows warning/confirm step.
   - `collector_penalty_reset_confirm` calls runtime helper and reports month + WA/CRM floors + backup file name.
