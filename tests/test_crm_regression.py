@@ -721,5 +721,135 @@ class StabilizationRegressionTests(unittest.TestCase):
         self.assertIn("+1 stale", text)
 
 
+class PrivatePersonPlaceholderTests(unittest.TestCase):
+    """Regressions для CRM-фильтра placeholder "Частное лицо" (2026-05-15).
+
+    1C регулярно выгружает placeholder-имена типа "Частное лицо N" в debt/sales.
+    Без фильтра они попадают в claim broadcast / phone-pending — менеджеры
+    получают запрос «чей это клиент?» по непоименованному физлицу.
+    """
+
+    def test_is_service_client_name_skips_chastnoe_litso_variations(self):
+        self.assertTrue(crm.is_service_client_name("Частное лицо"))
+        self.assertTrue(crm.is_service_client_name("Частное лицо 1"))
+        self.assertTrue(crm.is_service_client_name("М Частное лицо"))
+        self.assertTrue(crm.is_service_client_name("Е 1. Частное лицо"))
+        self.assertTrue(crm.is_service_client_name("А Частное Лицо"))  # camelcase из 1C
+        self.assertTrue(crm.is_service_client_name("О Частное лицо"))
+
+    def test_is_service_client_name_skips_fizicheskoe_litso(self):
+        self.assertTrue(crm.is_service_client_name("Физическое лицо"))
+        self.assertTrue(crm.is_service_client_name("Физлицо"))
+        self.assertTrue(crm.is_service_client_name("М Физлицо Иванов"))
+
+    def test_is_service_client_name_keeps_real_clients_with_similar_words(self):
+        # Не должно зацепить настоящих клиентов с похожими словами,
+        # которые случайно содержат буквосочетания.
+        self.assertFalse(crm.is_service_client_name("М ТОО Частная клиника"))
+        self.assertFalse(crm.is_service_client_name("О Магазин Физкультура"))
+        self.assertFalse(crm.is_service_client_name("Е ИП Физкульт-товары"))
+
+    def test_update_from_reports_marks_chastnoe_litso_as_vendor(self):
+        # При появлении новой записи "Частное лицо N" в debt-выгрузке
+        # она должна сразу попасть в clients.json с is_vendor=True
+        # и do_not_call=True. Pending CRM-запрос не создаётся.
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            config_dir = root / "config"
+            json_dir = root / "reports" / "json"
+            config_dir.mkdir(parents=True)
+            json_dir.mkdir(parents=True)
+            clients_path = config_dir / "clients.json"
+            clients_path.write_text(
+                json.dumps({"clients": {}}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            (json_dir / "debt_ext_Детальный Дебиторы Магира (1).json").write_text(
+                json.dumps(
+                    {
+                        "manager": "Магира",
+                        "clients": [{"name": "Частное лицо 5"}],
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            with patch.object(crm, "CONFIG_DIR", config_dir), patch.object(
+                crm, "CLIENTS_PATH", clients_path
+            ), patch.object(crm, "JSON_DIR", json_dir), patch.object(
+                crm, "CONTACTS_XLSX_PATH", root / "contacts.xlsx"
+            ), patch.object(
+                crm, "CONTACTS_XLSX_BACKUP_DIR", root / "backups"
+            ):
+                crm.update_from_reports()
+                data = crm.load_clients()
+            entry = data["clients"].get("Частное лицо 5")
+            self.assertIsNotNone(entry)
+            self.assertTrue(entry.get("is_vendor"))
+            self.assertTrue(entry.get("do_not_call"))
+
+    def test_collect_unowned_claim_skips_chastnoe_litso(self):
+        # Если в clients.json лежит "Частное лицо 1" без manager —
+        # _crm_collect_unowned_claim_clients не должен его поднимать в broadcast.
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            config_dir = root / "config"
+            config_dir.mkdir(parents=True)
+            clients_path = config_dir / "clients.json"
+            clients_path.write_text(
+                json.dumps(
+                    {
+                        "clients": {
+                            "Частное лицо 1": {"manager": ""},
+                            "Частное лицо": {"manager": ""},
+                            "Физлицо": {"manager": ""},
+                            "ИП Реальный клиент": {"manager": ""},
+                        }
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            with patch.object(crm, "CONFIG_DIR", config_dir), patch.object(crm, "CLIENTS_PATH", clients_path):
+                result = sr._crm_collect_unowned_claim_clients(limit=10)
+            # Placeholder'ы должны быть исключены, реальный — остаться
+            self.assertNotIn("Частное лицо 1", result)
+            self.assertNotIn("Частное лицо", result)
+            self.assertNotIn("Физлицо", result)
+            self.assertIn("ИП Реальный клиент", result)
+
+    def test_get_clients_without_phones_skips_chastnoe_litso(self):
+        # daily phone-pending не должен поднимать placeholder
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            config_dir = root / "config"
+            config_dir.mkdir(parents=True)
+            clients_path = config_dir / "clients.json"
+            clients_path.write_text(
+                json.dumps(
+                    {
+                        "clients": {
+                            "М Частное лицо": {
+                                "manager": "Магира",
+                                "whatsapp": "",
+                                "sources": ["debt"],
+                            },
+                            "М ИП Реальный клиент": {
+                                "manager": "Магира",
+                                "whatsapp": "",
+                                "sources": ["debt"],
+                            },
+                        }
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            with patch.object(crm, "CONFIG_DIR", config_dir), patch.object(crm, "CLIENTS_PATH", clients_path):
+                result = crm.get_clients_without_phones("Магира", limit=50)
+            self.assertNotIn("М Частное лицо", result)
+            self.assertIn("М ИП Реальный клиент", result)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
