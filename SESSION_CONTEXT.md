@@ -5,6 +5,88 @@
 
 ---
 
+## HANDOFF 2026-05-15 (вечер) — аудит + Block A "Частное лицо" + F-B1 client-promise
+
+### Что сделано (master, коммиты `2427089`, `6bb882f`, `0d5746e`)
+
+Read-only аудит CRM + collector runtime, затем точечные фиксы по результатам.
+
+#### Audit-документы
+
+- **AUDIT_CRM_PRIVATE_PERSON_2026-05-15.md** — Block A: фильтр placeholder-имён "Частное лицо"
+- **AUDIT_COLLECTOR_RUNTIME_2026-05-15.md** — Block B: фактический runtime после рестарта v9.4.79
+- Все 5 последних фиксов реально проявились в production logs/state. 0 P0/P1 багов в бою.
+
+#### Block A — Placeholder "Частное лицо" фильтр (`2427089`)
+
+Root cause: `_VENDOR_NAME_KEYWORDS` (`bot/crm_clients.py:74-91`) не содержал keyword "частное лицо".
+1С регулярно выгружает placeholder-имена ("Частное лицо 1", "М Частное лицо", "Е 1. Частное лицо"),
+они попадали в claim broadcast — менеджеры получали "чей это клиент?" по непоименованному физлицу.
+
+Эталонный кейс: `logs/crm_claim_pending_state.json` содержал активный claim на "Частное лицо 1"
+(notified=5 chats, claimed by Магира).
+
+Фикс: добавлены 3 keyword (`"частное лицо"`, `"физическое лицо"`, `"физлицо"`). Покрывает все CRM-пути
+через единый `is_service_client_name()`: update_from_reports, get_clients_without_phones,
+_crm_collect_unowned_claim_clients, get_phone_conflict_groups.
+
+6 регрессий в `PrivatePersonPlaceholderTests`. Прогон: 36/36 test_crm_regression.
+
+#### F-B1 — client-promise sync в wa_agreed_promises (`0d5746e`)
+
+Root cause (refined в `6bb882f`): три отдельные promise-tracking системы.
+Handler `check_broken_agreed_deadlines` (10:30 daily) смотрит только `wa_agreed_promises.json`.
+Client-promise (от ответа клиента в WA) жил только в `collector_client_dialogs.json` — невидимый для handler.
+Гриль Косши (3 дня overdue), МАСТЕР-КОНДИТЕР (2 дня overdue) — конкретные жертвы этого gap.
+
+Фикс:
+- Новая public-функция `record_client_promise()` в `collector/approval_flow.py` — записывает
+  client-promise с `source="client_dialog"`, не перезаписывает активный manager-promise.
+- `collector/client_dialog.py` v1.1.11: `intent="promise"` и `intent="promise_schedule"`
+  дополнительно вызывают `record_client_promise()`.
+
+**Критическая защита от контаминации (по требованию пользователя):**
+- `_TEST_MODE` guard в `client_dialog.py` — при `COLLECTOR_TEST_MODE=1` запись пропускается.
+- Без guard тесты `test_collector.py` через `handle_incoming` УСПЕЛИ записать запись `"Кайрбек"`
+  с просроченным `deadline=2026-04-22` в **боевой** `wa_agreed_promises.json`. Это могло бы вызвать
+  ложное "обещание нарушено" уведомление менеджеру Ергали в следующем 10:30 cycle. Запись была
+  немедленно убрана.
+
+Миграция выполнена one-shot скриптом `tools/migrate_dialog_promises_to_wa_agreed.py`: 4 записи
+перенесены (Еркебулан 18.05, Гриль Косши 12.05, МАСТЕР-КОНДИТЕР 13.05, Орда 18.05).
+Backup: `logs/wa_agreed_promises.json.bak-pre-fb1-migration`.
+
+**Эффект:** 16.05 в 10:30 handler `check_broken_agreed_deadlines` автоматически зафиксирует
+2 overdue (Гриль Косши, МАСТЕР-КОНДИТЕР) как `status="broken"` и уведомит менеджеров.
+
+6 регрессий в `ClientPromiseRecordHermeticTests`: create new, не перезаписывает manager-promise,
+обновляет client-promise, reopens после broken, отклоняет невалидное.
+
+### Тесты
+
+| Suite | Результат | Изменения |
+|---|---|---|
+| `test_crm_regression.py` | 36/36 | +6 `PrivatePersonPlaceholderTests` |
+| `test_collector_regression_hermetic.py` | 23/24 | +6 `ClientPromiseRecordHermeticTests`; 1 pre-existing fail (legacy_tail, prod state Еркебулан) |
+| `test_collector.py` | 641/643 | 2 pre-existing fails (P4 T10/T10b, prod state Еркебулан) |
+| `test_project.py` | 110/110 | |
+
+3 pre-existing fails связаны с тем, что Еркебулан в боевом `collector_client_dialogs.json`
+находится в `state=escalated` с promise_date 17.05 — тесты P4 T10/T10b и legacy_tail
+читают этот prod-state и не ожидают активный escalated_promise. Это design issue
+существующих тестов (читают prod state без mokирования), не связан с F-B1.
+
+### Что остаётся открытым
+
+- **backfill 6 placeholder-записей**: опционально, не срочно. После keyword-фикса новые broadcast'ы
+  по ним не идут (у всех уже есть manager+phone).
+- **test gap**: нет отдельного теста на `_TEST_MODE` guard для `record_client_promise` sync.
+  Не блокирует runtime, но единственный непокрытый угол F-B1.
+- **test_collector / hermetic читают prod state без мокирования** — design issue существующих
+  P4 T10/T10b и legacy_tail tests. Не связан с текущими фиксами.
+
+---
+
 ## HANDOFF 2026-05-15 — hard-fail lock + stale dialogs + penalty reset
 
 ### Что сделано (master, коммиты `0c8561e`, `d4ae395`, `f7f1d13`, `167069a`)
