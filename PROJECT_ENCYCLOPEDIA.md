@@ -4,7 +4,7 @@
 
 Статус: актуально на `2026-05-15`  
 Текущая базовая ветка: `master`  
-Последний коммит: `f7f1d13`
+Последний коммит: `785bc55`
 
 ---
 
@@ -243,7 +243,8 @@ Client dialog — актуально на 2026-05-15:
 - `start_client_dialog()` при supersede stale-диалога пробрасывает `phone_silent_cycles`.
 - Env: `COLLECTOR_SILENT_ACTIVE_RESEND_HOURS` (default 24).
 - `collections_engine.py` (preview + send-approved) переведён на `dialog_blocks_new_outreach()`;
-  legacy TTL-ветка для `awaiting_payment_proof` в движке удалена.
+  ? preview-path ??? ???????? legacy TTL-????? ??? `awaiting_payment_proof` ?
+  ????????????? ??????????, ?? ?????????? ???????????? helper-??????.
 
 Penalty reset — актуально на 2026-05-15:
 - `build_reset_state()` / `reset_penalty_state()` в `collector/approval_penalty.py`.
