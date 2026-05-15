@@ -242,9 +242,7 @@ Client dialog — актуально на 2026-05-15:
   никогда не попадали в следующую ежедневную рассылку.
 - `start_client_dialog()` при supersede stale-диалога пробрасывает `phone_silent_cycles`.
 - Env: `COLLECTOR_SILENT_ACTIVE_RESEND_HOURS` (default 24).
-- `collections_engine.py` (preview + send-approved) переведён на `dialog_blocks_new_outreach()`;
-  ? preview-path ??? ???????? legacy TTL-????? ??? `awaiting_payment_proof` ?
-  ????????????? ??????????, ?? ?????????? ???????????? helper-??????.
+- `collections_engine.py` (preview + send-approved) полностью переведён на `dialog_blocks_new_outreach()`; единственный источник истины для TTL-логики диалогов.
 
 Penalty reset — актуально на 2026-05-15:
 - `build_reset_state()` / `reset_penalty_state()` в `collector/approval_penalty.py`.
