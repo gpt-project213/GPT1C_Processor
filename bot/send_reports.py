@@ -191,7 +191,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.80/15.05.2026"
+__VERSION__ = "v9.4.81/15.05.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
@@ -7131,7 +7131,10 @@ def _crm_collect_unowned_claim_clients(limit: int = 3) -> List[str]:
 
     result: List[str] = []
     for _canon, items in grouped.items():
-        owned = any((item.get("manager") or "") not in ("", "Не определён", "?", "-", "—") for _, item in items)
+        owned = any(
+            (item.get("ownership_manager") or item.get("manager") or "") not in ("", "Не определён", "?", "-", "—")
+            for _, item in items
+        )
         if owned:
             continue
         candidate = next((k for k, _ in items if not _is_svc(k)), None)
@@ -8399,18 +8402,28 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 (it for it in items if (it.get("manager") or "").strip() == chosen_manager),
                 items[0],
             )
-            try:
-                from bot.crm_clients import resolve_phone_conflict
-                ok = resolve_phone_conflict(
-                    client_keys=client_keys,
-                    chosen_phone=chosen_item.get("phone", ""),
-                    chosen_key=chosen_item.get("client_key", ""),
-                    reviewer=reviewer,
-                    phone_source="ambiguous_conflict_admin_resolve",
-                )
-            except Exception as _e:
-                crm_logger.error("crm_ambi assign error: %s", _e)
+            if not chosen_manager:
                 ok = False
+            else:
+                try:
+                    from bot.crm_clients import apply_manual_ownership, resolve_phone_conflict
+                    ok = resolve_phone_conflict(
+                        client_keys=client_keys,
+                        chosen_phone=chosen_item.get("phone", ""),
+                        chosen_key=chosen_item.get("client_key", ""),
+                        reviewer=reviewer,
+                        phone_source="ambiguous_conflict_admin_resolve",
+                    )
+                    if ok:
+                        ok = apply_manual_ownership(
+                            client_keys=client_keys,
+                            manager=chosen_manager,
+                            reviewer=reviewer,
+                            source="ambiguous_conflict_admin_resolve",
+                        )
+                except Exception as _e:
+                    crm_logger.error("crm_ambi assign error: %s", _e)
+                    ok = False
             _crmdup_try_finalize_ambiguous(
                 sig,
                 ok=ok,
@@ -9070,7 +9083,12 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         _crm_write_ok = False
         try:
-            from bot.crm_clients import load_clients as _cc_load, save_clients as _cc_save, canonicalize_client_key
+            from bot.crm_clients import (
+                apply_manual_ownership as _crm_apply_manual_ownership,
+                load_clients as _cc_load,
+                save_clients as _cc_save,
+                canonicalize_client_key,
+            )
             _cc_data = _cc_load()
             _cc_clients = _cc_data.get("clients", {})
             _claim_canon = canonicalize_client_key(client_key)
@@ -9085,7 +9103,15 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 _cc_clients[_existing_key] = _existing_value
                 _updated_keys.append(_existing_key)
             _cc_data["clients"] = _cc_clients
-            _cc_save(_cc_data)
+            if not _cc_save(_cc_data):
+                raise RuntimeError("crm_claim: clients save failed")
+            if not _crm_apply_manual_ownership(
+                client_keys=_updated_keys,
+                manager=claimer_name,
+                reviewer=claimer_name,
+                source="claim_broadcast",
+            ):
+                raise RuntimeError("crm_claim: ownership stamp failed")
             crm_logger.info("CRM claim: %s -> manager %s (aliases=%d)", client_key, claimer_name, len(_updated_keys))
             crm_audit("claim_taken", client_key=client_key, claimer=claimer_name, aliases=_updated_keys, token=token)
             _crm_write_ok = True

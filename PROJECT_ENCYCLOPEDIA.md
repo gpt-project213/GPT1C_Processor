@@ -782,3 +782,5 @@ Audit-документы:
 - Safety/rollback:
   - pre-change backup: `config/clients.json.bak-arch-stabilization-20260515-205838`
   - if rollback is needed, restore that backup and revert the architecture commit
+- **CRM ownership stabilization** (2026-05-15 late): explicit manual ownership marker via `ownership_manager/ownership_decided_*`; claim-broadcast and admin ambiguous-assign now persist ownership decision instead of relying on bare `manager` only.
+- **Claim candidate filter respects explicit ownership**: `_crm_collect_unowned_claim_clients()` skips groups with `ownership_manager`, reducing repeat claim-broadcast on already manually assigned clients.

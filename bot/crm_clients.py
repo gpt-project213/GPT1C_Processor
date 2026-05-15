@@ -4,7 +4,7 @@
 bot/crm_clients.py
 Универсальная база клиентов Минбаракат (CRM).
 
-Версия: 1.1.1 (2026-05-15)
+Версия: 1.1.2 (2026-05-15)
 Изменения v1.0.5:
   - Fix S1: список менеджеров читается из config/managers.json (single source of truth).
     Раньше был хардкод ("Алена", "Ергали", "Магира", "Оксана"); fallback — тот же
@@ -491,6 +491,59 @@ def resolve_phone_conflict(
         merged_keys=existing_keys,
     )
     logger.info("CRM duplicate conflict resolved: keep=%s merged=%d reviewer=%s", keep_key, len(existing_keys), reviewer or "-")
+    return True
+
+
+def apply_manual_ownership(
+    client_keys: List[str],
+    manager: str,
+    reviewer: str = "",
+    source: str = "manual_ownership",
+) -> bool:
+    """
+    Persists an explicit ownership decision for one or more CRM cards.
+
+    This is additive and safe: it only stamps explicit ownership fields plus the
+    visible manager field on the surviving cards. It does not change merge logic.
+    """
+    manager = (manager or "").strip()
+    if not client_keys or not manager or manager in _UNKNOWN_MANAGERS:
+        return False
+    data = load_clients()
+    clients_db = data.get("clients", {})
+    stamp = datetime.now(TZ).isoformat()
+    changed_keys: List[str] = []
+    for key in client_keys:
+        info = clients_db.get(key)
+        if not isinstance(info, dict):
+            continue
+        info["manager"] = manager
+        info["ownership_manager"] = manager
+        info["ownership_decided_at"] = stamp
+        info["ownership_decided_by"] = reviewer or "system"
+        info["ownership_source"] = source
+        clients_db[key] = info
+        changed_keys.append(key)
+    if not changed_keys:
+        return False
+    data["clients"] = clients_db
+    if not save_clients(data):
+        logger.error("apply_manual_ownership: clients.json not saved")
+        return False
+    crm_audit(
+        "ownership_assigned",
+        reviewer=reviewer,
+        manager=manager,
+        source=source,
+        client_keys=changed_keys,
+    )
+    logger.info(
+        "CRM ownership assigned: manager=%s keys=%d source=%s reviewer=%s",
+        manager,
+        len(changed_keys),
+        source,
+        reviewer or "-",
+    )
     return True
 
 

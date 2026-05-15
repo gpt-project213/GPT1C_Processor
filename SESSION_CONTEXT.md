@@ -3424,3 +3424,20 @@ approval_penalty.py v1.0.2 (новый модуль)
   - code: revert the commit for this architecture patch
   - data: restore `config/clients.json` from `config/clients.json.bak-arch-stabilization-20260515-205838`
   - no legacy `debtors_contacts.json` rollback needed because the file was absent before the patch
+
+## 2026-05-15 21:20 � CRM ownership stabilization
+- Backup before change: `config/clients.json.bak-ownership-stabilization-20260515-211300`.
+- Runtime changes:
+  - `bot/crm_clients.py` v1.1.2: added `apply_manual_ownership(client_keys, manager, reviewer, source)`; stamps `ownership_manager`, `ownership_decided_at`, `ownership_decided_by`, `ownership_source` plus visible `manager`.
+  - `bot/send_reports.py` v9.4.81: `_crm_collect_unowned_claim_clients()` now treats explicit `ownership_manager` as owned; `crm_claim|...` stamps explicit ownership after successful CRM save; `crm_ambi|a|...` now also stamps explicit ownership after successful admin assign and rejects empty chosen manager.
+  - `tests/test_crm_regression.py`: added 3 ownership regressions.
+- Validation:
+  - `python -m py_compile bot\crm_clients.py` -> OK
+  - `python -m py_compile bot\send_reports.py` -> OK
+  - `python -X utf8 tests\test_crm_regression.py` -> 44/44
+  - `python -X utf8 tests\test_project.py` -> 110/110
+- Rollback:
+  1. Code: `git revert <ownership-fix-commit>`
+  2. Data if needed: `Copy-Item -LiteralPath "C:\GPT1C_Processor_analitica\config\clients.json.bak-ownership-stabilization-20260515-211300" -Destination "C:\GPT1C_Processor_analitica\config\clients.json" -Force`
+  3. Restart bot after rollback.
+- Scope intentionally NOT changed: no broad ownership heuristics, no collector contact flow changes, no merge semantics change.

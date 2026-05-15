@@ -933,5 +933,79 @@ class PrivatePersonPlaceholderTests(unittest.TestCase):
             self.assertIn("М ИП Реальный клиент", result)
 
 
+class OwnershipStabilizationTests(unittest.TestCase):
+    def test_apply_manual_ownership_sets_explicit_fields(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            config_dir = root / "config"
+            config_dir.mkdir(parents=True)
+            clients_path = config_dir / "clients.json"
+            clients_path.write_text(
+                json.dumps(
+                    {
+                        "clients": {
+                            "A": {"manager": "", "aliases": ["B"]},
+                            "B": {"manager": ""},
+                        }
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            with patch.object(crm, "CONFIG_DIR", config_dir), patch.object(crm, "CLIENTS_PATH", clients_path), patch.object(
+                crm, "CONTACTS_XLSX_PATH", root / "contacts.xlsx"
+            ), patch.object(
+                crm, "CONTACTS_XLSX_BACKUP_DIR", root / "backups"
+            ):
+                ok = crm.apply_manual_ownership(
+                    client_keys=["A", "B"],
+                    manager="РњР°РіРёСЂР°",
+                    reviewer="ADMIN",
+                    source="claim_broadcast",
+                )
+                data = crm.load_clients()
+            self.assertTrue(ok)
+            for key in ("A", "B"):
+                entry = data["clients"][key]
+                self.assertEqual(entry.get("manager"), "РњР°РіРёСЂР°")
+                self.assertEqual(entry.get("ownership_manager"), "РњР°РіРёСЂР°")
+                self.assertEqual(entry.get("ownership_decided_by"), "ADMIN")
+                self.assertEqual(entry.get("ownership_source"), "claim_broadcast")
+                self.assertTrue(entry.get("ownership_decided_at"))
+
+    def test_apply_manual_ownership_returns_false_when_save_fails(self):
+        with patch.object(crm, "save_clients", return_value=False):
+            ok = crm.apply_manual_ownership(
+                client_keys=["A"],
+                manager="РњР°РіРёСЂР°",
+                reviewer="ADMIN",
+                source="claim_broadcast",
+            )
+        self.assertFalse(ok)
+
+    def test_collect_unowned_claim_skips_explicit_ownership_marker(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            config_dir = root / "config"
+            config_dir.mkdir(parents=True)
+            clients_path = config_dir / "clients.json"
+            clients_path.write_text(
+                json.dumps(
+                    {
+                        "clients": {
+                            "РўРћРћ РђР»СЊС„Р°": {"manager": "", "ownership_manager": "РћРєСЃР°РЅР°"},
+                            "РўРћРћ РРЅР°СЏ": {"manager": ""},
+                        }
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            with patch.object(crm, "CONFIG_DIR", config_dir), patch.object(crm, "CLIENTS_PATH", clients_path):
+                result = sr._crm_collect_unowned_claim_clients(limit=10)
+            self.assertNotIn("РўРћРћ РђР»СЊС„Р°", result)
+            self.assertIn("РўРћРћ РРЅР°СЏ", result)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
