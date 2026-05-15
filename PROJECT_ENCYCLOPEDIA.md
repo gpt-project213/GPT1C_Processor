@@ -2,9 +2,9 @@
 
 Актуальная единая база знаний по `GPT1C_Processor_analitica`.
 
-Статус: актуально на `2026-05-14`  
+Статус: актуально на `2026-05-15`  
 Текущая базовая ветка: `master`  
-Последний коммит: `81013aa`
+Последний коммит: `f7f1d13`
 
 ---
 
@@ -234,6 +234,25 @@ Admin summary — актуально на 2026-05-14:
 - timeout + `waiting_for_agreed` → `"⏳ начал — не написал детали по «X»"` (не «🔇 не ответил»)
 - timeout + `waiting_for_proof` → `"⏳ начал — не прислал документ по «X»"` (аналогично)
 
+Client dialog — актуально на 2026-05-15:
+- `dialog_blocks_new_outreach(dialog)` — единый предикат блокировки: возвращает `(bool, reason)`.
+  Два случая разблокировки: `awaiting_payment_proof` + 72h → `stale_payment_proof`;
+  `active` + 0 ответов клиента + 24h+ → `stale_silent_active`.
+- До этого клиенты типа Шахин/Тян/Еркебулан залипали в `active, exchange_count=0` бесконечно и
+  никогда не попадали в следующую ежедневную рассылку.
+- `start_client_dialog()` при supersede stale-диалога пробрасывает `phone_silent_cycles`.
+- Env: `COLLECTOR_SILENT_ACTIVE_RESEND_HOURS` (default 24).
+- `collections_engine.py` (preview + send-approved) переведён на `dialog_blocks_new_outreach()`;
+  legacy TTL-ветка для `awaiting_payment_proof` в движке удалена.
+
+Penalty reset — актуально на 2026-05-15:
+- `build_reset_state()` / `reset_penalty_state()` в `collector/approval_penalty.py`.
+- `reset_penalty_state()`: делает backup `logs/approval_penalty_state.json`, пишет новый state
+  с `wa_reset_floor` и `crm_reset_floor` — батчи/CRM-записи старше floor не получают штраф
+  при следующем backfill.
+- Admin UI: кнопка `♻️ Сброс штрафов` в экране 🤖 Коллектор (confirm-step, admin only).
+  После подтверждения показывает: месяц, WA floor, CRM floor, имя backup-файла.
+
 ### 7.3. Stop/payment-контур
 
 Это отдельный контур, не равный collector.
@@ -287,18 +306,17 @@ State-файлы (все 4 покрыты lock-discipline на 2026-05-14):
 - `logs/crm_duplicate_review_state.json` — dup-review
 - `logs/crm_ambiguous_conflicts.json` — ambiguous conflicts
 
-Что стабилизировано к 2026-05-14:
+Что стабилизировано к 2026-05-15:
 - canonical client key + alias-expansion в load_contacts_compat
 - restart-safe `crm_claim` + `_crm_write_ok` gate (F-07)
 - `crm_audit.jsonl` audit trail
-- portalocker lock-discipline (`_crm_state_lock`) для всех 4 CRM state-файлов — **best-effort**: при `LockException/PermissionError/OSError` логируется warning и save продолжается без exclusive lock
+- portalocker lock-discipline (`_crm_state_lock`) — **hard-fail**: при недоступности lock поднимает `CrmStateLockError`; все 4 save → `bool`; callback-callers делают rollback + user-facing error; scheduler-callers логируют error и продолжают (2026-05-15)
 - stale claim tokens: `_crm_claim_is_stale` — без `created_at` или просроченные удаляются при cleanup; callback `crm_claim|...` явно отклоняет expired (снимает кнопку)
 - deterministic keep-key в dup-review custom phone: `sorted(client_keys)[0]` вместо `client_keys[0]`
 - phone-aware ambiguous signature: `sorted(“client_key#normalized_phone”)` — если phone изменился, signature новый → reopen автоматически через новую pending-запись
 - admin CRM backlog screen: кнопка `📋 CRM бэклог` в admin menu (callback `crm_backlog`), formatter `_format_crm_backlog_text` — 4 категории, top-5, age-label, stale-count
 
 Что ещё не закрыто:
-- lock — best-effort, не жёсткая гарантия при реальном contention
 - stale dup-review callback: отвечает «запрос устарел», но без full cleanup-строгости как у claim
 - три несогласованных хранилища: `clients.json` / `debtors_contacts.json` / batch snapshot
 
@@ -363,14 +381,14 @@ State-файлы (все 4 покрыты lock-discipline на 2026-05-14):
 
 ## 11. Тестовая матрица
 
-Актуальный рабочий набор к `2026-05-14`:
+Актуальный рабочий набор к `2026-05-15`:
 
 | Тест | Результат | Примечание |
 |---|---|---|
 | `tests/test_project.py` | `110/110` | |
-| `tests/test_collector.py` | `330/330` | |
+| `tests/test_collector.py` | `643/643` | +13 (silent dialog + penalty reset, 2026-05-15) |
 | `tests/test_collector_regression_hermetic.py` | `18/18` | +3 TimeoutLabelHermeticTests (2026-05-14) |
-| `tests/test_crm_regression.py` | `26/26` | +12 StabilizationRegressionTests (2026-05-14) |
+| `tests/test_crm_regression.py` | `28/28` | +14 StabilizationRegressionTests + lock contention (2026-05-15) |
 | `tests/test_parsers.py` | `69/69` | |
 | `tests/test_audit_reports_20260414.py` | `8/8` | |
 | `tests/test_phase2_safe_send.py` | green | |
@@ -402,10 +420,12 @@ State-файлы (все 4 покрыты lock-discipline на 2026-05-14):
 - deterministic keep-key в dup-review custom phone (F-12, 2026-05-14)
 - phone-aware ambiguous signature для reopen (F-13, 2026-05-14)
 - admin CRM backlog screen `📋 CRM бэклог` (2026-05-14)
+- CRM lock hard-fail: `CrmStateLockError` + save `→ bool` + rollback в callback-callers (2026-05-15)
+- stale silent dialogs разблокированы: `dialog_blocks_new_outreach()` + `stale_silent_active` (2026-05-15)
+- admin penalty reset: `♻️ Сброс штрафов` + floor-marks + backup (2026-05-15)
 
 ### 12.2. Закрыто частично / не считать идеальным
 
-- CRM lock — best-effort, fallback без exclusive lock при недоступности (см. раздел 8)
 - CRM ownership ambiguity — значительно улучшено (signature, deterministic keep), но не исчерпано
 - stale dup-review callback — базовый ответ есть, full cleanup как у claim ещё не сделан
 - часть legacy/architectural duplication
@@ -422,10 +442,13 @@ State-файлы (все 4 покрыты lock-discipline на 2026-05-14):
 - качество менеджерских обещаний можно дальше усиливать политиками и репортингом
 
 ### CRM
-- lock best-effort → решить политику hard-fail vs proceed-without-lock при contention
 - stale dup-review callback: дать полную cleanup-строгость как у claim
 - ambiguous multi-manager ownership: значительно улучшено, но не исчерпано
 - три несогласованных хранилища контактов: clients.json / debtors_contacts.json / batch snapshot
+
+### Collector
+- `build_reset_state()` / `reset_penalty_state()` подключены к admin UI; при необходимости расширить до CLI-утилиты
+- `COLLECTOR_SILENT_ACTIVE_RESEND_HOURS` env по умолчанию 24ч — проверить достаточность порога в бою
 
 ### Architecture
 - `txt_to_html` duplication
