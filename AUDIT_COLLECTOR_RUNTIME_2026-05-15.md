@@ -127,7 +127,7 @@ Collector работает **штатно** после рестарта. Все 
 
 ## 4. Detailed findings
 
-### F-B1 | MEDIUM | Overdue promise: 2 клиента, бот не реагирует
+### F-B1 | MEDIUM | Overdue promise: расхождение между тремя promise-tracking системами
 
 **Symptom:** Два escalated диалога имеют `promise_date` в прошлом, но клиент не оплатил и бот не вернул их в дисциплинарный цикл:
 
@@ -136,18 +136,44 @@ Collector работает **штатно** после рестарта. Все 
 | `М Гриль Косши ул Республика 18 б ...` | Магира | 2026-05-12 | 3 дня |
 | `О ТОО МАСТЕР-КОНДИТЕР` | Оксана | 2026-05-13 | 2 дня |
 
-**Root cause (по коду):** В collector есть `promise_overdue_handler` (`collector/collections_engine.py`), который должен проверять `promise_date < today` и возвращать клиента в WA-цикл с эскалацией. Проверить, что этот handler действительно запускается в scheduler.
+**Root cause (уточнено по коду):** Handlers для overdue promise **существуют и зарегистрированы в scheduler** — это не "handler отсутствует". Проблема в том, что у проекта **три отдельных promise-tracking системы**, и существующие handlers покрывают только две из них.
 
-**Code location:** `collector/collections_engine.py` — функция отвечающая за overdue promise.
+#### Три системы promise-tracking
+
+| # | Источник promise | Хранилище | Handler | Расписание | Покрывает |
+|---|---|---|---|---|---|
+| 1 | Manager нажал «Договорились» в admin batch | `logs/wa_agreed_promises.json` | `check_broken_agreed_deadlines` (`collector/approval_flow.py:2571`) | `wa_agreed_deadline_check` в 10:30 (`bot/send_reports.py:10962-10972`) | ✅ |
+| 2 | Legacy: collector_state promise_date | `logs/collector_state.json` | `check_promises` (`collector/collections_engine.py:1463-1493`) | `debt_collector_promises` в 10:00 (`bot/send_reports.py:10950-10955`) | ✅ |
+| 3 | **Клиент сам сказал "оплачу до X" в WA-диалоге** | `logs/collector_client_dialogs.json` (поле `promise_date` внутри dialog) | **отсутствует** | — | ❌ |
+
+**Конкретный case Гриль Косши/МАСТЕР-КОНДИТЕР:** их `promise_date` живёт только в системе #3 (dialog-state, проставлено через анализ ответа клиента в WA). В `wa_agreed_promises.json` и `collector_state.json` для них нет записи. Существующие handlers смотрят #1 и #2 — не подбирают #3.
+
+**Code locations:**
+- Где promise попадает в dialog-state: `collector/client_dialog.py` (логика разбора ответа клиента, поле `promise_date` в dialog dict)
+- Где handlers смотрят `wa_agreed_promises.json`: `collector/approval_flow.py:2571`
+- Где handlers смотрят `collector_state.json`: `collector/collections_engine.py:1463`
+- Hole: ни один из существующих handlers не итерирует `collector_client_dialogs.json` в поиске `state in (active, escalated) and promise_date < today`
 
 **Evidence:**
-- `logs/collector_client_dialogs.json` — escalated state с просроченным promise_date
+- `logs/collector_client_dialogs.json` — оба клиента в `state=escalated`, `promise_date<today`, `exchange_count=1`
+- `logs/collector_state.json` — у обоих `promise_date=null`
+- `logs/wa_agreed_promises.json` — нет записей для этих клиентов
 
-**Impact:** Клиент дал обещание, не оплатил, бот молчит. Менеджер должен это заметить вручную.
+**Impact:**
+- Клиент дал обещание в WA-диалоге, не оплатил, бот молчит
+- Менеджер должен заметить вручную
+- Если канал клиент→бот используется активно — каждый такой случай теряется
 
-**Status:** OPEN — проверить scheduler / handler. Возможно требует ручного триггера.
+**Status:** OPEN — это **недоделанная фича**, не баг существующего handler'а.
 
-**Fix direction:** Если handler существует — проверить расписание. Если нет — добавить. Не блокирует другие фиксы.
+**Fix direction (две развилки):**
+
+1. **Минимум** — синхронизировать dialog-promise в одну из существующих систем (predпочтительно #1 `wa_agreed_promises.json`): когда `client_dialog` определяет `promise_date` из ответа клиента, дополнительно записывать запись в `wa_agreed_promises.json` — handler 10:30 автоматически подхватит.
+2. **Максимум** — добавить отдельный handler `check_dialog_promises` который итерирует `collector_client_dialogs.json` и обрабатывает overdue dialog-promises. Регистрировать в scheduler рядом с двумя существующими.
+
+Первый вариант проще и не плодит четвёртую систему.
+
+**Priority:** P2. Не блокирует другие правки. Не приоритетнее текущей очистки stale dup-review callback.
 
 ---
 
@@ -256,7 +282,7 @@ Collector работает **штатно** после рестарта. Все 
 **Нет.** Все известные P1 уже закрыты.
 
 ### P2
-- **F-B1**: Проверить scheduler / handler для `promise_overdue` — почему Гриль Косши (3 дня) и МАСТЕР-КОНДИТЕР (2 дня) не вернулись в дисциплинарный цикл. Если handler есть — проверить crontab; если нет — добавить.
+- **F-B1**: Синхронизировать dialog-promise (источник #3, `collector_client_dialogs.json`) с одной из существующих promise-tracking систем (#1 `wa_agreed_promises.json` или #2 `collector_state.json`). Самый простой путь — при установке `promise_date` в client_dialog дополнительно писать в `wa_agreed_promises.json`, тогда существующий handler `check_broken_agreed_deadlines` (10:30) подхватит автоматически. Конкретный case: Гриль Косши (3 дня просрочка), МАСТЕР-КОНДИТЕР (2 дня).
 
 ### Operational (без правок кода)
 - **F-B2**: Если жалобы повторятся — рассмотреть summary-нотификацию admin'у при массовом expiry payment holds. Сейчас не нужно.
