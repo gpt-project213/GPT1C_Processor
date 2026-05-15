@@ -634,6 +634,46 @@ class ClientPromiseRecordHermeticTests(unittest.TestCase):
         self.assertFalse(approval_flow.record_client_promise("Клиент", "", "2026-05-20"))
         self.assertFalse(approval_flow.record_client_promise("Клиент", "Магира", ""))
 
+    def test_sync_helper_skipped_in_test_mode(self):
+        """_TEST_MODE guard в _sync_promise_to_agreed защищает prod state.
+
+        Критично: без guard юнит-тесты, прогоняющие handle_incoming с
+        intent=promise, контаминировали бы боевой wa_agreed_promises.json.
+        Прецедент 2026-05-15: запись "Кайрбек" с deadline=2026-04-22 (overdue)
+        могла бы спровоцировать ложное «обещание нарушено» уведомление в проде.
+        """
+        from collector import client_dialog as cd
+        # _TEST_MODE должен быть True (COLLECTOR_TEST_MODE=1 установлен на уровне файла)
+        self.assertTrue(cd._TEST_MODE, "тестовая среда должна иметь _TEST_MODE=True")
+
+        dialog = {"client_name": "Тестклиент", "manager_name": "Магира"}
+        result = cd._sync_promise_to_agreed(dialog, "2026-05-20", "WA dialog: тест")
+
+        # В test mode — никакая запись не должна быть сохранена
+        self.assertFalse(result)
+        self.assertEqual(self._load(), {})
+
+    def test_sync_helper_writes_when_not_test_mode(self):
+        """Без _TEST_MODE helper должен записать через record_client_promise.
+
+        Защита: явно проверяем что _PROMISES_PATH замокан в tempdir
+        перед тем как трогать запись.
+        """
+        from collector import client_dialog as cd
+        # Защита от случайной записи в боевой файл
+        self.assertEqual(
+            approval_flow._PROMISES_PATH, self._tmp_path,
+            "_PROMISES_PATH должен указывать на tempfile, а не на боевой logs/",
+        )
+        dialog = {"client_name": "Тестклиент", "manager_name": "Магира"}
+        with patch.object(cd, "_TEST_MODE", False):
+            result = cd._sync_promise_to_agreed(dialog, "2026-05-20", "WA dialog: real")
+        self.assertTrue(result)
+        data = self._load()
+        self.assertIn("Тестклиент", data)
+        self.assertEqual(data["Тестклиент"]["deadline"], "2026-05-20")
+        self.assertEqual(data["Тестклиент"]["source"], "client_dialog")
+
 
 class WhatsAppPollerHermeticTests(unittest.IsolatedAsyncioTestCase):
     async def test_poll_once_passes_attachment_metadata_to_client_dialog(self):

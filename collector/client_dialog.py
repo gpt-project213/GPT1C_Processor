@@ -173,6 +173,35 @@ def _parse_dialog_dt(value: Any) -> Optional[datetime]:
     return parsed.astimezone(TZ)
 
 
+def _sync_promise_to_agreed(
+    dialog: Dict[str, Any], promise_date: Any, details: str,
+) -> bool:
+    """F-B1: записывает client-promise в wa_agreed_promises.json.
+
+    Содержит критический `_TEST_MODE` guard. Без него юнит-тесты, которые
+    прогоняют handle_incoming с intent=promise, успешно контаминировали
+    боевой `logs/wa_agreed_promises.json` (запись "Кайрбек" с deadline
+    2026-04-22 → handler 10:30 мог бы выслать ложное «обещание нарушено»).
+
+    Возвращает True если запись действительно сохранена.
+    """
+    if _TEST_MODE:
+        return False
+    if not promise_date:
+        return False
+    try:
+        from collector.approval_flow import record_client_promise as _record_promise
+        return _record_promise(
+            client_name=str(dialog.get("client_name") or ""),
+            manager_name=str(dialog.get("manager_name") or ""),
+            promise_date=str(promise_date),
+            details=details,
+        )
+    except Exception as _exc:
+        logger.warning("_sync_promise_to_agreed failed: %s", _exc)
+        return False
+
+
 def dialog_blocks_new_outreach(dialog: Optional[Dict[str, Any]], *, now: Optional[datetime] = None) -> tuple[bool, str]:
     """Return whether an existing client dialog should block a fresh WA send."""
     if not isinstance(dialog, dict):
@@ -1168,19 +1197,10 @@ async def handle_incoming(phone: str, text: str, attachment: Optional[Dict[str, 
         dialog["payment_schedule"] = schedule_code
         if promise_date:
             dialog["promise_date"] = promise_date
-            # F-B1: client-promise → wa_agreed_promises.json чтобы handler 10:30 подхватил.
-            # _TEST_MODE guard защищает от контаминации боевого файла из юнит-тестов.
-            if not _TEST_MODE:
-                try:
-                    from collector.approval_flow import record_client_promise as _record_promise
-                    _record_promise(
-                        client_name=dialog.get("client_name", "") or "",
-                        manager_name=dialog.get("manager_name", "") or "",
-                        promise_date=str(promise_date),
-                        details=f"WA dialog: график {schedule_text}, первый платёж до {promise_date}",
-                    )
-                except Exception as _exc:
-                    logger.warning("record_client_promise (schedule) failed: %s", _exc)
+            _sync_promise_to_agreed(
+                dialog, promise_date,
+                f"WA dialog: график {schedule_text}, первый платёж до {promise_date}",
+            )
         if promise_amount:
             dialog["promise_amount"] = promise_amount
         first_payment = f" Первый платёж ждём до {_fmt_date_display(promise_date)}." if promise_date else ""
@@ -1242,19 +1262,10 @@ async def handle_incoming(phone: str, text: str, attachment: Optional[Dict[str, 
         # Сохраняем дату обещания в диалог
         if promise_date:
             dialog["promise_date"] = promise_date
-            # F-B1: client-promise → wa_agreed_promises.json чтобы handler 10:30 подхватил.
-            # _TEST_MODE guard защищает от контаминации боевого файла из юнит-тестов.
-            if not _TEST_MODE:
-                try:
-                    from collector.approval_flow import record_client_promise as _record_promise
-                    _record_promise(
-                        client_name=dialog.get("client_name", "") or "",
-                        manager_name=dialog.get("manager_name", "") or "",
-                        promise_date=str(promise_date),
-                        details=f"WA dialog: клиент обещал оплатить до {promise_date}",
-                    )
-                except Exception as _exc:
-                    logger.warning("record_client_promise (promise) failed: %s", _exc)
+            _sync_promise_to_agreed(
+                dialog, promise_date,
+                f"WA dialog: клиент обещал оплатить до {promise_date}",
+            )
         if promise_amount:
             dialog["promise_amount"] = promise_amount
         date_str = f" до {promise_date}" if promise_date else ""
