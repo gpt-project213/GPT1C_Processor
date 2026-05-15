@@ -5,6 +5,12 @@ collector/approval_penalty.py
 Штрафные баллы менеджеров за пропуск окна согласования WhatsApp-рассылки
 и за неответ на CRM-запрос.
 
+v1.1.2 (2026-05-14): ручной reset штрафов больше не реанимирует старые WA/CRM
+  записи. State может хранить wa_reset_floor / crm_reset_floor; batch/pending
+  старше этих отметок не поднимаются обратно ни при periodic backfill, ни при
+  прямом process_batch_penalties(). Это закрывает повторное начисление штрафов
+  после операционного сброса state в середине месяца.
+
 v1.1.1 (2026-05-13): timeout после начатого manager-review теперь считается
   partial, даже если менеджер не добавил никого в approved_names. Раньше
   ветки "Договорились"/"Оплатил без документа"/ожидание деталей ошибочно
@@ -117,6 +123,39 @@ def _ensure_month(state: Dict[str, Any], month: str) -> None:
         state["managers"] = {}
 
 
+def build_reset_state(_now: Optional[datetime] = None) -> Dict[str, Any]:
+    """
+    Операционный reset штрафов:
+    - обнуляет счётчики за текущий месяц;
+    - ставит floor-метки, чтобы старые WA/CRM записи не переехали обратно
+      из batch/pending backfill.
+    """
+    now = (_now or datetime.now(TZ)).astimezone(TZ)
+    floor = now.isoformat()
+    return {
+        "month": _month_key(now),
+        "managers": {},
+        "wa_reset_floor": floor,
+        "crm_reset_floor": floor,
+    }
+
+
+def _parse_dt(raw: Any) -> Optional[datetime]:
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(str(raw)).astimezone(TZ)
+    except (ValueError, TypeError):
+        return None
+
+
+def _reset_floor(state: Dict[str, Any], key: str, month: str) -> Optional[datetime]:
+    dt = _parse_dt(state.get(key))
+    if not dt:
+        return None
+    return dt if _month_key(dt) == month else None
+
+
 def _mgr_state(state: Dict[str, Any], manager: str, chat_id: int) -> Dict[str, Any]:
     mgrs = state.setdefault("managers", {})
     if manager not in mgrs:
@@ -226,6 +265,9 @@ async def process_batch_penalties(batch: Dict[str, Any], bot) -> None:
 
     state = _load_state()
     _ensure_month(state, month)
+    wa_floor = _reset_floor(state, "wa_reset_floor", month)
+    if wa_floor and created_dt < wa_floor:
+        return
 
     managers = batch.get("managers", {})
     for mgr_name, mgr_data in managers.items():
@@ -285,6 +327,7 @@ async def check_recent_batches(bot) -> None:
     month = _month_key()
     state = _load_state()
     _ensure_month(state, month)
+    wa_floor = _reset_floor(state, "wa_reset_floor", month)
 
     notified_batch_ids = {
         e["batch_id"]
@@ -304,6 +347,8 @@ async def check_recent_batches(bot) -> None:
         except (ValueError, TypeError):
             continue
         if _month_key(created_dt) != month:
+            continue
+        if wa_floor and created_dt < wa_floor:
             continue
 
         await process_batch_penalties(batch, bot)
@@ -351,6 +396,7 @@ async def check_crm_ignores(bot, _now: Optional[datetime] = None) -> None:
     month = _month_key()
     state = _load_state()
     _ensure_month(state, month)
+    crm_floor = _reset_floor(state, "crm_reset_floor", month)
 
     for chat_id_str, entry in pending.items():
         manager = entry.get("manager", "")
@@ -364,6 +410,8 @@ async def check_crm_ignores(bot, _now: Optional[datetime] = None) -> None:
         try:
             ts = datetime.fromisoformat(ts_raw).astimezone(TZ)
         except (ValueError, TypeError):
+            continue
+        if crm_floor and ts < crm_floor:
             continue
 
         # F-05: менеджер явно нажал "Позже" — не штрафуем до истечения paused_until

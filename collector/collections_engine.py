@@ -4,7 +4,11 @@
 collections/collections_engine.py
 Главный оркестратор AI-Коллектора долгов.
 
-Версия: 1.5.4 (2026-05-13)
+Версия: 1.5.6 (2026-05-15)
+
+v1.5.6 (2026-05-15): stale silent client dialogs (active, zero replies,
+  24h+) no longer block the next daily preview/send-approved cycle forever;
+  collector may resend once per day instead of hiding such clients.
 
 v1.5.5 (2026-05-14): send-approved refresh now keeps both client_approval
   and manager_review clients aligned with preview semantics; collector
@@ -1529,12 +1533,13 @@ async def _send_approved_client(client: Dict[str, Any]) -> Dict[str, Any]:
     # Если клиент уже в диалоге с ботом или передан менеджеру —
     # повторная отправка WA создаёт дублирование.
     try:
-        from collector.client_dialog import _get_client_dialog, _DIALOG_ACTIVE_STATES
+        from collector.client_dialog import _get_client_dialog, dialog_blocks_new_outreach
         _phone_clean = "".join(c for c in phone if c.isdigit())
         _existing_dlg = _get_client_dialog(_phone_clean)
         if _existing_dlg:
-            _dlg_state = _existing_dlg.get("state", "")
-            if _dlg_state in (*_DIALOG_ACTIVE_STATES, "escalated"):
+            _should_block, _dlg_reason = dialog_blocks_new_outreach(_existing_dlg)
+            _dlg_state = str(_existing_dlg.get("state") or "")
+            if _should_block:
                 result["reason"] = f"dialog_exists:{_dlg_state}"
                 logger.info(
                     "[%s] пропуск — диалог уже активен (state=%s)",
@@ -2045,33 +2050,23 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
 
         if _phone:
             try:
-                from collector.client_dialog import _get_client_dialog, _DIALOG_ACTIVE_STATES
+                from collector.client_dialog import _get_client_dialog, dialog_blocks_new_outreach
                 _phone_clean = "".join(ch for ch in _phone if ch.isdigit())
                 _existing_dlg = _get_client_dialog(_phone_clean)
                 if _existing_dlg:
+                    _should_block, _dlg_reason = dialog_blocks_new_outreach(_existing_dlg)
                     _dlg_state = str(_existing_dlg.get("state") or "")
-                    if _dlg_state in (*_DIALOG_ACTIVE_STATES, "escalated"):
-                        # awaiting_payment_proof: снимаем guard если suppress (3 дн.) уже истёк
-                        _skip = True
-                        if _dlg_state == "awaiting_payment_proof":
-                            _last_act = _existing_dlg.get("last_activity") or _existing_dlg.get("created", "")
-                            try:
-                                _act_dt = datetime.fromisoformat(str(_last_act))
-                                if (datetime.now(TZ) - _act_dt).days >= 3:
-                                    logger.info(
-                                        "run_approval_preview: [%s] awaiting_payment_proof устарел (>3 дн.) — guard снят",
-                                        name,
-                                    )
-                                    _skip = False
-                            except Exception:
-                                pass
-                        if _skip:
-                            logger.info(
-                                "run_approval_preview: [%s] skip — existing client dialog state=%s",
-                                name, _dlg_state,
-                            )
-                            _skipped.append({"name": name, "reason": f"диалог: {_dlg_state}"})
-                            continue
+                    if _should_block:
+                        logger.info(
+                            "run_approval_preview: [%s] skip — existing client dialog state=%s",
+                            name, _dlg_state,
+                        )
+                        _skipped.append({"name": name, "reason": f"диалог: {_dlg_state}"})
+                        continue
+                    logger.info(
+                        "run_approval_preview: [%s] stale dialog guard removed: %s",
+                        name, _dlg_reason,
+                    )
             except Exception as dlg_exc:
                 logger.warning("run_approval_preview: [%s] client dialog precheck error: %s", name, dlg_exc)
 

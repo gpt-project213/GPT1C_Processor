@@ -3177,3 +3177,63 @@ approval_penalty.py v1.0.2 (РЅРѕРІС‹Р№ РјРѕРґСѓР»СЊ)
 
 - Preview path РґРѕРїСѓСЃРєР°Р» manager_review, Р° send-refresh С„РёР»СЊС‚СЂРѕРІР°Р» С‚РѕР»СЊРєРѕ client_approval.
 - Р—Р°С‰РёС‚Р° РѕС‚ РїРѕРІС‚РѕСЂРЅРѕРіРѕ Р·Р°С…РѕРґР° РєР»РёРµРЅС‚Р° РґРµСЂР¶Р°Р»Р°СЃСЊ РЅР° active-dialog Рё РЅРµ РїРѕРєСЂС‹РІР°Р»Р° escalation cooldown + exception-РєРµР№СЃС‹.
+
+---
+
+## HANDOFF 2026-05-14 — approval_penalty reset floor: старые WA/CRM штрафы не должны оживать после ручного сброса
+
+### Root cause
+
+- Ручной reset очищал только `logs/approval_penalty_state.json`.
+- Затем periodic job `check_recent_batches()` заново перечитывал все terminal WA-батчи текущего месяца из `logs/wa_approval_batches.json`.
+- Аналогично `check_crm_ignores()` мог повторно поднять старые CRM pending-записи.
+- Из-за этого после операционного сброса штрафы возвращались из старья.
+
+### Что сделано
+
+- `collector/approval_penalty.py`
+  - добавлен `build_reset_state()`:
+    - `{month, managers={}, wa_reset_floor, crm_reset_floor}`
+  - `process_batch_penalties(...)` теперь пропускает batch, если его `created_at < wa_reset_floor`
+  - `check_recent_batches(...)` не backfill-ит WA-батчи старше `wa_reset_floor`
+  - `check_crm_ignores(...)` не штрафует CRM pending-записи старше `crm_reset_floor`
+
+- `tests/test_collector.py`
+  - добавлены регрессии:
+    - старый WA batch не реанимируется после reset
+    - direct `process_batch_penalties(...)` тоже не поднимает старый batch
+    - старый CRM pending не штрафуется после reset
+    - новый WA batch после reset продолжает считаться нормально
+
+### Операционное действие
+
+- `logs/approval_penalty_state.json` повторно сброшен вручную в новом формате:
+  - `month = 2026-05`
+  - `managers = {}`
+  - `wa_reset_floor = 2026-05-14T21:49:19.309486+05:00`
+  - `crm_reset_floor = 2026-05-14T21:49:19.309486+05:00`
+- бэкап состояния до сброса:
+  - `logs/approval_penalty_state.json.bak-20260514-reset2`
+
+### Проверка
+
+- `python -m py_compile collector\approval_penalty.py` -> OK
+- `python -X utf8 tests\test_collector.py` -> `635/635`
+
+### Важно
+
+- Чтобы боевой runtime подхватил кодовый фикс, нужен рестарт бота.
+- Сам сброс state уже выполнен на диске, но без рестарта текущий процесс продолжит жить со старым импортом модуля.
+
+## 2026-05-15 12:20 — silent active dialogs no longer block daily resend
+- Problem: clients like Еркебулан / Шахин / Шама-Тян were skipped from preview with reason `диалог: active` because old client dialogs from 2026-05-12 stayed in `state=active` with `exchange_count=0` and no TTL.
+- Root cause: collector only had expiry for `awaiting_payment_proof > 3d`; plain `active` dialogs with zero client replies blocked preview/send-approved forever.
+- Fix:
+  - `collector/client_dialog.py`: added `dialog_blocks_new_outreach()` and `SILENT_ACTIVE_RESEND_HOURS=24`; stale silent `active` dialogs (`exchange_count=0`, 24h+) no longer block a fresh send; `start_client_dialog()` supersedes them and increments `phone_silent_cycles`.
+  - `collector/collections_engine.py`: preview and send-approved now use the shared helper instead of hardcoded active-dialog blocking.
+  - `tests/test_collector.py`: regressions for stale silent dialog resend + send-approved path.
+- Verification:
+  - `python -m py_compile collector\client_dialog.py` OK
+  - `python -m py_compile collector\collections_engine.py` OK
+  - `python -X utf8 tests\test_collector.py` -> `640/640`
+- Operational note: runtime restart is required for the new daily-resend policy to take effect in the live bot.

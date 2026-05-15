@@ -863,6 +863,33 @@ try:
     check("start_client_dialog: amount", d.get("amount") == 500000.0)
     check("start_client_dialog: report_date default empty", d.get("report_date") == "")
 
+    d["last_activity"] = (datetime.now(cd_mod.TZ) - timedelta(days=2)).isoformat()
+    d["created"] = d["last_activity"]
+    d["exchange_count"] = 0
+    d["phone_silent_cycles"] = 1
+    cd_mod._set_client_dialog("77011234567", d)
+    _blocks_stale, _reason_stale = cd_mod.dialog_blocks_new_outreach(cd_mod._get_client_dialog("77011234567"))
+    check("start_client_dialog: stale silent active dialog no longer blocks resend",
+          _blocks_stale is False and _reason_stale == "stale_silent_active",
+          str((_blocks_stale, _reason_stale)))
+    asyncio.run(cd_mod.start_client_dialog(
+        phone="77011234567",
+        client_name="ТОО Тест",
+        manager_name="Алена",
+        manager_chat_id=123456,
+        level=2,
+        days=15,
+        amount=500000.0,
+        message_text="Повторное напоминание по задолженности.",
+    ))
+    d_resend = cd_mod._get_client_dialog("77011234567")
+    check("start_client_dialog: stale silent dialog is superseded by new send",
+          d_resend is not None and d_resend.get("exchanges", [{}])[0].get("text") == "Повторное напоминание по задолженности.",
+          str(d_resend))
+    check("start_client_dialog: phone_silent_cycles increments on daily resend",
+          d_resend.get("phone_silent_cycles") == 2,
+          str(d_resend.get("phone_silent_cycles")))
+
     # handle_incoming обновляет exchange_count (мокаем DeepSeek)
     with patch("collector.collection_agent._call_deepseek") as mock_ds:
         mock_ds.return_value = '{"intent":"unclear","promise_date":null,"promise_amount":null,"requires_human":false,"suggested_reply":"Уточните дату."}'
@@ -2603,6 +2630,28 @@ check("H4 T4b: _send_approved_client сохраняет deferral поля в к�
 # ═══════════════════════════════════════════════════════════════
 # 17. WHATSAPP AUDIO STT — AssemblyAI primary, safe fallback
 # ═══════════════════════════════════════════════════════════════
+_stale_dialog = {
+    "state": "active",
+    "exchange_count": 0,
+    "created": (datetime.now(ce_mod.TZ) - timedelta(days=2)).isoformat(),
+    "last_activity": (datetime.now(ce_mod.TZ) - timedelta(days=2)).isoformat(),
+}
+with patch("collector.collections_engine.send_whatsapp", return_value=True), \
+     patch("collector.collections_engine.generate_message", return_value="повторное сообщение"), \
+     patch("collector.collections_engine.already_contacted_today", return_value=False), \
+     patch("collector.collections_engine._get_manager_chat_id", return_value=99999999), \
+     patch("collector.collections_engine.update_after_contact"), \
+     patch("collector.client_dialog._get_client_dialog", return_value=_stale_dialog), \
+     patch("collector.client_dialog.start_client_dialog", new=AsyncMock()) as _restart_dialog:
+    _stale_send_result = asyncio.run(_send_approved_client(_h4_approved_client))
+
+check("H4 T5: stale silent active dialog does not block send-approved",
+      _stale_send_result.get("status") == "sent",
+      str(_stale_send_result))
+check("H4 T5b: stale silent active dialog still starts a fresh client dialog",
+      _restart_dialog.await_count == 1,
+      str(_restart_dialog.await_args_list))
+
 section("WhatsApp audio STT: AssemblyAI primary")
 
 import collector.whatsapp_poller as _wa_poller
@@ -4181,6 +4230,140 @@ finally:
 # ═══════════════════════════════════════════════════════════════
 # 28a. payment_deferrals — логика отсрочки
 # ═══════════════════════════════════════════════════════════════
+from collector.approval_penalty import (
+    check_recent_batches as _check_recent_batches,
+    process_batch_penalties as _process_batch_penalties,
+    build_reset_state as _build_penalty_reset_state,
+)
+
+_pen_floor_tmp = Path(tempfile.mkdtemp(prefix="penalty_floor_"))
+_pen_batches_file = _pen_floor_tmp / "wa_approval_batches.json"
+_pen_pending_file = _pen_floor_tmp / "crm_pending_state.json"
+_pen_state_floor_file = _pen_floor_tmp / "approval_penalty_state.json"
+
+_reset_now = datetime(2026, 5, 14, 20, 30, tzinfo=ZoneInfo("Asia/Almaty"))
+_old_batch_dt = datetime(2026, 5, 14, 17, 0, tzinfo=ZoneInfo("Asia/Almaty"))
+_new_batch_dt = datetime(2026, 5, 14, 21, 0, tzinfo=ZoneInfo("Asia/Almaty"))
+
+_pen_batches_file.write_text(json.dumps({
+    "old-wa": {
+        "batch_id": "old-wa",
+        "created_at": _old_batch_dt.isoformat(),
+        "status": "too_late",
+        "managers": {
+            "Оксана": {
+                "status": "timeout",
+                "approved_names": [],
+                "rejected_names": [],
+                "postponed_names": [],
+                "agreed_names": [],
+                "agreed_details": {},
+                "paid_with_doc_names": [],
+                "paid_no_doc_names": [],
+                "second_chance_used": [],
+                "waiting_for_proof": None,
+                "waiting_for_agreed": None,
+                "responded_at": None,
+                "chat_id": 1446255940,
+            }
+        }
+    }
+}), encoding="utf-8")
+_pen_pending_file.write_text(json.dumps({
+    "1446255940": {
+        "manager": "Оксана",
+        "client_key": "О Клиент",
+        "state": "clarify_phone",
+        "created_at": (_reset_now - _td(hours=30)).isoformat(),
+        "last_sent": (_reset_now - _td(hours=1)).isoformat(),
+    }
+}), encoding="utf-8")
+_pen_state_floor_file.write_text(
+    json.dumps(_build_penalty_reset_state(_reset_now), ensure_ascii=False, indent=2),
+    encoding="utf-8",
+)
+
+_orig_batches_path_pen2 = _pen_mod._BATCHES_PATH
+_orig_crm_path_pen2 = _pen_mod._CRM_PENDING_PATH
+_orig_state_path_pen2 = _pen_mod._STATE_PATH
+_pen_mod._BATCHES_PATH = _pen_batches_file
+_pen_mod._CRM_PENDING_PATH = _pen_pending_file
+_pen_mod._STATE_PATH = _pen_state_floor_file
+try:
+    _floor_bot = _AsyncMock_crm()
+    _floor_bot.send_message = _AsyncMock_crm()
+    _asyncio_crm.run(_check_recent_batches(_floor_bot))
+    _state_after_old_wa = json.loads(_pen_state_floor_file.read_text(encoding="utf-8"))
+    check("penalty reset floor: старый WA batch не реанимируется после reset",
+          _state_after_old_wa.get("managers") == {},
+          json.dumps(_state_after_old_wa, ensure_ascii=False)[:200])
+
+    _asyncio_crm.run(_process_batch_penalties({
+        "batch_id": "old-wa-direct",
+        "created_at": _old_batch_dt.isoformat(),
+        "status": "too_late",
+        "managers": {
+            "Оксана": {
+                "status": "timeout",
+                "approved_names": [],
+                "rejected_names": [],
+                "postponed_names": [],
+                "agreed_names": [],
+                "agreed_details": {},
+                "paid_with_doc_names": [],
+                "paid_no_doc_names": [],
+                "second_chance_used": [],
+                "waiting_for_proof": None,
+                "waiting_for_agreed": None,
+                "responded_at": None,
+                "chat_id": 1446255940,
+            }
+        }
+    }, _floor_bot))
+    _state_after_direct = json.loads(_pen_state_floor_file.read_text(encoding="utf-8"))
+    check("penalty reset floor: direct process_batch_penalties тоже пропускает старый batch",
+          _state_after_direct.get("managers") == {},
+          json.dumps(_state_after_direct, ensure_ascii=False)[:200])
+
+    _asyncio_crm.run(_check_crm_ignores(_floor_bot, _now=_reset_now))
+    _state_after_old_crm = json.loads(_pen_state_floor_file.read_text(encoding="utf-8"))
+    check("penalty reset floor: старый CRM pending не штрафуется после reset",
+          _state_after_old_crm.get("managers") == {},
+          json.dumps(_state_after_old_crm, ensure_ascii=False)[:200])
+
+    _asyncio_crm.run(_process_batch_penalties({
+        "batch_id": "new-wa",
+        "created_at": _new_batch_dt.isoformat(),
+        "status": "too_late",
+        "managers": {
+            "Оксана": {
+                "status": "timeout",
+                "approved_names": [],
+                "rejected_names": [],
+                "postponed_names": [],
+                "agreed_names": [],
+                "agreed_details": {},
+                "paid_with_doc_names": [],
+                "paid_no_doc_names": [],
+                "second_chance_used": [],
+                "waiting_for_proof": None,
+                "waiting_for_agreed": None,
+                "responded_at": None,
+                "chat_id": 1446255940,
+            }
+        }
+    }, _floor_bot))
+    _state_after_new = json.loads(_pen_state_floor_file.read_text(encoding="utf-8"))
+    _oksana_ignores = _state_after_new.get("managers", {}).get("Оксана", {}).get("ignores", [])
+    check("penalty reset floor: новый WA batch после reset учитывается",
+          len(_oksana_ignores) == 1 and _oksana_ignores[0].get("batch_id") == "new-wa",
+          str(_oksana_ignores))
+finally:
+    _pen_mod._BATCHES_PATH = _orig_batches_path_pen2
+    _pen_mod._CRM_PENDING_PATH = _orig_crm_path_pen2
+    _pen_mod._STATE_PATH = _orig_state_path_pen2
+    shutil.rmtree(_pen_floor_tmp, ignore_errors=True)
+
 section("28a. payment_deferrals")
 
 from collector.payment_deferrals import (

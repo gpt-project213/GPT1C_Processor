@@ -4,7 +4,11 @@
 collector/client_dialog.py
 Управление диалогами с должниками через WhatsApp.
 
-Версия: 1.1.8 (2026-05-13)
+Версия: 1.1.10 (2026-05-15)
+
+v1.1.10 (2026-05-15): silent active dialogs with zero client replies stop
+  blocking the next daily cycle forever; after 24h the bot may resend and
+  supersede the stale outreach instead of hiding the client from preview.
 
 v1.1.9 (2026-05-14): escalated client dialogs now set a short
   wa_dialog_suppress cooldown by default, so promise/soft-positive/manual
@@ -81,6 +85,7 @@ TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 _TEST_MODE = os.getenv("COLLECTOR_TEST_MODE", "0").lower() in ("1", "true", "yes")
 COMPANY_NAME = os.getenv("COMPANY_NAME", "Минбаракат")
 ESCALATION_SUPPRESS_DAYS = int(os.getenv("COLLECTOR_ESCALATION_SUPPRESS_DAYS", "2"))
+SILENT_ACTIVE_RESEND_HOURS = float(os.getenv("COLLECTOR_SILENT_ACTIVE_RESEND_HOURS", "24"))
 
 _ROOT = Path(__file__).resolve().parent.parent
 _DIALOGS_PATH = _ROOT / "logs" / "collector_client_dialogs.json"
@@ -147,6 +152,48 @@ def _schedule_tg_deletion(chat_id: int, message_id: int, delay_hours: int = 24) 
 def _now_iso() -> str:
     """Текущее время в ISO формате (Asia/Almaty)."""
     return datetime.now(TZ).isoformat()
+
+
+def _parse_dialog_dt(value: Any) -> Optional[datetime]:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=TZ)
+    return parsed.astimezone(TZ)
+
+
+def dialog_blocks_new_outreach(dialog: Optional[Dict[str, Any]], *, now: Optional[datetime] = None) -> tuple[bool, str]:
+    """Return whether an existing client dialog should block a fresh WA send."""
+    if not isinstance(dialog, dict):
+        return False, ""
+
+    state = str(dialog.get("state") or "")
+    if state not in (*_DIALOG_ACTIVE_STATES, "escalated"):
+        return False, state
+
+    ref_now = now or datetime.now(TZ)
+    last_activity = _parse_dialog_dt(dialog.get("last_activity") or dialog.get("created"))
+    age_hours: Optional[float] = None
+    if last_activity is not None:
+        age_hours = max(0.0, (ref_now - last_activity).total_seconds() / 3600.0)
+
+    if state == "awaiting_payment_proof" and age_hours is not None and age_hours >= 72:
+        return False, "stale_payment_proof"
+
+    if (
+        state == "active"
+        and int(dialog.get("exchange_count", 0) or 0) == 0
+        and age_hours is not None
+        and age_hours >= SILENT_ACTIVE_RESEND_HOURS
+    ):
+        return False, "stale_silent_active"
+
+    return True, state
 
 
 def _load_client_dialogs() -> Dict[str, Any]:
@@ -710,14 +757,28 @@ async def start_client_dialog(
     # Не перезаписываем активный или эскалированный диалог —
     # клиент уже в работе, повторная отправка создаёт дублирование.
     existing = _get_client_dialog(phone_clean)
+    carried_silent_cycles = 0
     if existing:
-        existing_state = existing.get("state", "")
-        if existing_state in (*_DIALOG_ACTIVE_STATES, "escalated"):
+        should_block, reason = dialog_blocks_new_outreach(existing)
+        if should_block:
+            existing_state = existing.get("state", "")
             logger.info(
                 "[%s] диалог уже существует (state=%s, phone=%s) — пропуск",
                 client_name, existing_state, phone_clean,
             )
             return
+        if reason == "stale_silent_active":
+            carried_silent_cycles = int(existing.get("phone_silent_cycles", 0) or 0) + 1
+            logger.info(
+                "[%s] stale silent dialog no longer blocks resend (phone=%s, cycles=%d)",
+                client_name, phone_clean, carried_silent_cycles,
+            )
+            _audit(
+                "dialog_superseded_after_silence",
+                name=client_name,
+                phone_masked=_mask_phone(phone_clean),
+                silent_cycles=carried_silent_cycles,
+            )
 
     now = _now_iso()
     dialog: Dict[str, Any] = {
@@ -738,7 +799,7 @@ async def start_client_dialog(
         "state":             "active",
         "created":           now,
         "last_activity":     now,
-        "phone_silent_cycles": 0,
+        "phone_silent_cycles": carried_silent_cycles,
         "off_topic_count":   0,
         "awaiting_payment_proof": False,
     }
