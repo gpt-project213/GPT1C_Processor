@@ -4234,6 +4234,7 @@ from collector.approval_penalty import (
     check_recent_batches as _check_recent_batches,
     process_batch_penalties as _process_batch_penalties,
     build_reset_state as _build_penalty_reset_state,
+    reset_penalty_state as _reset_penalty_state,
 )
 
 _pen_floor_tmp = Path(tempfile.mkdtemp(prefix="penalty_floor_"))
@@ -4358,6 +4359,22 @@ try:
     check("penalty reset floor: новый WA batch после reset учитывается",
           len(_oksana_ignores) == 1 and _oksana_ignores[0].get("batch_id") == "new-wa",
           str(_oksana_ignores))
+
+    _pen_state_floor_file.write_text(
+        json.dumps({"month": "2026-05", "managers": {"Алена": {"ignores": [{"batch_id": "x"}]}}}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    _reset_result = _reset_penalty_state(_reset_now)
+    _state_after_helper_reset = json.loads(_pen_state_floor_file.read_text(encoding="utf-8"))
+    check("penalty reset helper: managers cleared",
+          _state_after_helper_reset.get("managers") == {},
+          json.dumps(_state_after_helper_reset, ensure_ascii=False)[:200])
+    check("penalty reset helper: wa_reset_floor set",
+          _state_after_helper_reset.get("wa_reset_floor") == _reset_now.isoformat(),
+          str(_state_after_helper_reset))
+    check("penalty reset helper: backup file created",
+          bool(_reset_result.get("backup_path")) and Path(str(_reset_result.get("backup_path"))).exists(),
+          str(_reset_result))
 finally:
     _pen_mod._BATCHES_PATH = _orig_batches_path_pen2
     _pen_mod._CRM_PENDING_PATH = _orig_crm_path_pen2

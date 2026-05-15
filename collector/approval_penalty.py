@@ -51,6 +51,7 @@ import calendar
 import json
 import logging
 import os
+import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -137,6 +138,26 @@ def build_reset_state(_now: Optional[datetime] = None) -> Dict[str, Any]:
         "managers": {},
         "wa_reset_floor": floor,
         "crm_reset_floor": floor,
+    }
+
+
+def reset_penalty_state(_now: Optional[datetime] = None) -> Dict[str, Any]:
+    """Safely reset approval penalties for the current month with backup."""
+    now = (_now or datetime.now(TZ)).astimezone(TZ)
+    state = build_reset_state(now)
+    backup_path = ""
+    if _STATE_PATH.exists():
+        backup = _STATE_PATH.with_name(
+            f"{_STATE_PATH.name}.bak-{now.strftime('%Y%m%d-%H%M%S')}-reset"
+        )
+        shutil.copy2(_STATE_PATH, backup)
+        backup_path = str(backup)
+    _save_state(state)
+    return {
+        "state": state,
+        "month": state["month"],
+        "backup_path": backup_path,
+        "state_path": str(_STATE_PATH),
     }
 
 

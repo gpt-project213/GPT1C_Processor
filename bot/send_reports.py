@@ -191,7 +191,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.78/14.05.2026"
+__VERSION__ = "v9.4.79/15.05.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
@@ -3415,6 +3415,7 @@ def _collector_batch_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton("📋 Саида backlog", callback_data="collector_saida_stats")],
         [InlineKeyboardButton("🔸 Частичные оплаты", callback_data="collector_partial_stats")],
         [InlineKeyboardButton("⏱ Отсрочки", callback_data="collector_deferral_stats")],
+        [InlineKeyboardButton("♻️ Сброс штрафов", callback_data="collector_penalty_reset_prompt")],
     ]
     # Батч ждёт утверждения Администратора
     pending = _get_pending_admin_batch()
@@ -3429,6 +3430,14 @@ def _collector_batch_keyboard() -> InlineKeyboardMarkup:
         rows.append([InlineKeyboardButton("📤 Готовый список", callback_data="collector_send_latest")])
     rows.append([InlineKeyboardButton("🔙 Главное меню", callback_data="back_main")])
     return InlineKeyboardMarkup(rows)
+
+
+def _collector_penalty_reset_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("⚠️ Подтвердить сброс", callback_data="collector_penalty_reset_confirm")],
+        [InlineKeyboardButton("↩️ К батчу", callback_data="collector_batch")],
+        [InlineKeyboardButton("🔙 Главное меню", callback_data="back_main")],
+    ])
 
 
 def _get_actual_collector_batch_mode() -> str:
@@ -8127,6 +8136,63 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             _menu_set(chat_id, msg.message_id)
         except Exception as _e:
             logger.error("collector_deferral_stats send error: %s", _e)
+        return
+
+    if data == "collector_penalty_reset_prompt":
+        if user_role != "admin":
+            await q.answer("⛔ Доступ запрещён")
+            return
+        await q.answer()
+        text = (
+            "♻️ <b>Сброс штрафов</b>\n\n"
+            "Будут обнулены штрафы текущего месяца в <code>approval_penalty_state.json</code>.\n"
+            "Одновременно будут выставлены <code>wa_reset_floor</code> и <code>crm_reset_floor</code>, "
+            "чтобы старые WA/CRM записи не ожили обратно из history.\n\n"
+            "Перед сбросом будет создан backup текущего state.\n\n"
+            "<b>Действие необратимо для текущего счётчика штрафов.</b>"
+        )
+        await hide_main_menu(context, chat_id)
+        try:
+            msg = await context.bot.send_message(
+                chat_id=chat_id,
+                text=text,
+                parse_mode="HTML",
+                reply_markup=_collector_penalty_reset_keyboard(),
+            )
+            _menu_set(chat_id, msg.message_id)
+        except Exception as _e:
+            logger.error("collector_penalty_reset_prompt send error: %s", _e)
+        return
+
+    if data == "collector_penalty_reset_confirm":
+        if user_role != "admin":
+            await q.answer("⛔ Доступ запрещён")
+            return
+        await q.answer("Сбрасываю штрафы...")
+        try:
+            from collector.approval_penalty import reset_penalty_state
+            result = reset_penalty_state()
+            state = result.get("state") or {}
+            backup_path = str(result.get("backup_path") or "")
+            backup_label = _html.escape(Path(backup_path).name) if backup_path else "не требовался"
+            text = (
+                "✅ <b>Штрафы сброшены</b>\n\n"
+                f"Месяц: <code>{_html.escape(str(result.get('month') or state.get('month') or '—'))}</code>\n"
+                f"WA floor: <code>{_html.escape(str(state.get('wa_reset_floor') or '—'))}</code>\n"
+                f"CRM floor: <code>{_html.escape(str(state.get('crm_reset_floor') or '—'))}</code>\n"
+                f"Backup: <code>{backup_label}</code>"
+            )
+            await hide_main_menu(context, chat_id)
+            msg = await context.bot.send_message(
+                chat_id=chat_id,
+                text=text,
+                parse_mode="HTML",
+                reply_markup=_collector_batch_keyboard(),
+            )
+            _menu_set(chat_id, msg.message_id)
+        except Exception as _e:
+            logger.error("collector_penalty_reset_confirm error: %s", _e, exc_info=True)
+            await _send_auto(context, chat_id, "⚠️ Не удалось сбросить штрафы. Проверьте логи.")
         return
 
     # 🆕 v9.4.9: Аналитика

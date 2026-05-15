@@ -3237,3 +3237,20 @@ approval_penalty.py v1.0.2 (Ð½Ð¾Ð²Ñ‹Ð¹ Ð¼Ð¾Ð´ÑƒÐ»ÑŒ)
   - `python -m py_compile collector\collections_engine.py` OK
   - `python -X utf8 tests\test_collector.py` -> `640/640`
 - Operational note: runtime restart is required for the new daily-resend policy to take effect in the live bot.
+
+## 2026-05-15 12:45 — admin button for penalty reset
+- Added admin-only collector UI action `?? Ñáðîñ øòðàôîâ` in `bot/send_reports.py`.
+- Flow:
+  - `collector_penalty_reset_prompt` shows warning/confirm step.
+  - `collector_penalty_reset_confirm` calls runtime helper and reports month + WA/CRM floors + backup file name.
+- `collector/approval_penalty.py`:
+  - added `reset_penalty_state()` helper;
+  - creates backup of `logs/approval_penalty_state.json` before reset;
+  - writes `build_reset_state()` result with `wa_reset_floor` / `crm_reset_floor`.
+- Tests:
+  - `tests/test_collector.py` now verifies helper reset clears managers, sets floor, and creates backup.
+- Verification:
+  - `python -m py_compile bot\send_reports.py` OK
+  - `python -m py_compile collector\approval_penalty.py` OK
+  - `python -X utf8 tests\test_collector.py` -> `643/643`
+- Note: no commit yet in this step.
