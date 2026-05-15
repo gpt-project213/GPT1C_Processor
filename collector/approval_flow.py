@@ -2450,6 +2450,71 @@ def save_agreed_promise(
     return deadline
 
 
+def record_client_promise(
+    client_name: str,
+    manager_name: str,
+    promise_date: str,
+    details: str = "",
+) -> bool:
+    """Регистрирует обещание клиента из WA-диалога в wa_agreed_promises.json.
+
+    F-B1: до этого фикса promise_date жил только в collector_client_dialogs.json
+    и был невидим для check_broken_agreed_deadlines() (10:30 daily) —
+    handler смотрит исключительно wa_agreed_promises.json.
+
+    В отличие от save_agreed_promise (manager-promise через batch), эта функция:
+    - принимает готовую дату (ISO string YYYY-MM-DD), не парсит из текста
+    - проставляет source="client_dialog" для отличия в forensics
+    - НЕ перезаписывает активный manager-promise (manager-договорённость главнее)
+    - обновляет существующий client-promise при уточнении
+
+    Возвращает True если запись создана/обновлена, False если конфликт
+    с manager-promise или невалидная дата.
+    """
+    if not client_name or not manager_name or not promise_date:
+        return False
+    try:
+        deadline = date.fromisoformat(promise_date)
+    except (TypeError, ValueError):
+        logger.warning(
+            "record_client_promise: invalid promise_date=%r for %s",
+            promise_date, client_name,
+        )
+        return False
+
+    promises = _load_promises()
+    existing = promises.get(client_name)
+    now_iso = datetime.now(tz=TZ).isoformat()
+
+    if existing:
+        existing_status = str(existing.get("status") or "")
+        existing_source = str(existing.get("source") or "")
+        # Активный manager-promise имеет приоритет над client-обещанием в WA
+        if existing_status in ("active", "accepted") and existing_source != "client_dialog":
+            logger.info(
+                "record_client_promise: skip — manager-promise active for %s (status=%s)",
+                client_name, existing_status,
+            )
+            return False
+
+    promises[client_name] = {
+        "manager":    manager_name,
+        "batch_id":   "client_dialog",
+        "source":     "client_dialog",
+        "details":    details or f"WA dialog: обещал оплатить до {promise_date}",
+        "deadline":   deadline.isoformat(),
+        "set_at":     (existing or {}).get("set_at") or now_iso,
+        "status":     "active",
+        "updated_at": now_iso,
+    }
+    _save_promises(promises)
+    logger.info(
+        "record_client_promise: %s → deadline=%s manager=%s",
+        client_name, deadline, manager_name,
+    )
+    return True
+
+
 def get_agreed_promise_stats() -> Dict[str, Any]:
     """Агрегирует статистику обещаний менеджеров из wa_agreed_promises.json."""
     promises = _load_promises()

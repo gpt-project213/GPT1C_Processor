@@ -4,7 +4,13 @@
 collector/client_dialog.py
 Управление диалогами с должниками через WhatsApp.
 
-Версия: 1.1.10 (2026-05-15)
+Версия: 1.1.11 (2026-05-15)
+
+v1.1.11 (2026-05-15): client-promise из WA-диалога теперь синхронизируется
+  с wa_agreed_promises.json через record_client_promise(). Раньше handler
+  10:30 (check_broken_agreed_deadlines) видел только manager-promise — клиенты
+  типа Гриль Косши / МАСТЕР-КОНДИТЕР с overdue dialog-promise оставались
+  невидимыми. F-B1.
 
 v1.1.10 (2026-05-15): silent active dialogs with zero client replies stop
   blocking the next daily cycle forever; after 24h the bot may resend and
@@ -1162,6 +1168,19 @@ async def handle_incoming(phone: str, text: str, attachment: Optional[Dict[str, 
         dialog["payment_schedule"] = schedule_code
         if promise_date:
             dialog["promise_date"] = promise_date
+            # F-B1: client-promise → wa_agreed_promises.json чтобы handler 10:30 подхватил.
+            # _TEST_MODE guard защищает от контаминации боевого файла из юнит-тестов.
+            if not _TEST_MODE:
+                try:
+                    from collector.approval_flow import record_client_promise as _record_promise
+                    _record_promise(
+                        client_name=dialog.get("client_name", "") or "",
+                        manager_name=dialog.get("manager_name", "") or "",
+                        promise_date=str(promise_date),
+                        details=f"WA dialog: график {schedule_text}, первый платёж до {promise_date}",
+                    )
+                except Exception as _exc:
+                    logger.warning("record_client_promise (schedule) failed: %s", _exc)
         if promise_amount:
             dialog["promise_amount"] = promise_amount
         first_payment = f" Первый платёж ждём до {_fmt_date_display(promise_date)}." if promise_date else ""
@@ -1223,6 +1242,19 @@ async def handle_incoming(phone: str, text: str, attachment: Optional[Dict[str, 
         # Сохраняем дату обещания в диалог
         if promise_date:
             dialog["promise_date"] = promise_date
+            # F-B1: client-promise → wa_agreed_promises.json чтобы handler 10:30 подхватил.
+            # _TEST_MODE guard защищает от контаминации боевого файла из юнит-тестов.
+            if not _TEST_MODE:
+                try:
+                    from collector.approval_flow import record_client_promise as _record_promise
+                    _record_promise(
+                        client_name=dialog.get("client_name", "") or "",
+                        manager_name=dialog.get("manager_name", "") or "",
+                        promise_date=str(promise_date),
+                        details=f"WA dialog: клиент обещал оплатить до {promise_date}",
+                    )
+                except Exception as _exc:
+                    logger.warning("record_client_promise (promise) failed: %s", _exc)
         if promise_amount:
             dialog["promise_amount"] = promise_amount
         date_str = f" до {promise_date}" if promise_date else ""
