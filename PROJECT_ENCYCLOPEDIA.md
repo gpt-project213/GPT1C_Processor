@@ -2,9 +2,9 @@
 
 Актуальная единая база знаний по `GPT1C_Processor_analitica`.
 
-Статус: актуально на `2026-05-15` (вечер)  
+Статус: актуально на `2026-05-16`  
 Текущая базовая ветка: `master`  
-Последний коммит: `89600e5`
+Последний коммит: `f2ab785`
 
 ---
 
@@ -301,6 +301,25 @@ State-файлы:
 - менеджер и Саида получают уведомление
 - связанное shipment-control решение закрывается без второго ручного шага
 
+#### Silence-отчёт — бизнес-правило и закрытые баги (2026-05-16)
+
+**Бизнес-правило:** Молчание = молчание В ОПЛАТЕ. Только `confirmed_full` от Саиды снимает клиента из silence-отчёта. Частичная оплата, диалог, обещание — не снимают.
+
+Silence-отчёт живёт в `bot/silence_alerts.py`. Три P0-бага закрыты в коммите `f2ab785`.
+
+| Баг | Файл | Суть фикса |
+|---|---|---|
+| BUG-2 | `bot/debt_stop_control.py` | token-based callback `sp0001` вместо `name[:26]`. Новые: `_saida_payment_token`, `_resolve_saida_payment_token`, `_kb_saida_stop_item`. `send_saida_full_stoplist` переведён на токены. |
+| BUG-saida | `bot/silence_alerts.py` | `apply_payment_holds` теперь использует собственный `_load_recent_full_payments()` (TTL 7 дней). payment_hold=True только для `confirmed_full`. Partial/pending/rejected не снимают молчание. |
+| BUG-5 | `bot/silence_alerts.py` | Новый файл `logs/debt_age_history.json` с persistence. `apply_residual_debt_age` берёт `min(saved, current)` — reset окна Саиды 15-го числа больше не обнуляет историю. TEST_MODE guard на запись. |
+
+Косметика P2/P3 (одновременно закрыта):
+- `"остаток N дн"` → `"долг N дн"`
+- `"МОЛЧАНИЕ/ПРОСРОЧКА"` → `"Долг N–M дн"`
+- `"ВСЕГО МОЛЧАЩИХ"` → `"ВСЕГО ДОЛГА"`
+
+Тесты: +22 регрессии (9 BUG-2 в `test_collector.py`; 7 SilenceFullPayment + 6 DebtAgeHistory в hermetic).
+
 ### 7.4. Саида — текущее состояние процесса
 
 У Саиды есть отдельный backlog-контур:
@@ -410,18 +429,20 @@ Audit-документы:
 
 ## 11. Тестовая матрица
 
-Актуальный рабочий набор к `2026-05-15`:
+Актуальный рабочий набор к `2026-05-16`:
 
 | Тест | Результат | Примечание |
 |---|---|---|
 | `tests/test_project.py` | `110/110` | |
-| `tests/test_collector.py` | `641/643` | +13 silent dialog + penalty reset; 2 pre-existing fails (P4 T10/T10b — prod state Еркебулан) |
-| `tests/test_collector_regression_hermetic.py` | `23/24` | +8 ClientPromiseRecord (F-B1 + TEST_MODE guard), +3 TimeoutLabel; 1 pre-existing fail (legacy_tail prod state) |
-| `tests/test_crm_regression.py` | `36/36` | +14 Stabilization + lock contention + 6 PrivatePersonPlaceholder (2026-05-15) |
+| `tests/test_collector.py` | `652/652` | +9 Saida payment token (BUG-2); T10/T10b исправлены mock-ом |
+| `tests/test_collector_regression_hermetic.py` | `39/39` | +13 SilenceFullPayment (7) + DebtAgeHistory (6); legacy_tail исправлен |
+| `tests/test_crm_regression.py` | `44/44` | +8 CRM fixes (2026-05-15–16) |
 | `tests/test_parsers.py` | `69/69` | |
 | `tests/test_audit_reports_20260414.py` | `8/8` | |
 | `tests/test_phase2_safe_send.py` | green | |
 | `tests/test_log_monitor.py` | `9/9` | |
+
+Все тесты зелёные. Prod state неизменён (SHA-256 верификация 10/10).
 
 ---
 
@@ -455,6 +476,10 @@ Audit-документы:
 - **"Частное лицо" placeholder filter** (Block A, 2026-05-15 вечер): keywords в `_VENDOR_NAME_KEYWORDS`, закрывает claim broadcast по placeholder из 1С
 - **F-B1 client-promise sync**: `record_client_promise()` + `_sync_promise_to_agreed()` helper в `client_dialog.py` v1.1.11 — dialog-promise теперь попадает в `wa_agreed_promises.json` и handler 10:30 его подхватывает (2026-05-15 вечер)
 - **`_TEST_MODE` guard для promise-sync**: защита боевого `wa_agreed_promises.json` от контаминации юнит-тестами (2026-05-15)
+- **BUG-2 — token-based Saida callback**: `_saida_payment_token` / `_resolve_saida_payment_token`, `_kb_saida_stop_item(full_name, state)` — обрезка `name[:26]` удалена, `send_saida_full_stoplist` переведён на токены `sp0001` (2026-05-16)
+- **BUG-saida — полная оплата снимает молчание**: `apply_payment_holds` использует `_load_recent_full_payments()` (TTL 7 дней), payment_hold=True только для `confirmed_full` — partial/pending не снимают (2026-05-16)
+- **BUG-5 — persistence debt_age_history**: `logs/debt_age_history.json`, `min(saved, current)` для oldest_unpaid_date, TEST_MODE guard — reset окна Саиды 15-го числа больше не обнуляет историю долгов (2026-05-16)
+- **Косметика silence-отчёта P2/P3**: формулировки "долг N дн", "Долг N–M дн", "ВСЕГО ДОЛГА" (2026-05-16)
 
 ### 12.2. Закрыто частично / не считать идеальным
 
@@ -474,11 +499,12 @@ Audit-документы:
 - качество менеджерских обещаний можно дальше усиливать политиками и репортингом
 
 ### CRM
-- ambiguous multi-manager ownership: ??????????? ????????, ?? ?? ?????????
-- ??? ??????????????? ????????? ?????????: clients.json / debtors_contacts.json / batch snapshot
+- ambiguous multi-manager ownership: значительно улучшено (signature, deterministic keep), но не исчерпано
+- три несогласованных хранилища: `clients.json` / `debtors_contacts.json` / batch snapshot
 
 ### Collector
-- ??????????? open-item'?? ?? runtime-?????? ???: stale silent resend, penalty reset floors, timeout labels ? client-promise sync ??? ???????
+- `debt_age_history.json` bootstrap из архива — опционально; без него бот накопит историю за 1-2 месяца сам
+- `COLLECTOR_SILENT_ACTIVE_RESEND_HOURS` (default 24h) — проверить порог в бою после рестарта
 
 ### Architecture
 - `txt_to_html` duplication
@@ -795,3 +821,23 @@ Audit-документы:
   - не падает из-за реального боевого клиента с активным suppress.
 - Проверено:
   - `python -X utf8 tests/test_collector.py` -> `652/652`
+
+## 2026-05-16 — Silence Audit Closed
+
+- Silence-контур по итогам 2026-05-16 закрыт полностью:
+  - `39bb8f0` — закрыты 3 реальные silence-ошибки:
+    - `BUG-2`: identity Саиды больше не завязана на `name[:26]`, используется короткий token + state;
+    - `BUG-saida`: только `confirmed_full` у Саиды на 7 дней убирает клиента из silence-отчёта; partial не убирает;
+    - `BUG-5`: возраст старого долга больше не омолаживается после переключения окна отчёта; введён `logs/debt_age_history.json`.
+  - `fc4bab5` — добит последний legacy `name[:26]` в full stoplist path Саиды.
+  - `30bbbf9` — тестовая гигиена: `P4 T10/T10b` изолированы от live `wa_dialog_suppress` через явный patch.
+  - `f2ab785` — закрыта косметика формулировок:
+    - `остаток 14 дн` -> `долг 14 дн`
+    - `МОЛЧАНИЕ/ПРОСРОЧКА/...` -> единая шкала `Долг 7-9 / 10-14 / 15-29 / 30+ дн`
+    - `ВСЕГО МОЛЧАЩИХ` -> `ВСЕГО ДОЛГА`
+- Проверено на финальном пакете:
+  - `python -X utf8 tests/test_collector.py` -> `652/652`
+  - `python -X utf8 tests/test_collector_regression_hermetic.py` -> `39/39`
+  - `python -X utf8 tests/test_crm_regression.py` -> `44/44`
+  - `python -X utf8 tests/test_project.py` -> `110/110`
+  - `python -X utf8 tests/test_parsers.py` -> `69/69`

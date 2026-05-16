@@ -5,6 +5,65 @@
 
 ---
 
+## HANDOFF 2026-05-16 (финал) — все silence-баги закрыты, тесты 100% зелёные
+
+### Что сделано (master, коммиты `fc4bab5`, `30bbbf9`, `f2ab785`)
+
+Дополнения к предыдущему handoff (`39bb8f0`):
+
+#### BUG-2 доделан — `send_saida_full_stoplist` переведён на токены (`fc4bab5`)
+
+`bot/debt_stop_control.py:2825` — последняя legacy-точка с `name[:26]`:
+- добавлен `state = load_state()` перед циклом
+- строки callback заменены на `_kb_saida_stop_item(name, state)` (токены `sp0001..`)
+- добавлен `save_state(state)` после цикла
+- BUG-2 закрыт полностью по всем 3 точкам `dstop_paid|`
+
+#### Изоляция тестов от prod state (`fc4bab5`, `30bbbf9`)
+
+Тесты `P4 T10/T10b` и `legacy_tail` читали prod `collector_state.json` — клиент "Е Еркебулан"
+мог иметь активный `wa_dialog_suppress` → тест возвращал "skip" вместо "client_approval".
+
+Фиксы:
+- `test_collector.py` P4 T10/T10b: клиент переименован в `TEST_P4T10 хвост_с_частичной_оплатой_клиент`
+- hermetic legacy_tail: клиент переименован в `TEST_legacy_tail_partial_клиент`
+- `test_collector.py` T10/T10b: добавлен `patch("collector.collections_db.get_wa_dialog_suppress", return_value=None)`
+
+#### BUG-3 + BUG-4 (P2/P3) — нейтральные формулировки silence-отчёта (`f2ab785`)
+
+`bot/silence_alerts.py`:
+- `_age_text()`: "остаток N дн" → "долг N дн (с дата)"
+- "🔴 КРИТИЧНО (30+ дней)" → "🔴 Долг 30+ дн (критично)"
+- "🟠 ТРЕВОГА (15-29 дней)" → "🟠 Долг 15-29 дн (тревога)"
+- "🟡 МОЛЧАНИЕ (10-14 дней)" → "🟡 Долг 10-14 дн"
+- "⚡ ПРОСРОЧКА (7-9 дней)" → "⚡ Долг 7-9 дн"
+- "Итого молчание/просрочка" → "Итого 10-14 дн / 7-9 дн"
+- "💰 ВСЕГО МОЛЧАЩИХ" → "💰 ВСЕГО ДОЛГА"
+- "👥 Всего молчащих клиентов" → "👥 Всего клиентов в отчёте"
+
+### Финальные результаты тестов (HEAD `f2ab785`)
+
+| Сьют | Результат |
+|---|---|
+| `test_collector.py` | **652/652** |
+| `test_collector_regression_hermetic.py` | **39/39** |
+| `test_crm_regression.py` | **44/44** |
+| `test_project.py` | **110/110** |
+| `test_parsers.py` | 69/69 |
+
+Prod state intact: 10/10 файлов SHA-256 unchanged.
+
+### Что остаётся открытым
+
+- Bootstrap `debt_age_history.json` из архива (опционально, не блокирует)
+- `COLLECTOR_SILENT_ACTIVE_RESEND_HOURS` (default 24h) — проверить порог в бою
+
+### Push
+
+Все коммиты от `39bb8f0` до `f2ab785` запушены в `origin/master`.
+
+---
+
 ## HANDOFF 2026-05-16 — silence-отчёт: 3 настоящих бага закрыты по бизнес-правилу
 
 ### Что сделано (master, коммит `39bb8f0`, запушен)
