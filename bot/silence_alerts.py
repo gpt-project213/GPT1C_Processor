@@ -495,10 +495,13 @@ class SilenceAlert:
 
     @classmethod
     def _age_text(cls, client: Dict) -> str:
-        text = f"остаток {cls._age_days(client)} дн"
+        """BUG-3 (2026-05-16): 'остаток N дн' было двусмысленным
+        (читалось как 'осталось N дней'). Заменено на 'долг N дн' —
+        однозначно про возраст долга."""
+        text = f"долг {cls._age_days(client)} дн"
         oldest = client.get("oldest_unpaid_date")
         if oldest:
-            text += f", с {oldest}"
+            text += f" (с {oldest})"
         return text
     
     def categorize_by_silence(self, clients_data: List[Dict],
@@ -655,22 +658,22 @@ class SilenceAlert:
             return total
 
         if categorized.get('critical'):
-            debt = _append_block("🔴 КРИТИЧНО (30+ дней):", categorized['critical'])
+            debt = _append_block("🔴 Долг 30+ дн (критично):", categorized['critical'])
             msg_lines.append(f"  💰 Итого: {self.format_amount(debt)} ₸")
             msg_lines.append("")
 
         if categorized.get('alarm'):
-            debt = _append_block("🟠 ТРЕВОГА (15-29 дней):", categorized['alarm'])
+            debt = _append_block("🟠 Долг 15-29 дн (тревога):", categorized['alarm'])
             msg_lines.append(f"  💰 Итого: {self.format_amount(debt)} ₸")
             msg_lines.append("")
 
         if categorized.get('silence'):
-            debt = _append_block("🟡 МОЛЧАНИЕ (10-14 дней):", categorized['silence'])
+            debt = _append_block("🟡 Долг 10-14 дн:", categorized['silence'])
             msg_lines.append(f"  💰 Итого: {self.format_amount(debt)} ₸")
             msg_lines.append("")
 
         if categorized.get('overdue'):
-            debt = _append_block("⚡ ПРОСРОЧКА (7-9 дней):", categorized['overdue'])
+            debt = _append_block("⚡ Долг 7-9 дн:", categorized['overdue'])
             msg_lines.append(f"  💰 Итого: {self.format_amount(debt)} ₸")
             msg_lines.append("")
 
@@ -824,26 +827,26 @@ class SilenceAlert:
             msg_lines.append("━" * 50)
 
             if categorized.get('critical'):
-                d = _append_std_block("🔴 КРИТИЧНО (30+ дней):", categorized['critical'], 20)
+                d = _append_std_block("🔴 Долг 30+ дн (критично):", categorized['critical'], 20)
                 msg_lines.append(f"  💰 Итого критично: {self.format_amount(d)} ₸")
                 msg_lines.append("")
                 total_overall_debt += d
 
             if categorized.get('alarm'):
-                d = _append_std_block("🟠 ТРЕВОГА (15-29 дней):", categorized['alarm'])
+                d = _append_std_block("🟠 Долг 15-29 дн (тревога):", categorized['alarm'])
                 msg_lines.append(f"  💰 Итого тревога: {self.format_amount(d)} ₸")
                 msg_lines.append("")
                 total_overall_debt += d
 
             if categorized.get('silence'):
-                d = _append_std_block("🟡 МОЛЧАНИЕ (10-14 дней):", categorized['silence'])
-                msg_lines.append(f"  💰 Итого молчание: {self.format_amount(d)} ₸")
+                d = _append_std_block("🟡 Долг 10-14 дн:", categorized['silence'])
+                msg_lines.append(f"  💰 Итого 10-14 дн: {self.format_amount(d)} ₸")
                 msg_lines.append("")
                 total_overall_debt += d
 
             if categorized.get('overdue'):
-                d = _append_std_block("⚡ ПРОСРОЧКА (7-9 дней):", categorized['overdue'])
-                msg_lines.append(f"  💰 Итого просрочка: {self.format_amount(d)} ₸")
+                d = _append_std_block("⚡ Долг 7-9 дн:", categorized['overdue'])
+                msg_lines.append(f"  💰 Итого 7-9 дн: {self.format_amount(d)} ₸")
                 msg_lines.append("")
                 total_overall_debt += d
 
@@ -891,12 +894,12 @@ class SilenceAlert:
             msg_lines.append("")
 
         if managers_with_issues == 0:
-            return "✅ У всех менеджеров нет критичных дней молчания!"
+            return "✅ У всех менеджеров нет долгов 7+ дней!"
 
         msg_lines.append("━" * 50)
-        msg_lines.append(f"💰 ВСЕГО МОЛЧАЩИХ: {self.format_amount(total_overall_debt)} ₸")
+        msg_lines.append(f"💰 ВСЕГО ДОЛГА: {self.format_amount(total_overall_debt)} ₸")
         msg_lines.append(f"📊 Менеджеров с проблемами: {managers_with_issues}")
-        msg_lines.append(f"👥 Всего молчащих клиентов: {total_overall_clients}")
+        msg_lines.append(f"👥 Всего клиентов в отчёте: {total_overall_clients}")
 
         return "\n".join(msg_lines)
     
