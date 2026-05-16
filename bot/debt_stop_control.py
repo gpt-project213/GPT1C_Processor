@@ -2765,6 +2765,7 @@ async def send_saida_full_stoplist_with_help(bot) -> None:
 async def send_saida_full_stoplist(bot) -> None:
     """Полный актуальный стоп-лист для Саиды (по нажатию кнопки)."""
     registry  = load_registry()
+    state     = load_state()  # BUG-2 finish: нужен для token-based callback
     today_str = datetime.now(TZ).strftime("%d.%m.%Y")
 
     stop_statuses = (
@@ -2821,9 +2822,8 @@ async def send_saida_full_stoplist(bot) -> None:
             f"Молчит {days}\u202fдн. · {note} [{mgr}]\n"
             f"<i>Не отгружать без разрешения руководителя</i>"
         )
-        kb = InlineKeyboardMarkup([[
-            InlineKeyboardButton("💰 Оплата получена", callback_data=f"dstop_paid|{name[:26]}")
-        ]])
+        # BUG-2 finish: token-based callback вместо name[:26]
+        kb = _kb_saida_stop_item(name, state)
         try:
             item_msg = await bot.send_message(
                 chat_id=SAIDA_CHAT_ID, text=text, parse_mode="HTML", reply_markup=kb
@@ -2831,3 +2831,6 @@ async def send_saida_full_stoplist(bot) -> None:
             _schedule_delete(SAIDA_CHAT_ID, item_msg.message_id, item_msg.date.timestamp())
         except Exception as e:
             LOG.warning("Ошибка позиции '%s' полного стоп-листа: %s", name, e)
+
+    # BUG-2 finish: сохраняем накопленные tokens в state (resolveим их в callback)
+    save_state(state)

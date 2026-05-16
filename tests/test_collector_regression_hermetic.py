@@ -358,9 +358,11 @@ class LegacyTailClassificationHermeticTests(unittest.TestCase):
         self.assertNotIn("отгруз", decision.get("reason", "").lower())
 
     def test_stopped_legacy_tail_with_partial_payments_uses_partial_tail_msg_type(self):
+        # 2026-05-16: имя клиента изолировано от prod state, чтобы тест не падал
+        # из-за wa_dialog_suppress у "Е Еркебулан" в боевом collector_state.json.
         decision = collections_engine._collector_candidate_decision(
             {
-                "name": "Е Еркебулан",
+                "name": "TEST_legacy_tail_partial_клиент",
                 "amount": 739409.67,
                 "days": 28,
                 "opening": 767268.67,

@@ -2356,8 +2356,12 @@ check("P4 T9b: stopped + старый хвост без движения -> lega
       _d9.get("msg_type") == "legacy_tail_reminder", str(_d9))
 
 # T10: stopped + старый хвост с частичной оплатой -> partial_tail_reminder
+# 2026-05-16: имя теста изолировано от prod state (раньше использовалось "Е Еркебулан",
+# у которого в боевом collector_state.json может быть активный wa_dialog_suppress —
+# тест читает live state и падал из-за этого, не связано с тестируемой логикой).
 _d10 = _collector_candidate_decision(
-    {"name": "Е Еркебулан", "amount": 739409.67, "days": 28, "opening": 767268.67, "debit": 0.0, "credit": 27859.0},
+    {"name": "TEST_P4T10 хвост_с_частичной_оплатой_клиент", "amount": 739409.67, "days": 28,
+     "opening": 767268.67, "debit": 0.0, "credit": 27859.0},
     _p4_contact,
     {"status": "stopped"},
 )
