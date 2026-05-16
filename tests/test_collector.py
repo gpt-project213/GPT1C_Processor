@@ -3452,6 +3452,64 @@ with _DstopIsolation(_dstop_tmpdir) as _iso:
           str(_cand_names10))
 # _DstopIsolation.__exit__ восстанавливает все пути автоматически
 
+section("19b. Saida payment token (BUG-2 fix)")
+
+# BUG-2: до фикса callback_data был `dstop_paid|{name[:26]}` — обрезка ломала
+# идентификацию клиентов с длинными именами в _handle_saida_payment / hold lookup.
+# После фикса callback несёт короткий token (sp0001), полное имя в state.
+
+_long_names = [
+    "М Гриль Косши ул Республика 18 б тел 87751827070",
+    "О ТОО Petro Retail (Автогаз) ул Мангилик Ел 89 В",
+    "О ТОО Чайхана Navat ул Достык 13 тел 87014850191",
+]
+
+with tempfile.TemporaryDirectory() as _td_tok:
+    with _DstopIsolation(Path(_td_tok)):
+        _state_tok = {"date": datetime.now(_dstop.TZ).strftime("%Y-%m-%d"),
+                      "candidates": {}, "next_id": 1, "saida_sent": False}
+        # Tokens генерируются последовательно
+        _t1 = _dstop._saida_payment_token(_state_tok, _long_names[0])
+        _t2 = _dstop._saida_payment_token(_state_tok, _long_names[1])
+        _t3 = _dstop._saida_payment_token(_state_tok, _long_names[2])
+        check("BUG-2 T1: token формат sp{NNNN}",
+              _t1.startswith("sp") and _t1[2:].isdigit() and len(_t1) <= 8, _t1)
+        check("BUG-2 T2: уникальные tokens для разных клиентов",
+              len({_t1, _t2, _t3}) == 3, f"{_t1},{_t2},{_t3}")
+        check("BUG-2 T3: callback_data влезает в 64 байта",
+              all(len(f"dstop_paid|{t}".encode()) <= 64 for t in (_t1, _t2, _t3)),
+              "ok")
+
+        # Resolve обратно
+        check("BUG-2 T4: resolve token → полное имя (без обрезки)",
+              _dstop._resolve_saida_payment_token(_state_tok, _t1) == _long_names[0],
+              _dstop._resolve_saida_payment_token(_state_tok, _t1))
+        check("BUG-2 T5: resolve сохраняет полные 48+ символов",
+              len(_dstop._resolve_saida_payment_token(_state_tok, _t2)) > 40, "ok")
+
+        # Дедупликация: повторный вызов для того же клиента → тот же token
+        _t1_again = _dstop._saida_payment_token(_state_tok, _long_names[0])
+        check("BUG-2 T6: дедупликация — один клиент = один token",
+              _t1 == _t1_again, f"{_t1} vs {_t1_again}")
+
+        # Legacy fallback: если в callback пришло полное/обрезанное имя — вернётся как есть
+        _legacy = _dstop._resolve_saida_payment_token(_state_tok, "Е Старый клиент без token")
+        check("BUG-2 T7: legacy fallback — если на вход не token, возврат as-is",
+              _legacy == "Е Старый клиент без token", _legacy)
+
+        # _kb_saida_stop_item генерирует token и кладёт в state
+        _state_kb = {"date": datetime.now(_dstop.TZ).strftime("%Y-%m-%d"),
+                     "candidates": {}, "next_id": 1, "saida_sent": False}
+        _kb = _dstop._kb_saida_stop_item("М Очень Длинное Имя ул Республика 18 б тел 87751827070", _state_kb)
+        _kb_data = _kb.inline_keyboard[0][0].callback_data
+        check("BUG-2 T8: _kb_saida_stop_item использует token-формат",
+              _kb_data.startswith("dstop_paid|sp") and len(_kb_data.encode()) <= 64,
+              _kb_data)
+        check("BUG-2 T9: token сохранён в state.saida_payment_tokens",
+              "saida_payment_tokens" in _state_kb
+              and any(v.startswith("М Очень Длинное") for v in _state_kb["saida_payment_tokens"].values()),
+              str(_state_kb.get("saida_payment_tokens")))
+
 section("20. Shipment control (условная отгрузка)")
 
 import tempfile as _tmpmod

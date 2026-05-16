@@ -675,6 +675,250 @@ class ClientPromiseRecordHermeticTests(unittest.TestCase):
         self.assertEqual(data["Тестклиент"]["source"], "client_dialog")
 
 
+class SilenceFullPaymentHermeticTests(unittest.TestCase):
+    """Regressions для BUG-saida + BUG-1a (2026-05-16):
+
+    По бизнес-правилу пользователя: молчание = молчание В ОПЛАТЕ.
+    Только confirmed_full Саидой снимает клиента из silence-отчёта.
+    Частичная (confirmed_partial), pending_saida, rejected — НЕ снимают.
+    TTL подтверждения: 7 дней (достаточно для разноски в 1С).
+    """
+
+    def setUp(self):
+        # Изолируем PAYMENT_HOLD_PATH в tempdir чтобы не трогать боевой файл
+        import collector.payment_hold as ph
+        self._tmp = tempfile.TemporaryDirectory()
+        self._hold_path = Path(self._tmp.name) / "saida_payment_holds.json"
+        self._patcher = patch.object(ph, "PAYMENT_HOLD_PATH", self._hold_path)
+        self._patcher.start()
+        from bot.silence_alerts import SilenceAlert
+        self._alerter = SilenceAlert()
+
+    def tearDown(self):
+        self._patcher.stop()
+        self._tmp.cleanup()
+
+    def _write_holds(self, holds: dict):
+        self._hold_path.parent.mkdir(parents=True, exist_ok=True)
+        self._hold_path.write_text(json.dumps(holds, ensure_ascii=False), encoding="utf-8")
+
+    def _now_iso(self, delta_days: float = 0):
+        from datetime import datetime as _dt, timedelta as _td
+        from zoneinfo import ZoneInfo as _ZI
+        tz = _ZI("Asia/Almaty")
+        return (_dt.now(tz) - _td(days=delta_days)).isoformat()
+
+    def test_full_payment_within_grace_marks_payment_hold(self):
+        self._write_holds({
+            "tok1": {
+                "client": "М Тестклиент",
+                "status": "confirmed_full",
+                "saida_confirmed_at": self._now_iso(delta_days=1),
+            }
+        })
+        data = [{"client": "М Тестклиент", "debt": 100000, "silence_days": 14}]
+        result = self._alerter.apply_payment_holds(data)
+        self.assertTrue(result[0].get("payment_hold"))
+        self.assertEqual(result[0].get("payment_hold_status"), "confirmed_full")
+
+    def test_partial_payment_does_NOT_mark_payment_hold(self):
+        # БИЗНЕС-ПРАВИЛО: только полная оплата снимает молчание.
+        self._write_holds({
+            "tok1": {
+                "client": "М Тестклиент",
+                "status": "confirmed_partial",
+                "saida_confirmed_at": self._now_iso(delta_days=1),
+            }
+        })
+        data = [{"client": "М Тестклиент", "debt": 100000, "silence_days": 14}]
+        result = self._alerter.apply_payment_holds(data)
+        self.assertFalse(result[0].get("payment_hold"))
+
+    def test_pending_saida_does_NOT_mark_payment_hold(self):
+        # Пока Саида не подтвердила — клиент в молчании.
+        self._write_holds({
+            "tok1": {
+                "client": "М Тестклиент",
+                "status": "pending_saida",
+                "created_at": self._now_iso(delta_days=1),
+            }
+        })
+        data = [{"client": "М Тестклиент", "debt": 100000, "silence_days": 14}]
+        result = self._alerter.apply_payment_holds(data)
+        self.assertFalse(result[0].get("payment_hold"))
+
+    def test_rejected_does_NOT_mark_payment_hold(self):
+        self._write_holds({
+            "tok1": {
+                "client": "М Тестклиент",
+                "status": "rejected",
+                "saida_confirmed_at": self._now_iso(delta_days=1),
+            }
+        })
+        data = [{"client": "М Тестклиент", "debt": 100000, "silence_days": 14}]
+        result = self._alerter.apply_payment_holds(data)
+        self.assertFalse(result[0].get("payment_hold"))
+
+    def test_full_payment_older_than_grace_does_NOT_mark(self):
+        # Подтверждение старше 7 дней — должно было быть разнесено в 1С.
+        # Если нет — клиент возвращается в молчание (что-то пошло не так).
+        self._write_holds({
+            "tok1": {
+                "client": "М Тестклиент",
+                "status": "confirmed_full",
+                "saida_confirmed_at": self._now_iso(delta_days=10),
+            }
+        })
+        data = [{"client": "М Тестклиент", "debt": 100000, "silence_days": 14}]
+        result = self._alerter.apply_payment_holds(data)
+        self.assertFalse(result[0].get("payment_hold"))
+
+    def test_legacy_short_name_compat(self):
+        # BUG-2 enabler: legacy holds могли быть записаны с обрезанным именем.
+        # apply_payment_holds должен матчить полное имя с обрезанным holding-именем.
+        full = "М Гриль Косши ул Республика 18 б тел 87751827070"
+        short = full[:26]
+        self._write_holds({
+            "tok1": {
+                "client": short,
+                "status": "confirmed_full",
+                "saida_confirmed_at": self._now_iso(delta_days=1),
+            }
+        })
+        data = [{"client": full, "debt": 62385, "silence_days": 14}]
+        result = self._alerter.apply_payment_holds(data)
+        self.assertTrue(result[0].get("payment_hold"),
+                        "Legacy обрезанное имя должно матчиться с полным")
+
+    def test_categorize_skips_full_payment_client(self):
+        """End-to-end: confirmed_full клиент не попадает в silence."""
+        self._write_holds({
+            "tok1": {
+                "client": "М Полностью Оплатил",
+                "status": "confirmed_full",
+                "saida_confirmed_at": self._now_iso(delta_days=2),
+            }
+        })
+        data = [
+            {"client": "М Полностью Оплатил", "debt": 100000, "silence_days": 14,
+             "debit_amount": 0, "paid_amount": 100000},
+            {"client": "М Молчит", "debt": 200000, "silence_days": 14,
+             "debit_amount": 0, "paid_amount": 0},
+        ]
+        data = self._alerter.apply_payment_holds(data)
+        categorized = self._alerter.categorize_by_silence(data)
+        all_in_silence = [
+            c["client"]
+            for cat in ("critical", "alarm", "silence", "overdue")
+            for c in categorized.get(cat, [])
+        ]
+        self.assertNotIn("М Полностью Оплатил", all_in_silence)
+        self.assertIn("М Молчит", all_in_silence)
+
+
+class DebtAgeHistoryHermeticTests(unittest.TestCase):
+    """Regressions для BUG-5 (2026-05-16): reset окна Саиды 15-го числа.
+
+    Проблема: 14.05 Еркебулан показывался как "30 дн КРИТИЧНО с 14.04",
+    15.05 — как "14 дн МОЛЧАНИЕ" потому что окно Саиды сжалось до 01.05-15.05.
+    Долг тот же, возраст потерян. Решение: persistence min(saved, current).
+    """
+
+    def setUp(self):
+        import bot.silence_alerts as sa
+        self._tmp = tempfile.TemporaryDirectory()
+        self._history_path = Path(self._tmp.name) / "debt_age_history.json"
+        self._patcher = patch.object(sa.SilenceAlert, "DEBT_AGE_HISTORY_PATH", self._history_path)
+        self._patcher.start()
+        self._alerter = sa.SilenceAlert()
+
+    def tearDown(self):
+        self._patcher.stop()
+        self._tmp.cleanup()
+
+    def _load_history(self):
+        if not self._history_path.exists():
+            return {}
+        return json.loads(self._history_path.read_text(encoding="utf-8"))
+
+    def test_load_history_empty_returns_dict(self):
+        self.assertEqual(self._alerter._load_debt_age_history(), {})
+
+    def test_save_and_load_roundtrip(self):
+        h = {"Е Еркебулан": {"oldest_unpaid_date": "2026-04-14", "last_updated": "2026-05-16T09:00:00+05:00"}}
+        self._alerter._save_debt_age_history(h)
+        self.assertEqual(self._alerter._load_debt_age_history(), h)
+
+    def test_min_logic_preserves_earlier_date(self):
+        """Если в истории 2026-04-14, а текущий отчёт даёт 2026-05-01 — используем 04-14."""
+        # Подготовим историю с ранней датой
+        self._alerter._save_debt_age_history({
+            "Е Еркебулан": {"oldest_unpaid_date": "2026-04-14",
+                            "last_updated": "2026-05-14T09:00:00+05:00"}
+        })
+
+        # Мокаем classify_debtors / load_latest_debt_json чтобы вернуть current=2026-05-01
+        from bot import silence_alerts as sa_mod
+        with patch("collector.debt_monitor.load_latest_debt_json", return_value={}), \
+             patch("collector.debt_monitor.classify_debtors", return_value=[
+                 {"name": "Е Еркебулан", "debt": 739409.67,
+                  "oldest_unpaid_date": "2026-05-01",  # reset окна
+                  "residual_debt_age_days": 14,
+                  "days": 14}
+             ]):
+            data = [{"client": "Е Еркебулан", "debt": 739409.67, "silence_days": 14}]
+            result = self._alerter.apply_residual_debt_age(data)
+
+        # Должны взять сохранённую более раннюю дату
+        self.assertEqual(result[0]["oldest_unpaid_date"], "2026-04-14")
+        # И возраст пересчитан от 14.04 (сегодня минус 14.04 = ~32 дня)
+        self.assertGreaterEqual(result[0]["residual_debt_age_days"], 30)
+
+    def test_new_client_writes_to_history(self):
+        # Клиент впервые увиден — должен быть записан в историю
+        with patch("collector.debt_monitor.load_latest_debt_json", return_value={}), \
+             patch("collector.debt_monitor.classify_debtors", return_value=[
+                 {"name": "М Новый клиент", "debt": 100000,
+                  "oldest_unpaid_date": "2026-05-10",
+                  "days": 6}
+             ]):
+            data = [{"client": "М Новый клиент", "debt": 100000, "silence_days": 6}]
+            self._alerter.apply_residual_debt_age(data)
+        h = self._load_history()
+        self.assertIn("М Новый клиент", h)
+        self.assertEqual(h["М Новый клиент"]["oldest_unpaid_date"], "2026-05-10")
+
+    def test_paid_client_removed_from_history(self):
+        # Клиент оплатил (debt=0 в новой выгрузке) — должен быть удалён из истории
+        self._alerter._save_debt_age_history({
+            "М Оплатил": {"oldest_unpaid_date": "2026-04-01"}
+        })
+        with patch("collector.debt_monitor.load_latest_debt_json", return_value={}), \
+             patch("collector.debt_monitor.classify_debtors", return_value=[
+                 {"name": "М Оплатил", "debt": 0,
+                  "oldest_unpaid_date": "", "days": 0}
+             ]):
+            data = [{"client": "М Оплатил", "debt": 0, "silence_days": 0}]
+            self._alerter.apply_residual_debt_age(data)
+        h = self._load_history()
+        self.assertNotIn("М Оплатил", h)
+
+    def test_current_earlier_than_history_updates_history(self):
+        # Если current дата раньше сохранённой — обновляем (взяли более раннюю)
+        self._alerter._save_debt_age_history({
+            "Е Клиент": {"oldest_unpaid_date": "2026-04-20"}
+        })
+        with patch("collector.debt_monitor.load_latest_debt_json", return_value={}), \
+             patch("collector.debt_monitor.classify_debtors", return_value=[
+                 {"name": "Е Клиент", "debt": 500000,
+                  "oldest_unpaid_date": "2026-04-10", "days": 36}
+             ]):
+            data = [{"client": "Е Клиент", "debt": 500000}]
+            self._alerter.apply_residual_debt_age(data)
+        h = self._load_history()
+        self.assertEqual(h["Е Клиент"]["oldest_unpaid_date"], "2026-04-10")
+
+
 class WhatsAppPollerHermeticTests(unittest.IsolatedAsyncioTestCase):
     async def test_poll_once_passes_attachment_metadata_to_client_dialog(self):
         payload = {

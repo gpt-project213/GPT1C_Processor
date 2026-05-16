@@ -153,9 +153,45 @@ def _kb_saida_help_only() -> InlineKeyboardMarkup:
     ]])
 
 
-def _kb_saida_stop_item(name_key: str) -> InlineKeyboardMarkup:
+def _saida_payment_token(state: Dict[str, Any], full_name: str) -> str:
+    """Возвращает короткий token для Saida-кнопки 'Оплата получена'.
+
+    BUG-2 (2026-05-16): раньше callback_data содержал `name[:26]` — обрезка
+    ломала identity клиента в _handle_saida_payment / payment_hold lookup.
+    Теперь callback несёт короткий token, полное имя хранится в state.
+    """
+    tokens = state.setdefault("saida_payment_tokens", {})
+    # Дедупликация: если этот клиент уже зарегистрирован сегодня — возвращаем тот же token
+    for tok, name in tokens.items():
+        if name == full_name:
+            return tok
+    next_id = int(state.get("next_id", 1))
+    tok = f"sp{next_id:04d}"
+    state["next_id"] = next_id + 1
+    tokens[tok] = full_name
+    return tok
+
+
+def _resolve_saida_payment_token(state: Dict[str, Any], token_or_name: str) -> str:
+    """Resolve token → полное имя. Если на вход уже полное имя (legacy) — вернёт как есть."""
+    tokens = state.get("saida_payment_tokens") or {}
+    if token_or_name in tokens:
+        return tokens[token_or_name]
+    return token_or_name
+
+
+def _kb_saida_stop_item(full_name: str, state: Optional[Dict[str, Any]] = None) -> InlineKeyboardMarkup:
+    """BUG-2 fix: callback_data теперь несёт token, не name[:26]."""
+    if state is None:
+        state = load_state()
+        save_after = True
+    else:
+        save_after = False
+    token = _saida_payment_token(state, full_name)
+    if save_after:
+        save_state(state)
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("💰 Оплата получена", callback_data=f"dstop_paid|{name_key}")],
+        [InlineKeyboardButton("💰 Оплата получена", callback_data=f"dstop_paid|{token}")],
         [InlineKeyboardButton("❓ Что это значит?", callback_data="dstop_saida_help")],
     ])
 
@@ -1016,10 +1052,7 @@ async def send_saida_final(bot) -> None:
             f"Молчит {days}\u202fдн.  ·  {note}  [{manager}]\n"
             f"<i>Не отгружать до разрешения руководителя</i>"
         )
-        kb = InlineKeyboardMarkup([[
-            InlineKeyboardButton("💰 Оплата получена", callback_data=f"dstop_paid|{name[:26]}")
-        ]])
-        kb = _kb_saida_stop_item(name[:26])
+        kb = _kb_saida_stop_item(name, state)
         try:
             item_msg = await bot.send_message(
                 chat_id=SAIDA_CHAT_ID, text=text, parse_mode="HTML", reply_markup=kb
@@ -1278,7 +1311,10 @@ async def handle_dstop_callback(data: str, chat_id: int, bot) -> Optional[str]:
         return await _handle_conditional_clearance(client_key, chat_id, bot)
 
     if data.startswith("dstop_paid|"):
-        client_key = data.split("|", 1)[1]
+        token_or_name = data.split("|", 1)[1]
+        # BUG-2 fix: callback несёт token (sp0001) — resolve в полное имя.
+        # Legacy: если на вход уже полное/обрезанное имя — пройдёт как есть.
+        client_key = _resolve_saida_payment_token(load_state(), token_or_name)
         return await _handle_saida_payment(client_key, chat_id, bot)
 
     if data.startswith("dstop_mgr_paid|"):

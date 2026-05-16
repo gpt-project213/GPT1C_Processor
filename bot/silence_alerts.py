@@ -27,6 +27,7 @@
 """
 
 import logging
+import os
 import re
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
@@ -258,8 +259,19 @@ class SilenceAlert:
     def _norm_client_name(name: str) -> str:
         return " ".join(str(name or "").lower().split())
 
+    # BUG-5 (2026-05-16): окно Саиды скользящее (на 15-е число reset).
+    # Без persistence долг с апреля показывается как "14 дн" вместо реального возраста.
+    # Решение: храним собственный журнал oldest_unpaid_date в logs/debt_age_history.json
+    # и используем min(saved, current) — bot помнит истинный возраст независимо от окна.
+    DEBT_AGE_HISTORY_PATH = Path(__file__).resolve().parent.parent / "logs" / "debt_age_history.json"
+
     def apply_residual_debt_age(self, clients_data: List[Dict]) -> List[Dict]:
-        """Adds Phase 5 residual debt age to short debt notifications."""
+        """Adds Phase 5 residual debt age to short debt notifications.
+
+        BUG-5: после получения oldest_unpaid_date от Саиды сравниваем с сохранённой
+        историей. Если в истории есть более ранняя дата для этого клиента — используем
+        её. Так бот не теряет реальный возраст долга при reset окна Саиды.
+        """
         try:
             from collector.debt_monitor import classify_debtors, load_latest_debt_json
             classified = classify_debtors(load_latest_debt_json())
@@ -277,42 +289,199 @@ class SilenceAlert:
             for c in classified
             if c.get("name")
         }
+        history = self._load_debt_age_history()
+        from datetime import datetime as _dt, date as _date
+        from zoneinfo import ZoneInfo as _ZI
+        tz = _ZI(os.getenv("TZ", "Asia/Almaty"))
+        today = _dt.now(tz).date()
         matched = 0
+        history_updated = False
         for client in clients_data:
-            profile = by_name.get(self._norm_client_name(client.get("client")))
+            client_name = client.get("client", "")
+            profile = by_name.get(self._norm_client_name(client_name))
             if not profile:
                 continue
-            client["residual_debt_age_days"] = int(
+            current_oldest = profile.get("oldest_unpaid_date") or ""
+            # BUG-5: проверяем сохранённую историю
+            effective_oldest = current_oldest
+            saved_oldest = history.get(client_name, {}).get("oldest_unpaid_date")
+            if saved_oldest and current_oldest:
+                # Берём более раннюю дату — окно Саиды не должно "омолаживать" долг
+                if saved_oldest < current_oldest:
+                    effective_oldest = saved_oldest
+            elif saved_oldest and not current_oldest:
+                effective_oldest = saved_oldest
+            # Обновляем историю если есть новая oldest_unpaid_date или она раньше
+            if effective_oldest and effective_oldest != saved_oldest:
+                history[client_name] = {
+                    "oldest_unpaid_date": effective_oldest,
+                    "last_updated": _dt.now(tz).isoformat(),
+                    "last_debt": float(profile.get("debt") or 0),
+                }
+                history_updated = True
+
+            # Пересчитываем age если effective_oldest отличается от current
+            effective_age_days = int(
                 profile.get("residual_debt_age_days", profile.get("days", client.get("silence_days", 0))) or 0
             )
-            client["oldest_unpaid_date"] = profile.get("oldest_unpaid_date") or ""
+            if effective_oldest and effective_oldest != current_oldest:
+                try:
+                    eff_date = _date.fromisoformat(effective_oldest)
+                    effective_age_days = max(effective_age_days, (today - eff_date).days)
+                except (ValueError, TypeError):
+                    pass
+
+            client["residual_debt_age_days"] = effective_age_days
+            client["oldest_unpaid_date"] = effective_oldest
             client["debt_age_basis"] = profile.get("debt_age_basis", "")
             client["payment_silence_days"] = profile.get("payment_silence_days", client.get("silence_days", 0))
             client["active_turnover"] = bool(profile.get("active_turnover", False))
             matched += 1
+
+        # Cleanup: убираем из истории клиентов с нулевым долгом (debt=0 в текущей выгрузке)
+        for c in classified:
+            cname = c.get("name", "")
+            if cname in history and (float(c.get("debt") or 0) <= 0):
+                history.pop(cname, None)
+                history_updated = True
+
+        if history_updated:
+            self._save_debt_age_history(history)
+
         logger.info("apply_residual_debt_age: matched %d/%d clients", matched, len(clients_data))
         return clients_data
 
-    def apply_payment_holds(self, clients_data: List[Dict]) -> List[Dict]:
-        """Marks clients confirmed by Saida as waiting for 1C posting."""
+    @classmethod
+    def _load_debt_age_history(cls) -> Dict[str, Dict[str, str]]:
+        """Загружает logs/debt_age_history.json."""
+        path = cls.DEBT_AGE_HISTORY_PATH
+        if not path.exists():
+            return {}
         try:
-            from collector.payment_hold import get_hold_for_client
+            import json as _json
+            data = _json.loads(path.read_text(encoding="utf-8"))
+            return data if isinstance(data, dict) else {}
         except Exception as exc:
-            logger.warning("apply_payment_holds: unavailable: %s", exc)
-            return clients_data
+            logger.warning("_load_debt_age_history error: %s", exc)
+            return {}
 
+    @classmethod
+    def _save_debt_age_history(cls, history: Dict[str, Dict[str, str]]) -> bool:
+        """Атомарная запись logs/debt_age_history.json.
+
+        TEST_MODE guard: при COLLECTOR_TEST_MODE=1 запись пропускается, если путь
+        не замокан явно (защита от контаминации боевого файла из тестов которые
+        вызывают apply_residual_debt_age без mock на DEBT_AGE_HISTORY_PATH).
+        """
+        path = cls.DEBT_AGE_HISTORY_PATH
+        # Защита: если test mode + путь не переопределён в tempdir → не писать
+        test_mode = os.getenv("COLLECTOR_TEST_MODE", "0").lower() in ("1", "true", "yes")
+        if test_mode:
+            # Проверяем что путь действительно мокается (не указывает на боевой logs/)
+            real_default = Path(__file__).resolve().parent.parent / "logs" / "debt_age_history.json"
+            if path == real_default:
+                logger.warning(
+                    "_save_debt_age_history: TEST_MODE без mock DEBT_AGE_HISTORY_PATH — запись пропущена"
+                )
+                return False
+        try:
+            import json as _json
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(_json.dumps(history, ensure_ascii=False, indent=2), encoding="utf-8")
+            tmp.replace(path)
+            return True
+        except Exception as exc:
+            logger.warning("_save_debt_age_history error: %s", exc)
+            return False
+
+    # BUG-saida (2026-05-16): только ПОЛНАЯ подтверждённая оплата снимает молчание.
+    # Частичная (confirmed_partial), pending_saida, rejected — оставляют клиента в молчании.
+    # TTL: 7 дней с момента подтверждения Саидой (достаточно для разноски в 1С).
+    PAYMENT_FULL_GRACE_DAYS = 7
+
+    def apply_payment_holds(self, clients_data: List[Dict]) -> List[Dict]:
+        """Marks clients confirmed by Saida as waiting for 1C posting.
+
+        BUG-saida: payment_hold=True ставится ТОЛЬКО для confirmed_full в течение
+        PAYMENT_FULL_GRACE_DAYS дней. confirmed_partial / pending_saida / rejected
+        НЕ снимают молчание (по бизнес-правилу: молчание = молчание В ОПЛАТЕ,
+        частичная оплата = всё ещё молчание).
+        """
+        full_payments = self._load_recent_full_payments()
         marked = 0
         for client in clients_data:
-            hold = get_hold_for_client(client.get("client", ""))
-            if not hold:
+            name = (client.get("client") or "").strip()
+            confirmed = self._lookup_full_payment(full_payments, name)
+            if not confirmed:
                 continue
             client["payment_hold"] = True
-            client["payment_hold_status"] = hold.get("status", "")
-            client["payment_hold_since"] = hold.get("saida_confirmed_at") or hold.get("updated_at", "")
+            client["payment_hold_status"] = "confirmed_full"
+            client["payment_hold_since"] = confirmed
             marked += 1
         if marked:
-            logger.info("apply_payment_holds: marked %d clients as waiting for posting", marked)
+            logger.info(
+                "apply_payment_holds: marked %d clients as waiting for posting (confirmed_full only)",
+                marked,
+            )
         return clients_data
+
+    def _load_recent_full_payments(self) -> Dict[str, str]:
+        """Загружает все confirmed_full holds за последние PAYMENT_FULL_GRACE_DAYS.
+
+        Returns: {normalized_client_name: saida_confirmed_at_iso}
+        """
+        try:
+            from collector.payment_hold import _load as _hold_load
+            from datetime import timedelta
+            holds = _hold_load()
+        except Exception as exc:
+            logger.warning("_load_recent_full_payments: unavailable: %s", exc)
+            return {}
+
+        from datetime import datetime as _dt
+        from zoneinfo import ZoneInfo as _ZI
+        tz = _ZI(os.getenv("TZ", "Asia/Almaty"))
+        cutoff = _dt.now(tz) - timedelta(days=self.PAYMENT_FULL_GRACE_DAYS)
+        result: Dict[str, str] = {}
+        for hold in (holds or {}).values():
+            if not isinstance(hold, dict):
+                continue
+            if hold.get("status") != "confirmed_full":
+                continue
+            confirmed_at = hold.get("saida_confirmed_at") or hold.get("updated_at") or ""
+            if not confirmed_at:
+                continue
+            try:
+                ts = _dt.fromisoformat(confirmed_at)
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=tz)
+            except (ValueError, TypeError):
+                continue
+            if ts < cutoff:
+                continue
+            name = (hold.get("client") or "").strip()
+            if not name:
+                continue
+            # Берём самую свежую дату если несколько hold по одному клиенту
+            prev = result.get(name)
+            if prev is None or confirmed_at > prev:
+                result[name] = confirmed_at
+        return result
+
+    @staticmethod
+    def _lookup_full_payment(full_payments: Dict[str, str], client_name: str) -> str:
+        """Ищет confirmed_full hold по имени с учётом legacy обрезки name[:26]."""
+        if not client_name:
+            return ""
+        if client_name in full_payments:
+            return full_payments[client_name]
+        # Legacy: hold мог быть записан с обрезанным именем (BUG-2 до фикса)
+        short = client_name[:26]
+        for hold_name, ts in full_payments.items():
+            if hold_name == short or hold_name[:26] == short:
+                return ts
+        return ""
 
     @staticmethod
     def _age_days(client: Dict) -> int:
