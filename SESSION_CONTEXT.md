@@ -5,6 +5,84 @@
 
 ---
 
+## HANDOFF 2026-05-16 — silence-отчёт: 3 настоящих бага закрыты по бизнес-правилу
+
+### Что сделано (master, коммит `39bb8f0`, запушен)
+
+Аудит silence-отчёта `silence_alerts_task` за 15.05.2026 раскрыл 7 потенциальных багов.
+После уточнения бизнес-правила пользователем — оставлено 3 настоящих, остальные сняты.
+
+#### Бизнес-правило (зафиксировано пользователем)
+
+**Молчание = молчание В ОПЛАТЕ, не в общении.** Только ПОЛНАЯ подтверждённая Саидой
+оплата (или закрытие долга) снимает клиента из отчёта. Частичная оплата / обещание /
+диалог / договорённость менеджера НЕ снимают молчание.
+
+#### BUG-2 (P0) — `name[:26]` обрезка в Saida callback
+
+`bot/debt_stop_control.py`:
+- `_saida_payment_token(state, full_name)` + `_resolve_saida_payment_token(state, token)`
+- `_kb_saida_stop_item(full_name, state)` — генерирует token `sp0001`, сохраняет в state
+- callback `dstop_paid|TOKEN` → resolve в полное имя
+- Удалены 2 точки обрезки + dead code
+
+Симптом: admin видел "О ТОО Чайхана Navat ул Дос" (обрезка), holds создавались
+под обрезанными именами и не находились по полному имени.
+
+#### BUG-saida + BUG-1a (P0) — подтверждённая ПОЛНАЯ оплата снимает молчание
+
+`bot/silence_alerts.py`:
+- `apply_payment_holds` теперь использует свой `_load_recent_full_payments`
+  (не `get_hold_for_client` с 12h TTL)
+- payment_hold=True ставится ТОЛЬКО для `status="confirmed_full"`
+- TTL: `PAYMENT_FULL_GRACE_DAYS = 7` дней
+- `confirmed_partial` / `pending_saida` / `rejected` НЕ снимают молчание
+- Legacy `name[:26]` compat для старых hold
+
+Симптом: Гриль Косши и Petro Retail утром 16.05 получили "оплата получена", в
+вечернем отчёте 15.05 висели как "молчат 14 дней". Внутреннее противоречие.
+
+#### BUG-5 (P0) — reset окна Саиды 15-го числа омолаживал долги
+
+`bot/silence_alerts.py`:
+- Новый `logs/debt_age_history.json` persistence
+- `apply_residual_debt_age` берёт `min(saved, current)` для `oldest_unpaid_date`
+- При оплате (debt=0) — клиент удаляется из истории
+- TEST_MODE guard на запись (защита от контаминации боевого файла)
+
+Симптом: на 14.05 Еркебулан "30 дн КРИТИЧНО с 14.04", на 15.05 — "14 дн МОЛЧАНИЕ"
+(окно Саиды сжалось до 01.05-15.05). Категории КРИТИЧНО+ТРЕВОГА полностью исчезли
+(5+3 клиентов). Руководитель видел "улучшение" которого нет.
+
+### Снято с багов (раньше считал, не баги по правилу)
+
+- ~~Engagement filter (dialog/promise → skip)~~ — диалог без денег = молчание
+- ~~Sticky cooldown после positive activity~~ — не нужен
+- ~~"Те же 5-6 клиентов 10 дней подряд раздражает"~~ — правильно, пока не платят
+
+### Тесты (+22 регрессии, prod state intact)
+
+| Suite | Результат |
+|---|---|
+| `test_collector.py` | 650/652 (+9 BUG-2; 2 pre-existing P4 T10/T10b — prod state) |
+| `test_collector_regression_hermetic.py` | 83/84 (+7 BUG-saida +6 BUG-5; 1 pre-existing legacy_tail) |
+| `test_crm_regression.py` | 44/44 |
+| `test_project.py` | 110/110 |
+
+**Prod state intact** — 10/10 файлов SHA-256 unchanged после полного прогона.
+
+### Что остаётся открытым
+
+- Косметика (P2/P3): "остаток N дн" → "долг возрастом N дн"; "Молчание/Просрочка" → нейтральные
+- Bootstrap `debt_age_history.json` из архива `archive/2026-03-01..` (опционально, для быстрого старта с реальными датами; иначе бот накопит за 1-2 месяца сам)
+- Pre-existing fails P4 T10/T10b и legacy_tail в тестах — зависят от prod state Еркебулан (не связано с silence-фиксами)
+
+### Push
+
+Все коммиты от `81013aa` до `39bb8f0` запушены в `origin/master`.
+
+---
+
 ## HANDOFF 2026-05-15 (вечер) — аудит + Block A "Частное лицо" + F-B1 client-promise
 
 ### Что сделано (master, коммиты `2427089`, `6bb882f`, `0d5746e`)
@@ -3387,12 +3465,12 @@ approval_penalty.py v1.0.2 (новый модуль)
 - Note: no commit yet in this step.
 
 ## 2026-05-15 20:30 - CRM tails cleanup
-- ������ stale dup-review callback � `bot/send_reports.py`: ����� `_crmdup_review_is_stale()`, callback `crmdup|...` ������ ������ ������������ token, ������� awaiting-text � ������� inline-������ ����� ������� `������ ������ �������`.
-- `bot/send_reports.py` ������: `v9.4.80/15.05.2026`.
-- � `tests/test_crm_regression.py` ��������� ��������� �� stale duplicate-review cleanup.
-- �������� one-shot backfill `config/clients.json`: 6 legacy placeholder-������� `������� ����*` �������� `is_vendor=True` + `do_not_call=True`.
+- ������ stale dup-review callback � `bot/send_reports.py`: ����� `_crmdup_review_is_stale()`, callback `crmdup|...` ������ ������ ������������ token, ������� awaiting-text � ������� inline-������ ����� ������� `������ ������ �������`.
+- `bot/send_reports.py` ������: `v9.4.80/15.05.2026`.
+- � `tests/test_crm_regression.py` ��������� ��������� �� stale duplicate-review cleanup.
+- �������� one-shot backfill `config/clients.json`: 6 legacy placeholder-������� `������� ����*` �������� `is_vendor=True` + `do_not_call=True`.
 - Backup: `config/clients.json.bak-private-person-backfill-20260515-202931-2`.
-- ��������: `python -m py_compile bot\send_reports.py` -> OK; `python -X utf8 tests\test_crm_regression.py` -> `38/38`.
+- ��������: `python -m py_compile bot\send_reports.py` -> OK; `python -X utf8 tests\test_crm_regression.py` -> `38/38`.
 
 ## 2026-05-15 20:58 - Contact truth stabilization (CRM primary / legacy fallback)
 - Goal: remove the last active split contact read/write path without broad refactor.
@@ -3425,7 +3503,7 @@ approval_penalty.py v1.0.2 (новый модуль)
   - data: restore `config/clients.json` from `config/clients.json.bak-arch-stabilization-20260515-205838`
   - no legacy `debtors_contacts.json` rollback needed because the file was absent before the patch
 
-## 2026-05-15 21:20 � CRM ownership stabilization
+## 2026-05-15 21:20 � CRM ownership stabilization
 - Backup before change: `config/clients.json.bak-ownership-stabilization-20260515-211300`.
 - Runtime changes:
   - `bot/crm_clients.py` v1.1.2: added `apply_manual_ownership(client_keys, manager, reviewer, source)`; stamps `ownership_manager`, `ownership_decided_at`, `ownership_decided_by`, `ownership_source` plus visible `manager`.
