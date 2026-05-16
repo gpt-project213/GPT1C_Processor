@@ -81,6 +81,23 @@
 
 Все коммиты от `81013aa` до `39bb8f0` запушены в `origin/master`.
 
+## 2026-05-16 12:10 +05:00 — test hygiene: legacy-tail isolation from live suppress-state
+
+- Цель: убрать зависимость `P4 T10/T10b` в `tests/test_collector.py` от боевого `collector_state.json`, где у реального клиента может висеть активный `wa_dialog_suppress`.
+- Что сделано:
+  - `tests/test_collector.py`: для `P4 T10/T10b` добавлен явный `patch("collector.collections_db.get_wa_dialog_suppress", return_value=None)` вокруг `_collector_candidate_decision(...)`.
+- Проверка:
+  - `python -X utf8 tests/test_collector.py` -> `652/652`
+  - `python -X utf8 tests/test_collector_regression_hermetic.py` -> `39/39` (без дополнительных изменений в этой сессии)
+- Безопасность:
+  - `COLLECTOR_TEST_MODE=1` остаётся активным в тестах;
+  - клиентские/Саида-уведомления защищены `_TEST_MODE` guard;
+  - SHA-256 watcher на боевые state-файлы остаётся в `tests/test_collector.py`.
+- Ограничение:
+  - hermetic partial-tail тест по-прежнему использует отдельное `TEST_*` имя; в этой сессии сознательно не добивался его переписывания, чтобы не трогать второй файл и не рисковать с кодировкой/литералами.
+- Dirty files left alone:
+  - `config/clients.json` уже был изменён до этой правки; не добавлялся в commit.
+
 ---
 
 ## HANDOFF 2026-05-15 (вечер) — аудит + Block A "Частное лицо" + F-B1 client-promise

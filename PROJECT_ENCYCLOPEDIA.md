@@ -784,3 +784,14 @@ Audit-документы:
   - if rollback is needed, restore that backup and revert the architecture commit
 - **CRM ownership stabilization** (2026-05-15 late): explicit manual ownership marker via `ownership_manager/ownership_decided_*`; claim-broadcast and admin ambiguous-assign now persist ownership decision instead of relying on bare `manager` only.
 - **Claim candidate filter respects explicit ownership**: `_crm_collect_unowned_claim_clients()` skips groups with `ownership_manager`, reducing repeat claim-broadcast on already manually assigned clients.
+
+## 2026-05-16 — Test Hygiene Note
+
+- `tests/test_collector.py`:
+  - `P4 T10/T10b` больше не зависят от live `wa_dialog_suppress` в боевом `collector_state.json`;
+  - для этих двух flat-тестов suppress-state теперь явно обнуляется через `patch("collector.collections_db.get_wa_dialog_suppress", return_value=None)`.
+- Практический смысл:
+  - тест проверяет именно business-rule legacy tail;
+  - не падает из-за реального боевого клиента с активным suppress.
+- Проверено:
+  - `python -X utf8 tests/test_collector.py` -> `652/652`

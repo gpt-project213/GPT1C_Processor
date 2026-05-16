@@ -2359,12 +2359,15 @@ check("P4 T9b: stopped + старый хвост без движения -> lega
 # 2026-05-16: имя теста изолировано от prod state (раньше использовалось "Е Еркебулан",
 # у которого в боевом collector_state.json может быть активный wa_dialog_suppress —
 # тест читает live state и падал из-за этого, не связано с тестируемой логикой).
+_p4_t10_suppress = patch("collector.collections_db.get_wa_dialog_suppress", return_value=None)
+_p4_t10_suppress.start()
 _d10 = _collector_candidate_decision(
     {"name": "TEST_P4T10 хвост_с_частичной_оплатой_клиент", "amount": 739409.67, "days": 28,
      "opening": 767268.67, "debit": 0.0, "credit": 27859.0},
     _p4_contact,
     {"status": "stopped"},
 )
+_p4_t10_suppress.stop()
 check("P4 T10: stopped + старый хвост с частичной оплатой -> client_approval",
       _d10.get("action") == "client_approval", str(_d10))
 check("P4 T10b: stopped + старый хвост с частичной оплатой -> partial_tail_reminder",
