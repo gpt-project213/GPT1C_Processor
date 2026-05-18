@@ -741,14 +741,18 @@ def format_partial_payment_stats_text() -> str:
     return "\n".join(lines)
 
 
-def _strip_manager_prefix(name: str) -> str:
-    """Убирает однобуквенный префикс менеджера: 'О Гриль Косши' → 'Гриль Косши'."""
+def strip_manager_prefix(name: str) -> str:
+    """Убирает однобуквенный префикс менеджера: 'О Гриль Косши' → 'Гриль Косши'.
+
+    Префиксы — внутренняя кодировка принадлежности клиента менеджеру.
+    Не должны появляться во внешних сообщениях (WhatsApp, Саиде, Минай).
+    """
     import re
     return re.sub(r'^[А-ЯЁA-Z]\s+', '', name).strip()
 
 
 def _minai_notify_text(client: str, manager: str) -> str:
-    client_display = _strip_manager_prefix(client)
+    client_display = strip_manager_prefix(client)
     return (
         f"Минай, добрый день! 🔔\n\n"
         f"Менеджер {manager} сообщил об оплате клиента:\n"

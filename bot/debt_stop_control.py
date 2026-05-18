@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 """
-debt_stop_control.py · v1.0.15 (2026-05-11)
+debt_stop_control.py · v1.0.16 (2026-05-16)
 
 Контроль стоп-листа отгрузки — уведомление Саиды-бухгалтера.
 
@@ -49,6 +49,7 @@ except Exception:
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from collector.logging_utils import get_stop_logger
+from collector.payment_hold import strip_manager_prefix as _strip_pfx
 
 
 LOG = get_stop_logger("debt_stop_control")
@@ -178,6 +179,19 @@ def _resolve_saida_payment_token(state: Dict[str, Any], token_or_name: str) -> s
     if token_or_name in tokens:
         return tokens[token_or_name]
     return token_or_name
+
+
+def _resolve_registry_client_key(client_key: str, registry: Optional[Dict[str, Any]] = None) -> Optional[str]:
+    """Resolve short token / legacy truncated key to the full registry client name."""
+    full_key = _resolve_saida_payment_token(load_state(), client_key)
+    if registry is None:
+        registry = load_registry()
+    if full_key in registry:
+        return full_key
+    for name in registry:
+        if name.startswith(full_key) or name[:26] == full_key[:26]:
+            return name
+    return None
 
 
 def _kb_saida_stop_item(full_name: str, state: Optional[Dict[str, Any]] = None) -> InlineKeyboardMarkup:
@@ -422,8 +436,9 @@ async def monitor_exceptions(bot) -> None:
                 LOG.warning("Авто-стоп: %s (%d дн.)", client_name, days)
 
                 mgr_id = rec.get("manager_chat_id", 0)
+                _cn_d = _strip_pfx(client_name)
                 msg = (
-                    f"🚫 <b>Авто-стоп: {client_name}</b>\n"
+                    f"🚫 <b>Авто-стоп: {_cn_d}</b>\n"
                     f"Молчит <b>{days} дн.</b> — договорённость нарушена.\n"
                     f"Долг: <b>{_fmt(debt)}</b>\n"
                     f"Клиент заблокирован для отгрузки до полной оплаты.\n"
@@ -1152,6 +1167,7 @@ async def send_saida_payment_hold_reminders(bot) -> None:
 
         age_h = (now - created).total_seconds() / 3600
         client   = rec.get("client", "—")
+        client_d = _strip_pfx(client)
         manager  = rec.get("manager", "—")
         debt_str = rec.get("debt_str") or rec.get("debt", "—")
         mgr_chat = rec.get("manager_chat_id")
@@ -1182,7 +1198,7 @@ async def send_saida_payment_hold_reminders(bot) -> None:
                     await bot.send_message(
                         chat_id=admin_id,
                         text=(
-                            f"ℹ️ Саида не ответила на запрос по <b>{client}</b> за <b>{age_h:.0f} ч</b>.\n"
+                            f"ℹ️ Саида не ответила на запрос по <b>{client_d}</b> за <b>{age_h:.0f} ч</b>.\n"
                             f"Менеджер: <b>{manager}</b> | Долг: {debt_str}\n\n"
                             f"Холд закрыт автоматически — клиент остаётся в дебиторке."
                         ),
@@ -1196,7 +1212,7 @@ async def send_saida_payment_hold_reminders(bot) -> None:
                     await bot.send_message(
                         chat_id=int(mgr_chat),
                         text=(
-                            f"ℹ️ Саида не ответила на запрос по <b>{client}</b> за {age_h:.0f} ч.\n"
+                            f"ℹ️ Саида не ответила на запрос по <b>{client_d}</b> за {age_h:.0f} ч.\n"
                             f"Клиент остаётся в дебиторке."
                         ),
                         parse_mode="HTML",
@@ -1208,7 +1224,7 @@ async def send_saida_payment_hold_reminders(bot) -> None:
                 await bot.send_message(
                     chat_id=SAIDA_CHAT_ID,
                     text=(
-                        f"🚨 Саида, ты проигнорировала запрос по клиенту <b>{client}</b> — {age_h:.0f} ч без ответа.\n"
+                        f"🚨 Саида, ты проигнорировала запрос по клиенту <b>{client_d}</b> — {age_h:.0f} ч без ответа.\n"
                         f"Холд закрыт автоматически. Все последствия — на тебе."
                     ),
                     parse_mode="HTML",
@@ -1230,7 +1246,7 @@ async def send_saida_payment_hold_reminders(bot) -> None:
                 [InlineKeyboardButton("❌ Оплаты нет",    callback_data=f"payhold_none|{token}")],
             ])
             text = (
-                f"⚠️ Саида, ты не подтвердила оплату <b>{client}</b> уже <b>{age_h:.0f} ч</b>.\n\n"
+                f"⚠️ Саида, ты не подтвердила оплату <b>{client_d}</b> уже <b>{age_h:.0f} ч</b>.\n\n"
                 f"Через <b>{remaining:.0f} ч</b> решение уйдёт автоматически. "
                 f"Менеджер <b>{manager}</b> и директор узнают о твоём молчании.\n\n"
                 f"Все последствия ошибки — на тебе."
@@ -1910,9 +1926,10 @@ async def _register_allow_after_payment_with_limit(
 
     mgr_chat_id = c.get("manager_chat_id")
     client = c["client"]
+    client_d = _strip_pfx(client)
     saida_msg = (
         f"⏳ <b>Отгрузка после полной оплаты с лимитом</b>\n"
-        f"<b>{client}</b>\n\n"
+        f"<b>{client_d}</b>\n\n"
         f"Сейчас не отгружать. Старый долг должен быть закрыт в 1С "
         f"(остаток до {_fmt(STOP_PAID_THRESHOLD)}).\n\n"
         f"После закрытия старого долга новая отгрузка разрешена "
@@ -1973,11 +1990,7 @@ async def _handle_clearance(client_key: str, action: str, chat_id: int, bot) -> 
     registry = load_registry()
 
     # Ищем по полному имени (ключ мог быть обрезан до 40 символов в callback)
-    matched_key = None
-    for name in registry:
-        if name.startswith(client_key) or name[:26] == client_key[:26]:
-            matched_key = name
-            break
+    matched_key = _resolve_registry_client_key(client_key, registry)
 
     if not matched_key:
         return "❓ Клиент не найден в реестре."
@@ -2040,12 +2053,13 @@ async def _auto_clear_stop_after_saida_full(c: Dict[str, Any], bot) -> bool:
         LOG.warning("Ошибка закрытия shipment decision %s после подтверждения Саиды: %s", client_name, e)
 
     mgr_chat_id = rec.get("manager_chat_id") or c.get("manager_chat_id")
+    client_name_d = _strip_pfx(client_name)
     saida_msg = (
-        f"✅ <b>{client_name}</b> снят со стопа автоматически.\n"
+        f"✅ <b>{client_name_d}</b> снят со стопа автоматически.\n"
         f"Полная оплата подтверждена, можно отгружать."
     )
     mgr_msg = (
-        f"✅ <b>{client_name}</b> снят со стопа автоматически.\n"
+        f"✅ <b>{client_name_d}</b> снят со стопа автоматически.\n"
         f"Саида подтвердила полную оплату. Клиент больше не в стоп-листе."
     )
     for target, msg in ((SAIDA_CHAT_ID, saida_msg), (mgr_chat_id, mgr_msg)):
@@ -2067,11 +2081,7 @@ async def _handle_conditional_clearance(client_key: str, chat_id: int, bot) -> s
     """
     registry = load_registry()
 
-    matched_key = None
-    for name in registry:
-        if name.startswith(client_key) or name[:26] == client_key[:26]:
-            matched_key = name
-            break
+    matched_key = _resolve_registry_client_key(client_key, registry)
 
     if not matched_key:
         return "❓ Клиент не найден в реестре."
@@ -2088,14 +2098,15 @@ async def _handle_conditional_clearance(client_key: str, chat_id: int, bot) -> s
 
     mgr_chat_id = rec.get("manager_chat_id") or _load_managers().get(rec.get("manager", ""), 0)
 
+    matched_key_d = _strip_pfx(matched_key)
     saida_msg = (
         f"⚠️ <b>Условная отгрузка разрешена</b>\n"
-        f"<b>{matched_key}</b>\n"
+        f"<b>{matched_key_d}</b>\n"
         f"Руководитель разрешил отгрузить под условие оплаты.\n"
         f"Оплата ожидается — отгрузи, но контролируй поступление."
     )
     mgr_msg = (
-        f"⚠️ <b>Условная отгрузка — {matched_key}</b>\n"
+        f"⚠️ <b>Условная отгрузка — {matched_key_d}</b>\n"
         f"Руководитель разрешил отгрузить клиента под условие оплаты.\n"
         f"Проконтролируй поступление платежа."
     )
@@ -2118,11 +2129,7 @@ async def _handle_clearance_limit_request(client_key: str, chat_id: int, bot) ->
         return "⛔ Лимит отгрузки может задать только руководитель."
 
     registry = load_registry()
-    matched_key = None
-    for name in registry:
-        if name.startswith(client_key) or name[:26] == client_key[:26]:
-            matched_key = name
-            break
+    matched_key = _resolve_registry_client_key(client_key, registry)
 
     if not matched_key:
         return "❓ Клиент не найден в реестре."
@@ -2202,7 +2209,7 @@ async def _handle_mgr_paid_claim(cid: str, chat_id: int, bot) -> str:
             chat_id=SAIDA_CHAT_ID,
             text=(
                 f"💳 <b>Менеджер {c['manager']} сообщает об оплате</b>\n\n"
-                f"Клиент: <b>{c['client']}</b>\n"
+                f"Клиент: <b>{_strip_pfx(c['client'])}</b>\n"
                 f"Время: {now_str}\n\n"
                 f"Проверь разноску и подтверди:"
             ),
@@ -2354,7 +2361,9 @@ async def _request_saida_zero_balance_confirmation(
     if not SAIDA_CHAT_ID:
         await _send_admin_direct_clearance_menu(client_name, rec, bot)
         return
-    key = client_name[:26]
+    state = load_state()
+    key = _saida_payment_token(state, client_name)
+    save_state(state)
     current = _get_client_current_state(client_name)
     debt_line = f"Остаток в 1С: <b>{_fmt(current['debt'])}</b>" if current else ""
     manager = rec.get("manager", "?")
@@ -2386,7 +2395,9 @@ async def _send_admin_direct_clearance_menu(
     current = _get_client_current_state(client_name)
     debt_line = f"Остаток: <b>{_fmt(current['debt'])}</b>\n" if current else ""
     manager = rec.get("manager", "?")
-    key = client_name[:26]
+    state = load_state()
+    key = _saida_payment_token(state, client_name)
+    save_state(state)
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("✅ Снять со стопа",         callback_data=f"dstop_adm_cl_clear|{key}")],
         [InlineKeyboardButton("⚠️ Только предоплата 100%", callback_data=f"dstop_adm_cl_prepay|{key}")],
@@ -2410,9 +2421,7 @@ async def _handle_saida_zeropay_confirm(client_key: str, chat_id: int, bot) -> s
     if int(chat_id) != int(SAIDA_CHAT_ID or 0):
         return "⛔ Только для бухгалтера."
     registry = load_registry()
-    matched_key = next(
-        (n for n in registry if n[:26] == client_key[:26] or n.startswith(client_key)), None
-    )
+    matched_key = _resolve_registry_client_key(client_key, registry)
     if not matched_key:
         return "❓ Клиент не найден."
     rec = registry[matched_key]
@@ -2429,9 +2438,7 @@ async def _handle_saida_zeropay_deny(client_key: str, chat_id: int, bot) -> str:
     if int(chat_id) != int(SAIDA_CHAT_ID or 0):
         return "⛔ Только для бухгалтера."
     registry = load_registry()
-    matched_key = next(
-        (n for n in registry if n[:26] == client_key[:26] or n.startswith(client_key)), None
-    )
+    matched_key = _resolve_registry_client_key(client_key, registry)
     if not matched_key:
         return "❓ Клиент не найден."
     rec = registry[matched_key]
@@ -2460,7 +2467,9 @@ async def _notify_manager_clearance_proposal(
     current = _get_client_current_state(client_name)
     debt_line = f"Остаток в 1С: <b>{_fmt(current['debt'])}</b>" if current else ""
     days_on_stop = rec.get("days_at_stop", "?")
-    key = client_name[:26]
+    state = load_state()
+    key = _saida_payment_token(state, client_name)
+    save_state(state)
 
     kb = InlineKeyboardMarkup([
         [
@@ -2494,7 +2503,9 @@ async def _notify_admin_clearance_fallback(
         return
     current = _get_client_current_state(client_name)
     debt_line = f"Остаток: <b>{_fmt(current['debt'])}</b>" if current else ""
-    key = client_name[:26]
+    state = load_state()
+    key = _saida_payment_token(state, client_name)
+    save_state(state)
     kb = InlineKeyboardMarkup([
         [
             InlineKeyboardButton("✅ Разрешить",       callback_data=f"dstop_adm_cl_clear|{key}"),
@@ -2520,9 +2531,7 @@ async def _handle_mgr_clearance_proposal(
 ) -> str:
     """Менеджер выбрал своё предложение руководителю по снятию стопа."""
     registry = load_registry()
-    matched_key = next(
-        (n for n in registry if n[:26] == client_key[:26] or n.startswith(client_key)), None
-    )
+    matched_key = _resolve_registry_client_key(client_key, registry)
     if not matched_key:
         return "❓ Клиент не найден в реестре."
     rec = registry[matched_key]
@@ -2564,7 +2573,9 @@ async def _forward_mgr_proposal_to_admin(
     proposal = rec.get("clearance_proposal", {})
     action   = proposal.get("action", "?")
     manager  = rec.get("manager", "?")
-    key      = client_name[:26]
+    state = load_state()
+    key = _saida_payment_token(state, client_name)
+    save_state(state)
 
     limit_amount = float(proposal.get("limit_amount") or 0)
     limit_days   = proposal.get("limit_days", "?")
@@ -2608,9 +2619,7 @@ async def _handle_admin_clearance_confirm(client_key: str, chat_id: int, bot) ->
     if chat_id != _get_admin_chat_id():
         return "⛔ Только для руководителя."
     registry = load_registry()
-    matched_key = next(
-        (n for n in registry if n[:26] == client_key[:26] or n.startswith(client_key)), None
-    )
+    matched_key = _resolve_registry_client_key(client_key, registry)
     if not matched_key:
         return "❓ Клиент не найден."
     rec = registry[matched_key]
@@ -2633,9 +2642,7 @@ async def _handle_admin_clearance_override(
     if chat_id != _get_admin_chat_id():
         return "⛔ Только для руководителя."
     registry = load_registry()
-    matched_key = next(
-        (n for n in registry if n[:26] == client_key[:26] or n.startswith(client_key)), None
-    )
+    matched_key = _resolve_registry_client_key(client_key, registry)
     if not matched_key:
         return "❓ Клиент не найден."
     rec = registry[matched_key]

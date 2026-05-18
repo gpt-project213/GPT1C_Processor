@@ -4,7 +4,15 @@
 collections/collections_engine.py
 Главный оркестратор AI-Коллектора долгов.
 
-Версия: 1.5.7 (2026-05-15)
+Версия: 1.5.9 (2026-05-18)
+
+v1.5.9 (2026-05-18): payment-hold skips now explain the real state in Russian:
+waiting for Saida reply, partial payment on hold, or confirmed payment pending
+1C posting, instead of calling every hold a confirmed payment.
+
+v1.5.8 (2026-05-16): approval preview now respects the same collector send
+window as send-approved, so weekend/forbidden-window runs do not create
+batches that are guaranteed to fail later.
 
 v1.5.7 (2026-05-15): collector contact reads now use one CRM-primary
 adapter with read-only legacy fallback, instead of ad-hoc split reads.
@@ -602,6 +610,20 @@ def _build_preview_client_payload(
     }
 
 
+def _payment_hold_skip_reason(hold: Optional[Dict[str, Any]]) -> str:
+    """Short Russian explanation for hold-based collector skip."""
+    if not isinstance(hold, dict):
+        return "Клиент временно на стопе по оплате"
+    status = str(hold.get("status") or "").strip().lower()
+    if status == "confirmed_full":
+        return "Оплата подтверждена, ждём разноски в 1С"
+    if status == "confirmed_partial":
+        return "Есть частичная оплата, клиент остаётся на стопе"
+    if status == "pending_saida":
+        return "Саиде отправлен вопрос по оплате, ждём ответа"
+    return "Клиент временно на стопе по оплате"
+
+
 def _collector_candidate_decision(
     client: Dict[str, Any],
     contact: Optional[Dict[str, Any]],
@@ -657,7 +679,7 @@ def _collector_candidate_decision(
     if hold:
         return {
             "action": "skip",
-            "reason": "Саида подтвердила оплату, ждём разноски в 1С",
+            "reason": _payment_hold_skip_reason(hold),
             "payment_hold_status": hold.get("status", ""),
             "client": client,
         }
@@ -930,7 +952,8 @@ async def _process_single(
 ) -> Dict[str, Any]:
     """Обрабатывает одного должника: генерация + диалог с менеджером + звонок."""
     name = client["name"]
-    display_name = contact.get("display_name") or name
+    from collector.payment_hold import strip_manager_prefix as _strip_pfx
+    display_name = contact.get("display_name") or _strip_pfx(name)
     level = client["level"]
     days = client["days"]
     amount = client["amount"]
@@ -1359,7 +1382,7 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
         except Exception:
             _payment_hold = None
         if _payment_hold:
-            logger.info("[%s] пропуск — Саида подтвердила оплату, ждём разноски в 1С", name)
+            logger.info("[%s] пропуск — %s", name, _payment_hold_skip_reason(_payment_hold))
             try:
                 from collector.audit_log import audit as _audit
                 _audit("wa_skipped", name=name, reason="payment_hold", dry_run=dry_run)
@@ -1519,7 +1542,7 @@ async def _send_approved_client(client: Dict[str, Any]) -> Dict[str, Any]:
     except Exception:
         hold = None
     if hold:
-        result["reason"] = "Saida confirmed payment, waiting for 1C posting"
+        result["reason"] = _payment_hold_skip_reason(hold)
         return result
     if not phone:
         result["reason"] = "missing WhatsApp phone in approved batch"
@@ -1953,6 +1976,10 @@ async def run_approval_preview(single_client: Optional[str] = None) -> Optional[
         close_admin_messages,
         supersede_batch,
     )
+
+    if not is_allowed_time():
+        logger.info("run_approval_preview: outside collector send window — batch not created")
+        return None
 
     debt_data = load_latest_debt_json()
     if not debt_data:

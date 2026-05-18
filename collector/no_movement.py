@@ -30,6 +30,7 @@ import asyncio
 import json
 import logging
 from collector.logging_utils import get_collector_logger
+from collector.payment_hold import strip_manager_prefix as _strip_pfx
 import os
 from datetime import datetime
 from pathlib import Path
@@ -146,7 +147,7 @@ async def ask_saida_about_no_movement(
 
     text = (
         f"❓ <b>Нет движений по клиенту</b>\n\n"
-        f"<b>Клиент:</b> {name}\n"
+        f"<b>Клиент:</b> {_strip_pfx(name)}\n"
         f"<b>Долг:</b> {amount_str} тг\n"
         f"<b>Без движений:</b> {days} дн.\n"
         f"<b>Менеджер:</b> {mgr_name or '—'}\n\n"
@@ -233,7 +234,7 @@ async def handle_nm_callback(data: str, chat_id: int) -> bool:
 
         await send_telegram(
             chat_id,
-            f"✅ Зафиксировала. Ожидаем разноску в 1С по <b>{full_name}</b>."
+            f"✅ Зафиксировала. Ожидаем разноску в 1С по <b>{_strip_pfx(full_name)}</b>."
         )
         await notify_admin(
             f"💳 <b>Нет движений — оплата подтверждена Саидой</b>\n\n"
@@ -250,7 +251,7 @@ async def handle_nm_callback(data: str, chat_id: int) -> bool:
         state[norm] = rec
         _save_state(state)
 
-        await send_telegram(chat_id, f"Понял. Уведомляю руководителя по <b>{full_name}</b>.")
+        await send_telegram(chat_id, f"Понял. Уведомляю руководителя по <b>{_strip_pfx(full_name)}</b>.")
 
         try:
             import telegram as _tg
