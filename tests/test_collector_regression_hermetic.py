@@ -961,5 +961,85 @@ class WhatsAppPollerHermeticTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(delete_mock.await_count, 1)
 
 
+class PendingSaidaStaleExpiryHermeticTests(unittest.TestCase):
+    """Регрессии для lazy-expiry pending_saida в get_hold_for_client.
+
+    Проблема (2026-05-18): get_hold_for_client возвращал hold с status=pending_saida
+    без проверки TTL — такая запись блокировала collector вечно.
+    Cleanup в send_saida_payment_hold_reminders (ежечасно с 09:00 до 21:00) мог
+    опоздать (race 17:00 collector vs 17:03 cleanup) или вовсе не добраться до
+    hold'ов созданных до добавления cleanup-логики (age_h=268).
+
+    Фикс: lazy-expiry в get_hold_for_client для pending_saida по порогу
+    SAIDA_PENDING_STALE_HOURS (= SAIDA_STALE_TTL_HOURS, default 12h).
+    """
+
+    def setUp(self):
+        import collector.payment_hold as ph
+        self._ph = ph
+        self._tmp = tempfile.TemporaryDirectory()
+        self._hold_path = Path(self._tmp.name) / "saida_payment_holds.json"
+        self._patcher = patch.object(ph, "PAYMENT_HOLD_PATH", self._hold_path)
+        self._patcher.start()
+
+    def tearDown(self):
+        self._patcher.stop()
+        self._tmp.cleanup()
+
+    def _write_holds(self, holds: dict):
+        self._hold_path.parent.mkdir(parents=True, exist_ok=True)
+        self._hold_path.write_text(json.dumps(holds, ensure_ascii=False), encoding="utf-8")
+
+    def _now_iso(self, delta_hours: float = 0):
+        from datetime import datetime as _dt, timedelta as _td
+        from zoneinfo import ZoneInfo as _ZI
+        tz = _ZI("Asia/Almaty")
+        return (_dt.now(tz) - _td(hours=delta_hours)).isoformat()
+
+    def test_fresh_pending_saida_blocks_collector(self):
+        self._write_holds({"tok1": {
+            "client": "М ТестКлиент",
+            "client_norm": "м тестклиент",
+            "status": "pending_saida",
+            "created_at": self._now_iso(delta_hours=1),
+        }})
+        result = self._ph.get_hold_for_client("М ТестКлиент")
+        self.assertIsNotNone(result, "Свежий pending_saida (<12h) должен блокировать")
+
+    def test_stale_pending_saida_does_NOT_block(self):
+        self._write_holds({"tok1": {
+            "client": "М ТестКлиент",
+            "client_norm": "м тестклиент",
+            "status": "pending_saida",
+            "created_at": self._now_iso(delta_hours=268),
+        }})
+        result = self._ph.get_hold_for_client("М ТестКлиент")
+        self.assertIsNone(result, "Старый pending_saida (268h >> 12h) не должен блокировать")
+
+    def test_stale_pending_saida_marked_expired_in_file(self):
+        self._write_holds({"tok1": {
+            "client": "М ТестКлиент",
+            "client_norm": "м тестклиент",
+            "status": "pending_saida",
+            "created_at": self._now_iso(delta_hours=268),
+        }})
+        self._ph.get_hold_for_client("М ТестКлиент")
+        saved = json.loads(self._hold_path.read_text(encoding="utf-8"))
+        self.assertEqual(saved["tok1"]["status"], "expired",
+                         "Протухший pending_saida должен быть помечен expired в файле")
+        self.assertIn("expired_at", saved["tok1"])
+
+    def test_exactly_at_ttl_boundary_does_NOT_block(self):
+        self._write_holds({"tok1": {
+            "client": "М ТестКлиент",
+            "client_norm": "м тестклиент",
+            "status": "pending_saida",
+            "created_at": self._now_iso(delta_hours=12),
+        }})
+        with patch.object(self._ph, "SAIDA_PENDING_STALE_HOURS", 12):
+            result = self._ph.get_hold_for_client("М ТестКлиент")
+        self.assertIsNone(result, "Hold на границе 12h должен быть expired (age >= TTL)")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -31,6 +31,7 @@ PAYMENT_HOLD_PATH = ROOT / "logs" / "saida_payment_holds.json"
 HOLD_TTL_DAYS = int(os.getenv("SAIDA_PAYMENT_HOLD_TTL_DAYS", "2"))
 SAIDA_WARN_HOURS = int(os.getenv("SAIDA_WARN_HOURS", "1"))
 SAIDA_BYPASS_HOURS = int(os.getenv("SAIDA_BYPASS_HOURS", "2"))
+SAIDA_PENDING_STALE_HOURS = int(os.getenv("SAIDA_STALE_TTL_HOURS", "12"))
 
 ACTIVE_STATUSES = {"confirmed_full", "confirmed_partial"}
 OPEN_STATUSES = {"pending_saida", *ACTIVE_STATUSES}
@@ -340,7 +341,7 @@ def get_hold_for_client(client: str) -> Optional[Dict[str, Any]]:
         status = record.get("status")
         if status not in OPEN_STATUSES:
             continue
-        # TTL только для подтверждённых холдов; pending_saida блокирует без TTL
+        # TTL для подтверждённых холдов (2 дня по saida_confirmed_at)
         if status in ACTIVE_STATUSES:
             created_raw = record.get("saida_confirmed_at") or record.get("updated_at") or record.get("created_at")
             try:
@@ -350,6 +351,23 @@ def get_hold_for_client(client: str) -> Optional[Dict[str, Any]]:
             except Exception:
                 created = now
             if now - created > timedelta(days=HOLD_TTL_DAYS):
+                record["status"] = "expired"
+                record["expired_at"] = _now_iso()
+                data[token] = record
+                changed = True
+                continue
+        # Lazy-expiry для pending_saida: тот же порог SAIDA_STALE_TTL_HOURS (12h по умолчанию).
+        # Без этого check старые pending_saida-записи блокируют collector вечно, даже если
+        # send_saida_payment_hold_reminders их ещё не почистил (race window или gap после рестарта).
+        if status == "pending_saida":
+            created_raw = record.get("created_at") or record.get("updated_at")
+            try:
+                created = datetime.fromisoformat(str(created_raw))
+                if created.tzinfo is None and TZ:
+                    created = created.replace(tzinfo=TZ)
+            except Exception:
+                created = now
+            if now - created >= timedelta(hours=SAIDA_PENDING_STALE_HOURS):
                 record["status"] = "expired"
                 record["expired_at"] = _now_iso()
                 data[token] = record
@@ -586,7 +604,7 @@ def _fmt_age_human(hours: float) -> str:
 
 
 def format_saida_hold_stats_text() -> str:
-    """Текстовая сводка backlog Саиды для директора (человеческий язык)."""
+    """Текстовая сводка очереди Саиды для директора."""
     stats = get_saida_hold_stats()
     totals = stats.get("totals", {})
     if not totals.get("pending_total"):
