@@ -191,7 +191,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.81/15.05.2026"
+__VERSION__ = "v9.4.85/18.05.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
@@ -1447,8 +1447,12 @@ async def check_workday_task(context: ContextTypes.DEFAULT_TYPE):
 async def debt_collector_daily(context: ContextTypes.DEFAULT_TYPE):
     """Ежедневный запуск AI-коллектора в 17:00 Asia/Almaty."""
     from bot.workday_checker import is_holiday_today
+    from collector.communications import is_allowed_time as _collector_is_allowed_time
     if is_holiday_today():
         logger.info("debt_collector_daily: выходной — пропуск")
+        return
+    if not _collector_is_allowed_time():
+        logger.info("debt_collector_daily: collector окно закрыто — пропуск")
         return
 
     # Если WHATSAPP_ENABLED=0 — форсируем dry-run, не пытаемся --send (избегаем exit code 1)
@@ -1521,11 +1525,14 @@ async def debt_collector_trigger_check(context: ContextTypes.DEFAULT_TYPE):
     - флаг считается устаревшим (и удаляется без запуска) если старше 6 часов
     """
     from bot.workday_checker import is_holiday_today
+    from collector.communications import is_allowed_time as _collector_is_allowed_time
     now = datetime.now(TZ)
 
     if is_holiday_today():
         return
     if not (9 <= now.hour < 22):
+        return
+    if not _collector_is_allowed_time():
         return
     if not _COLLECTOR_TRIGGER_PATH.exists():
         return
@@ -3107,7 +3114,7 @@ def kb_main(user_role: str, chat_id: int = 0) -> InlineKeyboardMarkup:
             [InlineKeyboardButton("📈 АНАЛИТИКА", callback_data="menu_analytics")],
             [InlineKeyboardButton("🔔 Уведомления сейчас", callback_data="menu_notify")],
             [InlineKeyboardButton("🤖 Коллектор", callback_data="collector_batch")],
-            [InlineKeyboardButton("📋 CRM бэклог", callback_data="crm_backlog")],
+            [InlineKeyboardButton("📋 Клиенты: открытые вопросы", callback_data="crm_backlog")],
             [InlineKeyboardButton(_crm_label, callback_data="crm_ambiguous_queue")],
             [InlineKeyboardButton("🗄️ Архив", callback_data="archive|root")],
             [InlineKeyboardButton("📈 Статистика", callback_data="show_stats")],
@@ -3150,29 +3157,30 @@ def kb_main(user_role: str, chat_id: int = 0) -> InlineKeyboardMarkup:
 # ── Коллектор: статус активного батча ────────────────────────────────────────
 
 _BATCH_STATUS_RU = {
-    "pending_managers":  "⏳ Ожидание менеджеров",
-    "pending_admin":     "📋 Ожидание администратора",
-    "admin_approved":    "✅ Утверждён администратором",
-    "sent":              "📤 Отправлен",
-    "partially_sent":    "📤 Отправлен частично",
-    "send_failed":       "❌ Ошибка отправки",
-    "send_empty":        "⚠️ Нет клиентов к отправке",
-    "expired":           "⌛ Истёк",
-    "cancelled":         "🚫 Отменён",
-    "superseded":        "🔄 Заменён новым",
+    "pending_managers":  "⏳ Ждём ответы менеджеров",
+    "pending_admin":     "📋 Ждёт решения директора",
+    "admin_approved":    "✅ Директор одобрил отправку",
+    "sent":              "📤 Отправлено",
+    "partially_sent":    "📤 Отправлено частично",
+    "send_failed":       "❌ Отправка не удалась",
+    "send_empty":        "⚠️ Некого отправлять",
+    "expired":           "⌛ Время вышло",
+    "too_late":          "⌛ Сегодня уже не отправится",
+    "cancelled":         "🚫 Отменено",
+    "superseded":        "🔄 Заменено новым списком",
 }
 
 
 def _format_collector_batch_text() -> str:
-    """Формирует сообщение о последнем батче коллектора для admin."""
+    """Формирует сообщение о последней подборке коллектора для admin."""
     try:
         from collector.approval_flow import _load_batches
         batches = _load_batches()
     except Exception as exc:
-        return f"⚠️ Не удалось загрузить батчи: {exc}"
+        return f"⚠️ Не удалось загрузить список коллектора: {exc}"
 
     if not batches:
-        return "🤖 <b>Коллектор</b>\n\nАктивных батчей нет."
+        return "🤖 <b>Коллектор</b>\n\nСейчас активных подборок нет."
 
     # Последний батч по created_at (а не по ключу — иначе тестовые
     # `batch-*` или произвольные ID лексикографически побеждают
@@ -3184,7 +3192,7 @@ def _format_collector_batch_text() -> str:
             return (ca, _id)
         latest_id, batch = max(batches.items(), key=_created_at_key)
     except Exception:
-        return "⚠️ Ошибка чтения батча."
+        return "⚠️ Ошибка чтения списка."
 
     batch_id   = batch.get("batch_id", latest_id)
     status     = batch.get("status", "—")
@@ -3192,9 +3200,9 @@ def _format_collector_batch_text() -> str:
     created_at = str(batch.get("created_at") or "—")[:16].replace("T", " ")
 
     lines = [
-        "🤖 <b>Коллектор — текущий батч</b>",
+        "🤖 <b>Коллектор — текущая подборка</b>",
         "",
-        f"ID: <code>{batch_id}</code>",
+        f"Номер: <code>{batch_id}</code>",
         f"Статус: <b>{status_ru}</b>",
         f"Создан: <b>{created_at}</b>",
     ]
@@ -3220,7 +3228,13 @@ def _format_collector_batch_text() -> str:
                 "approved": "✅", "rejected": "❌",
                 "partial": "🔸", "timeout": "⌛",
             }.get(mgr_status, "⏳")
-            status_detail = mgr_status
+            status_detail = {
+                "pending": "ждём ответ",
+                "approved_all": "разрешил всем",
+                "rejected_all": "снял всех",
+                "manual_done": "выбор сохранён",
+                "manual_editing": "проверяет вручную",
+            }.get(mgr_status, mgr_status)
             if mgr_status == "timeout":
                 _wa = mgr_data.get("waiting_for_agreed") or {}
                 _wp = mgr_data.get("waiting_for_proof") or {}
@@ -3240,7 +3254,7 @@ def _format_collector_batch_text() -> str:
     if approved_clients:
         client_list = approved_clients
         lines.append("")
-        lines.append(f"<b>Одобрено к отправке ({len(client_list)}):</b>")
+        lines.append(f"<b>Разрешено к отправке ({len(client_list)}):</b>")
     else:
         all_clients = [
             c for mgr_data in managers.values()
@@ -3249,7 +3263,7 @@ def _format_collector_batch_text() -> str:
         if all_clients:
             client_list = all_clients
             lines.append("")
-            lines.append(f"<b>Клиентов в батче ({len(client_list)}):</b>")
+            lines.append(f"<b>Клиентов в подборке ({len(client_list)}):</b>")
 
     for c in client_list[:20]:
         name    = c.get("name", "—")
@@ -3275,7 +3289,7 @@ def _format_collector_batch_text() -> str:
         total_skipped = len(skip_summary)
         more = "+" if total_skipped >= 20 else ""
         lines.append("")
-        lines.append(f"<b>Пропущено ({total_skipped}{more}):</b>")
+        lines.append(f"<b>Не вошли в отправку ({total_skipped}{more}):</b>")
         for item in skip_summary[:10]:
             lines.append(f"  — {item.get('name', '?')}: {item.get('reason', '?')}")
         if total_skipped > 10:
@@ -3308,11 +3322,11 @@ def _format_crm_backlog_text(top_limit: int = 5) -> str:
         minutes = int(delta.total_seconds() // 60)
         return f"{minutes}м"
 
-    lines: List[str] = ["📋 <b>CRM бэклог</b>\n"]
+    lines: List[str] = ["📋 <b>Клиенты: открытые вопросы</b>\n"]
 
     # ── 1. Phone pending ──────────────────────────────────────────────────────
     phone_items = list(_CRM_PHONE_PENDING.items())
-    lines.append(f"📞 <b>Phone pending: {len(phone_items)}</b>")
+    lines.append(f"📞 <b>Нужно внести телефон: {len(phone_items)}</b>")
     if phone_items:
         phone_items.sort(key=lambda kv: str((kv[1] or {}).get("created_at", "")))
         for _chat_id, entry in phone_items[:top_limit]:
@@ -3320,7 +3334,12 @@ def _format_crm_backlog_text(top_limit: int = 5) -> str:
             client  = entry.get("client_key", "?")
             state   = entry.get("state", "?")
             age     = _age_label(entry.get("created_at"))
-            lines.append(f"  • {manager} → {client} ({state}, {age})")
+            state_ru = {
+                "clarify_name": "уточняем имя",
+                "clarify_phone": "ждём телефон",
+                "clarify_address": "ждём адрес",
+            }.get(state, state)
+            lines.append(f"  • {manager} → {client} ({state_ru}, {age})")
         if len(phone_items) > top_limit:
             lines.append(f"  ... ещё {len(phone_items) - top_limit}")
     lines.append("")
@@ -3331,22 +3350,22 @@ def _format_crm_backlog_text(top_limit: int = 5) -> str:
         if not c.get("claimed") and not _crm_claim_is_stale(c, now_dt)
     ]
     stale_claims = sum(1 for c in _CRM_CLAIM_PENDING.values() if _crm_claim_is_stale(c, now_dt))
-    suffix = f" (+{stale_claims} stale)" if stale_claims else ""
-    lines.append(f"✋ <b>Claim pending: {len(open_claims)}</b>{suffix}")
+    suffix = f" (+{stale_claims} проср.)" if stale_claims else ""
+    lines.append(f"✋ <b>Ждут закрепления: {len(open_claims)}</b>{suffix}")
     if open_claims:
         open_claims.sort(key=lambda kv: str((kv[1] or {}).get("created_at", "")))
         for _tok, claim in open_claims[:top_limit]:
             client = claim.get("client_key", "?")
             age    = _age_label(claim.get("created_at"))
             n_notified = len(claim.get("notified") or [])
-            lines.append(f"  • {client} (разослан {n_notified} мгр, {age})")
+            lines.append(f"  • {client} (отправлено {n_notified} менеджерам, {age})")
         if len(open_claims) > top_limit:
             lines.append(f"  ... ещё {len(open_claims) - top_limit}")
     lines.append("")
 
     # ── 3. Duplicate review ───────────────────────────────────────────────────
     dup_items = [(tok, r) for tok, r in _CRM_DUP_REVIEW_PENDING.items() if not r.get("resolved_at")]
-    lines.append(f"🔀 <b>Duplicate review: {len(dup_items)}</b>")
+    lines.append(f"🔀 <b>Сверка дублей: {len(dup_items)}</b>")
     if dup_items:
         dup_items.sort(key=lambda kv: str((kv[1] or {}).get("created_at", "")))
         for _tok, review in dup_items[:top_limit]:
@@ -3362,8 +3381,8 @@ def _format_crm_backlog_text(top_limit: int = 5) -> str:
     # ── 4. Ambiguous conflicts ────────────────────────────────────────────────
     amb_pending = [(sig, v) for sig, v in _CRM_AMBIGUOUS.items() if v.get("status") == "pending"]
     amb_resolved = sum(1 for v in _CRM_AMBIGUOUS.values() if v.get("status") == "resolved")
-    suffix = f" (+{amb_resolved} resolved в истории)" if amb_resolved else ""
-    lines.append(f"❓ <b>Ambiguous: {len(amb_pending)}</b>{suffix}")
+    suffix = f" (+{amb_resolved} уже решено)" if amb_resolved else ""
+    lines.append(f"❓ <b>Спорные клиенты: {len(amb_pending)}</b>{suffix}")
     if amb_pending:
         amb_pending.sort(key=lambda kv: str((kv[1] or {}).get("added_at", "")))
         for _sig, entry in amb_pending[:top_limit]:
@@ -3380,7 +3399,7 @@ def _format_crm_backlog_text(top_limit: int = 5) -> str:
 def _crm_backlog_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🔄 Обновить", callback_data="crm_backlog")],
-        [InlineKeyboardButton("🟡 Ambiguous-очередь", callback_data="crm_ambiguous_queue")],
+        [InlineKeyboardButton("🟡 Спорные клиенты", callback_data="crm_ambiguous_queue")],
         [InlineKeyboardButton("🔙 Главное меню", callback_data="back_main")],
     ])
 
@@ -3410,9 +3429,9 @@ def _get_pending_admin_batch() -> Optional[Dict[str, Any]]:
 def _collector_batch_keyboard() -> InlineKeyboardMarkup:
     rows = [
         [InlineKeyboardButton("🔄 Обновить", callback_data="collector_batch")],
-        [InlineKeyboardButton("🧭 Актуальный батч", callback_data="collector_actual_batch")],
+        [InlineKeyboardButton("🧭 Текущая подборка", callback_data="collector_actual_batch")],
         [InlineKeyboardButton("🤝 Обещания менеджеров", callback_data="collector_agreed_stats")],
-        [InlineKeyboardButton("📋 Саида backlog", callback_data="collector_saida_stats")],
+        [InlineKeyboardButton("📋 Очередь Саиды", callback_data="collector_saida_stats")],
         [InlineKeyboardButton("🔸 Частичные оплаты", callback_data="collector_partial_stats")],
         [InlineKeyboardButton("⏱ Отсрочки", callback_data="collector_deferral_stats")],
         [InlineKeyboardButton("♻️ Сброс штрафов", callback_data="collector_penalty_reset_prompt")],
@@ -3420,14 +3439,14 @@ def _collector_batch_keyboard() -> InlineKeyboardMarkup:
     # Батч ждёт утверждения Администратора
     pending = _get_pending_admin_batch()
     if pending:
-        rows.append([InlineKeyboardButton("📋 Утвердить рассылку", callback_data="collector_resend_approval")])
+        rows.append([InlineKeyboardButton("📋 Открыть на решение", callback_data="collector_resend_approval")])
     try:
         from collector.approval_flow import get_latest_send_ready_batch
         send_ready = get_latest_send_ready_batch()
     except Exception:
         send_ready = None
     if send_ready:
-        rows.append([InlineKeyboardButton("📤 Готовый список", callback_data="collector_send_latest")])
+        rows.append([InlineKeyboardButton("📤 Список к отправке", callback_data="collector_send_latest")])
     rows.append([InlineKeyboardButton("🔙 Главное меню", callback_data="back_main")])
     return InlineKeyboardMarkup(rows)
 
@@ -3435,7 +3454,7 @@ def _collector_batch_keyboard() -> InlineKeyboardMarkup:
 def _collector_penalty_reset_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("⚠️ Подтвердить сброс", callback_data="collector_penalty_reset_confirm")],
-        [InlineKeyboardButton("↩️ К батчу", callback_data="collector_batch")],
+        [InlineKeyboardButton("↩️ К списку", callback_data="collector_batch")],
         [InlineKeyboardButton("🔙 Главное меню", callback_data="back_main")],
     ])
 
@@ -3464,12 +3483,12 @@ def _format_collector_agreed_stats_text() -> str:
 
 
 def _format_collector_saida_stats_text() -> str:
-    """Формирует read-only сводку backlog Саиды."""
+    """Формирует сводку очереди Саиды."""
     try:
         from collector.payment_hold import format_saida_hold_stats_text
         return format_saida_hold_stats_text()
     except Exception as exc:
-        return f"⚠️ Не удалось загрузить backlog Саиды: {exc}"
+        return f"⚠️ Не удалось загрузить очередь Саиды: {exc}"
 
 
 def _format_collector_partial_stats_text() -> str:
@@ -5869,14 +5888,14 @@ async def cmd_health(update: Update, context: ContextTypes.DEFAULT_TYPE):
     version = __VERSION__
     
     text = (
-        "🥼 System Health\n\n"
-        f"🧩 Version: {version}\n"
-        f"📊 Report types indexed: {len(index)}\n"
-        f"👥 Total manager groups: {total_groups}\n"
-        f"📁 Total files: {total_files}\n"
-        f"⏰ Index age: {round(age_seconds, 1)}s\n"
-        f"🕐 Last build: {datetime.fromtimestamp(_index_ts, tz=TZ).strftime('%H:%M:%S') if _index_ts else 'n/a'}\n"
-        f"🗑️ Pending deletions: {pending_deletions}"
+        "🥼 Состояние системы\n\n"
+        f"🧩 Версия: {version}\n"
+        f"📊 Видов отчётов: {len(index)}\n"
+        f"👥 Групп менеджеров: {total_groups}\n"
+        f"📁 Файлов в индексе: {total_files}\n"
+        f"⏰ Возраст индекса: {round(age_seconds, 1)} сек.\n"
+        f"🕐 Последнее обновление: {datetime.fromtimestamp(_index_ts, tz=TZ).strftime('%H:%M:%S') if _index_ts else 'нет данных'}\n"
+        f"🗑️ Задач на удаление: {pending_deletions}"
     )
     await _send_auto(context, update.effective_chat.id, text)
 
@@ -6446,18 +6465,18 @@ def _crm_phone_suggestions(client_key: str) -> List[str]:
 def _crm_phone_prompt_text(client_key: str, suggestions: Optional[List[str]] = None) -> str:
     suggestions = suggestions if suggestions is not None else _crm_phone_suggestions(client_key)
     if not suggestions:
-        return "Введите телефон WhatsApp:\n<code>+7XXXXXXXXXX</code>"
+        return "Введите номер в WhatsApp:\n<code>+7XXXXXXXXXX</code>"
     if len(suggestions) == 1:
         return (
-            "У клиента нет WhatsApp в CRM.\n\n"
+            "У клиента нет номера в WhatsApp.\n\n"
             f"Клиент:\n<b>{client_key}</b>\n\n"
             "В названии найден возможный номер:\n"
             f"<code>{suggestions[0]}</code>\n\n"
-            "Подтвердите WhatsApp клиента."
+            "Подтвердите номер клиента."
         )
     rows = "\n".join(f"{idx}. <code>{phone}</code>" for idx, phone in enumerate(suggestions, start=1))
     return (
-        "У клиента нет WhatsApp в CRM.\n\n"
+        "У клиента нет номера в WhatsApp.\n\n"
         f"Клиент:\n<b>{client_key}</b>\n\n"
         "В названии найдено несколько возможных номеров:\n"
         f"{rows}\n\n"
@@ -7957,12 +7976,12 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         mode = _get_actual_collector_batch_mode()
         if mode == "pending_admin":
-            await q.answer("Открываю батч на утверждение...")
+            await q.answer("Открываю список на решение...")
             try:
                 from collector.approval_flow import send_admin_summary
                 batch = _get_pending_admin_batch()
                 if not batch:
-                    await _send_auto(context, chat_id, "⚠️ Актуальный батч уже изменился. Обновите экран.")
+                    await _send_auto(context, chat_id, "⚠️ Текущий список уже изменился. Обновите экран.")
                     return
                 await send_admin_summary(batch, context.bot)
             except Exception as _e:
@@ -7970,7 +7989,7 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await context.bot.send_message(chat_id=chat_id, text=f"⚠️ Ошибка: {_e}")
             return
         if mode == "send_ready":
-            await q.answer("Открываю готовый список...")
+            await q.answer("Открываю список к отправке...")
             try:
                 from collector.approval_flow import (
                     get_latest_send_ready_batch,
@@ -7979,12 +7998,12 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 batch = get_latest_send_ready_batch()
                 if not batch:
-                    await _send_auto(context, chat_id, "⚠️ Нет готового списка для отправки.")
+                    await _send_auto(context, chat_id, "⚠️ Сейчас нет списка, готового к отправке.")
                     return
                 batch_id = str(batch.get("batch_id") or "—")
                 text = (
-                    f"📤 <b>Готовый список ждёт отправки</b>\n"
-                    f"Batch: <code>{batch_id}</code>\n\n"
+                    f"📤 <b>Список ждёт отправки</b>\n"
+                    f"Номер: <code>{batch_id}</code>\n\n"
                     f"{_format_admin_summary_text(batch)}"
                 )
                 await _send_auto(
@@ -7998,7 +8017,7 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logger.error("collector_actual_batch send_ready error: %s", _e, exc_info=True)
                 await context.bot.send_message(chat_id=chat_id, text=f"⚠️ Ошибка: {_e}")
             return
-        await q.answer("Показываю текущий статус...")
+        await q.answer("Показываю текущую подборку...")
         text = _format_collector_batch_text()
         kb_back = _collector_batch_keyboard()
         await hide_main_menu(context, chat_id)
@@ -8017,9 +8036,9 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         batch = _get_pending_admin_batch()
         if not batch:
-            await q.answer("Нет батча, ожидающего утверждения")
+            await q.answer("Сейчас нет списка, который ждёт решения")
             return
-        await q.answer("Отправляю сводку для утверждения...")
+        await q.answer("Открываю сводку для решения...")
         try:
             from collector.approval_flow import send_admin_summary
             await send_admin_summary(batch, context.bot)
@@ -8032,7 +8051,7 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if user_role != "admin":
             await q.answer("⛔ Доступ запрещён")
             return
-        await q.answer("Открываю готовый список...")
+        await q.answer("Открываю список к отправке...")
         try:
             from collector.approval_flow import (
                 get_latest_send_ready_batch,
@@ -8041,12 +8060,12 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             batch = get_latest_send_ready_batch()
             if not batch:
-                await _send_auto(context, chat_id, "⚠️ Нет готового списка для отправки.")
+                await _send_auto(context, chat_id, "⚠️ Сейчас нет списка, готового к отправке.")
                 return
             batch_id = str(batch.get("batch_id") or "—")
             text = (
-                f"📤 <b>Готовый список ждёт отправки</b>\n"
-                f"Batch: <code>{batch_id}</code>\n\n"
+                f"📤 <b>Список ждёт отправки</b>\n"
+                f"Номер: <code>{batch_id}</code>\n\n"
                 f"{_format_admin_summary_text(batch)}"
             )
             await _send_auto(
@@ -8069,7 +8088,7 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = _format_collector_agreed_stats_text()
         kb_back = InlineKeyboardMarkup([
             [InlineKeyboardButton("🔄 Обновить", callback_data="collector_agreed_stats")],
-            [InlineKeyboardButton("↩️ К батчу", callback_data="collector_batch")],
+            [InlineKeyboardButton("↩️ К подборке", callback_data="collector_batch")],
             [InlineKeyboardButton("🔙 Главное меню", callback_data="back_main")],
         ])
         await hide_main_menu(context, chat_id)
@@ -8090,7 +8109,7 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = _format_collector_saida_stats_text()
         kb_back = InlineKeyboardMarkup([
             [InlineKeyboardButton("🔄 Обновить", callback_data="collector_saida_stats")],
-            [InlineKeyboardButton("↩️ К батчу", callback_data="collector_batch")],
+            [InlineKeyboardButton("↩️ К подборке", callback_data="collector_batch")],
             [InlineKeyboardButton("🔙 Главное меню", callback_data="back_main")],
         ])
         await hide_main_menu(context, chat_id)
@@ -8111,7 +8130,7 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = _format_collector_partial_stats_text()
         kb_back = InlineKeyboardMarkup([
             [InlineKeyboardButton("🔄 Обновить", callback_data="collector_partial_stats")],
-            [InlineKeyboardButton("↩️ К батчу", callback_data="collector_batch")],
+            [InlineKeyboardButton("↩️ К подборке", callback_data="collector_batch")],
             [InlineKeyboardButton("🔙 Главное меню", callback_data="back_main")],
         ])
         await hide_main_menu(context, chat_id)
@@ -8132,7 +8151,7 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = _format_collector_deferral_stats_text()
         kb_back = InlineKeyboardMarkup([
             [InlineKeyboardButton("🔄 Обновить", callback_data="collector_deferral_stats")],
-            [InlineKeyboardButton("↩️ К батчу", callback_data="collector_batch")],
+            [InlineKeyboardButton("↩️ К подборке", callback_data="collector_batch")],
             [InlineKeyboardButton("🔙 Главное меню", callback_data="back_main")],
         ])
         await hide_main_menu(context, chat_id)
@@ -8293,7 +8312,7 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.answer("Жду новый номер.")
             await context.bot.send_message(
                 chat_id=chat_id,
-                text="Введите действующий номер WhatsApp:\n<code>+7XXXXXXXXXX</code>",
+                text="Введите действующий номер в WhatsApp:\n<code>+7XXXXXXXXXX</code>",
                 parse_mode="HTML",
             )
             return
@@ -8332,7 +8351,7 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pass
             return
 
-        await q.answer("Неизвестное действие CRM duplicate review.")
+        await q.answer("Неизвестное действие в сверке клиентов.")
         return
 
     # ── CRM backlog: единый экран по всем CRM-очередям ────────────────────────
@@ -8616,7 +8635,7 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
             await context.bot.send_message(
                 chat_id=chat_id,
-                text="Введите другой телефон WhatsApp:\n<code>+7XXXXXXXXXX</code>",
+                text="Введите другой номер в WhatsApp:\n<code>+7XXXXXXXXXX</code>",
                 parse_mode="HTML",
             )
             return
@@ -8630,7 +8649,7 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await q.answer("Номер уже недоступен. Введите другой номер.")
                 await context.bot.send_message(
                     chat_id=chat_id,
-                    text="Введите телефон WhatsApp:\n<code>+7XXXXXXXXXX</code>",
+                    text="Введите номер в WhatsApp:\n<code>+7XXXXXXXXXX</code>",
                     parse_mode="HTML",
                 )
                 return
@@ -9131,7 +9150,7 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.answer("✅ Взяли!")
         try:
             await q.message.edit_text(
-                f"? <b>{client_key}</b>\n????: <b>{claimer_name}</b>",
+                f"✅ <b>{client_key}</b>\nЗакреплён за: <b>{claimer_name}</b>",
                 parse_mode="HTML",
                 reply_markup=None,
             )
@@ -9144,7 +9163,7 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 await context.bot.send_message(
                     chat_id=other_chat_id,
-                    text=f"?? <b>{client_key}</b> ? ???? {claimer_name}.",
+                    text=f"✅ <b>{client_key}</b> уже закреплён за менеджером <b>{claimer_name}</b>.",
                     parse_mode="HTML",
                 )
             except Exception:
@@ -9211,6 +9230,16 @@ async def post_init(app: Application):
     _dev_feedback_load()
     _crmdup_load_ambiguous()
 
+    # Startup-очистка протухших payment holds (pending_saida без ответа, confirmed старше TTL).
+    # Убирает старьё, накопившееся пока бот был остановлен или scheduler не успел отработать.
+    try:
+        from collector.payment_hold import expire_stale_holds_on_startup
+        _expired_holds = expire_stale_holds_on_startup()
+        if _expired_holds:
+            logger.info("🧹 Startup cleanup: закрыто %d просроченных payment holds", _expired_holds)
+    except Exception as _ph_e:
+        logger.warning("payment hold startup cleanup error: %s", _ph_e)
+
     # v9.4.27: Уведомление о запуске — admin (техническое) + команда (мотивирующее)
     start_kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("📋 Открыть меню", callback_data="back_main")]
@@ -9241,7 +9270,7 @@ async def post_init(app: Application):
                 f"· 14:00 — контроль отгрузки / авто-стоп{_oploss_line}\n"
                 f"· 16:30 — стоп-лист менеджерам\n"
                 f"· 17:00 — коллектор (резерв)\n"
-                f"· 18:00 — CRM: база + телефоны\n"
+                f"· 18:00 — база клиентов + телефоны\n"
                 f"· 18:30 — эскалация стоп-листа\n"
                 f"· 20:00 — валовая\n"
                 f"· 21:00 — продажи\n"

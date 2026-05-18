@@ -32,6 +32,7 @@ HOLD_TTL_DAYS = int(os.getenv("SAIDA_PAYMENT_HOLD_TTL_DAYS", "2"))
 SAIDA_WARN_HOURS = int(os.getenv("SAIDA_WARN_HOURS", "1"))
 SAIDA_BYPASS_HOURS = int(os.getenv("SAIDA_BYPASS_HOURS", "2"))
 SAIDA_PENDING_STALE_HOURS = int(os.getenv("SAIDA_STALE_TTL_HOURS", "12"))
+MINAI_WA_PHONE = os.getenv("MINAI_WA_PHONE", "")
 
 ACTIVE_STATUSES = {"confirmed_full", "confirmed_partial"}
 OPEN_STATUSES = {"pending_saida", *ACTIVE_STATUSES}
@@ -125,12 +126,14 @@ def create_manager_payment_request(
 ) -> Dict[str, Any]:
     """Create or refresh a manager-to-Saida payment check request."""
     token = _token(manager, client)
+    is_new = False
     with _hold_lock():
         data = _load()
         current = data.get(token, {})
         if current.get("status") in ACTIVE_STATUSES:
             return current
 
+        is_new = not bool(current)
         record = {
             "token": token,
             "status": "pending_saida",
@@ -146,7 +149,17 @@ def create_manager_payment_request(
         }
         data[token] = record
         _save(data)
-        return record
+
+    # Уведомление Минай — вне лока, чтобы не держать file lock во время сетевого вызова.
+    # Только при НОВОМ hold-е (не при refresh), только в боевом режиме.
+    if is_new and MINAI_WA_PHONE and os.getenv("COLLECTOR_TEST_MODE") != "1":
+        try:
+            from collector.communications import send_whatsapp
+            send_whatsapp(MINAI_WA_PHONE, _minai_notify_text(client, manager))
+        except Exception:
+            pass
+
+    return record
 
 
 _CONFIRMED_STATUSES = {"confirmed_full", "confirmed_partial", "rejected"}
@@ -726,3 +739,64 @@ def format_partial_payment_stats_text() -> str:
             )
 
     return "\n".join(lines)
+
+
+def _minai_notify_text(client: str, manager: str) -> str:
+    return (
+        f"Минай, добрый день! 🔔\n\n"
+        f"Менеджер {manager} сообщил об оплате клиента:\n"
+        f"{client}\n\n"
+        f"Пожалуйста, предоставьте Саиде выписку или реестр платежей "
+        f"по этому клиенту как можно скорее — до получения её запроса на подтверждение.\n\n"
+        f"Если данные не предоставлены вовремя — Саида не сможет подтвердить оплату, "
+        f"клиент останется в должниках, и аналитическая система будет содержать неверные данные. "
+        f"Это тормозит работу всей команды."
+    )
+
+
+def expire_stale_holds_on_startup() -> int:
+    """Принудительно закрывает все протухшие holds при старте бота.
+
+    Возвращает количество закрытых записей.
+    Используется в post_init() чтобы убрать старьё, накопившееся пока бот был остановлен
+    или пока cleanup-scheduler не успел отработать.
+    """
+    now = _now()
+    with _hold_lock():
+        data = _load()
+        expired = 0
+        for token, record in list(data.items()):
+            if not isinstance(record, dict):
+                continue
+            status = record.get("status")
+            if status not in OPEN_STATUSES:
+                continue
+            if status == "pending_saida":
+                created_raw = record.get("created_at") or record.get("updated_at")
+                try:
+                    created = datetime.fromisoformat(str(created_raw))
+                    if created.tzinfo is None and TZ:
+                        created = created.replace(tzinfo=TZ)
+                except Exception:
+                    created = now
+                if now - created >= timedelta(hours=SAIDA_PENDING_STALE_HOURS):
+                    record["status"] = "expired"
+                    record["expired_at"] = _now_iso()
+                    data[token] = record
+                    expired += 1
+            elif status in ACTIVE_STATUSES:
+                created_raw = record.get("saida_confirmed_at") or record.get("updated_at") or record.get("created_at")
+                try:
+                    created = datetime.fromisoformat(str(created_raw))
+                    if created.tzinfo is None and TZ:
+                        created = created.replace(tzinfo=TZ)
+                except Exception:
+                    created = now
+                if now - created > timedelta(days=HOLD_TTL_DAYS):
+                    record["status"] = "expired"
+                    record["expired_at"] = _now_iso()
+                    data[token] = record
+                    expired += 1
+        if expired:
+            _save(data)
+    return expired
