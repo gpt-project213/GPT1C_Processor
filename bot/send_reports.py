@@ -11232,6 +11232,14 @@ def main():
                 )
                 sched_logger.info("🚫 Настроен SLA-контроль оплат Саиды: каждый час")
 
+        # Приветствие Минай — один раз при первом запуске
+        if os.getenv("MINAI_WA_PHONE"):
+            try:
+                from bot.minai_reminders import send_welcome_if_needed as _minai_welcome
+                _minai_welcome()
+            except Exception as _we:
+                sched_logger.warning("minai welcome error: %s", _we)
+
         # Напоминалка Минай — каждые 5 минут
         if os.getenv("MINAI_WA_PHONE"):
             try:
