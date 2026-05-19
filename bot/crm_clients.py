@@ -4,7 +4,7 @@
 bot/crm_clients.py
 Универсальная база клиентов Минбаракат (CRM).
 
-Версия: 1.1.2 (2026-05-15)
+Версия: 1.1.3 (2026-05-19)
 Изменения v1.0.5:
   - Fix S1: список менеджеров читается из config/managers.json (single source of truth).
     Раньше был хардкод ("Алена", "Ергали", "Магира", "Оксана"); fallback — тот же
@@ -55,6 +55,7 @@ CONTACTS_XLSX_PATH = ROOT_DIR / "contacts.xlsx"
 CONTACTS_XLSX_BACKUP_DIR = ROOT_DIR / "backups" / "contacts_xlsx"
 
 logger = get_runtime_logger(__name__, system="CRM", component="STORE")
+__VERSION__ = "1.1.3"
 _UNKNOWN_MANAGERS = {"", "Не определён", "?", "-", "—"}
 
 
@@ -575,6 +576,81 @@ def mark_phone_conflict_distinct(client_keys: List[str], reviewer: str = "") -> 
         return False
     crm_audit("duplicate_phone_conflict_marked_distinct", reviewer=reviewer, client_keys=client_keys)
     logger.info("CRM duplicate conflict marked distinct: keys=%d reviewer=%s", len(client_keys), reviewer or "-")
+    return True
+
+
+def is_client_pair_excluded(left_key: str, right_key: str) -> bool:
+    """Public wrapper: whether two CRM keys were explicitly marked as different."""
+    if not left_key or not right_key:
+        return False
+    data = load_clients()
+    clients_db = data.get("clients", {})
+    left_info = clients_db.get(left_key)
+    right_info = clients_db.get(right_key)
+    if not isinstance(left_info, dict) or not isinstance(right_info, dict):
+        return False
+    return _pair_review_blocked(left_key, left_info, right_key, right_info)
+
+
+def merge_client_into_existing(
+    keep_key: str,
+    alias_key: str,
+    manager: str = "",
+    reviewer: str = "",
+    source: str = "claim_same_client",
+) -> bool:
+    """
+    Safe merge for manager-confirmed "это тот же клиент?" cases.
+
+    keep_key remains the canonical CRM card; alias_key is folded into aliases.
+    """
+    if not keep_key or not alias_key or keep_key == alias_key:
+        return False
+
+    data = load_clients()
+    clients_db = data.get("clients", {})
+    keep_entry = clients_db.get(keep_key)
+    alias_entry = clients_db.get(alias_key)
+    if not isinstance(keep_entry, dict) or not isinstance(alias_entry, dict):
+        return False
+
+    _merge_client_entries(clients_db, keep_key, alias_key)
+    data["clients"] = clients_db
+    if not save_clients(data):
+        logger.error("merge_client_into_existing: clients.json not saved")
+        return False
+
+    crm_audit(
+        "same_client_merged",
+        keep_key=keep_key,
+        alias_key=alias_key,
+        manager=manager,
+        reviewer=reviewer,
+        source=source,
+    )
+
+    if manager and manager not in _UNKNOWN_MANAGERS:
+        if not apply_manual_ownership(
+            client_keys=[keep_key],
+            manager=manager,
+            reviewer=reviewer or manager,
+            source=source,
+        ):
+            logger.error(
+                "merge_client_into_existing: ownership stamp failed keep=%s alias=%s manager=%s",
+                keep_key,
+                alias_key,
+                manager,
+            )
+            return False
+
+    logger.info(
+        "CRM same-client merge: keep=%s alias=%s manager=%s reviewer=%s",
+        keep_key,
+        alias_key,
+        manager or "-",
+        reviewer or "-",
+    )
     return True
 
 

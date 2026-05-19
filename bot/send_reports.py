@@ -191,7 +191,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.86/19.05.2026"
+__VERSION__ = "v9.4.87/19.05.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
@@ -1367,37 +1367,31 @@ async def crm_daily_task(context: ContextTypes.DEFAULT_TYPE):
                     except Exception as _pe:
                         crm_logger.warning("CRM prefix-autoassign send error %s: %s", _client_key, _pe)
                 continue
-            # Нет префикса — broadcast "чей клиент?" всем
-            _token = _crm_claim_token()
-            _notified = []
-            _kb = InlineKeyboardMarkup([[
-                InlineKeyboardButton("✋ Мой клиент", callback_data=f"crm_claim|{_token}")
-            ]])
-            for _mgr_name, _mgr_chat in _participants.items():
-                try:
-                    await context.bot.send_message(
-                        chat_id=_mgr_chat,
-                        text=(
-                            f"❓ <b>Чей клиент?</b>\n\n"
-                            f"<b>{_client_key}</b>\n\n"
-                            f"Если ваш — нажмите кнопку."
-                        ),
-                        parse_mode="HTML",
-                        reply_markup=_kb,
-                    )
-                    _notified.append(_mgr_chat)
-                except Exception as _ce:
-                    crm_logger.warning("crm_claim broadcast %s → %s: %s", _client_key, _mgr_name, _ce)
-            _CRM_CLAIM_PENDING[_token] = {
-                "client_key": _client_key,
-                "notified": _notified,
-                "claimed": False,
-                "created_at": datetime.now(TZ).isoformat(),
-            }
-            if not _crm_save_claim_pending():
-                crm_logger.error("crm_state_lock_timeout: claim broadcast save failed (in-memory only)")
-            crm_audit("claim_broadcast", client_key=_client_key, notified_count=len(_notified), token=_token)
-            crm_logger.info("CRM claim: разослано по %d участникам для «%s»", len(_notified), _client_key)
+            # Нет префикса — сначала пробуем спросить владельца похожей карточки,
+            # это тот же клиент или нет. Только потом общий broadcast "чей клиент?"
+            _same_client = _crm_pick_owned_similar_client(_client_key)
+            if _same_client:
+                _known_key, _known_manager = _same_client
+                _known_chat = _participants.get(_known_manager)
+                if _known_chat:
+                    try:
+                        await _crm_send_same_client_confirm(
+                            context=context,
+                            client_key=_client_key,
+                            known_key=_known_key,
+                            manager_name=_known_manager,
+                            manager_chat_id=_known_chat,
+                        )
+                        continue
+                    except Exception as _same_e:
+                        crm_logger.warning(
+                            "crm same-client confirm %s -> %s failed: %s",
+                            _client_key,
+                            _known_manager,
+                            _same_e,
+                        )
+
+            await _crm_send_claim_broadcast(context, _client_key)
 
         log_event("crm_daily_done",
                   new_total=sum(len(v) for v in new_by_manager.values()))
@@ -7164,6 +7158,222 @@ def _crm_collect_unowned_claim_clients(limit: int = 3) -> List[str]:
     return result
 
 
+def _crm_pick_owned_similar_client(client_key: str) -> Optional[Tuple[str, str]]:
+    """Returns (existing_key, manager) for a likely already-owned duplicate, else None."""
+    try:
+        from bot.crm_clients import (
+            find_similar_clients as _find_similar_clients,
+            is_client_pair_excluded as _crm_pair_excluded,
+            load_clients as _crm_load,
+        )
+    except Exception as _e:
+        crm_logger.warning("crm same-client imports error for %s: %s", client_key, _e)
+        return None
+
+    _crm_data = _crm_load()
+    _clients = _crm_data.get("clients", {})
+    _unknown = {"", "Не определён", "?", "-", "—"}
+    _matches: List[Tuple[str, str]] = []
+    for _candidate_key in _find_similar_clients(client_key, limit=5):
+        if _candidate_key == client_key:
+            continue
+        if _crm_pair_excluded(client_key, _candidate_key):
+            continue
+        _candidate = _clients.get(_candidate_key)
+        if not isinstance(_candidate, dict):
+            continue
+        _owner = (_candidate.get("ownership_manager") or _candidate.get("manager") or "").strip()
+        if _owner in _unknown:
+            continue
+        _chat_id = MANAGERS_MAP.get(_owner)
+        if not _chat_id:
+            continue
+        _matches.append((_candidate_key, _owner))
+
+    if not _matches:
+        return None
+    _owners = {owner for _, owner in _matches}
+    if len(_owners) != 1:
+        crm_logger.info("CRM same-client skipped for %s: multiple owners %s", client_key, sorted(_owners))
+        return None
+    return _matches[0]
+
+
+async def _crm_send_claim_broadcast(
+    context: ContextTypes.DEFAULT_TYPE,
+    client_key: str,
+    preface_html: str = "",
+) -> None:
+    _participants = _all_crm_participants()
+    if not _participants:
+        return
+
+    _token = _crm_claim_token()
+    _notified: List[int] = []
+    _kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("✋ Мой клиент", callback_data=f"crm_claim|{_token}")
+    ]])
+    _text = (
+        f"{preface_html}"
+        f"❓ <b>Чей клиент?</b>\n\n"
+        f"<b>{client_key}</b>\n\n"
+        f"Если ваш — нажмите кнопку."
+    )
+    for _mgr_name, _mgr_chat in _participants.items():
+        try:
+            await context.bot.send_message(
+                chat_id=_mgr_chat,
+                text=_text,
+                parse_mode="HTML",
+                reply_markup=_kb,
+            )
+            _notified.append(_mgr_chat)
+        except Exception as _ce:
+            crm_logger.warning("crm_claim broadcast %s → %s: %s", client_key, _mgr_name, _ce)
+
+    _CRM_CLAIM_PENDING[_token] = {
+        "mode": "claim_broadcast",
+        "client_key": client_key,
+        "notified": _notified,
+        "claimed": False,
+        "created_at": datetime.now(TZ).isoformat(),
+    }
+    if not _crm_save_claim_pending():
+        crm_logger.error("crm_state_lock_timeout: claim broadcast save failed (in-memory only)")
+    crm_audit("claim_broadcast", client_key=client_key, notified_count=len(_notified), token=_token)
+    crm_logger.info("CRM claim: разослано по %d участникам для «%s»", len(_notified), client_key)
+
+
+async def _crm_send_same_client_confirm(
+    context: ContextTypes.DEFAULT_TYPE,
+    client_key: str,
+    known_key: str,
+    manager_name: str,
+    manager_chat_id: int,
+) -> None:
+    _token = _crm_claim_token()
+    _kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Да, тот же клиент", callback_data=f"crm_same_yes|{_token}")],
+        [InlineKeyboardButton("❌ Нет, это другой", callback_data=f"crm_same_no|{_token}")],
+    ])
+    await context.bot.send_message(
+        chat_id=manager_chat_id,
+        text=(
+            f"❓ <b>Это один и тот же клиент?</b>\n\n"
+            f"Новый ключ в CRM:\n<b>{client_key}</b>\n\n"
+            f"Похож на уже известного клиента:\n<b>{known_key}</b>\n\n"
+            f"Если это тот же клиент — свяжу карточки.\n"
+            f"Если нет — попрошу отдельную идентификацию."
+        ),
+        parse_mode="HTML",
+        reply_markup=_kb,
+    )
+    _CRM_CLAIM_PENDING[_token] = {
+        "mode": "same_client_confirm",
+        "client_key": client_key,
+        "known_key": known_key,
+        "notified": [manager_chat_id],
+        "manager": manager_name,
+        "claimed": False,
+        "created_at": datetime.now(TZ).isoformat(),
+    }
+    if not _crm_save_claim_pending():
+        crm_logger.error("crm_state_lock_timeout: same-client save failed (in-memory only)")
+    crm_audit("same_client_confirm_sent", client_key=client_key, known_key=known_key, manager=manager_name, token=_token)
+    crm_logger.info("CRM same-client ask: %s ?= %s -> %s", client_key, known_key, manager_name)
+
+
+async def _crm_begin_phone_chain(
+    context: ContextTypes.DEFAULT_TYPE,
+    chat_id: int,
+    manager_name: str,
+    client_key: str,
+    done_today: int = 0,
+    daily_limit: int = 1,
+) -> bool:
+    from bot.crm_clients import canonicalize_client_key, load_clients as _crm_load
+
+    _crm_data = _crm_load()
+    _clients = _crm_data.get("clients", {})
+    _entry_key = next(
+        (key for key in _clients.keys() if canonicalize_client_key(key) == canonicalize_client_key(client_key)),
+        None,
+    )
+    if not _entry_key:
+        return False
+    _entry = _clients.get(_entry_key)
+    if not isinstance(_entry, dict):
+        return False
+
+    _prefix_mgr = _crm_manager_from_prefix(_entry_key)
+    _display_name = (_entry.get("display_name") or "").strip()
+    _phone = (_entry.get("whatsapp") or _entry.get("phone") or "").strip()
+    _address = (_entry.get("address") or "").strip()
+
+    if not _display_name and not _prefix_mgr:
+        _state = "clarify_name"
+    elif not _phone:
+        _state = "clarify_phone"
+    elif not _address:
+        _state = "clarify_address"
+    else:
+        return False
+
+    _remaining = 0
+    try:
+        from bot.crm_clients import get_clients_without_phones as _crm_next2
+        _remaining = len(_crm_next2(manager_name, limit=500))
+    except Exception:
+        _remaining = 0
+
+    _now_iso = datetime.now(TZ).isoformat()
+    _CRM_PHONE_PENDING[chat_id] = {
+        "state": _state,
+        "client_key": _entry_key,
+        "original_name": _entry.get("original_name") or _entry_key,
+        "display_name": _display_name or (_entry_key[2:] if _prefix_mgr else ""),
+        "name_mode": (_entry.get("name_mode") or ("system" if _prefix_mgr else None)),
+        "name_review_needed": _entry.get("name_review_needed", False if _prefix_mgr else not bool(_display_name)),
+        "phone": _phone,
+        "address": _address,
+        "done_today": done_today,
+        "daily_limit": daily_limit,
+        "manager": manager_name,
+        "total_no_phone": _remaining,
+        "created_at": _now_iso,
+        "last_sent": _now_iso,
+    }
+    if not _crm_save_pending():
+        _CRM_PHONE_PENDING.pop(chat_id, None)
+        return False
+
+    if _state == "clarify_name":
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=_crm_name_prompt_text(
+                client_key=_entry_key,
+                done_today=done_today,
+                total=_remaining,
+                daily_limit=daily_limit,
+            ),
+            parse_mode="HTML",
+            reply_markup=_crm_name_choice_kb(),
+        )
+    elif _state == "clarify_phone":
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=_crm_phone_prompt_text(_entry_key),
+            parse_mode="HTML",
+            reply_markup=_crm_phone_choice_kb(_entry_key) or _crm_phone_help_only_kb(),
+        )
+    else:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="Введите адрес торговой точки",
+        )
+    return True
+
+
 async def cmd_guide(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Отправляет HTML-инструкцию. Саиде — её инструкцию, остальным — общую."""
     chat_id = update.effective_chat.id
@@ -9085,6 +9295,134 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         return
 
+    if data.startswith("crm_same_yes|"):
+        token = data.split("|", 1)[1]
+        claim = _CRM_CLAIM_PENDING.get(token)
+        if claim and not claim.get("claimed") and _crm_claim_is_stale(claim):
+            _CRM_CLAIM_PENDING.pop(token, None)
+            _crm_save_claim_pending()
+            claim = None
+        if not claim or claim.get("mode") != "same_client_confirm":
+            await q.answer("Запрос устарел или уже закрыт.")
+            return
+
+        claimer_chat_id = q.message.chat.id
+        claimer_name = None
+        for mgr, mid in _all_crm_participants().items():
+            if mid == claimer_chat_id:
+                claimer_name = mgr
+                break
+        if not claimer_name:
+            await q.answer("Нет доступа к этому действию.")
+            return
+        if claim.get("manager") and claim.get("manager") != claimer_name:
+            await q.answer("Этот вопрос адресован другому менеджеру.")
+            return
+
+        client_key = claim.get("client_key", "")
+        known_key = claim.get("known_key", "")
+        try:
+            from bot.crm_clients import merge_client_into_existing as _crm_merge_existing
+            if not _crm_merge_existing(
+                keep_key=known_key,
+                alias_key=client_key,
+                manager=claimer_name,
+                reviewer=claimer_name,
+                source="same_client_confirm",
+            ):
+                await q.answer("⚠️ Не удалось связать карточки.", show_alert=True)
+                return
+        except Exception as _e:
+            crm_logger.error("crm_same_yes merge error: %s", _e)
+            await q.answer("⚠️ Не удалось связать карточки.", show_alert=True)
+            return
+
+        _CRM_CLAIM_PENDING.pop(token, None)
+        if not _crm_save_claim_pending():
+            crm_logger.error("crm_same_yes: pending save failed after resolve")
+        crm_audit("same_client_confirm_yes", client_key=client_key, known_key=known_key, manager=claimer_name)
+
+        await q.answer("✅ Карточки связаны")
+        try:
+            await q.message.edit_text(
+                (
+                    f"✅ <b>Карточки связаны</b>\n\n"
+                    f"Новый ключ:\n<b>{client_key}</b>\n\n"
+                    f"Теперь это alias клиента:\n<b>{known_key}</b>"
+                ),
+                parse_mode="HTML",
+                reply_markup=None,
+            )
+        except Exception:
+            pass
+
+        await _crm_begin_phone_chain(
+            context=context,
+            chat_id=claimer_chat_id,
+            manager_name=claimer_name,
+            client_key=known_key,
+            done_today=0,
+            daily_limit=1,
+        )
+        return
+
+    if data.startswith("crm_same_no|"):
+        token = data.split("|", 1)[1]
+        claim = _CRM_CLAIM_PENDING.get(token)
+        if claim and not claim.get("claimed") and _crm_claim_is_stale(claim):
+            _CRM_CLAIM_PENDING.pop(token, None)
+            _crm_save_claim_pending()
+            claim = None
+        if not claim or claim.get("mode") != "same_client_confirm":
+            await q.answer("Запрос устарел или уже закрыт.")
+            return
+
+        claimer_chat_id = q.message.chat.id
+        claimer_name = None
+        for mgr, mid in _all_crm_participants().items():
+            if mid == claimer_chat_id:
+                claimer_name = mgr
+                break
+        if not claimer_name:
+            await q.answer("Нет доступа к этому действию.")
+            return
+        if claim.get("manager") and claim.get("manager") != claimer_name:
+            await q.answer("Этот вопрос адресован другому менеджеру.")
+            return
+
+        client_key = claim.get("client_key", "")
+        known_key = claim.get("known_key", "")
+        try:
+            from bot.crm_clients import mark_phone_conflict_distinct as _crm_mark_distinct
+            _crm_mark_distinct([client_key, known_key], reviewer=claimer_name)
+        except Exception as _e:
+            crm_logger.warning("crm_same_no mark distinct error: %s", _e)
+
+        _CRM_CLAIM_PENDING.pop(token, None)
+        if not _crm_save_claim_pending():
+            crm_logger.error("crm_same_no: pending save failed after resolve")
+        crm_audit("same_client_confirm_no", client_key=client_key, known_key=known_key, manager=claimer_name)
+
+        await q.answer("Понял, это разные клиенты")
+        try:
+            await q.message.edit_text(
+                (
+                    f"✅ <b>Принято: это разные клиенты</b>\n\n"
+                    f"{client_key}\nне будет автоматически связан с\n{known_key}"
+                ),
+                parse_mode="HTML",
+                reply_markup=None,
+            )
+        except Exception:
+            pass
+
+        await _crm_send_claim_broadcast(
+            context,
+            client_key,
+            preface_html="ℹ️ Менеджер подтвердил, что похожая карточка — это другой клиент.\n\n",
+        )
+        return
+
     # ?? CRM: "??? ??????" ? ????????/admin ???????? ?????????? ??????? ??????
     if data.startswith("crm_claim|"):
         token = data.split("|", 1)[1]
@@ -9101,6 +9439,9 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             claim = None
         if not claim:
             await q.answer("?????? ??????? ??? ??? ?????????.")
+            return
+        if claim.get("mode") and claim.get("mode") != "claim_broadcast":
+            await q.answer("Этот запрос обрабатывается в другом режиме.")
             return
         if claim.get("claimed"):
             await q.answer("???? ?????? ??? ???? ?????? ??????????.")
@@ -9201,39 +9542,15 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pass
 
         try:
-            from bot.crm_clients import get_clients_without_phones as _crm_next2
-            remaining = len(_crm_next2(claimer_name, limit=500))
-            _claimer_now_iso = datetime.now(TZ).isoformat()
-            _CRM_PHONE_PENDING[claimer_chat_id] = {
-                "state": "clarify_name",
-                "client_key": client_key,
-                "original_name": client_key,
-                "done_today": 0,
-                "daily_limit": 1,
-                "manager": claimer_name,
-                "total_no_phone": remaining,
-                "created_at": _claimer_now_iso,
-                "last_sent": _claimer_now_iso,
-            }
-            if not _crm_save_pending():
-                _CRM_PHONE_PENDING.pop(claimer_chat_id, None)
-                await context.bot.send_message(
-                    chat_id=claimer_chat_id,
-                    text="⚠️ Временная ошибка сохранения, откройте CRM снова.",
-                )
-                return
-            crm_audit("claim_phone_chain_started", client_key=client_key, claimer=claimer_name, remaining=remaining)
-            await context.bot.send_message(
+            if await _crm_begin_phone_chain(
+                context=context,
                 chat_id=claimer_chat_id,
-                text=_crm_name_prompt_text(
-                    client_key=client_key,
-                    done_today=0,
-                    total=remaining,
-                    daily_limit=1,
-                ),
-                parse_mode="HTML",
-                reply_markup=_crm_name_choice_kb(),
-            )
+                manager_name=claimer_name,
+                client_key=client_key,
+                done_today=0,
+                daily_limit=1,
+            ):
+                crm_audit("claim_phone_chain_started", client_key=client_key, claimer=claimer_name)
         except Exception as _e:
             crm_logger.warning("crm_claim -> phone chain error: %s", _e)
         return

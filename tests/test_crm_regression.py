@@ -1007,5 +1007,109 @@ class OwnershipStabilizationTests(unittest.TestCase):
             self.assertIn("РўРћРћ РРЅР°СЏ", result)
 
 
+class CRMSameClientConfirmTests(unittest.TestCase):
+    def test_mark_pair_excluded_and_read_back(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            config_dir = root / "config"
+            config_dir.mkdir(parents=True)
+            clients_path = config_dir / "clients.json"
+            clients_path.write_text(
+                json.dumps(
+                    {
+                        "clients": {
+                            "ТОО Садко KZ": {"manager": ""},
+                            "А Садко": {"manager": "Алена"},
+                        }
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            with patch.object(crm, "CONFIG_DIR", config_dir), patch.object(crm, "CLIENTS_PATH", clients_path):
+                self.assertTrue(crm.mark_phone_conflict_distinct(["ТОО Садко KZ", "А Садко"], reviewer="Алена"))
+                self.assertTrue(crm.is_client_pair_excluded("ТОО Садко KZ", "А Садко"))
+
+    def test_merge_client_into_existing_keeps_canonical_and_stamps_ownership(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            config_dir = root / "config"
+            config_dir.mkdir(parents=True)
+            clients_path = config_dir / "clients.json"
+            clients_path.write_text(
+                json.dumps(
+                    {
+                        "clients": {
+                            "А Садко": {
+                                "manager": "Алена",
+                                "ownership_manager": "Алена",
+                                "whatsapp": "+77770000001",
+                                "aliases": [],
+                                "sources": ["sales"],
+                            },
+                            "ТОО Садко KZ": {
+                                "manager": "",
+                                "address": "Новый адрес",
+                                "aliases": [],
+                                "sources": ["debt"],
+                            },
+                        }
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            with patch.object(crm, "CONFIG_DIR", config_dir), patch.object(crm, "CLIENTS_PATH", clients_path), patch.object(
+                crm, "CONTACTS_XLSX_PATH", root / "contacts.xlsx"
+            ), patch.object(
+                crm, "CONTACTS_XLSX_BACKUP_DIR", root / "backups"
+            ):
+                ok = crm.merge_client_into_existing(
+                    keep_key="А Садко",
+                    alias_key="ТОО Садко KZ",
+                    manager="Алена",
+                    reviewer="Алена",
+                    source="same_client_confirm",
+                )
+                data = crm.load_clients()
+            self.assertTrue(ok)
+            self.assertIn("А Садко", data["clients"])
+            self.assertNotIn("ТОО Садко KZ", data["clients"])
+            entry = data["clients"]["А Садко"]
+            self.assertIn("ТОО Садко KZ", entry.get("aliases", []))
+            self.assertEqual(entry.get("ownership_manager"), "Алена")
+            self.assertEqual(entry.get("ownership_source"), "same_client_confirm")
+            self.assertEqual(entry.get("address"), "Новый адрес")
+
+    def test_pick_owned_similar_client_prefers_single_owned_match(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            config_dir = root / "config"
+            config_dir.mkdir(parents=True)
+            clients_path = config_dir / "clients.json"
+            clients_path.write_text(
+                json.dumps(
+                    {
+                        "clients": {
+                            "А Садко": {
+                                "manager": "Алена",
+                                "ownership_manager": "Алена",
+                            },
+                            "ТОО Садко KZ": {
+                                "manager": "",
+                            },
+                        }
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            with patch.object(crm, "CONFIG_DIR", config_dir), patch.object(crm, "CLIENTS_PATH", clients_path), patch.dict(
+                sr.MANAGERS_MAP, {"Алена": 12345}, clear=True
+            ):
+                result = sr._crm_pick_owned_similar_client("ТОО Садко KZ")
+            self.assertEqual(result, ("А Садко", "Алена"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
