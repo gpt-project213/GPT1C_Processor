@@ -302,7 +302,7 @@ def _expire_stale(state: Dict[str, Any], now: datetime, changed: list) -> None:
             changed.append(sk)
             LOG.info("День закончился, напоминание закрыто без подтверждения: %s", rid)
 
-    # 3. Sent/pending напоминания текущего дня после 21:00 — закрыть
+    # 3. Sent/pending напоминания текущего дня — обработка конца дня
     if now.hour >= _DAY_END_HOUR:
         for rid, r in reminders.items():
             day = r.get("day") or (
@@ -315,13 +315,67 @@ def _expire_stale(state: Dict[str, Any], now: datetime, changed: list) -> None:
             entry = state.get(sk)
             if not isinstance(entry, dict):
                 continue
-            if entry.get("status") in ("sent", "snoozed"):
+            status = entry.get("status")
+            if status not in ("sent", "snoozed"):
+                continue
+
+            if r.get("critical"):
+                # Критичный день: в 21:00 — финальный алерт Минай
+                if now.hour == _DAY_END_HOUR and not entry.get("final_alert_sent"):
+                    _send_buttons(
+                        f"⚠️ ПОСЛЕДНИЙ ШАНС!\n\n{r['text']}\n\n"
+                        f"Рабочий день заканчивается. Вы успели? "
+                        f"Нажмите ✅ Сделала — иначе в 22:00 руководитель получит уведомление.",
+                        [_btn("done", "✅ Сделала"), _btn("later", "⏰ Уже иду")],
+                    )
+                    entry["final_alert_sent"] = True
+                    state[sk] = entry
+                    changed.append(sk)
+                    LOG.warning("Финальный алерт Минай: %s", rid)
+                # В 22:00 — всё, уведомляем Вадима
+                elif now.hour >= _DAY_END_HOUR + 1 and not entry.get("admin_notified"):
+                    label = r.get("label", rid)
+                    _notify_admin_missed(label)
+                    entry["status"] = "missed"
+                    entry["missed_at"] = now.isoformat()
+                    entry["admin_notified"] = True
+                    state[sk] = entry
+                    changed.append(sk)
+                    LOG.error("ПРОВАЛ: %s — не подтверждено, уведомлен руководитель", rid)
+            else:
+                # Некритичный — тихо закрываем
                 entry["status"] = "auto_closed"
                 entry["auto_closed_at"] = now.isoformat()
                 entry["auto_closed_reason"] = "day_end_no_confirm"
                 state[sk] = entry
                 changed.append(sk)
                 LOG.info("21:00 — закрыт без подтверждения: %s", rid)
+
+
+def _notify_admin_missed(label: str) -> None:
+    """Уведомляет Вадима в Telegram что критичное задание не подтверждено."""
+    try:
+        import asyncio as _asyncio
+        import os as _os
+        import httpx as _httpx
+        token = _os.getenv("TG_BOT_TOKEN", "")
+        admin = _os.getenv("ADMIN_CHAT_ID", "")
+        if not token or not admin:
+            return
+        text = (
+            f"🚨 ПРОВАЛ: Минай не подтвердила выполнение!\n\n"
+            f"Задание: {label}\n"
+            f"Весь день напоминали — ответа нет.\n\n"
+            f"Проверьте что задание выполнено!"
+        )
+        _httpx.post(
+            f"https://api.telegram.org/bot{token}/sendMessage",
+            json={"chat_id": admin, "text": text, "parse_mode": "HTML"},
+            timeout=10,
+        )
+        LOG.error("Уведомление руководителю: %s не выполнено", label)
+    except Exception as e:
+        LOG.error("Ошибка уведомления руководителя: %s", e)
 
 
 # ── Проверка и отправка (вызывается каждые 5 мин) ─────────────────────────
