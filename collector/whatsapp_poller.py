@@ -52,7 +52,8 @@ TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 
 GREENAPI_ID    = os.getenv("GREENAPI_ID", "")
 GREENAPI_TOKEN = os.getenv("GREENAPI_TOKEN", "")
-MINAI_WA_PHONE = os.getenv("MINAI_WA_PHONE", "")
+MINAI_WA_PHONE  = os.getenv("MINAI_WA_PHONE", "")
+DARYA_WA_PHONE  = os.getenv("DARYA_WA_PHONE", "")
 ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY", "")
 ASSEMBLYAI_POLL_SECONDS = int(os.getenv("ASSEMBLYAI_POLL_SECONDS", "18"))
 ASSEMBLYAI_SPEECH_MODELS = ["universal-2"]
@@ -399,6 +400,34 @@ async def poll_once() -> None:
                         await handle_minai_response(_raw_text)
                     except Exception as _me:
                         logger.error("minai_reminders ошибка: %s", _me)
+                await _delete_notification(receipt_id)
+                return
+
+            # Второй личный канал напоминаний
+            _darya_digits = "".join(c for c in (DARYA_WA_PHONE or "") if c.isdigit())
+            if _darya_digits and _phone_digits.endswith(_darya_digits[-9:]):
+                _darya_msg_data = body.get("messageData", {})
+                _darya_type = _darya_msg_data.get("typeMessage", "")
+                _darya_text = (
+                    _darya_msg_data.get("textMessageData", {}).get("textMessage", "")
+                    or _darya_msg_data.get("extendedTextMessageData", {}).get("text", "")
+                    or _darya_msg_data.get("buttonsResponseMessage", {}).get("selectedDisplayText", "")
+                )
+                if not _darya_text and _darya_type == "audioMessage":
+                    _dl = _darya_msg_data.get("fileMessageData", {}).get("downloadUrl", "")
+                    if _dl:
+                        _tr = await transcribe_audio(_dl, archive_label="darya")
+                        try:
+                            from bot.darya_reminders import handle_darya_audio
+                            await handle_darya_audio(_tr or "")
+                        except Exception as _de:
+                            logger.error("darya audio error: %s", _de)
+                elif _darya_text:
+                    try:
+                        from bot.darya_reminders import handle_darya_response
+                        await handle_darya_response(_darya_text)
+                    except Exception as _de:
+                        logger.error("darya response error: %s", _de)
                 await _delete_notification(receipt_id)
                 return
 

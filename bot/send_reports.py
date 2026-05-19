@@ -11232,13 +11232,31 @@ def main():
                 )
                 sched_logger.info("🚫 Настроен SLA-контроль оплат Саиды: каждый час")
 
-        # Приветствие Минай — один раз при первом запуске
+        # Приветствие личных ассистентов — один раз при первом запуске
         if os.getenv("MINAI_WA_PHONE"):
             try:
                 from bot.minai_reminders import send_welcome_if_needed as _minai_welcome
                 _minai_welcome()
             except Exception as _we:
                 sched_logger.warning("minai welcome error: %s", _we)
+
+        # Второй личный канал — приветствие и scheduler
+        if os.getenv("DARYA_WA_PHONE"):
+            try:
+                from bot.darya_reminders import send_welcome_if_needed as _darya_welcome
+                _darya_welcome()
+            except Exception as _dwe:
+                sched_logger.warning("darya welcome error: %s", _dwe)
+            try:
+                from bot.darya_reminders import check_and_send as _darya_check
+                async def _job_darya(ctx):
+                    try:
+                        _darya_check()
+                    except Exception as e:
+                        sched_logger.error("darya reminders error: %s", e)
+                job_queue.run_repeating(_job_darya, interval=300, first=90, name="darya_reminders")
+            except Exception as _dse:
+                sched_logger.warning("darya scheduler error: %s", _dse)
 
         # Напоминалка Минай — каждые 5 минут
         if os.getenv("MINAI_WA_PHONE"):
