@@ -45,6 +45,7 @@ BUILTIN: Dict[str, Dict[str, Any]] = {
         "day":      18,
         "hour":     10,
         "critical": True,
+        "work":     True,
         "resend":   [13, 16, 19],
         "group":    "internet",
     },
@@ -71,6 +72,7 @@ BUILTIN: Dict[str, Dict[str, Any]] = {
         "day":      5,
         "hour":     10,
         "critical": True,
+        "work":     True,
         "resend":   [13, 16, 19],
         "group":    "rent",
     },
@@ -97,6 +99,7 @@ BUILTIN: Dict[str, Dict[str, Any]] = {
         "day":      25,
         "hour":     10,
         "critical": True,
+        "work":     True,
         "resend":   [13, 16, 19],
         "group":    "taxes",
     },
@@ -320,28 +323,34 @@ def _expire_stale(state: Dict[str, Any], now: datetime, changed: list) -> None:
                 continue
 
             if r.get("critical"):
-                # Критичный день: в 21:00 — финальный алерт Минай
+                is_work = r.get("work", False)
+                # Финальный алерт в 21:00
                 if now.hour == _DAY_END_HOUR and not entry.get("final_alert_sent"):
+                    suffix = (
+                        "\nНажмите ✅ Сделала — иначе в 22:00 руководитель получит уведомление."
+                        if is_work else
+                        "\nНажмите ✅ Сделала как только выполните."
+                    )
                     _send_buttons(
-                        f"⚠️ ПОСЛЕДНИЙ ШАНС!\n\n{r['text']}\n\n"
-                        f"Рабочий день заканчивается. Вы успели? "
-                        f"Нажмите ✅ Сделала — иначе в 22:00 руководитель получит уведомление.",
+                        f"⚠️ ПОСЛЕДНИЙ ШАНС!\n\n{r['text']}\n\nРабочий день заканчивается. Вы успели?{suffix}",
                         [_btn("done", "✅ Сделала"), _btn("later", "⏰ Уже иду")],
                     )
                     entry["final_alert_sent"] = True
                     state[sk] = entry
                     changed.append(sk)
                     LOG.warning("Финальный алерт Минай: %s", rid)
-                # В 22:00 — всё, уведомляем Вадима
+                # В 22:00 — только рабочие уведомляют Вадима
                 elif now.hour >= _DAY_END_HOUR + 1 and not entry.get("admin_notified"):
-                    label = r.get("label", rid)
-                    _notify_admin_missed(label)
+                    if is_work:
+                        _notify_admin_missed(r.get("label", rid))
+                        LOG.error("ПРОВАЛ: %s — не подтверждено, уведомлен руководитель", rid)
+                    else:
+                        LOG.info("Личное напоминание не подтверждено, руководитель не уведомлён: %s", rid)
                     entry["status"] = "missed"
                     entry["missed_at"] = now.isoformat()
                     entry["admin_notified"] = True
                     state[sk] = entry
                     changed.append(sk)
-                    LOG.error("ПРОВАЛ: %s — не подтверждено, уведомлен руководитель", rid)
             else:
                 # Некритичный — тихо закрываем
                 entry["status"] = "auto_closed"
@@ -485,6 +494,31 @@ async def handle_minai_response(text: str) -> bool:
     # Ожидание подтверждения распознанного напоминания
     if state.get("__pending_confirm__"):
         pending = state["__pending_confirm__"]
+        # Шаг 1: выбор рабочее/личное (если work ещё не выбрано)
+        if "work" not in pending:
+            if _match(t, ("💼", "Рабочее", "work_yes")):
+                pending["work"] = True
+                state["__pending_confirm__"] = pending
+                _save_state(state)
+                _send_buttons(
+                    f"Правильно понял?\n\n📌 {pending['text']}\n"
+                    f"🕐 {_schedule_human(pending['schedule'])}, в {pending['hour']:02d}:00\n"
+                    f"💼 Рабочее (при невыполнении уведомит руководителя)",
+                    _add_buttons(),
+                )
+                return True
+            if _match(t, ("👤", "Личное", "work_no")):
+                pending["work"] = False
+                state["__pending_confirm__"] = pending
+                _save_state(state)
+                _send_buttons(
+                    f"Правильно понял?\n\n📌 {pending['text']}\n"
+                    f"🕐 {_schedule_human(pending['schedule'])}, в {pending['hour']:02d}:00\n"
+                    f"👤 Личное (только для вас)",
+                    _add_buttons(),
+                )
+                return True
+        # Шаг 2: итоговое подтверждение
         if _match(t, ("✅", "Да", "add_yes", "правильно")):
             _save_custom_reminder(pending)
             del state["__pending_confirm__"]
@@ -497,7 +531,7 @@ async def handle_minai_response(text: str) -> bool:
             del state["__pending_confirm__"]
             _save_state(state)
             _send_plain("Хорошо, попробуйте написать иначе. Например:\n«напомни оплатить газ 10-го числа»")
-            state["__awaiting_add__"] = True
+            state["__awaiting_add__"] = {"_ts": _now().isoformat(), "_val": True}
             _save_state(state)
         else:
             _skip_add(state)
@@ -656,7 +690,11 @@ async def _process_add_text(text: str, state: Dict[str, Any]) -> None:
         "_ts": _now().isoformat(),
     }
     _save_state(state)
-    _send_buttons(confirm_text, _add_buttons())
+    # Сначала спрашиваем рабочее или личное
+    _send_buttons(
+        confirm_text + "\n\nЭто рабочее или личное?",
+        [_btn("work_yes", "💼 Рабочее"), _btn("work_no", "👤 Личное")],
+    )
 
 
 async def _deepseek_parse(user_text: str) -> Optional[Dict[str, Any]]:
@@ -716,13 +754,14 @@ def _save_custom_reminder(pending: Dict[str, Any]) -> None:
     if schedule.startswith("monthly:"):
         day = int(schedule.split(":")[1])
     custom[rid] = {
-        "label": pending["text"],
-        "text": f"📌 Напоминание: {pending['text']}",
+        "label":    pending["text"],
+        "text":     f"📌 Напоминание: {pending['text']}",
         "schedule": schedule,
-        "day": day,
-        "hour": int(pending.get("hour", 9)),
+        "day":      day,
+        "hour":     int(pending.get("hour", 10)),
         "critical": False,
-        "group": "custom",
+        "work":     bool(pending.get("work", False)),
+        "group":    "custom",
     }
     _save_custom(custom)
     LOG.info("Добавлено кастомное напоминание: %s → %s", rid, pending["text"])
