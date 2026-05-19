@@ -2060,10 +2060,26 @@ check(
 )
 
 # ── Тест 12: wa_appr_ callback зарегистрирован в send_reports.py ─────────────
+check(
+    "APPROVAL T11e: preview не создаёт батч вне collector window",
+    "if not is_allowed_time():" in _engine_src_v2
+    and "batch not created" in _engine_src_v2,
+)
+
 _reports_src = (Path(__file__).parent.parent / "bot" / "send_reports.py").read_text(encoding="utf-8")
 check(
     "APPROVAL T12: wa_appr_ callback роутер добавлен в send_reports.py",
     "wa_appr_" in _reports_src and "approval_flow" in _reports_src,
+)
+check(
+    "APPROVAL T12b: scheduler jobs учитывают collector window до запуска preview",
+    "_collector_is_allowed_time" in _reports_src
+    and "debt_collector_daily" in _reports_src
+    and "debt_collector_trigger_check" in _reports_src,
+)
+check(
+    "APPROVAL T12c: статус too_late показан по-русски",
+    '"too_late":          "⌛ Сегодня уже не отправится"' in _reports_src,
 )
 
 # ═══════════════════════════════════════════════════════════════
@@ -2727,7 +2743,8 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as _td_hold:
         {},
     )
     check("PAYHOLD T1: preview decision пропускает клиента с подтверждением Саиды",
-          _hold_decision.get("action") == "skip" and "Саида" in _hold_decision.get("reason", ""),
+          _hold_decision.get("action") == "skip"
+          and "оплата подтверждена" in _hold_decision.get("reason", "").lower(),
           str(_hold_decision))
 
     _hold_send_client = {
@@ -3675,7 +3692,7 @@ _blk = _af_mod._format_send_blocked_text(
     [],
 )
 check("blocked text starts with ❌", _blk.startswith("❌"))
-check("blocked text contains Батч", "Батч" in _blk)
+check("blocked text contains Номер списка", "Номер списка" in _blk)
 check("blocked text contains нет клиентов", "нет клиентов" in _blk)
 check("blocked text has no mojibake", "Р" not in _blk and "вќ" not in _blk)
 
@@ -4855,8 +4872,8 @@ finally:
     _cdb_guard.STATE_PATH = _orig_state_path28d
     shutil.rmtree(_tmpdir28d, ignore_errors=True)
 
-check("T28d-3: send_reports содержит кнопку актуального батча",
-      "collector_actual_batch" in _REPORTS_SRC and "Актуальный батч" in _REPORTS_SRC)
+check("T28d-3: send_reports содержит кнопку текущей подборки",
+      "collector_actual_batch" in _REPORTS_SRC and "Текущая подборка" in _REPORTS_SRC)
 check("T28d-4: send_reports содержит helper актуального режима батча",
       "def _get_actual_collector_batch_mode()" in _REPORTS_SRC)
 
@@ -4954,7 +4971,7 @@ _ph_reg_orig = _ph_reg.PAYMENT_HOLD_PATH
 with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as _td_f05:
     _ph_reg.PAYMENT_HOLD_PATH = Path(_td_f05) / "holds.json"
     _ph_reg._LOCK_FILE = _ph_reg.PAYMENT_HOLD_PATH.with_suffix(".lock")
-    _ph_reg.create_manager_payment_request("Менеджер", "Ф05 Тест", debt=50000.0)
+    _f05_req = _ph_reg.create_manager_payment_request("Менеджер", "Ф05 Тест", debt=50000.0)
     _f05_hold = _ph_reg.get_hold_for_client("Ф05 Тест")
     check("F-05 regression: pending_saida возвращается get_hold_for_client",
           _f05_hold is not None and _f05_hold.get("status") == "pending_saida",
@@ -4963,9 +4980,36 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as _td_f05:
         {"name": "Ф05 Тест", "amount": 50000.0, "days": 15, "opening": 0.0, "debit": 0.0, "credit": 0.0},
         None, {},
     )
-    check("F-05 regression: pending_saida блокирует collector shortlist",
-          _f05_decision.get("action") == "skip" and "Саид" in _f05_decision.get("reason", ""),
+    check("F-05 regression: pending_saida блокирует collector shortlist без ложного подтверждения оплаты",
+          _f05_decision.get("action") == "skip"
+          and "ждём ответа" in _f05_decision.get("reason", "")
+          and "подтвержд" not in _f05_decision.get("reason", "").lower(),
           str(_f05_decision))
+
+    _ph_reg.confirm_by_saida(_f05_req["token"], "partial")
+    _f05_partial = _collector_candidate_decision(
+        {"name": "Ф05 Тест", "amount": 50000.0, "days": 15, "opening": 0.0, "debit": 0.0, "credit": 0.0},
+        None, {},
+    )
+    check("F-05 regression: confirmed_partial не притворяется полной оплатой",
+          _f05_partial.get("action") == "skip"
+          and "частичная оплата" in _f05_partial.get("reason", "").lower()
+          and "ждём разноски" not in _f05_partial.get("reason", "").lower(),
+          str(_f05_partial))
+
+with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as _td_f05_full:
+    _ph_reg.PAYMENT_HOLD_PATH = Path(_td_f05_full) / "holds.json"
+    _ph_reg._LOCK_FILE = _ph_reg.PAYMENT_HOLD_PATH.with_suffix(".lock")
+    _f05_req_full = _ph_reg.create_manager_payment_request("Менеджер", "Ф05 Полная", debt=50000.0)
+    _ph_reg.confirm_by_saida(_f05_req_full["token"], "full")
+    _f05_full = _collector_candidate_decision(
+        {"name": "Ф05 Полная", "amount": 50000.0, "days": 15, "opening": 0.0, "debit": 0.0, "credit": 0.0},
+        None, {},
+    )
+    check("F-05 regression: confirmed_full пишет про подтверждённую оплату",
+          _f05_full.get("action") == "skip"
+          and "оплата подтверждена" in _f05_full.get("reason", "").lower(),
+          str(_f05_full))
     _ph_reg.PAYMENT_HOLD_PATH = _ph_reg_orig
     _ph_reg._LOCK_FILE = _ph_reg.PAYMENT_HOLD_PATH.with_suffix(".lock")
 

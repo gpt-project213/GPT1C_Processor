@@ -591,7 +591,7 @@ async def handle_minai_response(text: str) -> bool:
             del state["__pending_audio_text__"]
             _save_state(state)
             if pending_audio:
-                await handle_minai_response(pending_audio)
+                await _process_add_text(pending_audio, _load_state())
         elif _match(t, ("❌", "Нет", "audio_no", "ошиблась")):
             del state["__pending_audio_text__"]
             _save_state(state)
@@ -753,6 +753,11 @@ async def handle_minai_response(text: str) -> bool:
         await _process_feedback(t, state)
         return True
 
+    # Свободный текст сначала пробуем разобрать через AI.
+    if _should_try_ai_parse(t):
+        await _process_add_text(t, state)
+        return True
+
     # Инициатива Минай — свободный текст вне контекста кнопок
     # Пробуем распознать как напоминание
     if _looks_like_reminder(t):
@@ -788,6 +793,13 @@ def _looks_like_feedback(text: str) -> bool:
                 "фидбек", "feedback", "не нравится", "пожелание", "предложение",
                 "можно поменять", "можно изменить", "сделай иначе", "хочу поменять")
     return any(t in text.lower() for t in triggers)
+
+
+def _should_try_ai_parse(text: str) -> bool:
+    t = text.strip()
+    if not t:
+        return False
+    return not _is_simple_reply(t)
 
 
 async def _process_feedback(text: str, state: Dict[str, Any]) -> None:
