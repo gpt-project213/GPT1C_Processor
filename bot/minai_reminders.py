@@ -171,7 +171,8 @@ def _state_key(rid: str, month: Optional[str] = None) -> str:
 _WELCOME = """\
 Привет, Минай! 👋
 
-Я твой личный ассистент по напоминаниям. Теперь ничего не забудется — ни по работе, ни по личным делам.
+Я твой *личный ассистент* — создан специально для тебя.
+Настроен под твой график, твои задачи и твои привычки. Больше ничего не забудется — ни по работе, ни по личным делам.
 
 ━━━━━━━━━━━━━━━
 📋 *ЧТО Я УЖЕ ЗНАЮ*
@@ -210,6 +211,12 @@ _WELCOME = """\
 если не подтвердишь до 22:00 — руководитель получит уведомление.
 
 Личные напоминания — только между нами 🤝
+
+━━━━━━━━━━━━━━━
+💬 *ФИДБЕК*
+━━━━━━━━━━━━━━━
+Что-то неудобно? Хочешь изменить?
+Напиши «неудобно» или «хочу изменить» — передам разработчику.
 
 ━━━━━━━━━━━━━━━
 Всё готово. Буду на связи! 🚀\
@@ -306,8 +313,9 @@ def _expire_stale(state: Dict[str, Any], now: datetime, changed: list) -> None:
         "__awaiting_add__":       "⏰ Время ожидания вышло. Если хотите добавить напоминание — нажмите ➕ Добавить.",
         "__pending_audio_text__": "⏰ Время ожидания вышло. Голосовое устарело — попробуйте ещё раз 🎤",
         "__pending_confirm__":    "⏰ Время ожидания вышло. Напоминание не сохранено — нажмите ➕ Добавить заново.",
+        "__awaiting_feedback__":  "⏰ Время ожидания вышло. Если захотите оставить пожелание — напишите «хочу изменить».",
     }
-    for key in ("__awaiting_add__", "__pending_audio_text__", "__pending_confirm__"):
+    for key in ("__awaiting_add__", "__pending_audio_text__", "__pending_confirm__", "__awaiting_feedback__"):
         val = state.get(key)
         if not val:
             continue
@@ -646,6 +654,29 @@ async def handle_minai_response(text: str) -> bool:
         _send_plain("Хорошо 👍")
         return True
 
+    # Фидбек — «неудобно», «хочу изменить» и т.п.
+    if _looks_like_feedback(t):
+        # Если уже ждём текст фидбека
+        _fw = state.get("__awaiting_feedback__")
+        if _fw and (_fw.get("_val") if isinstance(_fw, dict) else False):
+            await _process_feedback(t, state)
+            return True
+        # Приглашаем написать
+        state["__awaiting_feedback__"] = {"_ts": _now().isoformat(), "_val": True}
+        _save_state(state)
+        _send_plain(
+            "Понял, хочешь что-то изменить 🛠\n\n"
+            "Напиши или скажи голосовым что именно неудобно или что изменить — "
+            "передам разработчику 🎤✍️"
+        )
+        return True
+
+    # Если ждём текст фидбека — любой текст это ответ
+    _fw = state.get("__awaiting_feedback__")
+    if _fw and (_fw.get("_val") if isinstance(_fw, dict) else False):
+        await _process_feedback(t, state)
+        return True
+
     # Инициатива Минай — свободный текст вне контекста кнопок
     # Пробуем распознать как напоминание
     if _looks_like_reminder(t):
@@ -663,9 +694,48 @@ def _match(text: str, keywords: tuple) -> bool:
 
 
 def _looks_like_reminder(text: str) -> bool:
-    """Эвристика: фраза похожа на просьбу добавить напоминание."""
     triggers = ("напомни", "напоминание", "не забыть", "добавь", "поставь напомин")
     return any(t in text.lower() for t in triggers)
+
+
+def _looks_like_feedback(text: str) -> bool:
+    triggers = ("неудобно", "неудобн", "хочу изменить", "изменить", "исправить",
+                "фидбек", "feedback", "не нравится", "пожелание", "предложение",
+                "можно поменять", "можно изменить", "сделай иначе", "хочу поменять")
+    return any(t in text.lower() for t in triggers)
+
+
+async def _process_feedback(text: str, state: Dict[str, Any]) -> None:
+    """Сохраняет фидбек и пересылает Вадиму."""
+    state.pop("__awaiting_feedback__", None)
+    _save_state(state)
+    # Подтверждение Минай
+    _send_plain("Принято, передала разработчику 👍\nСпасибо за фидбек — буду становиться лучше!")
+    # Уведомление Вадиму
+    _forward_feedback_to_admin(text)
+
+
+def _forward_feedback_to_admin(text: str) -> None:
+    try:
+        import httpx as _httpx
+        token = os.getenv("TG_BOT_TOKEN", "")
+        admin = os.getenv("ADMIN_CHAT_ID", "")
+        if not token or not admin:
+            LOG.warning("Фидбек не отправлен: нет TG_BOT_TOKEN/ADMIN_CHAT_ID")
+            return
+        msg = (
+            f"💬 <b>Фидбек от Минай</b>\n\n"
+            f"{text}\n\n"
+            f"<i>Отправлено: {_now().strftime('%d.%m.%Y %H:%M')}</i>"
+        )
+        _httpx.post(
+            f"https://api.telegram.org/bot{token}/sendMessage",
+            json={"chat_id": admin, "text": msg, "parse_mode": "HTML"},
+            timeout=10,
+        )
+        LOG.info("Фидбек Минай переслан разработчику")
+    except Exception as e:
+        LOG.error("Ошибка пересылки фидбека: %s", e)
 
 
 def _active_today(state: Dict[str, Any]) -> Optional[str]:
