@@ -371,20 +371,24 @@ async def poll_once() -> None:
             # ── Жёсткая изоляция личных каналов от коллектора ───────────────
             # Эти номера НИКОГДА не попадают в коллектор — ни при каких условиях.
             _phone_digits = "".join(c for c in phone if c.isdigit())
-            _personal_digits_set = {
-                "".join(c for c in p if c.isdigit())
-                for p in (MINAI_WA_PHONE, DARYA_WA_PHONE) if p
+
+            def _norm(p: str) -> str:
+                """77XXXXXXXXX / 87XXXXXXXXX / 7XXXXXXXXX → последние 10 цифр."""
+                d = "".join(c for c in p if c.isdigit())
+                return d[-10:] if len(d) >= 10 else d
+
+            _personal_norm_set = {
+                _norm(p) for p in (MINAI_WA_PHONE, DARYA_WA_PHONE) if p
             }
-            # Точное совпадение по всем цифрам номера — не по хвосту.
-            # Исключает случайное попадание реального клиента под блок.
-            _is_personal = _phone_digits in _personal_digits_set
+            # Сравниваем по 10 цифрам — одинаково для 77.../87.../7...
+            _is_personal = _norm(_phone_digits) in _personal_norm_set
             # Для личного номера старый privacy-гейт можно вернуть через
             # WA_REQUIRE_ACTIVE_DIALOG=1. Для выделенного бот-номера входящие
             # пропускаются до handle_incoming(), где неизвестные номера
             # безопасно игнорируются без ответа клиенту.
             # Минай — отдельный контур напоминалок, не проходит через collector
             _minai_digits = "".join(c for c in (MINAI_WA_PHONE or "") if c.isdigit())
-            if _minai_digits and _phone_digits == _minai_digits:
+            if _minai_digits and _norm(_phone_digits) == _norm(_minai_digits):
                 _msg_data = body.get("messageData", {})
                 _msg_type = _msg_data.get("typeMessage", "")
                 _raw_text = (
@@ -414,7 +418,7 @@ async def poll_once() -> None:
 
             # Второй личный канал напоминаний
             _darya_digits = "".join(c for c in (DARYA_WA_PHONE or "") if c.isdigit())
-            if _darya_digits and _phone_digits == _darya_digits:
+            if _darya_digits and _norm(_phone_digits) == _norm(_darya_digits):
                 _darya_msg_data = body.get("messageData", {})
                 _darya_type = _darya_msg_data.get("typeMessage", "")
                 _darya_text = (
