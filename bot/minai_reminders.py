@@ -229,18 +229,123 @@ def _send_reminder(rid: str) -> bool:
         LOG.info("Напоминание отправлено Минай: %s", rid)
     return ok
 
+# ── Авто-закрытие зависших состояний ─────────────────────────────────────
+
+_DAY_END_HOUR      = 21   # после этого часа напоминания дня закрываются
+_DIALOG_TIMEOUT_M  = 30   # минут — таймаут ожидания ответа в диалоге
+
+def _expire_stale(state: Dict[str, Any], now: datetime, changed: list) -> None:
+    """Закрывает всё что не должно висеть бесконечно."""
+
+    # 1. Диалоговые состояния — таймаут 30 минут
+    _timeout_msgs = {
+        "__awaiting_add__":       "⏰ Время ожидания вышло. Если хотите добавить напоминание — нажмите ➕ Добавить.",
+        "__pending_audio_text__": "⏰ Время ожидания вышло. Голосовое устарело — попробуйте ещё раз 🎤",
+        "__pending_confirm__":    "⏰ Время ожидания вышло. Напоминание не сохранено — нажмите ➕ Добавить заново.",
+    }
+    for key in ("__awaiting_add__", "__pending_audio_text__", "__pending_confirm__"):
+        val = state.get(key)
+        if not val:
+            continue
+        ts_raw = val.get("_ts") if isinstance(val, dict) else None
+        if ts_raw:
+            try:
+                ts = datetime.fromisoformat(ts_raw)
+                if (now - ts).total_seconds() > _DIALOG_TIMEOUT_M * 60:
+                    del state[key]
+                    changed.append(key)
+                    LOG.info("Диалоговый таймаут: %s", key)
+                    _send_buttons(
+                        _timeout_msgs[key],
+                        [_btn("add", "➕ Добавить"), _btn("nothing", "Не надо")],
+                    )
+                    continue
+            except Exception:
+                pass
+        # Если нет метки времени — ставим её сейчас
+        if isinstance(val, dict):
+            val.setdefault("_ts", now.isoformat())
+        else:
+            state[key] = {"_ts": now.isoformat(), "_val": True}
+        changed.append(key)
+
+    # 2. Сноуз за пределами рабочего окна (после 21:00 — не будить)
+    reminders = _all_reminders()
+    for rid in reminders:
+        sk = _state_key(rid)
+        entry = state.get(sk)
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("status") != "snoozed":
+            continue
+        until_raw = entry.get("snoozed_until", "")
+        if not until_raw:
+            continue
+        try:
+            until_dt = datetime.fromisoformat(until_raw)
+        except Exception:
+            continue
+        # Если снузи истёк вчера или на прошлой неделе — закрываем
+        if until_dt.date() < now.date():
+            entry["status"] = "auto_closed"
+            entry["auto_closed_at"] = now.isoformat()
+            entry["auto_closed_reason"] = "snooze_expired_past_day"
+            state[sk] = entry
+            changed.append(sk)
+            LOG.info("Снузи истёк на прошлый день, закрыт: %s", rid)
+        # Если сноуз ведёт за 21:00 сегодня — закрываем (не будить ночью)
+        elif until_dt.date() == now.date() and now.hour >= _DAY_END_HOUR:
+            entry["status"] = "auto_closed"
+            entry["auto_closed_at"] = now.isoformat()
+            entry["auto_closed_reason"] = "day_end_no_confirm"
+            state[sk] = entry
+            changed.append(sk)
+            LOG.info("День закончился, напоминание закрыто без подтверждения: %s", rid)
+
+    # 3. Sent/pending напоминания текущего дня после 21:00 — закрыть
+    if now.hour >= _DAY_END_HOUR:
+        for rid, r in reminders.items():
+            day = r.get("day") or (
+                int(r["schedule"].split(":")[1])
+                if str(r.get("schedule", "")).startswith("monthly:") else None
+            )
+            if day != now.day:
+                continue
+            sk = _state_key(rid)
+            entry = state.get(sk)
+            if not isinstance(entry, dict):
+                continue
+            if entry.get("status") in ("sent", "snoozed"):
+                entry["status"] = "auto_closed"
+                entry["auto_closed_at"] = now.isoformat()
+                entry["auto_closed_reason"] = "day_end_no_confirm"
+                state[sk] = entry
+                changed.append(sk)
+                LOG.info("21:00 — закрыт без подтверждения: %s", rid)
+
+
 # ── Проверка и отправка (вызывается каждые 5 мин) ─────────────────────────
 
 def check_and_send() -> None:
     if not MINAI_PHONE:
         return
-    now  = _now()
+    now   = _now()
     state = _load_state()
     reminders = _all_reminders()
+    _changed: list = []
+
+    # Сначала чистим зависшее
+    _expire_stale(state, now, _changed)
+    if _changed:
+        _save_state(state)
+        _changed.clear()
+
+    # После 21:00 — новых отправок нет
+    if now.hour >= _DAY_END_HOUR:
+        return
 
     for rid, r in reminders.items():
         day = r.get("day")
-        # Кастомные расписания — only monthly:N поддерживаем для MVP
         if day is None:
             schedule = r.get("schedule", "")
             if schedule.startswith("monthly:"):
@@ -255,7 +360,7 @@ def check_and_send() -> None:
         entry = state.get(sk) or {}
         status = entry.get("status")
 
-        if status == "confirmed":
+        if status in ("confirmed", "auto_closed"):
             continue
 
         if status == "snoozed":
@@ -265,8 +370,8 @@ def check_and_send() -> None:
             _send_reminder(rid)
             continue
 
-        send_hour = r.get("hour", 9)
-        if now.hour >= send_hour and status not in ("sent", "snoozed", "confirmed"):
+        send_hour = r.get("hour", 10)
+        if now.hour >= send_hour and status not in ("sent", "snoozed", "confirmed", "auto_closed"):
             _send_reminder(rid)
             continue
 
@@ -286,7 +391,7 @@ async def handle_minai_audio(transcribed: str) -> None:
         _send_plain("Не смогла распознать голосовое. Попробуйте написать текстом.")
         return
     state = _load_state()
-    state["__pending_audio_text__"] = transcribed
+    state["__pending_audio_text__"] = {"_ts": _now().isoformat(), "_val": transcribed}
     _save_state(state)
     _send_buttons(
         f"Вы сказали:\n«{transcribed}»\n\nПравильно?",
@@ -303,12 +408,14 @@ async def handle_minai_response(text: str) -> bool:
     now   = _now()
 
     # Подтверждение транскрипции голосового
-    if state.get("__pending_audio_text__"):
-        pending_audio = state["__pending_audio_text__"]
+    _audio_entry = state.get("__pending_audio_text__")
+    if _audio_entry:
+        pending_audio = (_audio_entry.get("_val") if isinstance(_audio_entry, dict) else _audio_entry) or ""
         if _match(t, ("✅", "Да", "audio_yes", "верно")):
             del state["__pending_audio_text__"]
             _save_state(state)
-            await handle_minai_response(pending_audio)   # обрабатываем как обычный текст
+            if pending_audio:
+                await handle_minai_response(pending_audio)
         elif _match(t, ("❌", "Нет", "audio_no", "ошиблась")):
             del state["__pending_audio_text__"]
             _save_state(state)
@@ -316,7 +423,8 @@ async def handle_minai_response(text: str) -> bool:
         return True
 
     # Проверяем ожидает ли бот текст нового напоминания от Минай
-    if state.get("__awaiting_add__"):
+    _aw = state.get("__awaiting_add__")
+    if _aw and (_aw is True or (_aw.get("_val") if isinstance(_aw, dict) else False)):
         await _process_add_text(t, state)
         return True
 
@@ -381,7 +489,7 @@ async def handle_minai_response(text: str) -> bool:
             "• «позвонить бухгалтеру каждый понедельник»\n"
             "• «продлить лицензию 25 июня»"
         )
-        state["__awaiting_add__"] = True
+        state["__awaiting_add__"] = {"_ts": _now().isoformat(), "_val": True}
         _save_state(state)
         return True
 
@@ -491,6 +599,7 @@ async def _process_add_text(text: str, state: Dict[str, Any]) -> None:
         "text": r_text,
         "schedule": schedule,
         "hour": hour_val,
+        "_ts": _now().isoformat(),
     }
     _save_state(state)
     _send_buttons(confirm_text, _add_buttons())
