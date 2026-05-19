@@ -977,6 +977,52 @@ def set_client_phone(client_name: str, phone: str, manager: str = "",
     return True
 
 
+def update_client_contact_from_dialog(
+    client_name: str,
+    new_phone: str,
+    old_phone: str = "",
+    contact_info: str = "",
+    source: str = "client_dialog_auto_update",
+) -> bool:
+    """Обновляет телефон клиента по данным из WA-диалога.
+
+    Сохраняет старый телефон в previous_whatsapp для аудит-следа.
+    Возвращает True если CRM успешно обновлён.
+    """
+    data = load_clients()
+    clients_db = data.get("clients", {})
+    entry_key = _find_existing_client_key(clients_db, client_name)
+    if not entry_key:
+        logger.warning("update_client_contact_from_dialog: клиент не найден: %s", client_name)
+        crm_audit("contact_update_missing", client_key=client_name, new_phone=new_phone)
+        return False
+
+    entry = clients_db[entry_key]
+    if old_phone:
+        entry["previous_whatsapp"] = old_phone.strip()
+    entry["whatsapp"] = new_phone.strip()
+    entry["phone_source"] = source
+    if contact_info:
+        entry["contact_info"] = contact_info.strip()
+
+    data["clients"] = clients_db
+    if not save_clients(data):
+        logger.error("update_client_contact_from_dialog: clients.json не сохранён для %s", client_name)
+        return False
+
+    crm_audit(
+        "contact_updated_from_dialog",
+        client_key=entry_key,
+        new_phone=new_phone,
+        old_phone=old_phone or "—",
+        source=source,
+    )
+    logger.info(
+        "CRM контакт обновлён: %s → %s (был: %s)", client_name, new_phone, old_phone or "—"
+    )
+    return True
+
+
 def _normalize_system_display_name(display_name: str, name_mode: str = "") -> str:
     """Strips manager ownership prefix from system-generated CRM display names."""
     value = str(display_name or "").strip()

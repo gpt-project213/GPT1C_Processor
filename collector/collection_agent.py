@@ -444,10 +444,10 @@ def analyze_response(
         "Твоя задача: проанализировать ответ клиента и вернуть ТОЛЬКО JSON без пояснений. "
         "Формат ответа строго:\n"
         '{"intent":"...", "promise_date":"...", "promise_amount":..., '
-        '"requires_human":..., "suggested_reply":"..."}\n'
+        '"requires_human":..., "suggested_reply":"...", "new_phone":...}\n'
         "intent: одно из [promise, promise_without_date, promise_schedule, paid_claim, soft_positive, "
         "refusal, delay_request, question, identity_question, cash_pickup, dispute, "
-        "doc_request, complaint, unclear]\n"
+        "doc_request, complaint, wrong_contact, new_contact_person, contact_update, new_phone_provided, unclear]\n"
         "  - promise: клиент обещает оплатить и даёт конкретную дату или относительный срок "
         "('завтра', 'послезавтра', 'до пятницы', 'в пятницу', 'через 2 дня', 'на этой неделе', '17 числа' и т.д.).\n"
         "  - promise_schedule: клиент описывает график частичных платежей: 'ежедневно', 'частями', "
@@ -481,6 +481,21 @@ def analyze_response(
         "ВСЕГДА requires_human=true.\n"
         "  - complaint: клиент жалуется на качество товара, доставку, сервис, менеджера, "
         "просрочку или порчу товара. ВСЕГДА requires_human=true.\n"
+        "  - wrong_contact: собеседник говорит что контакт неверный, устарел, или что он не тот человек. "
+        "Примеры: 'вы не туда написали', 'я не занимаюсь оплатами', 'этот номер больше не актуален', "
+        "'я тут случайно', 'пишите другому', 'это не наш долг' (без оспаривания суммы). "
+        "requires_human=false — бот сам запросит актуальный номер.\n"
+        "  - new_contact_person: собеседник идентифицирует себя как другое ответственное лицо или "
+        "перенаправляет к другому человеку. Примеры: 'я новый бухгалтер', 'пишите мне', "
+        "'я занимаюсь оплатами', 'это я теперь', 'я вместо него', 'по этому вопросу ко мне', "
+        "'старый человек уже не работает', 'теперь сюда', 'я по этому вопросу'. "
+        "Также: любая фраза означающая что текущий адресат не тот кому надо писать. "
+        "requires_human=false — бот запросит актуальный номер.\n"
+        "  - contact_update: собеседник прямо называет другой номер для связи. "
+        "Примеры: 'пишите на +7...', 'актуальный номер 87...', 'по оплатам сюда 77...'. "
+        "Обязательно извлекай номер в new_phone. requires_human=false.\n"
+        "  - new_phone_provided: клиент называет номер как ответ на запрос нового контакта. "
+        "Обязательно извлекай номер в new_phone. requires_human=false.\n"
         "  - unclear: ни одна категория не подходит и смысл не считывается.\n"
         "promise_date: YYYY-MM-DD — ОБЯЗАТЕЛЬНО вычисли если клиент назвал относительную дату. "
         "null только если дата вообще не упоминается\n"
@@ -538,6 +553,7 @@ def analyze_response(
                 "soft_positive", "refusal", "delay_request", "question",
                 "identity_question",
                 "cash_pickup", "dispute", "doc_request", "complaint",
+                "wrong_contact", "new_contact_person", "contact_update", "new_phone_provided",
                 "unclear",
             }
             if data.get("intent") not in valid_intents:
@@ -546,6 +562,7 @@ def analyze_response(
             data.setdefault("promise_amount", None)
             data.setdefault("requires_human", False)
             data.setdefault("suggested_reply", "")
+            data.setdefault("new_phone", None)
             # Жёсткое правило: при перечисленных intent-ах ответа от бота быть
             # не должно — диалог уходит к менеджеру/Саиде. Подавляем suggested_reply
             # и принудительно поднимаем requires_human, даже если модель забыла.
@@ -554,6 +571,9 @@ def analyze_response(
                 data["suggested_reply"] = ""
             if data["intent"] == "unclear":
                 data["requires_human"] = False  # AI отвечает сам, не эскалирует сразу
+            # Контактные intent-ы: бот сам ведёт сценарий, не нужен человек
+            if data["intent"] in {"wrong_contact", "new_contact_person", "contact_update", "new_phone_provided"}:
+                data["requires_human"] = False
             return data
     except (json.JSONDecodeError, ValueError, KeyError) as e:
         logger.warning("Ошибка парсинга ответа DeepSeek: %s | raw=%s", e, raw[:200])
@@ -564,4 +584,5 @@ def analyze_response(
         "promise_amount": None,
         "requires_human": True,
         "suggested_reply": "Не удалось распознать намерение. Требуется уточнение.",
+        "new_phone": None,
     }

@@ -317,6 +317,51 @@ async def transcribe_audio(audio_url: str, archive_label: str = "") -> str:
                 pass
 
 
+def _extract_contact_card(message_data: Dict[str, Any], msg_type: str) -> Optional[Dict[str, Any]]:
+    """Извлекает телефон и имя из contactMessage / contactsArrayMessage."""
+    contacts = []
+    if msg_type == "contactMessage":
+        c = (
+            message_data.get("contactMessageData", {})
+            or message_data.get("contactMessage", {})
+            or {}
+        )
+        if isinstance(c, dict) and c:
+            contacts = [c]
+    elif msg_type == "contactsArrayMessage":
+        arr = (
+            message_data.get("contactsArrayMessageData", {})
+            or message_data.get("contactsArrayMessage", {})
+            or {}
+        )
+        if isinstance(arr, dict):
+            contacts = arr.get("contacts", []) or []
+
+    if not contacts:
+        return None
+
+    first = contacts[0] if isinstance(contacts[0], dict) else {}
+    display_name = str(first.get("displayName") or "").strip()
+    vcard = str(first.get("vcard") or "").strip()
+
+    phone = ""
+    if vcard:
+        for line in vcard.splitlines():
+            if "TEL" in line.upper():
+                raw = line.rsplit(":", 1)[-1].strip()
+                digits = "".join(c for c in raw if c.isdigit())
+                if len(digits) >= 10:
+                    if digits.startswith("8") and len(digits) == 11:
+                        digits = "7" + digits[1:]
+                    phone = digits
+                    break
+
+    if not phone:
+        return None
+
+    return {"type": "contact_card", "phone": phone, "name": display_name}
+
+
 async def poll_once() -> None:
     """Получает одно уведомление из Green API и обрабатывает его.
 
@@ -479,6 +524,19 @@ async def poll_once() -> None:
                         text = "[аудио не распознано]"
                 else:
                     text = "[аудио без ссылки]"
+
+            elif msg_type in ("contactMessage", "contactsArrayMessage"):
+                contact_card = _extract_contact_card(message_data, msg_type)
+                if contact_card:
+                    attachment = contact_card
+                    text = f"[карточка контакта: {contact_card.get('name') or contact_card.get('phone')}]"
+                    logger.info(
+                        "Карточка контакта от %s: name=%s phone=...%s",
+                        phone, contact_card.get("name"), contact_card.get("phone", "")[-4:],
+                    )
+                else:
+                    text = f"[клиент прислал {msg_type} — номер не извлечён]"
+                    logger.info("Входящий %s от %s (номер не извлечён)", msg_type, phone)
 
             else:
                 # Изображения, документы и т.д.

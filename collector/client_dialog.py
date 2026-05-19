@@ -98,7 +98,7 @@ _DIALOGS_PATH = _ROOT / "logs" / "collector_client_dialogs.json"
 _DELETION_QUEUE_PATH = _ROOT / "logs" / "deletion_queue.json"
 
 logger = get_collector_logger(__name__)
-_DIALOG_ACTIVE_STATES = {"active", "awaiting_payment_proof", "awaiting_manager"}
+_DIALOG_ACTIVE_STATES = {"active", "awaiting_payment_proof", "awaiting_manager", "awaiting_new_contact"}
 
 
 def _mask_phone(phone: str) -> str:
@@ -541,6 +541,22 @@ _PURE_GREETINGS: frozenset[str] = frozenset({
 })
 
 
+_KZ_PHONE_RE = re.compile(
+    r"(?<!\d)(?:\+?7|8)[\s\-\(\)]*\d{3}[\s\-\(\)]*\d{3}[\s\-]*\d{2}[\s\-]*\d{2}(?!\d)"
+)
+
+
+def _extract_phone_from_text(text: str) -> str:
+    """Извлекает первый казахстанский телефон из свободного текста. Возвращает цифры или ''."""
+    for m in _KZ_PHONE_RE.finditer(str(text or "")):
+        digits = "".join(c for c in m.group(0) if c.isdigit())
+        if digits.startswith("8") and len(digits) == 11:
+            digits = "7" + digits[1:]
+        if re.fullmatch(r"7\d{10}", digits):
+            return digits
+    return ""
+
+
 def _is_greeting_only(text: str) -> bool:
     """True if text is a pure greeting without any payment signal."""
     normalized = _normalize_text(text)
@@ -675,6 +691,11 @@ def _build_escalation_text(
         "off_topic":            "уходит от темы",
         "requires_human":       "требуется живой человек",
         "limit_reached":        "исчерпан лимит обменов",
+        "wrong_contact":         "указал что контакт неверный или устарел",
+        "new_contact_person":    "указал себя как нового ответственного по оплатам",
+        "contact_update":        "указал новый контактный номер",
+        "new_phone_provided":    "прислал актуальный номер",
+        "contact_update_failed": "не предоставил новый контакт при повторном запросе",
     }
     intent_desc = intent_map.get(reason, reason)
 
@@ -696,6 +717,91 @@ def _build_escalation_text(
         f"📌 {intent_desc}\n\n"
         f"💬 Переписка:\n{exchanges_block}\n\n"
         f"⚠️ {summary}"
+    )
+
+
+def _build_contact_update_note(
+    dialog: Dict[str, Any],
+    old_phone: str,
+    new_phone: str,
+    contact_note: str,
+    crm_ok: bool,
+) -> str:
+    name = dialog.get("client_name", "—")
+    manager_name = dialog.get("manager_name", "—")
+    amount = _fmt_amount(float(dialog.get("amount", 0) or 0))
+    status = "CRM обновлён автоматически." if crm_ok else "⚠️ Обновление CRM не удалось — требуется ручная правка."
+    lines = [
+        f"📱 <b>{name}</b> — контакт обновлён",
+        f"Менеджер: <b>{manager_name}</b>",
+        f"Долг в контуре: {amount} тг",
+        f"Старый номер: <code>+{old_phone}</code>",
+        f"Новый номер: <code>+{new_phone}</code>",
+    ]
+    if contact_note:
+        lines.append(f"Контакт: {contact_note}")
+    lines += ["Источник: клиент сообщил в WhatsApp", status]
+    return "\n".join(lines)
+
+
+async def _finalize_contact_update(
+    phone_clean: str,
+    dialog: Dict[str, Any],
+    new_phone_raw: str,
+    contact_info: Dict[str, Any],
+    source: str,
+    now: str,
+) -> None:
+    """Обновляет CRM с новым контактом, уведомляет менеджера, закрывает кейс."""
+    client_name = str(dialog.get("client_name") or "")
+    manager_name = str(dialog.get("manager_name") or "менеджеру")
+
+    digits = "".join(c for c in new_phone_raw if c.isdigit())
+    if digits.startswith("8") and len(digits) == 11:
+        digits = "7" + digits[1:]
+    new_phone = digits
+
+    contact_note = str(contact_info.get("name") or "").strip()
+
+    crm_ok = False
+    try:
+        from bot.crm_clients import update_client_contact_from_dialog
+        crm_ok = update_client_contact_from_dialog(
+            client_name=client_name,
+            new_phone=new_phone,
+            old_phone=phone_clean,
+            contact_info=contact_note,
+            source="client_dialog_auto_update",
+        )
+    except Exception as e:
+        logger.error("CRM contact update failed [%s]: %s", client_name, e)
+
+    if crm_ok:
+        reply = "Спасибо, контакт обновили. Ваш менеджер свяжется с вами по актуальному номеру."
+    else:
+        reply = f"Спасибо, передаю информацию менеджеру {manager_name}."
+
+    dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
+    dialog["state"] = "escalated"
+    _set_client_dialog(phone_clean, dialog)
+
+    await _reply_to_client(phone_clean, reply)
+
+    mgr_note = _build_contact_update_note(dialog, phone_clean, new_phone, contact_note, crm_ok)
+    await _notify_dialog_observers(dialog, mgr_note)
+
+    _set_dialog_followup_suppress(client_name, "contact_updated", 2)
+    _audit(
+        "contact_updated_from_dialog",
+        name=client_name,
+        phone_masked=_mask_phone(phone_clean),
+        new_phone_masked=_mask_phone(new_phone),
+        source=source,
+        crm_ok=crm_ok,
+    )
+    logger.info(
+        "[%s] контакт обновлён: ...%s → ...%s (source=%s, crm_ok=%s)",
+        client_name, phone_clean[-4:], new_phone[-4:], source, crm_ok,
     )
 
 
@@ -915,6 +1021,17 @@ async def handle_incoming(phone: str, text: str, attachment: Optional[Dict[str, 
     exchange_count = dialog["exchange_count"]
     _audit("client_reply_received", name=client_name, phone_masked=_mask_phone(phone_clean), state=dialog.get("state"), exchange_count=exchange_count, attachment_type=(attachment or {}).get("type", ""), text_preview=text[:160])
 
+    # ── Карточка контакта: приоритетная обработка независимо от состояния ──
+    if attachment and attachment.get("type") == "contact_card":
+        contact_phone = str(attachment.get("phone") or "")
+        if contact_phone:
+            await _finalize_contact_update(
+                phone_clean, dialog, contact_phone,
+                {"name": str(attachment.get("name") or "")},
+                "contact_card", now,
+            )
+            return
+
     # Определяем язык
     language = detect_language(text)
 
@@ -1029,6 +1146,38 @@ async def handle_incoming(phone: str, text: str, attachment: Optional[Dict[str, 
         _audit("payment_claim_reported", name=client_name, phone_masked=_mask_phone(phone_clean), source="heuristic_recent_unposted", state=dialog.get("state"))
         return
 
+    # ── Состояние ожидания нового контакта ──────────────────────────────────
+    if dialog.get("state") == "awaiting_new_contact":
+        extracted = _extract_phone_from_text(text)
+        if extracted:
+            await _finalize_contact_update(
+                phone_clean, dialog, extracted, {}, "text_reply", now,
+            )
+            return
+        retry = dialog.get("contact_retry_count", 0) + 1
+        dialog["contact_retry_count"] = retry
+        if retry >= 2:
+            reply = (
+                f"Передаю вас менеджеру {manager_name} "
+                "для уточнения актуального контакта."
+            )
+            dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
+            _set_client_dialog(phone_clean, dialog)
+            await _reply_to_client(phone_clean, reply)
+            await escalate_to_manager(
+                dialog, "contact_update_failed",
+                "Клиент не предоставил новый контакт — требуется ручное уточнение",
+                phone_clean,
+            )
+            return
+        reply = (
+            "Пожалуйста, напишите актуальный номер или пришлите карточку контакта."
+        )
+        dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
+        _set_client_dialog(phone_clean, dialog)
+        await _reply_to_client(phone_clean, reply)
+        return
+
     # Анализируем через DeepSeek (синхронный вызов — выносим в поток)
     try:
         from collector.collection_agent import analyze_response
@@ -1060,6 +1209,38 @@ async def handle_incoming(phone: str, text: str, attachment: Optional[Dict[str, 
         "[%s] intent=%s requires_human=%s exchange_count=%d",
         client_name, intent, requires_human, exchange_count,
     )
+
+    # ── Контактные сценарии: смена/уточнение адресата ───────────────────────
+    _CONTACT_INTENTS = {"wrong_contact", "new_contact_person", "contact_update", "new_phone_provided"}
+    if intent in _CONTACT_INTENTS:
+        new_phone = str(analysis.get("new_phone") or "") or _extract_phone_from_text(text)
+        if new_phone:
+            await _finalize_contact_update(
+                phone_clean, dialog, new_phone, {}, intent, now,
+            )
+            return
+        if intent == "wrong_contact":
+            reply = (
+                "Извините за беспокойство. Подскажите, пожалуйста, актуальный номер "
+                "для связи по вопросу оплаты, или пришлите карточку контакта."
+            )
+        else:
+            reply = (
+                "Понял. Поделитесь, пожалуйста, актуальным номером для связи "
+                "по вопросу оплаты — напишите его или пришлите карточку контакта."
+            )
+        dialog["state"] = "awaiting_new_contact"
+        dialog["contact_retry_count"] = 0
+        dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
+        _set_client_dialog(phone_clean, dialog)
+        await _reply_to_client(phone_clean, reply)
+        _audit(
+            "contact_update_requested",
+            name=client_name,
+            phone_masked=_mask_phone(phone_clean),
+            intent=intent,
+        )
+        return
 
     # ─── Маршрутизация по намерению ──────────────────────────────────────────
 
