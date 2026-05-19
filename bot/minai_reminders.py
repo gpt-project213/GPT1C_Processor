@@ -29,25 +29,45 @@ MINAI_PHONE = os.getenv("MINAI_WA_PHONE", "")
 
 # Каждая запись: day=число месяца, hour=час отправки (Almaty),
 # critical=True → повторяет каждые 2-3ч пока нет подтверждения
+# ── Плавающий тариф интернета (дата меняется каждый месяц) ───────────────
+# Ключ: "YYYY-MM", значение: дата крайнего срока оплаты.
+# Предупреждение всегда за день до крайнего срока.
+INTERNET_SCHEDULE: Dict[str, int] = {
+    "2026-05": 17,
+    "2026-06": 15,
+    "2026-07": 14,
+    # добавляйте следующие месяцы по мере получения новых дат тарифа
+}
+
+
+def _internet_due_day(month_key: Optional[str] = None) -> Optional[int]:
+    """Возвращает крайний срок оплаты интернета для указанного месяца."""
+    mk = month_key or _now().strftime("%Y-%m")
+    return INTERNET_SCHEDULE.get(mk)
+
+
 BUILTIN: Dict[str, Dict[str, Any]] = {
-    # ── Интернет ──────────────────────────────────────────────────────────
+    # ── Интернет — даты берутся из INTERNET_SCHEDULE ──────────────────────
+    # day=None означает «вычислять динамически»; обрабатывается в check_and_send
     "internet_warn": {
         "label":    "Интернет (предупреждение)",
-        "text":     "Доброе утро, Минай! 🌅\n\n🌐 Завтра 17-е — крайний день оплатить интернет.\nОплатите сегодня, чтобы платёж успел пройти до отключения.",
-        "day":      16,
+        "text":     "Доброе утро, Минай! 🌅\n\n🌐 Завтра крайний день оплатить интернет.\nОплатите сегодня, чтобы платёж успел пройти до отключения.",
+        "day":      None,   # вычисляется как due_day - 1
         "hour":     10,
         "critical": False,
         "group":    "internet",
+        "dynamic":  "internet_warn",
     },
     "internet_due": {
         "label":    "Интернет (крайний срок)",
         "text":     "Доброе утро, Минай! 🌅\n\n🚨 СЕГОДНЯ крайний срок — оплатить интернет!\nБез оплаты бот встанет и вся аналитика компании остановится.",
-        "day":      17,
+        "day":      None,   # вычисляется из INTERNET_SCHEDULE
         "hour":     10,
         "critical": True,
         "work":     True,
         "resend":   [13, 16, 19],
         "group":    "internet",
+        "dynamic":  "internet_due",
     },
     # ── Аренда ────────────────────────────────────────────────────────────
     "rent_early": {
@@ -379,10 +399,14 @@ def _expire_stale(state: Dict[str, Any], now: datetime, changed: list) -> None:
     # 3. Sent/pending напоминания текущего дня — обработка конца дня
     if now.hour >= _DAY_END_HOUR:
         for rid, r in reminders.items():
-            day = r.get("day") or (
-                int(r["schedule"].split(":")[1])
-                if str(r.get("schedule", "")).startswith("monthly:") else None
-            )
+            if r.get("dynamic"):
+                due = _internet_due_day()
+                day = due if r["dynamic"] == "internet_due" else (due - 1 if due else None)
+            else:
+                day = r.get("day") or (
+                    int(r["schedule"].split(":")[1])
+                    if str(r.get("schedule", "")).startswith("monthly:") else None
+                )
             if day != now.day:
                 continue
             sk = _state_key(rid)
@@ -480,6 +504,13 @@ def check_and_send() -> None:
 
     for rid, r in reminders.items():
         day = r.get("day")
+        # Динамический день для интернета
+        if day is None and r.get("dynamic"):
+            due = _internet_due_day()
+            if due is None:
+                continue
+            day = due if r["dynamic"] == "internet_due" else due - 1
+
         if day is None:
             schedule = r.get("schedule", "")
             if schedule.startswith("monthly:"):
@@ -784,9 +815,13 @@ def _forward_feedback_to_admin(text: str) -> None:
 def _active_today(state: Dict[str, Any]) -> Optional[str]:
     now = _now()
     for rid, r in _all_reminders().items():
-        day = r.get("day") or (
-            int(r["schedule"].split(":")[1]) if str(r.get("schedule", "")).startswith("monthly:") else None
-        )
+        if r.get("dynamic"):
+            due = _internet_due_day()
+            day = due if r["dynamic"] == "internet_due" else (due - 1 if due else None)
+        else:
+            day = r.get("day") or (
+                int(r["schedule"].split(":")[1]) if str(r.get("schedule", "")).startswith("monthly:") else None
+            )
         if day and now.day == day:
             sk = _state_key(rid)
             if state.get(sk, {}).get("status") not in ("confirmed", None):
