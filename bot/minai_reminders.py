@@ -399,15 +399,7 @@ def _expire_stale(state: Dict[str, Any], now: datetime, changed: list) -> None:
     # 3. Sent/pending напоминания текущего дня — обработка конца дня
     if now.hour >= _DAY_END_HOUR:
         for rid, r in reminders.items():
-            if r.get("dynamic"):
-                due = _internet_due_day()
-                day = due if r["dynamic"] == "internet_due" else (due - 1 if due else None)
-            else:
-                day = r.get("day") or (
-                    int(r["schedule"].split(":")[1])
-                    if str(r.get("schedule", "")).startswith("monthly:") else None
-                )
-            if day != now.day:
+            if not _fires_today(r, now):
                 continue
             sk = _state_key(rid)
             entry = state.get(sk)
@@ -503,22 +495,7 @@ def check_and_send() -> None:
         return
 
     for rid, r in reminders.items():
-        day = r.get("day")
-        # Динамический день для интернета
-        if day is None and r.get("dynamic"):
-            due = _internet_due_day()
-            if due is None:
-                continue
-            day = due if r["dynamic"] == "internet_due" else due - 1
-
-        if day is None:
-            schedule = r.get("schedule", "")
-            if schedule.startswith("monthly:"):
-                day = int(schedule.split(":")[1])
-            else:
-                continue
-
-        if now.day != day:
+        if not _fires_today(r, now):
             continue
 
         sk = _state_key(rid)
@@ -530,8 +507,13 @@ def check_and_send() -> None:
 
         if status == "snoozed":
             until = entry.get("snoozed_until", "")
-            if until and now.isoformat() < until:
-                continue
+            if until:
+                try:
+                    _until_dt = datetime.fromisoformat(until)
+                    if now < _until_dt:
+                        continue
+                except Exception:
+                    pass
             _send_reminder(rid)
             continue
 
@@ -841,20 +823,55 @@ def _forward_feedback_to_admin(text: str) -> None:
         LOG.error("Ошибка пересылки фидбека: %s", e)
 
 
+def _fires_today(r: Dict[str, Any], now: datetime) -> bool:
+    """Возвращает True если напоминание r должно отработать сегодня (now)."""
+    # dynamic internet
+    if r.get("dynamic"):
+        due = _internet_due_day()
+        if due is None:
+            return False
+        day = due if r["dynamic"] == "internet_due" else (due - 1 if due > 1 else None)
+        return bool(day and day == now.day)
+
+    day = r.get("day")
+    if day is not None:
+        return day == now.day
+
+    schedule = str(r.get("schedule", ""))
+
+    if schedule.startswith("monthly:"):
+        try:
+            d = int(schedule.split(":")[1])
+            return 1 <= d <= 31 and d == now.day
+        except Exception:
+            return False
+
+    if schedule == "daily":
+        return True
+
+    if schedule.startswith("weekly:"):
+        days = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
+        return now.weekday() == days.get(schedule.split(":")[1].lower(), -1)
+
+    if schedule.startswith("once:"):
+        from datetime import date as _date
+        try:
+            target = _date.fromisoformat(schedule.split(":", 1)[1])
+            return now.date() == target
+        except Exception:
+            return False
+
+    return False
+
+
 def _active_today(state: Dict[str, Any]) -> Optional[str]:
     now = _now()
     for rid, r in _all_reminders().items():
-        if r.get("dynamic"):
-            due = _internet_due_day()
-            day = due if r["dynamic"] == "internet_due" else (due - 1 if due else None)
-        else:
-            day = r.get("day") or (
-                int(r["schedule"].split(":")[1]) if str(r.get("schedule", "")).startswith("monthly:") else None
-            )
-        if day and now.day == day:
-            sk = _state_key(rid)
-            if state.get(sk, {}).get("status") not in ("confirmed", None):
-                return rid
+        if not _fires_today(r, now):
+            continue
+        sk = _state_key(rid)
+        if state.get(sk, {}).get("status") not in ("confirmed", None):
+            return rid
     return None
 
 
@@ -923,22 +940,56 @@ def _skip_add(state: Dict[str, Any]) -> None:
     _send_plain("Хорошо, пропускаем 👍")
 
 
+def _validate_parsed(parsed: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    if not isinstance(parsed, dict) or "error" in parsed:
+        return None
+    text = str(parsed.get("text", "")).strip()
+    if not text:
+        return None
+    schedule = str(parsed.get("schedule", "monthly:1")).strip()
+    ok = False
+    if schedule == "daily":
+        ok = True
+    elif schedule.startswith("monthly:"):
+        try:
+            d = int(schedule.split(":")[1]); ok = 1 <= d <= 31
+        except Exception:
+            schedule = "monthly:1"; ok = True
+    elif schedule.startswith("weekly:"):
+        ok = schedule.split(":")[1].lower() in ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+    elif schedule.startswith("once:"):
+        try:
+            from datetime import date as _d; _d.fromisoformat(schedule.split(":", 1)[1]); ok = True
+        except Exception:
+            pass
+    if not ok:
+        schedule = "monthly:1"
+    try:
+        hour = int(parsed.get("hour", 10))
+        if not 0 <= hour <= 23:
+            hour = 10
+    except Exception:
+        hour = 10
+    return {"text": text, "schedule": schedule, "hour": hour}
+
+
 async def _process_add_text(text: str, state: Dict[str, Any]) -> None:
     """DeepSeek разбирает свободный текст в структурированное напоминание."""
     state.pop("__awaiting_add__", None)
     _save_state(state)
 
-    parsed = await _deepseek_parse(text)
-    if not parsed or "error" in parsed:
+    _raw = await _deepseek_parse(text)
+    parsed = _validate_parsed(_raw) if _raw else None
+    if not parsed:
         _send_plain(
             "Не смогла разобрать. Попробуйте написать или сказать голосовым чётче 🎤✍️\n"
             "Например: «напомни оплатить [что] [когда]»"
         )
         return
 
-    r_text = parsed.get("text", "").strip()
-    schedule = parsed.get("schedule", "monthly:1")
-    hour_val = int(parsed.get("hour", 9))
+    r_text = parsed["text"]
+    schedule = parsed["schedule"]
+    hour_val = parsed["hour"]
 
     # Формируем читаемое описание
     sched_human = _schedule_human(schedule)
@@ -1017,7 +1068,12 @@ def _save_custom_reminder(pending: Dict[str, Any]) -> None:
     schedule = pending["schedule"]
     day = None
     if schedule.startswith("monthly:"):
-        day = int(schedule.split(":")[1])
+        try:
+            day = int(schedule.split(":")[1])
+            if not 1 <= day <= 31:
+                day = None
+        except Exception:
+            day = None
     custom[rid] = {
         "label":    pending["text"],
         "text":     f"📌 Напоминание: {pending['text']}",
