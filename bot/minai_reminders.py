@@ -314,8 +314,10 @@ def _expire_stale(state: Dict[str, Any], now: datetime, changed: list) -> None:
         "__pending_audio_text__": "⏰ Время ожидания вышло. Голосовое устарело — попробуйте ещё раз 🎤",
         "__pending_confirm__":    "⏰ Время ожидания вышло. Напоминание не сохранено — нажмите ➕ Добавить заново.",
         "__awaiting_feedback__":  "⏰ Время ожидания вышло. Если захотите оставить пожелание — напишите «хочу изменить».",
+        "__awaiting_snooze__":    "⏰ Не дождалась ответа по времени. Напомню позже по расписанию.",
     }
-    for key in ("__awaiting_add__", "__pending_audio_text__", "__pending_confirm__", "__awaiting_feedback__"):
+    for key in ("__awaiting_add__", "__pending_audio_text__", "__pending_confirm__",
+                "__awaiting_feedback__", "__awaiting_snooze__"):
         val = state.get(key)
         if not val:
             continue
@@ -620,23 +622,47 @@ async def handle_minai_response(text: str) -> bool:
         return True
 
     if _match(t, ("⏰", "Позже", "later")):
-        _send_buttons("Когда напомнить?", _snooze_buttons())
+        state["__awaiting_snooze__"] = {"_ts": _now().isoformat(), "_rid": active_rid}
+        _save_state(state)
+        _send_buttons(
+            "Когда напомнить?\n\nИли напишите своё время — например «в 14:30» или «через 3 часа»",
+            _snooze_buttons(),
+        )
         return True
 
+    # Кнопки снузи
     if _match(t, ("Через 2", "snooze_2h")):
+        state.pop("__awaiting_snooze__", None)
         _set_snooze(active_rid, state, hours=2)
         _send_plain("Напомню через 2 часа ⏰")
         return True
 
     if _match(t, ("Через 4", "snooze_4h")):
+        state.pop("__awaiting_snooze__", None)
         _set_snooze(active_rid, state, hours=4)
         _send_plain("Напомню через 4 часа ⏰")
         return True
 
     if _match(t, ("18:00", "snooze_18")):
+        state.pop("__awaiting_snooze__", None)
         _set_snooze_at(active_rid, state, hour=18)
         _send_plain("Напомню в 18:00 ⏰")
         return True
+
+    # Свободный ввод времени снузи
+    _sn = state.get("__awaiting_snooze__")
+    if _sn:
+        rid_sn = _sn.get("_rid") if isinstance(_sn, dict) else active_rid
+        _pt = _parse_snooze_time(t)
+        if _pt:
+            state.pop("__awaiting_snooze__", None)
+            if isinstance(_pt, int):
+                _set_snooze(rid_sn, state, hours=_pt)
+                _send_plain(f"Напомню через {_pt} ч ⏰")
+            else:
+                _set_snooze_at(rid_sn, state, hour=_pt[0], minute=_pt[1])
+                _send_plain(f"Напомню в {_pt[0]:02d}:{_pt[1]:02d} ⏰")
+            return True
 
     if _match(t, ("➕", "Добавить", "add")):
         _send_plain(
@@ -786,12 +812,39 @@ def _set_snooze(rid: Optional[str], state: Dict[str, Any], hours: int) -> None:
     _save_state(state)
 
 
-def _set_snooze_at(rid: Optional[str], state: Dict[str, Any], hour: int) -> None:
+def _parse_snooze_time(text: str):
+    """Парсит свободный ввод времени. Возвращает int (часов), (h, m) или None."""
+    import re
+    t = text.lower().strip()
+    m = re.search(r"через\s+(\d+)\s*(час|ч\b)", t)
+    if m:
+        return int(m.group(1))
+    m = re.search(r"через\s+(\d+)\s*(мин)", t)
+    if m:
+        return (0, int(m.group(1)))
+    m = re.search(r"в\s+(\d{1,2})(?::(\d{2}))?", t)
+    if m:
+        h, mn = int(m.group(1)), int(m.group(2)) if m.group(2) else 0
+        if 0 <= h <= 23:
+            return (h, mn)
+    m = re.search(r"\b(\d{1,2}):(\d{2})\b", t)
+    if m:
+        h, mn = int(m.group(1)), int(m.group(2))
+        if 0 <= h <= 23:
+            return (h, mn)
+    return None
+
+
+def _set_snooze_at(rid: Optional[str], state: Dict[str, Any], hour: int, minute: int = 0) -> None:
     if not rid:
         return
-    target = _now().replace(hour=hour, minute=0, second=0, microsecond=0)
-    if target <= _now():
-        target += timedelta(days=1)
+    now = _now()
+    if hour == 0 and minute > 0:
+        target = now + timedelta(minutes=minute)
+    else:
+        target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        if target <= now:
+            target += timedelta(days=1)
     sk = _state_key(rid)
     entry = state.get(sk) or {}
     entry.update({"status": "snoozed", "snoozed_until": target.isoformat()})
