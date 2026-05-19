@@ -201,6 +201,9 @@ def _main_buttons() -> list[dict]:
     return [_btn("done", "✅ Сделала"), _btn("later", "⏰ Позже"), _btn("add", "➕ Добавить")]
 
 
+_HINT = "\n\n_Нажмите кнопку или напишите/скажите голосовым_ 🎤"
+
+
 def _snooze_buttons() -> list[dict]:
     return [_btn("snooze_2h", "Через 2 часа"), _btn("snooze_4h", "Через 4 часа"), _btn("snooze_18", "В 18:00")]
 
@@ -215,7 +218,7 @@ def _send_reminder(rid: str) -> bool:
     r = reminders.get(rid)
     if not r:
         return False
-    ok = _send_buttons(r["text"], _main_buttons())
+    ok = _send_buttons(r["text"] + _HINT, _main_buttons())
     if ok:
         state = _load_state()
         sk = _state_key(rid)
@@ -309,7 +312,7 @@ async def handle_minai_response(text: str) -> bool:
         elif _match(t, ("❌", "Нет", "audio_no", "ошиблась")):
             del state["__pending_audio_text__"]
             _save_state(state)
-            _send_plain("Хорошо, попробуйте отправить голосовое ещё раз или напишите текстом.")
+            _send_plain("Хорошо — можете сказать голосовым ещё раз или написать текстом 🎤✍️")
         return True
 
     # Проверяем ожидает ли бот текст нового напоминания от Минай
@@ -372,7 +375,7 @@ async def handle_minai_response(text: str) -> bool:
 
     if _match(t, ("➕", "Добавить", "add")):
         _send_plain(
-            "Напишите что нужно напомнить.\n\n"
+            "Можете написать или сказать голосовым — что напомнить 🎤✍️\n\n"
             "Примеры:\n"
             "• «оплатить газ 10-го числа каждый месяц»\n"
             "• «позвонить бухгалтеру каждый понедельник»\n"
@@ -467,8 +470,8 @@ async def _process_add_text(text: str, state: Dict[str, Any]) -> None:
     parsed = await _deepseek_parse(text)
     if not parsed or "error" in parsed:
         _send_plain(
-            "Не смогла разобрать. Попробуйте написать чётче:\n"
-            "«напомни оплатить [что] [когда]»"
+            "Не смогла разобрать. Попробуйте написать или сказать голосовым чётче 🎤✍️\n"
+            "Например: «напомни оплатить [что] [когда]»"
         )
         return
 
