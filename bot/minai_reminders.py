@@ -650,8 +650,16 @@ async def handle_minai_response(text: str) -> bool:
         _save_state(state)
         return True
 
-    if _match(t, ("Всё", "спасибо", "nothing")):
+    if _match(t, ("Всё", "спасибо", "nothing", "Ничего")):
         _send_plain("Хорошо 👍")
+        return True
+
+    if _match(t, ("💬", "fb", "Написать пожелание")):
+        state["__awaiting_feedback__"] = {"_ts": _now().isoformat(), "_val": True}
+        _save_state(state)
+        _send_plain(
+            "Напишите или скажите голосовым что хотите изменить 🎤✍️"
+        )
         return True
 
     # Фидбек — «неудобно», «хочу изменить» и т.п.
@@ -683,7 +691,16 @@ async def handle_minai_response(text: str) -> bool:
         await _process_add_text(t, state)
         return True
 
-    return False   # не распознали — передаём дальше
+    # Catch-all: любое непонятное сообщение — подсказка с кнопками
+    _send_buttons(
+        "Привет! 👋\n\n"
+        "Не поняла что вы имеете в виду.\n\n"
+        "Что хотите сделать?",
+        [_btn("add", "➕ Добавить напоминание"),
+         _btn("fb",  "💬 Написать пожелание"),
+         _btn("nothing", "Ничего, всё ок")],
+    )
+    return True
 
 
 # ── Вспомогательные функции ────────────────────────────────────────────────
