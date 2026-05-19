@@ -371,20 +371,20 @@ async def poll_once() -> None:
             # ── Жёсткая изоляция личных каналов от коллектора ───────────────
             # Эти номера НИКОГДА не попадают в коллектор — ни при каких условиях.
             _phone_digits = "".join(c for c in phone if c.isdigit())
-            _personal_phones = [
-                p for p in (MINAI_WA_PHONE, DARYA_WA_PHONE) if p
-            ]
-            _is_personal = any(
-                _phone_digits.endswith("".join(c for c in p if c.isdigit())[-9:])
-                for p in _personal_phones
-            )
+            _personal_digits_set = {
+                "".join(c for c in p if c.isdigit())
+                for p in (MINAI_WA_PHONE, DARYA_WA_PHONE) if p
+            }
+            # Точное совпадение по всем цифрам номера — не по хвосту.
+            # Исключает случайное попадание реального клиента под блок.
+            _is_personal = _phone_digits in _personal_digits_set
             # Для личного номера старый privacy-гейт можно вернуть через
             # WA_REQUIRE_ACTIVE_DIALOG=1. Для выделенного бот-номера входящие
             # пропускаются до handle_incoming(), где неизвестные номера
             # безопасно игнорируются без ответа клиенту.
             # Минай — отдельный контур напоминалок, не проходит через collector
             _minai_digits = "".join(c for c in (MINAI_WA_PHONE or "") if c.isdigit())
-            if _minai_digits and _phone_digits.endswith(_minai_digits[-9:]):
+            if _minai_digits and _phone_digits == _minai_digits:
                 _msg_data = body.get("messageData", {})
                 _msg_type = _msg_data.get("typeMessage", "")
                 _raw_text = (
@@ -414,7 +414,7 @@ async def poll_once() -> None:
 
             # Второй личный канал напоминаний
             _darya_digits = "".join(c for c in (DARYA_WA_PHONE or "") if c.isdigit())
-            if _darya_digits and _phone_digits.endswith(_darya_digits[-9:]):
+            if _darya_digits and _phone_digits == _darya_digits:
                 _darya_msg_data = body.get("messageData", {})
                 _darya_type = _darya_msg_data.get("typeMessage", "")
                 _darya_text = (
