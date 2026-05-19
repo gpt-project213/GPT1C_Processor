@@ -368,12 +368,21 @@ async def poll_once() -> None:
                     await _delete_notification(receipt_id)
                     return
 
+            # ── Жёсткая изоляция личных каналов от коллектора ───────────────
+            # Эти номера НИКОГДА не попадают в коллектор — ни при каких условиях.
+            _phone_digits = "".join(c for c in phone if c.isdigit())
+            _personal_phones = [
+                p for p in (MINAI_WA_PHONE, DARYA_WA_PHONE) if p
+            ]
+            _is_personal = any(
+                _phone_digits.endswith("".join(c for c in p if c.isdigit())[-9:])
+                for p in _personal_phones
+            )
             # Для личного номера старый privacy-гейт можно вернуть через
             # WA_REQUIRE_ACTIVE_DIALOG=1. Для выделенного бот-номера входящие
             # пропускаются до handle_incoming(), где неизвестные номера
             # безопасно игнорируются без ответа клиенту.
             # Минай — отдельный контур напоминалок, не проходит через collector
-            _phone_digits = "".join(c for c in phone if c.isdigit())
             _minai_digits = "".join(c for c in (MINAI_WA_PHONE or "") if c.isdigit())
             if _minai_digits and _phone_digits.endswith(_minai_digits[-9:]):
                 _msg_data = body.get("messageData", {})
@@ -428,6 +437,12 @@ async def poll_once() -> None:
                         await handle_darya_response(_darya_text)
                     except Exception as _de:
                         logger.error("darya response error: %s", _de)
+                await _delete_notification(receipt_id)
+                return
+
+            # Финальный барьер: личный номер не должен добраться сюда никогда
+            if _is_personal:
+                logger.warning("Личный номер достиг коллектора — заблокирован. phone_digits=%s", _phone_digits[-4:])
                 await _delete_notification(receipt_id)
                 return
 
