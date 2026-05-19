@@ -191,7 +191,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-__VERSION__ = "v9.4.85/18.05.2026"
+__VERSION__ = "v9.4.86/19.05.2026"
 
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
@@ -4716,14 +4716,14 @@ async def _send_payment_check_buttons(context, chat_id: int, manager: str, categ
     if not clients:
         return
     try:
-        from collector.payment_hold import create_manager_payment_request
+        from collector.payment_hold import mark_silence_candidate
     except Exception as exc:
         logger.warning("payment hold module unavailable: %s", exc)
         return
 
     rows = []
     for c in clients[:12]:
-        rec = create_manager_payment_request(
+        cand = mark_silence_candidate(
             manager=manager,
             client=c.get("client", ""),
             debt=float(c.get("debt", 0) or 0),
@@ -4733,7 +4733,7 @@ async def _send_payment_check_buttons(context, chat_id: int, manager: str, categ
         rows.append([
             InlineKeyboardButton(
                 f"Проверить у Саиды: {str(c.get('client', ''))[:32]}",
-                callback_data=f"payhold_req|{rec['token']}",
+                callback_data=f"payhold_req|{cand['token']}",
             )
         ])
     if not rows:
@@ -7625,7 +7625,8 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
 
             rec = get_request(token)
-            if not rec:
+            # payhold_req: hold может ещё не существовать (только кандидат)
+            if not rec and action != "payhold_req":
                 await q.answer("Запрос не найден или устарел.")
                 return
 
@@ -7633,9 +7634,36 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             admin_id = ADMIN_CHAT_ID
 
             if action == "payhold_req":
-                if chat_id != int(rec.get("manager_chat_id") or 0):
-                    await q.answer("Это запрос другого менеджера.")
+                # Идемпотентность: если уже отправлено Саиде — не дублируем
+                if rec and rec.get("sent_to_saida_at"):
+                    await q.answer("Запрос уже отправлен Саиде.")
                     return
+                if not rec:
+                    # Hold ещё не создан — берём данные из кандидата и создаём настоящий hold
+                    from collector.payment_hold import (
+                        get_silence_candidate_by_token,
+                        create_manager_payment_request,
+                        SOURCE_MANAGER_REQUEST,
+                    )
+                    cand = get_silence_candidate_by_token(token)
+                    if not cand:
+                        await q.answer("Запрос не найден или устарел.")
+                        return
+                    if chat_id != int(cand.get("manager_chat_id") or 0):
+                        await q.answer("Это запрос другого менеджера.")
+                        return
+                    rec = create_manager_payment_request(
+                        manager=cand["manager"],
+                        client=cand["client"],
+                        debt=float(cand.get("debt", 0) or 0),
+                        debt_str=str(cand.get("debt_str", "")),
+                        manager_chat_id=int(cand.get("manager_chat_id") or 0),
+                        source=SOURCE_MANAGER_REQUEST,
+                    )
+                else:
+                    if chat_id != int(rec.get("manager_chat_id") or 0):
+                        await q.answer("Это запрос другого менеджера.")
+                        return
                 kb = InlineKeyboardMarkup([
                     [InlineKeyboardButton("✅ Да, оплата есть", callback_data=f"payhold_full|{token}")],
                     [InlineKeyboardButton("🔸 Частично",        callback_data=f"payhold_partial|{token}")],
@@ -7652,7 +7680,7 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     chat_id=saida_chat_id,
                     text=(
                         f"💬 <b>Запрос на проверку оплаты</b>\n\n"
-                        f"Менеджер <b>{manager_name}</b> сообщил, что клиент оплатил.\n\n"
+                        f"Менеджер <b>{manager_name}</b> запросил проверку оплаты.\n\n"
                         f"Клиент: <b>{client_name}</b>\n"
                         f"Долг в отчёте: {debt_str}\n\n"
                         f"Проверь в 1С и нажми нужную кнопку.\n"
@@ -7661,6 +7689,9 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup=kb,
                     parse_mode="HTML",
                 )
+                # Фиксируем отправку Саиде — запускает таймеры и уведомляет Минай
+                from collector.payment_hold import set_sent_to_saida
+                set_sent_to_saida(rec["token"])
                 await q.answer("Запрос Саиде отправлен.")
                 return
 
@@ -10045,7 +10076,24 @@ async def collector_reminder_task(context: ContextTypes.DEFAULT_TYPE):
 
 
 async def whatsapp_poller_task(context: ContextTypes.DEFAULT_TYPE):
-    """Poll Green API for incoming WhatsApp messages every 30 seconds."""
+    """Poll Green API for incoming WhatsApp messages with adaptive interval."""
+    if not hasattr(whatsapp_poller_task, "_last_run_mono"):
+        whatsapp_poller_task._last_run_mono = 0.0
+
+    fast_start = int(os.getenv("COLLECTOR_HOUR_START", "9"))
+    fast_end = int(os.getenv("COLLECTOR_HOUR_END", "18"))
+    fast_interval = max(3, int(os.getenv("WA_POLL_FAST_INTERVAL_SEC", "5")))
+    slow_interval = max(fast_interval, int(os.getenv("WA_POLL_SLOW_INTERVAL_SEC", "30")))
+    now_local = datetime.now(TZ)
+    in_fast_window = fast_start <= now_local.hour <= fast_end
+    desired_interval = fast_interval if in_fast_window else slow_interval
+
+    now_mono = time.monotonic()
+    last_run_mono = getattr(whatsapp_poller_task, "_last_run_mono", 0.0)
+    if last_run_mono and (now_mono - last_run_mono) < desired_interval:
+        return
+
+    whatsapp_poller_task._last_run_mono = now_mono
     try:
         from collector.whatsapp_poller import poll_once
         # BUG FIX: poll_once может зависнуть (аудио Whisper до 90 сек).
@@ -11120,11 +11168,11 @@ def main():
 
         job_queue.run_repeating(
             whatsapp_poller_task,
-            interval=30,
-            first=60,
+            interval=5,
+            first=10,
             name="whatsapp_poller",
         )
-        sched_logger.info("📱 Настроен Green API поллер: каждые 30 сек")
+        sched_logger.info("📱 Настроен Green API поллер: быстро в часы WhatsApp, медленно вне окна")
 
         # ── Стоп-лист отгрузки (Саида) ─────────────────────────────
         if _DEBT_STOP_AVAILABLE:

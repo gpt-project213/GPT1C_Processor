@@ -4,7 +4,13 @@
 collector/approval_flow.py
 UX согласования рассылки WhatsApp — менеджер → администратор.
 
-Версия: 1.1.13 (2026-05-13)
+Версия: 1.1.15 (2026-05-16)
+
+v1.1.15 (2026-05-16): user-facing approval texts now prefer short plain
+Russian, including clearer labels for lists and WhatsApp-related prompts.
+
+v1.1.14 (2026-05-16): user-facing approval texts now prefer plain Russian
+labels such as "список" / "номер списка" instead of technical "батч".
 
 v1.1.13 (2026-05-13): manager preview now separates debt age from effective
   overdue for deferred-payment clients, including "still within deferral" cases.
@@ -1035,7 +1041,7 @@ def _format_admin_manual_header(batch: Dict[str, Any], decisions: Dict[str, str]
         f"Выбрано к отправке: <b>{keep_count}</b>\n"
         f"Исключено: <b>{skip_count}</b>\n"
         f"Осталось разобрать: <b>{remaining_count}</b>\n"
-        f"Батч: <code>{batch['batch_id']}</code>"
+        f"Номер списка: <code>{batch['batch_id']}</code>"
     )
 
 
@@ -1340,14 +1346,20 @@ async def handle_manager_callback(
             mgr_state["waiting_for_proof"] = None
             save_batch(batch)
             try:
-                from collector.payment_hold import create_manager_payment_request
-                create_manager_payment_request(
+                from collector.payment_hold import (
+                    create_manager_payment_request,
+                    set_sent_to_saida,
+                    SOURCE_MANAGER_NO_DOC,
+                )
+                _hold_rec = create_manager_payment_request(
                     manager=manager_name,
                     manager_chat_id=chat_id,
                     client=client_name,
                     debt=clients[cli_idx].get("amount", 0),
                     claimed_by_manager=True,
+                    source=SOURCE_MANAGER_NO_DOC,
                 )
+                set_sent_to_saida(_hold_rec["token"])
             except Exception as hold_exc:
                 logger.error("[%s] payment_hold create error for %s: %s", batch_id, client_name, hold_exc)
             await _tg_send(
@@ -1416,8 +1428,8 @@ async def handle_manager_callback(
 def _format_admin_summary_text(batch: Dict[str, Any]) -> str:
     """Формирует сводку для администратора."""
     lines = [
-        "📋 <b>Согласование рассылки WhatsApp — итог менеджеров</b>\n",
-        f"Батч: {batch['batch_id']}\n",
+        "📋 <b>Согласование рассылки в WhatsApp — итог менеджеров</b>\n",
+        f"Номер списка: {batch['batch_id']}\n",
     ]
     freshness_lines = _freshness_lines(batch)
     lines.extend(freshness_lines)
@@ -1426,7 +1438,7 @@ def _format_admin_summary_text(batch: Dict[str, Any]) -> str:
     if batch.get("escalated_to_admin_at"):
         lines += [
             "⚠️ <b>Часть менеджеров не ответила вовремя.</b>",
-            "Батч передан вам на ручное решение без ожидания всех ответов.\n",
+            "Список передан вам на ручное решение без ожидания всех ответов.\n",
         ]
 
     total_send = 0
@@ -1561,7 +1573,7 @@ def _format_agreed_review_text(batch: Dict[str, Any]) -> str:
     decisions = _get_agreed_review_decisions(batch)
     if not agreed_clients:
         lines += [
-            "Сейчас в батче нет активных договорённостей для проверки.",
+        "Сейчас в этом списке нет активных договорённостей для проверки.",
             "",
             "Нажмите «Назад к сводке».",
         ]
@@ -1593,7 +1605,7 @@ def _format_agreed_review_text(batch: Dict[str, Any]) -> str:
         lines.append(f"    <i>{status_prefix}</i>")
     lines += [
         "",
-        "По каждому клиенту: принять договорённость или вернуть клиента в WA этого батча.",
+        "По каждому клиенту: принять договорённость или вернуть клиента в WA-рассылку этого списка.",
     ]
     return "\n".join(lines)
 
@@ -1630,7 +1642,7 @@ def _format_send_results_text(batch_id: str, results: List[Dict[str, Any]]) -> s
     lines = [
         "📤 <b>Отправка завершена</b>",
         "",
-        f"Батч: <code>{batch_id}</code>",
+        f"Номер списка: <code>{batch_id}</code>",
         f"Отправлено: <b>{sent}</b>",
         f"Ошибок: <b>{failed}</b>",
         f"Пропущено: <b>{skipped}</b>",
@@ -1654,7 +1666,7 @@ def _format_send_blocked_text(batch_id: str, batch: Dict[str, Any], results: Opt
     lines = [
         "❌ <b>Отправка не выполнена</b>",
         "",
-        f"Батч: <code>{batch_id}</code>",
+        f"Номер списка: <code>{batch_id}</code>",
     ]
     if batch.get("send_in_progress"):
         lines.append("Статус: <b>отправка ещё выполняется</b>")
@@ -1723,9 +1735,9 @@ async def send_admin_preview_notice(batch: Dict[str, Any], bot=None) -> None:
     total_clients = sum(len(m.get("clients") or []) for m in managers.values())
 
     lines = [
-        "📬 <b>Создан новый батч согласования WhatsApp</b>",
+        "📬 <b>Создан новый список на рассылку в WhatsApp</b>",
         "",
-        f"Батч: <code>{batch.get('batch_id','—')}</code>",
+        f"Номер списка: <code>{batch.get('batch_id','—')}</code>",
         f"Клиентов всего: <b>{total_clients}</b>",
         f"Менеджеров: <b>{len(managers)}</b>",
         "",
@@ -1743,7 +1755,7 @@ async def send_admin_preview_notice(batch: Dict[str, Any], bot=None) -> None:
     if batch.get("replaced_batch_id"):
         lines += [
             "",
-            f"⚠️ Предыдущий активный батч <code>{batch['replaced_batch_id']}</code> закрыт как неактуальный.",
+            f"⚠️ Предыдущий активный список <code>{batch['replaced_batch_id']}</code> закрыт как неактуальный.",
         ]
     lines += [
         "",
@@ -1779,7 +1791,7 @@ async def send_admin_auto_ready_notice(batch: Dict[str, Any], bot=None) -> None:
     lines = [
         "🔁 <b>Повторное согласование не требуется</b>",
         "",
-        f"Батч: <code>{batch.get('batch_id', '—')}</code>",
+        f"Номер списка: <code>{batch.get('batch_id', '—')}</code>",
         f"К отправке без нового вопроса менеджерам: <b>{len(clients)}</b>",
         "",
         "У этих клиентов с прошлого решения нет новой оплаты, поэтому прошлое разрешение продолжено автоматически.",
@@ -1941,7 +1953,7 @@ async def handle_admin_callback(
             await _tg_edit(
                 chat_id,
                 message_id,
-                "⚠️ Отправка недоступна: батч ещё не утверждён администратором.",
+                "⚠️ Отправка недоступна: список ещё не утверждён директором.",
                 _admin_keyboard(batch_id, batch),
             )
             return True
@@ -1962,9 +1974,9 @@ async def handle_admin_callback(
                 message_id,
                 (
                     "⛔ <b>Окно отправки закрыто.</b>\n\n"
-                    f"Этот батч был активен до: <b>{batch.get('expires_at', '—')}</b>\n"
-                    "После дедлайна отправка по старому батчу не выполняется.\n\n"
-                    "Нужен новый актуальный батч."
+                    f"Этот список был активен до: <b>{batch.get('expires_at', '—')}</b>\n"
+                    "После дедлайна отправка по старому списку не выполняется.\n\n"
+                    "Нужен новый актуальный список."
                 ),
             )
             return True
@@ -2080,7 +2092,7 @@ async def handle_admin_callback(
                     int(mgr_chat_id),
                     (
                         f"⚠️ Директор не принял договорённость по <b>{client_name}</b>.\n"
-                        f"Клиент войдёт в WA-рассылку этого батча.\n"
+                        f"Клиент войдёт в WA-рассылку этого списка.\n"
                         f"Твоя договорённость аннулирована."
                     ),
                 )
@@ -2160,7 +2172,7 @@ async def handle_admin_callback(
             "⏸ <b>Рассылка отложена.</b>\n\n"
             "Вы можете вернуться к этому запросу в течение дня.\n"
             "Батч будет активен до конца рабочего дня.\n\n"
-            "⚠️ Если до 17:00 придёт новый датасет — этот батч будет заменён автоматически."
+            "⚠️ Если до 17:00 придут новые данные — этот список будет заменён автоматически."
         )
         await _tg_edit(chat_id, message_id, text)
         logger.info("[%s] Администратор отложил решение", batch_id)
@@ -3025,7 +3037,7 @@ async def promote_silent_batches_to_admin(bot=None) -> int:
                 admin_id,
                 "⏰ <b>Рассылка сегодня не состоится.</b>\n\n"
                 f"Батч <code>{bid}</code> создан, но менеджеры не ответили до {SEND_WINDOW_CUTOFF_HOUR}:{SEND_WINDOW_CUTOFF_MINUTE:02d}.\n"
-                "Следующий батч будет создан автоматически при поступлении новой дебиторки.",
+                "Следующий список будет создан автоматически при поступлении новой дебиторки.",
             )
         except (ValueError, TypeError):
             pass

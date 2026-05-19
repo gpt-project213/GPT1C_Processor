@@ -20,6 +20,7 @@ from typing import Any, Dict, Iterable, Optional
 import portalocker
 
 ROOT = Path(__file__).resolve().parents[1]
+__VERSION__ = "1.0.1"
 TZ_NAME = os.getenv("TZ", "Asia/Almaty")
 try:
     from zoneinfo import ZoneInfo
@@ -28,6 +29,16 @@ except Exception:  # pragma: no cover - defensive fallback
     TZ = None
 
 PAYMENT_HOLD_PATH = ROOT / "logs" / "saida_payment_holds.json"
+MINAI_NOTIFY_STATE_PATH = ROOT / "logs" / "minai_payment_notify_state.json"
+SILENCE_CANDIDATES_PATH = ROOT / "logs" / "silence_candidates.json"
+SILENCE_CANDIDATE_RESHOW_HOURS = int(os.getenv("SILENCE_CANDIDATE_RESHOW_HOURS", "4"))
+
+# Source constants for payment holds
+SOURCE_MANAGER_REQUEST  = "manager_request_check"
+SOURCE_MANAGER_CLAIM    = "manager_claim_paid"
+SOURCE_MANAGER_NO_DOC   = "manager_paid_no_doc"
+SOURCE_SAIDA_MANUAL     = "saida_manual"
+SOURCE_NO_MOVEMENT      = "no_movement_paid"
 HOLD_TTL_DAYS = int(os.getenv("SAIDA_PAYMENT_HOLD_TTL_DAYS", "2"))
 SAIDA_WARN_HOURS = int(os.getenv("SAIDA_WARN_HOURS", "1"))
 SAIDA_BYPASS_HOURS = int(os.getenv("SAIDA_BYPASS_HOURS", "2"))
@@ -111,9 +122,139 @@ def _save(data: Dict[str, Any]) -> None:
                 pass
 
 
+def _load_minai_notify_state() -> Dict[str, Any]:
+    try:
+        if MINAI_NOTIFY_STATE_PATH.exists():
+            data = json.loads(MINAI_NOTIFY_STATE_PATH.read_text(encoding="utf-8"))
+            return data if isinstance(data, dict) else {}
+    except Exception:
+        pass
+    return {}
+
+
+def _save_minai_notify_state(data: Dict[str, Any]) -> None:
+    MINAI_NOTIFY_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp = None
+    try:
+        with NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=MINAI_NOTIFY_STATE_PATH.parent,
+            delete=False,
+            suffix=".tmp",
+        ) as fh:
+            json.dump(data, fh, ensure_ascii=False, indent=2)
+            tmp = fh.name
+        os.replace(tmp, MINAI_NOTIFY_STATE_PATH)
+    finally:
+        if tmp and os.path.exists(tmp):
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+
+
 def _token(manager: str, client: str) -> str:
     raw = f"{normalize_client_name(manager)}|{normalize_client_name(client)}"
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def _load_candidates() -> Dict[str, Any]:
+    try:
+        if SILENCE_CANDIDATES_PATH.exists():
+            data = json.loads(SILENCE_CANDIDATES_PATH.read_text(encoding="utf-8"))
+            return data if isinstance(data, dict) else {}
+    except Exception:
+        pass
+    return {}
+
+
+def _save_candidates(data: Dict[str, Any]) -> None:
+    SILENCE_CANDIDATES_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp = None
+    try:
+        with NamedTemporaryFile(
+            "w", encoding="utf-8",
+            dir=SILENCE_CANDIDATES_PATH.parent, delete=False, suffix=".tmp",
+        ) as fh:
+            json.dump(data, fh, ensure_ascii=False, indent=2)
+            tmp = fh.name
+        os.replace(tmp, SILENCE_CANDIDATES_PATH)
+    finally:
+        if tmp and os.path.exists(tmp):
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+
+
+def mark_silence_candidate(
+    manager: str,
+    client: str,
+    debt: float = 0.0,
+    debt_str: str = "",
+    manager_chat_id: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Регистрирует что кнопки silence-check показаны менеджеру.
+
+    Не является payment hold. Без таймеров, без Саиды, без Минай.
+    Только для дедупликации повторных показов кнопок.
+    """
+    token = _token(manager, client)
+    record = {
+        "token": token,
+        "manager": manager,
+        "client": client,
+        "client_norm": normalize_client_name(client),
+        "debt": float(debt or 0.0),
+        "debt_str": debt_str,
+        "manager_chat_id": int(manager_chat_id or 0),
+        "shown_at": _now_iso(),
+    }
+    data = _load_candidates()
+    data[token] = record
+    _save_candidates(data)
+    return record
+
+
+def get_silence_candidate_by_token(token: str) -> Optional[Dict[str, Any]]:
+    """Ищет silence-кандидата по токену."""
+    record = _load_candidates().get(token)
+    return record if isinstance(record, dict) else None
+
+
+def _today_key() -> str:
+    return _now().date().isoformat()
+
+
+def _minai_notify_key(client: str, manager: str) -> str:
+    return _token(manager, client)
+
+
+def _send_minai_payment_notice(client: str, manager: str) -> None:
+    from collector.communications import send_whatsapp
+
+    state = _load_minai_notify_state()
+    today = _today_key()
+    if state.get("date") != today:
+        state = {"date": today, "greeted": False, "sent_keys": []}
+
+    sent_keys = set(state.get("sent_keys") or [])
+    notice_key = _minai_notify_key(client, manager)
+    if notice_key in sent_keys:
+        return
+
+    text = (
+        _minai_first_notice_text(client, manager)
+        if not state.get("greeted")
+        else _minai_followup_notice_text(client)
+    )
+    if send_whatsapp(MINAI_WA_PHONE, text):
+        sent_keys.add(notice_key)
+        state["date"] = today
+        state["greeted"] = True
+        state["sent_keys"] = sorted(sent_keys)
+        _save_minai_notify_state(state)
 
 
 def create_manager_payment_request(
@@ -123,17 +264,16 @@ def create_manager_payment_request(
     debt_str: str = "",
     manager_chat_id: Optional[int] = None,
     claimed_by_manager: bool = False,  # True когда менеджер заявил оплату в WA approval
+    source: str = SOURCE_MANAGER_REQUEST,
 ) -> Dict[str, Any]:
     """Create or refresh a manager-to-Saida payment check request."""
     token = _token(manager, client)
-    is_new = False
     with _hold_lock():
         data = _load()
         current = data.get(token, {})
         if current.get("status") in ACTIVE_STATUSES:
             return current
 
-        is_new = not bool(current)
         record = {
             "token": token,
             "status": "pending_saida",
@@ -144,18 +284,41 @@ def create_manager_payment_request(
             "debt_str": debt_str,
             "manager_chat_id": int(manager_chat_id or 0),
             "claimed_by_manager": claimed_by_manager,
+            "source": source,
+            "sent_to_saida_at": None,
             "created_at": current.get("created_at") or _now_iso(),
             "updated_at": _now_iso(),
         }
         data[token] = record
         _save(data)
 
-    # Уведомление Минай — вне лока, чтобы не держать file lock во время сетевого вызова.
-    # Только при НОВОМ hold-е (не при refresh), только в боевом режиме.
-    if is_new and MINAI_WA_PHONE and os.getenv("COLLECTOR_TEST_MODE") != "1":
+    return record
+
+
+def set_sent_to_saida(token: str) -> Optional[Dict[str, Any]]:
+    """Фиксирует что запрос реально отправлен Саиде. Запускает цепочку таймеров.
+
+    Уведомляет Минай — вызывается только один раз per hold.
+    Идемпотентен: повторный вызов ничего не делает.
+    """
+    record = None
+    with _hold_lock():
+        data = _load()
+        rec = data.get(token)
+        if not isinstance(rec, dict):
+            return None
+        if rec.get("sent_to_saida_at"):
+            return rec  # уже установлено — идемпотентен
+        rec["sent_to_saida_at"] = _now_iso()
+        rec["updated_at"] = _now_iso()
+        data[token] = rec
+        _save(data)
+        record = rec
+
+    # Минай — вне лока
+    if record and MINAI_WA_PHONE and os.getenv("COLLECTOR_TEST_MODE") != "1":
         try:
-            from collector.communications import send_whatsapp
-            send_whatsapp(MINAI_WA_PHONE, _minai_notify_text(client, manager))
+            _send_minai_payment_notice(record.get("client", ""), record.get("manager", ""))
         except Exception:
             pass
 

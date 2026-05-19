@@ -1188,6 +1188,10 @@ async def send_saida_payment_hold_reminders(bot) -> None:
                 client, manager, age_h, SAIDA_STALE_TTL_HOURS,
             )
 
+        elif not rec.get("sent_to_saida_at"):
+            # Hold не был реально отправлен Саиде — таймеры SLA не запускаем.
+            pass
+
         elif age_h >= SAIDA_BYPASS_HOURS and not rec.get("saida_escalated_at"):
             # Время вышло — авто-закрытие, уведомления директору/менеджеру/Саиде.
             from collector.payment_hold import confirm_by_saida as _confirm_saida

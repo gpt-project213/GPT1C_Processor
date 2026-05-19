@@ -217,14 +217,20 @@ async def handle_nm_callback(data: str, chat_id: int) -> bool:
     # ── Саида: оплата есть ────────────────────────────────────────────────────
     if action == "nm_paid":
         try:
-            from collector.payment_hold import create_manager_payment_request
-            create_manager_payment_request(
+            from collector.payment_hold import (
+                create_manager_payment_request,
+                set_sent_to_saida,
+                SOURCE_NO_MOVEMENT,
+            )
+            _nm_hold = create_manager_payment_request(
                 manager=mgr_name or "Менеджер",
                 client=full_name,
                 debt=amount,
                 debt_str=f"{amount_str} тг",
                 manager_chat_id=mgr_chat_id,
+                source=SOURCE_NO_MOVEMENT,
             )
+            set_sent_to_saida(_nm_hold["token"])
         except Exception as e:
             logger.error("[no_movement] payment_hold error: %s", e)
 
