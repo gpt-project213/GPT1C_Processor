@@ -52,6 +52,7 @@ TZ = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 
 GREENAPI_ID    = os.getenv("GREENAPI_ID", "")
 GREENAPI_TOKEN = os.getenv("GREENAPI_TOKEN", "")
+MINAI_WA_PHONE = os.getenv("MINAI_WA_PHONE", "")
 ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY", "")
 ASSEMBLYAI_POLL_SECONDS = int(os.getenv("ASSEMBLYAI_POLL_SECONDS", "18"))
 ASSEMBLYAI_SPEECH_MODELS = ["universal-2"]
@@ -370,6 +371,37 @@ async def poll_once() -> None:
             # WA_REQUIRE_ACTIVE_DIALOG=1. Для выделенного бот-номера входящие
             # пропускаются до handle_incoming(), где неизвестные номера
             # безопасно игнорируются без ответа клиенту.
+            # Минай — отдельный контур напоминалок, не проходит через collector
+            _phone_digits = "".join(c for c in phone if c.isdigit())
+            _minai_digits = "".join(c for c in (MINAI_WA_PHONE or "") if c.isdigit())
+            if _minai_digits and _phone_digits.endswith(_minai_digits[-9:]):
+                _msg_data = body.get("messageData", {})
+                _msg_type = _msg_data.get("typeMessage", "")
+                _raw_text = (
+                    _msg_data.get("textMessageData", {}).get("textMessage", "")
+                    or _msg_data.get("extendedTextMessageData", {}).get("text", "")
+                    or _msg_data.get("buttonsResponseMessage", {}).get("selectedDisplayText", "")
+                )
+                _is_audio = _msg_type == "audioMessage"
+                if not _raw_text and _is_audio:
+                    _dl_url = _msg_data.get("fileMessageData", {}).get("downloadUrl", "")
+                    if _dl_url:
+                        logger.info("Голосовое от Минай — транскрибирую...")
+                        _transcribed = await transcribe_audio(_dl_url, archive_label="minai")
+                        try:
+                            from bot.minai_reminders import handle_minai_audio
+                            await handle_minai_audio(_transcribed or "")
+                        except Exception as _me:
+                            logger.error("minai_reminders audio ошибка: %s", _me)
+                elif _raw_text:
+                    try:
+                        from bot.minai_reminders import handle_minai_response
+                        await handle_minai_response(_raw_text)
+                    except Exception as _me:
+                        logger.error("minai_reminders ошибка: %s", _me)
+                await _delete_notification(receipt_id)
+                return
+
             if not _should_process_incoming(phone):
                 _audit("wa_incoming_skipped", phone_masked=_mask_phone(phone), reason="no_active_dialog", receipt_id=receipt_id)
                 logger.info("Нет активного диалога коллектора для номера — пропуск")

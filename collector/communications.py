@@ -108,6 +108,51 @@ def send_whatsapp(phone: str, text: str) -> bool:
         return False
 
 
+def send_whatsapp_buttons(phone: str, text: str, buttons: list) -> bool:
+    """Отправляет WhatsApp-сообщение с кнопками через Green API sendButtons.
+
+    buttons: список dict {"buttonId": str, "buttonText": str}
+    Максимум 3 кнопки (ограничение WhatsApp).
+    Если нет кредов или кнопки пустые — fallback на обычный sendMessage.
+    """
+    if not buttons:
+        return send_whatsapp(phone, text)
+    if os.getenv("COLLECTOR_TEST_MODE") == "1":
+        logger.info("TEST_MODE: send_whatsapp_buttons пропущен (%s)", phone)
+        return True
+    _wa_enabled_now = os.getenv("WHATSAPP_ENABLED", "0").lower() in ("1", "true", "yes")
+    if not _wa_enabled_now:
+        return False
+    if not GREENAPI_ID or not GREENAPI_TOKEN:
+        return send_whatsapp(phone, text)
+
+    phone_clean = "".join(c for c in phone if c.isdigit() or c == "+")
+    if not phone_clean.startswith("+"):
+        phone_clean = "+" + phone_clean
+    chat_id = phone_clean.lstrip("+") + "@c.us"
+
+    url = f"https://api.green-api.com/waInstance{GREENAPI_ID}/sendButtons/{GREENAPI_TOKEN}"
+    payload = {
+        "chatId": chat_id,
+        "message": text,
+        "footer": "",
+        "buttons": [{"buttonId": str(b.get("buttonId") or b.get("id", i)),
+                     "buttonText": str(b.get("buttonText") or b.get("text", ""))}
+                    for i, b in enumerate(buttons[:3])],
+    }
+    try:
+        resp = httpx.post(url, json=payload, timeout=15)
+        if resp.status_code == 200:
+            logger.info("WhatsApp кнопки отправлены: %s", phone)
+            return True
+        # Некоторые версии Green API не поддерживают sendButtons — fallback
+        logger.warning("sendButtons %d — fallback на text: %s", resp.status_code, resp.text[:100])
+        return send_whatsapp(phone, text)
+    except (httpx.RequestError, httpx.TimeoutException) as e:
+        logger.error("sendButtons сетевая ошибка: %s", e)
+        return send_whatsapp(phone, text)
+
+
 async def send_telegram(telegram_id: int, text: str) -> Optional[int]:
     """Отправляет сообщение через Telegram Bot API.
 

@@ -11232,6 +11232,25 @@ def main():
                 )
                 sched_logger.info("🚫 Настроен SLA-контроль оплат Саиды: каждый час")
 
+        # Напоминалка Минай — каждые 5 минут
+        if os.getenv("MINAI_WA_PHONE"):
+            try:
+                from bot.minai_reminders import check_and_send as _minai_check
+                async def _job_minai_reminders(ctx):
+                    try:
+                        _minai_check()
+                    except Exception as e:
+                        sched_logger.error("minai_reminders error: %s", e)
+                job_queue.run_repeating(
+                    _job_minai_reminders,
+                    interval=300,
+                    first=60,
+                    name="minai_reminders",
+                )
+                sched_logger.info("🔔 Напоминалка Минай активирована")
+            except Exception as _me:
+                sched_logger.warning("minai_reminders не загружен: %s", _me)
+
         sched_logger.info(f"🗑️ Автоудаление сообщений через {AUTO_DELETE_HOURS} часов")
     
     log_event("bot_polling_started")
