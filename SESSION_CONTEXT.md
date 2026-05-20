@@ -3652,3 +3652,19 @@ approval_penalty.py v1.0.2 (новый модуль)
   - various untracked audit / backup / reminder files already present in worktree
 - Next action:
   - if user reports another duplicate in sales output, inspect whether it comes from source JSON duplication or formatter ranking.
+
+## 2026-05-20 09:45 - Minai reminder AI fallback
+- Commit planned for the Minai reminder flow:
+  - `bot/minai_reminders.py`
+  - `tests/test_reminder_channels.py`
+- Runtime changes:
+  - removed the "short text <= 3 words" shortcut from `_is_simple_reply()` so more human text goes through AI parsing;
+  - added DeepSeek-backed reply classification for ambiguous confirmation replies in Minai reminder flow;
+  - ambiguous `work_yes/work_no` and final `confirm_yes/confirm_no` answers now stay in-dialog instead of falling back to hardcoded trigger-only branches;
+  - unknown audio-confirm replies now retry with a human prompt instead of silently dropping context.
+- Tests:
+  - `python -m py_compile bot/minai_reminders.py tests/test_reminder_channels.py` -> OK
+  - `python -X utf8 tests/test_reminder_channels.py` -> OK (`10/10`)
+- Dirty files left untouched:
+  - `config/clients.json`
+  - existing user untracked files in the worktree

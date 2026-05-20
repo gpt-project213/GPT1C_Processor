@@ -24,7 +24,7 @@ TZ   = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 LOG  = logging.getLogger("minai_reminders")
 
 MINAI_PHONE = os.getenv("MINAI_WA_PHONE", "")
-__VERSION__ = "1.0.1"
+__VERSION__ = "1.0.2"
 
 # ── Встроенное расписание ──────────────────────────────────────────────────
 
@@ -548,9 +548,6 @@ def _is_simple_reply(text: str) -> bool:
     # Совпадение с известными командами
     if any(t == k or t.startswith(k + " ") for k in _SIMPLE_REPLIES):
         return True
-    # Очень короткий текст (до 4 слов) — скорее всего команда
-    if len(t.split()) <= 3 and len(t) <= 20:
-        return True
     return False
 
 
@@ -598,9 +595,20 @@ async def handle_minai_response(text: str) -> bool:
             _save_state(state)
             _send_plain("Хорошо — можете сказать голосовым ещё раз или написать текстом 🎤✍️")
         else:
-            _ask_confirm_retry(
-                "Поняла, но не уверена. Если всё верно — напишите «Да». Если нет — напишите «Нет» или повторите голосом."
-            )
+            ai_intent = await _deepseek_reply_intent(t, {"text": pending_audio}, stage="audio")
+            if ai_intent == "confirm_yes":
+                del state["__pending_audio_text__"]
+                _save_state(state)
+                if pending_audio:
+                    await _process_add_text(pending_audio, _load_state())
+            elif ai_intent == "confirm_no":
+                del state["__pending_audio_text__"]
+                _save_state(state)
+                _send_plain("Хорошо — можете сказать голосовым ещё раз или написать текстом 🎤✍️")
+            else:
+                _ask_confirm_retry(
+                    "Поняла, но не уверена. Если всё верно — напишите «Да». Если нет — напишите «Нет» или повторите голосом."
+                )
         return True
 
     # Проверяем ожидает ли бот текст нового напоминания от Минай
@@ -636,6 +644,29 @@ async def handle_minai_response(text: str) -> bool:
                     _add_buttons(),
                 )
                 return True
+            ai_intent = await _deepseek_reply_intent(t, pending, stage="work")
+            if ai_intent == "work_yes":
+                pending["work"] = True
+                state["__pending_confirm__"] = pending
+                _save_state(state)
+                _send_buttons(
+                    f"Правильно понял?\n\n📌 {pending['text']}\n"
+                    f"🕐 {_schedule_human(pending['schedule'])}, в {pending['hour']:02d}:00\n"
+                    f"💼 Рабочее (при невыполнении уведомит руководителя)",
+                    _add_buttons(),
+                )
+                return True
+            if ai_intent == "work_no":
+                pending["work"] = False
+                state["__pending_confirm__"] = pending
+                _save_state(state)
+                _send_buttons(
+                    f"Правильно понял?\n\n📌 {pending['text']}\n"
+                    f"🕐 {_schedule_human(pending['schedule'])}, в {pending['hour']:02d}:00\n"
+                    f"👤 Личное (только для вас)",
+                    _add_buttons(),
+                )
+                return True
             _ask_confirm_retry(
                 "Скажите, пожалуйста, задача рабочая для всех или личная только для вас?",
                 [_btn("work_yes", "💼 Рабочее"), _btn("work_no", "👤 Личное")],
@@ -657,9 +688,25 @@ async def handle_minai_response(text: str) -> bool:
             state["__awaiting_add__"] = {"_ts": _now().isoformat(), "_val": True}
             _save_state(state)
         else:
-            _ask_confirm_retry(
-                "Поняла не до конца. Если всё верно — напишите «Да». Если нет — напишите «Нет» или скажите заново."
-            )
+            ai_intent = await _deepseek_reply_intent(t, pending, stage="confirm")
+            if ai_intent == "confirm_yes":
+                _save_custom_reminder(pending)
+                del state["__pending_confirm__"]
+                _save_state(state)
+                _send_buttons(
+                    f"✅ Добавила: «{pending['text']}»\nБуду напоминать в нужное время.",
+                    [_btn("add", "➕ Ещё добавить"), _btn("nothing", "Всё, спасибо")],
+                )
+            elif ai_intent == "confirm_no":
+                del state["__pending_confirm__"]
+                _save_state(state)
+                _send_plain("Хорошо, попробуйте написать иначе. Например:\n«напомни оплатить газ 10-го числа»")
+                state["__awaiting_add__"] = {"_ts": _now().isoformat(), "_val": True}
+                _save_state(state)
+            else:
+                _ask_confirm_retry(
+                    "Поняла не до конца. Если всё верно — напишите «Да». Если нет — напишите «Нет» или скажите заново."
+                )
         return True
 
     # Найти активный reminder этого дня
@@ -1076,6 +1123,83 @@ async def _deepseek_parse(user_text: str) -> Optional[Dict[str, Any]]:
         return json.loads(content)
     except Exception as e:
         LOG.warning("DeepSeek parse error: %s", e)
+        return None
+
+
+async def _deepseek_reply_intent(user_text: str, pending: Dict[str, Any], stage: str) -> Optional[str]:
+    """Классифицирует живой ответ пользователя в confirm-flow через DeepSeek.
+
+    Возвращает одно из:
+    - work_yes / work_no
+    - confirm_yes / confirm_no
+    - clarify
+    """
+    try:
+        import os as _os
+        import httpx as _httpx
+
+        api_key = _os.getenv("DEEPSEEK_API_KEY", "")
+        if not api_key:
+            return None
+
+        pending_text = str(pending.get("text", "")).strip()
+        schedule = str(pending.get("schedule", "")).strip()
+        hour = pending.get("hour", 9)
+        work = pending.get("work") if isinstance(pending, dict) else None
+        if stage == "audio":
+            desired = "confirm_yes / confirm_no / clarify"
+            context = (
+                "Пользователь отвечает на проверку распознанного голосового сообщения. "
+                "Нужно понять, подтверждает ли он текст."
+            )
+        elif work is None:
+            desired = "work_yes / work_no / clarify"
+            context = (
+                "Пользователь должен выбрать, это рабочее напоминание для всех или личное только для себя."
+            )
+        else:
+            desired = "confirm_yes / confirm_no / clarify"
+            context = "Пользователь должен подтвердить сохранение напоминания."
+
+        prompt = (
+            "Ты помогаешь боту Минай разбирать короткий живой ответ пользователя.\n"
+            f"Контекст: {context}\n"
+            f"Напоминание: {pending_text}\n"
+            f"Расписание: {schedule}\n"
+            f"Час: {hour}\n"
+            f"Текст ответа: «{user_text}»\n\n"
+            "Верни ТОЛЬКО JSON без пояснений в одном из вариантов:\n"
+            f'{{"intent":"{desired.split(" / ")[0]}"}}\n'
+            f'{{"intent":"{desired.split(" / ")[1]}"}}\n'
+            '{"intent":"clarify"}\n\n'
+            "Правила:\n"
+            "- если ответ явно означает согласие, подтверждение или «да» — выбирай yes-вариант;\n"
+            "- если ответ явно означает отказ или «нет» — выбирай no-вариант;\n"
+            "- если ответ уклончивый, спорит с вопросом или неясен — выбирай clarify.\n"
+        )
+        payload = {
+            "model": _os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0,
+            "max_tokens": 80,
+        }
+        resp = _httpx.post(
+            "https://api.deepseek.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json=payload,
+            timeout=12,
+        )
+        if resp.status_code != 200:
+            LOG.warning("DeepSeek reply-intent error %d: %s", resp.status_code, resp.text[:200])
+            return None
+        content = resp.json()["choices"][0]["message"]["content"].strip()
+        if content.startswith("```"):
+            content = content.split("```")[1].lstrip("json").strip()
+        data = json.loads(content)
+        intent = str(data.get("intent", "")).strip().lower()
+        return intent if intent in {"work_yes", "work_no", "confirm_yes", "confirm_no", "clarify"} else None
+    except Exception as e:
+        LOG.warning("DeepSeek reply-intent parse error: %s", e)
         return None
 
 

@@ -115,6 +115,45 @@ class ReminderChannelFlowTests(unittest.TestCase):
         self.assertIn("Если всё верно", send_plain.call_args.args[0])
         send_buttons.assert_not_called()
 
+    def test_minai_pending_confirm_ai_routes_work_choice(self):
+        state = {
+            "__pending_confirm__": {
+                "text": "Оплатить интернет",
+                "schedule": "monthly:10",
+                "hour": 9,
+                "_ts": "2026-05-19T10:00:00+05:00",
+            }
+        }
+        with patch.object(minai, "_load_state", return_value=state.copy()), \
+             patch.object(minai, "_save_state"), \
+             patch.object(minai, "_deepseek_reply_intent", new=AsyncMock(return_value="work_yes")), \
+             patch.object(minai, "_send_buttons", return_value=True) as send_buttons, \
+             patch.object(minai, "_send_plain") as send_plain:
+            handled = asyncio.run(minai.handle_minai_response("Ну, это для всех"))
+        self.assertTrue(handled)
+        send_buttons.assert_called_once()
+        send_plain.assert_not_called()
+
+    def test_minai_pending_confirm_ai_routes_final_confirmation(self):
+        state = {
+            "__pending_confirm__": {
+                "text": "Оплатить интернет",
+                "schedule": "monthly:10",
+                "hour": 9,
+                "work": True,
+                "_ts": "2026-05-19T10:00:00+05:00",
+            }
+        }
+        with patch.object(minai, "_load_state", return_value=state.copy()), \
+             patch.object(minai, "_save_state"), \
+             patch.object(minai, "_deepseek_reply_intent", new=AsyncMock(return_value="confirm_yes")), \
+             patch.object(minai, "_save_custom_reminder") as save_custom, \
+             patch.object(minai, "_send_buttons", return_value=True) as send_buttons:
+            handled = asyncio.run(minai.handle_minai_response("Ну да, всё верно"))
+        self.assertTrue(handled)
+        save_custom.assert_called_once()
+        send_buttons.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()
