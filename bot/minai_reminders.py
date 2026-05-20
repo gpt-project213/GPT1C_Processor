@@ -24,6 +24,7 @@ TZ   = ZoneInfo(os.getenv("TZ", "Asia/Almaty"))
 LOG  = logging.getLogger("minai_reminders")
 
 MINAI_PHONE = os.getenv("MINAI_WA_PHONE", "")
+__VERSION__ = "1.0.1"
 
 # ── Встроенное расписание ──────────────────────────────────────────────────
 
@@ -596,6 +597,10 @@ async def handle_minai_response(text: str) -> bool:
             del state["__pending_audio_text__"]
             _save_state(state)
             _send_plain("Хорошо — можете сказать голосовым ещё раз или написать текстом 🎤✍️")
+        else:
+            _ask_confirm_retry(
+                "Поняла, но не уверена. Если всё верно — напишите «Да». Если нет — напишите «Нет» или повторите голосом."
+            )
         return True
 
     # Проверяем ожидает ли бот текст нового напоминания от Минай
@@ -631,6 +636,11 @@ async def handle_minai_response(text: str) -> bool:
                     _add_buttons(),
                 )
                 return True
+            _ask_confirm_retry(
+                "Скажите, пожалуйста, задача рабочая для всех или личная только для вас?",
+                [_btn("work_yes", "💼 Рабочее"), _btn("work_no", "👤 Личное")],
+            )
+            return True
         # Шаг 2: итоговое подтверждение
         if _match(t, ("✅", "Да", "add_yes", "правильно")):
             _save_custom_reminder(pending)
@@ -647,7 +657,9 @@ async def handle_minai_response(text: str) -> bool:
             state["__awaiting_add__"] = {"_ts": _now().isoformat(), "_val": True}
             _save_state(state)
         else:
-            _skip_add(state)
+            _ask_confirm_retry(
+                "Поняла не до конца. Если всё верно — напишите «Да». Если нет — напишите «Нет» или скажите заново."
+            )
         return True
 
     # Найти активный reminder этого дня
@@ -950,6 +962,13 @@ def _skip_add(state: Dict[str, Any]) -> None:
         state.pop(k, None)
     _save_state(state)
     _send_plain("Хорошо, пропускаем 👍")
+
+
+def _ask_confirm_retry(message: str, buttons: Optional[list[dict]] = None) -> None:
+    if buttons is None:
+        _send_plain(message)
+    else:
+        _send_buttons(message, buttons)
 
 
 def _validate_parsed(parsed: Dict[str, Any]) -> Optional[Dict[str, Any]]:
