@@ -244,11 +244,7 @@ def _send_minai_payment_notice(client: str, manager: str) -> None:
     if notice_key in sent_keys:
         return
 
-    text = (
-        _minai_first_notice_text(client, manager)
-        if not state.get("greeted")
-        else _minai_followup_notice_text(client)
-    )
+    text = _minai_notify_text(client, manager)
     if send_whatsapp(MINAI_WA_PHONE, text):
         sent_keys.add(notice_key)
         state["date"] = today
@@ -319,8 +315,9 @@ def set_sent_to_saida(token: str) -> Optional[Dict[str, Any]]:
     if record and MINAI_WA_PHONE and os.getenv("COLLECTOR_TEST_MODE") != "1":
         try:
             _send_minai_payment_notice(record.get("client", ""), record.get("manager", ""))
-        except Exception:
-            pass
+        except Exception as _me:
+            import logging as _log
+            _log.getLogger(__name__).warning("set_sent_to_saida: Минай уведомление не отправлено: %s", _me)
 
     return record
 

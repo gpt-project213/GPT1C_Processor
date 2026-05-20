@@ -7868,6 +7868,7 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         debt=float(cand.get("debt", 0) or 0),
                         debt_str=str(cand.get("debt_str", "")),
                         manager_chat_id=int(cand.get("manager_chat_id") or 0),
+                        claimed_by_manager=True,
                         source=SOURCE_MANAGER_REQUEST,
                     )
                 else:
@@ -7969,7 +7970,9 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if not updated:
                 await q.answer("Не удалось сохранить ответ.")
                 return
-            client = updated.get("client", "")
+            client_raw = updated.get("client", "")
+            from collector.payment_hold import strip_manager_prefix as _smp
+            client = _smp(client_raw)
             manager = updated.get("manager", "")
             manager_chat_id = int(updated.get("manager_chat_id") or 0)
             if status in ("full", "partial"):

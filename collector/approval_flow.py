@@ -1359,6 +1359,28 @@ async def handle_manager_callback(
                     claimed_by_manager=True,
                     source=SOURCE_MANAGER_NO_DOC,
                 )
+                _saida_cid = int(os.getenv("SAIDA_CHAT_ID", "920236287") or 0)
+                if _saida_cid:
+                    _htoken = _hold_rec["token"]
+                    _saida_kb = {"inline_keyboard": [
+                        [{"text": "✅ Да, оплата есть", "callback_data": f"payhold_full|{_htoken}"}],
+                        [{"text": "🔸 Частично",        "callback_data": f"payhold_partial|{_htoken}"}],
+                        [{"text": "❌ Не вижу оплаты",  "callback_data": f"payhold_none|{_htoken}"}],
+                        [{"text": "❓ Не понимаю",       "callback_data": f"payhold_help|{_htoken}"}],
+                    ]}
+                    from collector.payment_hold import strip_manager_prefix as _spfx
+                    _client_disp = _spfx(client_name)
+                    _debt_str = _hold_rec.get("debt_str") or str(_hold_rec.get("debt", ""))
+                    await _tg_send(
+                        _saida_cid,
+                        f"💬 <b>Запрос на проверку оплаты</b>\n\n"
+                        f"Менеджер <b>{manager_name}</b> сообщил, что клиент оплатил, но документа нет.\n\n"
+                        f"Клиент: <b>{_client_disp}</b>\n"
+                        f"Долг в отчёте: {_debt_str}\n\n"
+                        f"Проверь в 1С и нажми нужную кнопку.\n"
+                        f"<i>Ответь в течение 4 часов.</i>",
+                        markup=_saida_kb,
+                    )
                 set_sent_to_saida(_hold_rec["token"])
             except Exception as hold_exc:
                 logger.error("[%s] payment_hold create error for %s: %s", batch_id, client_name, hold_exc)
