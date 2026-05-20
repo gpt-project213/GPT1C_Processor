@@ -1,7 +1,7 @@
 """
 Модуль для генерации кратких сводок по продажам
 
-Версия: 1.7 (2026-04-22)
+Версия: 1.8 (2026-05-20)
 ─────────────────────────────────────────────────
 v1.7: format_manager_pipeline — корректный Топ-3 клиентов
   - Поддержка обоих форматов JSON: {client,total} (sales_parser.py) и {name,amount}
@@ -45,6 +45,17 @@ _MONTHS_RU = {
     "мая": 5, "июня": 6, "июля": 7, "августа": 8,
     "сентября": 9, "октября": 10, "ноября": 11, "декабря": 12,
 }
+
+
+def _normalize_manager_name(name: str) -> str:
+    value = (name or "").strip()
+    value = value.replace("Ё", "Е").replace("ё", "е")
+    value = re.sub(r"\s+", " ", value)
+    return value
+
+
+def _normalize_manager_key(name: str) -> str:
+    return _normalize_manager_name(name).lower()
 
 def _safe_mtime(p: Path) -> float:
     """p.stat().st_mtime с защитой от FileNotFoundError при конкурентном pipeline."""
@@ -632,8 +643,37 @@ class SalesSummary:
             except Exception as e:
                 logger.warning(f"Ошибка чтения {path.name}: {e}")
 
-        results.sort(key=lambda x: x["total_revenue"], reverse=True)
-        return results
+        return self._merge_manager_rows(results)
+
+    @staticmethod
+    def _merge_manager_rows(rows: List[Dict]) -> List[Dict]:
+        merged: Dict[str, Dict] = {}
+        order: List[str] = []
+
+        for row in rows:
+            raw_name = _normalize_manager_name(str(row.get("manager", "") or ""))
+            key = _normalize_manager_key(raw_name) or "__unknown__"
+            revenue = float(row.get("total_revenue", 0) or 0)
+            clients = list(row.get("clients", []))
+
+            current = merged.get(key)
+            if current is None:
+                merged[key] = {
+                    "manager": raw_name or str(row.get("manager", "") or "—"),
+                    "total_revenue": revenue,
+                    "clients": clients,
+                }
+                order.append(key)
+                continue
+
+            current["total_revenue"] += revenue
+            current["clients"].extend(clients)
+            if raw_name and len(raw_name) > len(current["manager"]):
+                current["manager"] = raw_name
+
+        result = [merged[key] for key in order]
+        result.sort(key=lambda x: x["total_revenue"], reverse=True)
+        return result
 
     def format_admin_pipeline(self, data: Dict, all_managers: List[Dict]) -> str:
         """
@@ -661,7 +701,7 @@ class SalesSummary:
         total_clients = 0
         medals = ["🥇", "🥈", "🥉"]
 
-        for i, mgr in enumerate(all_managers):
+        for i, mgr in enumerate(self._merge_manager_rows(all_managers)):
             rev   = mgr["total_revenue"]
             cnt   = len(mgr["clients"])
             name  = mgr["manager"]
@@ -744,13 +784,14 @@ class SalesSummary:
                 lines.append(f"  {i}. {name:<28} — {self.format_amount(amount)} ₸")
 
         # v1.4: Рейтинг среди всех менеджеров (розжиг конкуренции)
-        if all_managers and len(all_managers) > 1:
+        merged_managers = self._merge_manager_rows(all_managers) if all_managers else []
+        if merged_managers and len(merged_managers) > 1:
             lines.append("")
             lines.append("📊 Рейтинг:")
             medals = ["🥇", "🥈", "🥉"]
             SEP_R  = "─" * 32
             lines.append(SEP_R)
-            for i, mgr in enumerate(all_managers):
+            for i, mgr in enumerate(merged_managers):
                 m_name  = mgr["manager"]
                 m_rev   = mgr["total_revenue"]
                 m_cnt   = len(mgr.get("clients", []))
@@ -788,7 +829,7 @@ class SalesSummary:
 
         total_rev = 0.0
         total_cnt = 0
-        for i, mgr in enumerate(scope_data):
+        for i, mgr in enumerate(self._merge_manager_rows(scope_data)):
             m_name  = mgr["manager"]
             m_rev   = mgr["total_revenue"]
             m_cnt   = len(mgr.get("clients", []))

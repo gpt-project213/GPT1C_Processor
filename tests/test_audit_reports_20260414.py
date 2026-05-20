@@ -6,7 +6,9 @@
 """
 from __future__ import annotations
 
+import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -15,6 +17,7 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "bot"))
 
 
 class TestConcentrationMergedTotal(unittest.TestCase):
@@ -97,6 +100,49 @@ class TestTurnoverNormalizeProduct(unittest.TestCase):
             normalize_product("Молоко 1 кг."),
             normalize_product("Молоко 1 кг"),
         )
+
+
+class TestSalesSummaryDedup(unittest.TestCase):
+    def test_same_manager_rows_merge_before_ranking(self):
+        from sales_summary import SalesSummary
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            payloads = [
+                {
+                    "manager": "Магира",
+                    "period": "19 мая 2026 г.",
+                    "total_revenue": 100_000,
+                    "clients": [{"name": "A", "amount": 100_000}],
+                },
+                {
+                    "manager": "Магира",
+                    "period": "19 мая 2026 г.",
+                    "total_revenue": 250_000,
+                    "clients": [{"name": "B", "amount": 250_000}],
+                },
+                {
+                    "manager": "Оксана",
+                    "period": "19 мая 2026 г.",
+                    "total_revenue": 300_000,
+                    "clients": [{"name": "C", "amount": 300_000}],
+                },
+            ]
+            for idx, payload in enumerate(payloads, 1):
+                (root / f"sales_test_{idx}.json").write_text(
+                    json.dumps(payload, ensure_ascii=False),
+                    encoding="utf-8",
+                )
+
+            summary = SalesSummary()
+            rows = summary.load_all_managers_json(root, "19 мая 2026 г.")
+            self.assertEqual([row["manager"] for row in rows], ["Магира", "Оксана"])
+            self.assertAlmostEqual(rows[0]["total_revenue"], 350_000.0)
+            self.assertEqual(len(rows[0]["clients"]), 2)
+
+            text = summary.format_admin_pipeline({"date": "19 мая 2026 г."}, rows)
+            self.assertEqual(text.count("Магира"), 1)
+            self.assertEqual(text.count("Оксана"), 1)
 
 
 class TestConcentrationParetoDisclaimer(unittest.TestCase):
