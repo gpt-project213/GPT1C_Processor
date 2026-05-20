@@ -3632,8 +3632,23 @@ approval_penalty.py v1.0.2 (новый модуль)
   - `python -m py_compile bot\send_reports.py` -> OK
   - `python -X utf8 tests\test_crm_regression.py` -> 44/44
   - `python -X utf8 tests\test_project.py` -> 110/110
-- Rollback:
+  - Rollback:
   1. Code: `git revert <ownership-fix-commit>`
   2. Data if needed: `Copy-Item -LiteralPath "C:\GPT1C_Processor_analitica\config\clients.json.bak-ownership-stabilization-20260515-211300" -Destination "C:\GPT1C_Processor_analitica\config\clients.json" -Force`
   3. Restart bot after rollback.
 - Scope intentionally NOT changed: no broad ownership heuristics, no collector contact flow changes, no merge semantics change.
+
+## 2026-05-20 09:05 - Sales summary dedupe fix
+- Commit: `4a2f9ae` (`fix(sales): dedupe repeated manager rows in daily summary`)
+- Pushed: `origin/master` updated.
+- Runtime changes:
+  - `bot/sales_summary.py` v1.8: merged repeated manager rows by normalized manager name before formatting admin / manager / subadmin sales summaries.
+  - This prevents duplicate manager lines in daily sales output when multiple `sales_*.json` files map to the same manager in one period.
+- Tests:
+  - `python -m py_compile bot/sales_summary.py tests/test_audit_reports_20260414.py` -> OK
+  - `python -X utf8 tests/test_audit_reports_20260414.py` -> OK
+- Dirty files left untouched:
+  - `config/clients.json` (user change)
+  - various untracked audit / backup / reminder files already present in worktree
+- Next action:
+  - if user reports another duplicate in sales output, inspect whether it comes from source JSON duplication or formatter ranking.
