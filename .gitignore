@@ -46,3 +46,4 @@ config/clients.json
 # untracked local artifacts — не для репозитория
 site/
 
+bot/darya_reminders.py
