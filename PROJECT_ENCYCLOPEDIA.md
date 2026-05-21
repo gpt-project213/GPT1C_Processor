@@ -450,9 +450,11 @@ Audit-документы:
 - `AUDIT_CRM_PRIVATE_PERSON_2026-05-15.md` — Block A, placeholder filter
 - `AUDIT_COLLECTOR_RUNTIME_2026-05-15.md` — Block B, фактический runtime после рестарта v9.4.79
 
-Что ещё не закрыто:
-- stale dup-review callback: отвечает «запрос устарел», но без full cleanup-строгости как у claim
-- три несогласованных хранилища: `clients.json` / `debtors_contacts.json` / batch snapshot
+Что закрыто (2026-05-21):
+- stale dup-review callback: `janitor_task` чистит каждый час через `_crmdup_cleanup_pending()` (3927e99)
+- три хранилища контактов: `debtors_contacts.json` не существует (мигрировано в CRM); warning добавлен в fallback (1ed56a4)
+
+Что ещё открыто:
 - backfill 6 существующих placeholder-записей ("Частное лицо*") как `is_vendor=True` — optional, не блокирует runtime
 
 ---
@@ -585,23 +587,26 @@ Audit-документы:
 
 ## 13. Бэклог
 
-### 🔴 Критично — сломает если не исправить
+### 🔴 Критично — всё закрыто
 
-- **`INTERNET_SCHEDULE` истекает июль 2026** — с августа интернет-напоминания Минай пропадут тихо. Нужно добавить месяцы. → `bot/minai_reminders.py: INTERNET_SCHEDULE`
+*(нет открытых пунктов)*
 
-### 🟡 Технический долг — работает, но ненадёжно
+### 🟡 Технический долг — всё закрыто
 
-- **`except Exception: pass` без логирования** — глухие блоки по всему проекту. Ruff нашёл, не исправлял — нужен ручной проход. Именно этот паттерн скрыл P0-баг с Минай.
-- **F401 — неиспользуемые импорты** — 36 штук найдено `ruff`. Автофикс возможен, но требует проверки (`ruff check --fix --select F401` + тесты).
-- **vulture — мёртвый код** — `save_call_result`, `save_promise`, `was_saida_asked_today` импортируются в `collections_engine.py` без использования; несколько неиспользуемых переменных в `send_reports.py`.
-- **bandit B324** — `hashlib.md5/sha1` без `usedforsecurity=False` в 4 местах. Не реальная уязвимость (хэши для ID, не паролей), но нужно добавить флаг.
-- **stale dup-review callback** — запись в `crm_duplicate_review_state.json` не чистится полностью при устаревшем callback.
-- **три хранилища контактов** — `clients.json` / `debtors_contacts.json` / batch snapshot могут расходиться.
-- **`_saida_reject_buffer`** — глобальный dict в `send_reports.py`, никогда не чистится при ошибке flush. Минорная утечка при многомесячной работе без рестарта.
+*(нет открытых пунктов)*
+
+**Закрытые (ba1a6d3 / b483bbb / 3927e99 / 1ed56a4, 2026-05-21):**
+- ~~`except Exception: pass`~~ — 101 блок заменён на `except … as _exc: logger.debug(...)` (ba1a6d3)
+- ~~F401 неиспользуемые импорты~~ — 36 штук удалены через `ruff --fix` (ba1a6d3)
+- ~~vulture мёртвый код~~ — `save_call_result`, `save_promise`, `was_saida_asked_today` удалены (ba1a6d3)
+- ~~bandit B324~~ — `hashlib.md5/sha1(..., usedforsecurity=False)` в 4 местах (ba1a6d3)
+- ~~`INTERNET_SCHEDULE` истекает июль 2026~~ — месяцы добавлены до 2027-03 + `INTERNET_SCHEDULE_DEFAULT_DAY=15` (b483bbb)
+- ~~stale dup-review callback~~ — `janitor_task` вызывает `_crmdup_cleanup_pending()` каждый час (3927e99)
+- ~~`_saida_reject_buffer` утечка при ошибке flush~~ — явный `except CancelledError` + лог количества потерь (3927e99)
+- ~~три хранилища контактов~~ — `debtors_contacts.json` не существует (мигрировано); warning добавлен когда fallback триггерится (1ed56a4)
 
 ### 🟢 Низкий приоритет — не мешает работе
 
-- **`requirements.txt` отсутствует** — нет зафиксированных версий. `pipreqs` упал на не-UTF-8 файле, нужно разобраться.
 - **`txt_to_html` и inline HTML** — дублирование форматирования.
 - **`debt_age_history.json` bootstrap** — бот накопит сам за 1-2 месяца.
 - **partial payment автоматизация** — требует ручного участия директора.
