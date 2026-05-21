@@ -30,7 +30,6 @@ Endpoints (используется instance-specific URL, напр. https://710
 
 import asyncio
 import json
-import logging
 from collector.logging_utils import get_collector_logger
 import os
 import tempfile

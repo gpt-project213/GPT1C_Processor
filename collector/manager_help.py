@@ -10,7 +10,6 @@ collector/manager_help.py
 from __future__ import annotations
 
 import html
-import logging
 from collector.logging_utils import get_collector_logger
 import os
 from typing import Any, Dict, Iterable

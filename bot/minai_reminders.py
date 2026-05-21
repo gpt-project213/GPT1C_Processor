@@ -455,7 +455,6 @@ def _expire_stale(state: Dict[str, Any], now: datetime, changed: list) -> None:
 def _notify_admin_missed(label: str) -> None:
     """Уведомляет Вадима в Telegram что критичное задание не подтверждено."""
     try:
-        import asyncio as _asyncio
         import os as _os
         import httpx as _httpx
         token = _os.getenv("TG_BOT_TOKEN", "")

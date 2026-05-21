@@ -40,7 +40,6 @@ OpenClaw:
 """
 
 import json
-import logging
 from collector.logging_utils import get_collector_logger
 import os
 from datetime import datetime

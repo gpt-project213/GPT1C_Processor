@@ -18,12 +18,11 @@ API: POST https://api.retellai.com/v2/create-phone-call
   - Транскрипт сохраняется в collections_db
 """
 
-import logging
 from collector.logging_utils import get_collector_logger
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict
 
 import httpx
 from dotenv import load_dotenv

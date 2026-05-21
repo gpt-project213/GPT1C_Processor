@@ -175,20 +175,20 @@ logger = logging.getLogger(__name__)
 
 class SalesSummary:
     """Краткие сводки по продажам"""
-    
+
     @staticmethod
     def parse_amount(amount_str: str) -> float:
         """Парсит сумму: '1 000 000' -> 1000000.0"""
         if not amount_str:
             return 0.0
-        
+
         cleaned = ''.join(amount_str.split()).replace(',', '.').replace('₸', '').strip()
         try:
             return float(cleaned)
         except ValueError:
             logger.warning(f"Не удалось распарсить сумму: '{amount_str}'")
             return 0.0
-    
+
     def parse_sales_html(self, html_path: Path) -> Dict:
         """
         Парсит HTML продаж
@@ -205,23 +205,23 @@ class SalesSummary:
         try:
             html_content = html_path.read_text(encoding='utf-8')
             soup = BeautifulSoup(html_content, 'html.parser')
-            
+
             # Извлекаем метаданные
             small_tag = soup.find('small')
-            
+
             date_str = ""
             clients_count = 0
             total_amount = 0.0
-            
+
             if small_tag:
                 text = small_tag.get_text()
-                
+
                 # Период: 8 января 2026 г.
                 if 'Период:' in text or 'период:' in text.lower():
                     parts = text.split('Период:') if 'Период:' in text else text.split('период:')
                     if len(parts) > 1:
                         date_str = parts[1].split('\n')[0].strip()
-                
+
                 # Клиентов: 37
                 if 'Клиентов:' in text or 'клиентов:' in text.lower():
                     parts = text.split('Клиентов:') if 'Клиентов:' in text else text.split('клиентов:')
@@ -231,71 +231,71 @@ class SalesSummary:
                             clients_count = int(clients_str)
                         except (ValueError, TypeError):
                             pass
-                
+
                 # Итого (расч.): 6 173 090
                 if 'Итого' in text or 'итого' in text.lower():
                     parts = text.lower().split('итого')
                     if len(parts) > 1:
                         total_str = parts[1].split(':')[-1].split('\n')[0].strip()
                         total_amount = self.parse_amount(total_str)
-            
+
             # Парсим клиентов и товары
             clients = []
             products_dict = {}  # Аггрегация товаров
-            
+
             tables = soup.find_all('table')
-            
+
             for table in tables:
                 # Найти заголовок клиента
                 client_head = table.find('tr', class_='client-head')
-                
+
                 if not client_head:
                     continue
-                
+
                 client_text = client_head.get_text(strip=True)
-                
+
                 # Парсим имя клиента и итог
                 # "В ИП Глушков — Итого: 1 000 000 тг; Кол-во: 800 шт/кг"
                 client_name = ""
                 client_amount = 0.0
                 client_qty = 0.0
-                
+
                 if '—' in client_text:
                     client_name = client_text.split('—')[0].strip()
-                    
+
                     if 'Итого:' in client_text:
                         amount_part = client_text.split('Итого:')[1].split('тг')[0].strip()
                         client_amount = self.parse_amount(amount_part)
-                    
+
                     if 'Кол-во:' in client_text:
                         qty_part = client_text.split('Кол-во:')[1].split('шт')[0].strip()
                         client_qty = self.parse_amount(qty_part)
-                
+
                 clients.append({
                     'name': client_name,
                     'amount': client_amount,
                     'quantity': client_qty
                 })
-                
+
                 # Парсим товары в этой таблице
                 rows = table.find_all('tr')
-                
+
                 for row in rows:
                     # Пропускаем заголовки
                     if row.find('th') or row == client_head:
                         continue
-                    
+
                     cells = row.find_all('td')
-                    
+
                     if len(cells) == 4:
                         product = cells[0].get_text(strip=True)
                         qty_str = cells[1].get_text(strip=True)
                         price_str = cells[2].get_text(strip=True)
                         sum_str = cells[3].get_text(strip=True)
-                        
+
                         qty = self.parse_amount(qty_str)
                         amount = self.parse_amount(sum_str)
-                        
+
                         # Аггрегируем товары
                         if product in products_dict:
                             products_dict[product]['total_amount'] += amount
@@ -306,11 +306,11 @@ class SalesSummary:
                                 'total_amount': amount,
                                 'total_quantity': qty
                             }
-            
+
             products = list(products_dict.values())
-            
+
             logger.info(f"📊 Распарсено {len(clients)} клиентов и {len(products)} товаров из {html_path.name}")
-            
+
             return {
                 'date': date_str,
                 'total_amount': total_amount,
@@ -318,7 +318,7 @@ class SalesSummary:
                 'clients': clients,
                 'products': products
             }
-            
+
         except Exception as e:
             logger.error(f"Ошибка при парсинге {html_path}: {e}", exc_info=True)
             return {
@@ -328,7 +328,7 @@ class SalesSummary:
                 'clients': [],
                 'products': []
             }
-    
+
     def format_summary(self, data: Dict) -> str:
         """
         Форматирует краткую сводку
@@ -350,43 +350,43 @@ class SalesSummary:
             f"🛒 ПРОДАЖИ за {data['date']}",
             ""
         ]
-        
+
         # Метрики
         total = data['total_amount']
         clients = data['clients_count']
         avg_check = total / clients if clients > 0 else 0.0
-        
+
         msg_lines.append(f"Итого: {self.format_amount(total)} ₸")
         msg_lines.append(f"Клиентов: {clients}")
         msg_lines.append(f"Средний чек: {self.format_amount(avg_check)} ₸")
         msg_lines.append("")
-        
+
         # ТОП-3 клиента
         top_clients = sorted(data['clients'], key=lambda x: x['amount'], reverse=True)[:3]
-        
+
         if top_clients:
             msg_lines.append("🏆 ТОП-3 клиента:")
             for i, client in enumerate(top_clients, 1):
                 client_short = client['name'][:30]
                 msg_lines.append(f"  {i}. {client_short} — {self.format_amount(client['amount'])} ₸")
             msg_lines.append("")
-        
+
         # ТОП-3 товара
         top_products = sorted(data['products'], key=lambda x: x['total_amount'], reverse=True)[:3]
-        
+
         if top_products:
             msg_lines.append("🔥 ТОП-3 товара:")
             for i, product in enumerate(top_products, 1):
                 product_short = product['product'][:30]
                 msg_lines.append(f"  {i}. {product_short} — {self.format_amount(product['total_amount'])} ₸")
-        
+
         return "\n".join(msg_lines)
-    
+
     @staticmethod
     def format_amount(amount: float) -> str:
         """Форматирует сумму: 1000000.0 -> '1 000 000'"""
         return f"{amount:,.0f}".replace(',', ' ')
-    
+
     def get_latest_sales_report(self, reports_dir: Path, manager: Optional[str] = None) -> Optional[Path]:
         """
         v1.1: Находит отчёт продаж с наиболее свежим ПЕРИОДОМ ДАННЫХ.
@@ -855,14 +855,14 @@ class SalesSummary:
 # Тестирование
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    
+
     summary = SalesSummary()
     test_html = Path("/mnt/user-data/uploads/sales_grouped_Продажи__77_.html")
-    
+
     if test_html.exists():
         data = summary.parse_sales_html(test_html)
         message = summary.format_summary(data)
-        
+
         print("\n" + "="*60)
         print(message)
         print("="*60)

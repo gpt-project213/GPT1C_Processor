@@ -170,9 +170,6 @@ from collector.collections_db import (
     mark_escalated,
     mark_promise_broken,
     reset_debt_first_seen,
-    save_call_result,
-    set_sticky_approval,
-    save_promise,
     update_after_contact,
 )
 from collector.collection_agent import generate_message
@@ -917,7 +914,7 @@ def daily_summary(processed: List[Dict], total_classified: int = 0, dry_run: boo
     mode_label = "🔇 DRY-RUN (сообщения НЕ отправлялись)" if dry_run else "✅ LIVE"
     lines = [
         f"📊 <b>AI Коллектор — ежедневная сводка</b> {mode_label}",
-        f"",
+        "",
         f"Классифицировано должников 1–5: {total_classified}",
         f"Обработано коллектором: {total}",
         f"Пропущено фильтрами: {skipped}",
@@ -1414,7 +1411,7 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
         if not dry_run and not _bypass_active_guard and _debit_val == 0 and _credit_val == 0:
             try:
                 from collector.no_movement import (
-                    get_nm_state, ask_saida_about_no_movement, was_saida_asked_today,
+                    get_nm_state, ask_saida_about_no_movement,
                 )
                 from collector.collections_db import get_client_state as _get_cstate
                 _nm = get_nm_state(name)

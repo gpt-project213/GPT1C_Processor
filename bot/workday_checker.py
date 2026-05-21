@@ -30,7 +30,6 @@ import json
 import logging
 import os
 import tempfile
-from datetime import date
 from pathlib import Path
 
 from dotenv import load_dotenv

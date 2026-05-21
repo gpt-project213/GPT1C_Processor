@@ -32,7 +32,6 @@ debt_stop_control.py · v1.0.16 (2026-05-16)
 from __future__ import annotations
 
 import json
-import logging
 import os
 import re
 import tempfile
@@ -2238,7 +2237,7 @@ async def _handle_mgr_paid_claim(cid: str, chat_id: int, bot) -> str:
         except Exception as e:
             LOG.warning("Ошибка уведомления руководителя о заявке менеджера %s: %s", c["client"], e)
 
-    return f"✅ Саида уведомлена. Ожидайте подтверждения разноски."
+    return "✅ Саида уведомлена. Ожидайте подтверждения разноски."
 
 
 async def _handle_saida_confirm_full(cid: str, chat_id: int, bot) -> str:
@@ -2312,7 +2311,7 @@ async def _handle_saida_confirm_partial(cid: str, chat_id: int, bot) -> str:
         except Exception as e:
             LOG.warning("Ошибка уведомления менеджера о частичной оплате %s: %s", c["client"], e)
 
-    return f"⚠️ Руководитель уведомлён о конфликте. Клиент остаётся на стопе."
+    return "⚠️ Руководитель уведомлён о конфликте. Клиент остаётся на стопе."
 
 
 async def _handle_admin_allow_after_saida(cid: str, chat_id: int, bot) -> str:

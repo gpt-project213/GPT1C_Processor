@@ -25,7 +25,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, Dict, Iterable
 
 logger = logging.getLogger(__name__)
 

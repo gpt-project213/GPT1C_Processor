@@ -9,7 +9,6 @@ DeepSeek AI для разбора контактных данных и прич�
 """
 
 import json
-import logging
 from collector.logging_utils import get_collector_logger
 import os
 from datetime import datetime, timedelta
@@ -157,7 +156,7 @@ def _build_initial_message(dialog: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]
         return _build_final_confirm_message(dialog)
 
     lines = [
-        f"📋 <b>AI Коллектор — новый должник</b>\n",
+        "📋 <b>AI Коллектор — новый должник</b>\n",
         f"Клиент в 1С: {dialog['client_name']}",
         f"Просрочка: {dialog['days']} дн. | {_fmt_amount(dialog['amount'])} тг | Уровень: {dialog['level']}\n",
         "Если не ответите сразу, бот будет напоминать каждые 30 минут и усиливать тон.\n",
@@ -720,7 +719,6 @@ async def _on_admin_extend(dialog: Dict[str, Any], mid: int) -> None:
     old_deadline = dialog.get("control_deadline")
     if old_deadline:
         try:
-            from datetime import date
             old_date = datetime.fromisoformat(old_deadline).date()
             new_date = old_date + timedelta(days=1)
             new_deadline = new_date.isoformat()

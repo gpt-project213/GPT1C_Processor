@@ -27,7 +27,6 @@ Append-only JSONL-журнал событий коллектора.
 """
 
 import json
-import logging
 from collector.logging_utils import get_collector_logger
 import os
 import threading

@@ -23,7 +23,6 @@ v1.0.4 (2026-05-08): live-send окно синхронизировано с appr
 """
 
 import json
-import logging
 from collector.logging_utils import get_collector_logger
 import os
 from datetime import datetime, time as dt_time
@@ -207,7 +206,6 @@ async def send_telegram_with_markup(
     if not BOT_TOKEN:
         logger.warning("BOT_TOKEN не задан — Telegram недоступен")
         return False
-    import json as _json
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": telegram_id,

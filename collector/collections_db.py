@@ -14,11 +14,10 @@ collections/collections_db.py
 # v1.0.3 (2026-05-11): sticky approval state for unchanged no-movement tail debt clients.
 
 import json
-import logging
 from collector.logging_utils import get_collector_logger
 import os
 from contextlib import contextmanager
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any, Dict, Generator, List, Optional

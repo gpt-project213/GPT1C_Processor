@@ -21,7 +21,6 @@ v1.0.8 (2026-04-29): loader теперь возвращает freshness-мета
 """
 
 import json
-import logging
 from collector.logging_utils import get_collector_logger
 import os
 import re

@@ -68,7 +68,6 @@ v1.0.8 (2026-04-23): мягкая обработка ответов клиент
 
 import asyncio
 import json
-import logging
 import re
 from collector.logging_utils import get_collector_logger
 import os
@@ -1556,8 +1555,8 @@ async def handle_incoming(phone: str, text: str, attachment: Optional[Dict[str, 
                 reply = suggested_reply
             else:
                 reply = (
-                    f"Понимаю вашу ситуацию. Тем не менее, задолженность требует погашения. "
-                    f"Можете ли вы указать конкретную дату, когда сможете оплатить?"
+                    "Понимаю вашу ситуацию. Тем не менее, задолженность требует погашения. "
+                    "Можете ли вы указать конкретную дату, когда сможете оплатить?"
                 )
             dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
             _set_client_dialog(phone_clean, dialog)

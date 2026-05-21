@@ -94,7 +94,6 @@ Callback prefix: wa_appr_
 """
 
 import json
-import logging
 from collector.logging_utils import get_collector_logger
 import os
 import re
@@ -1157,10 +1156,10 @@ async def handle_manager_callback(
         save_batch(batch)
         decisions = _build_decisions(mgr_state)
         text = (
-            f"🤝 <b>Договорились — разбираем по каждому</b>\n\n"
-            f"По каждому клиенту нажмите 🤝 Договорились и укажите детали.\n"
-            f"Массово убрать без причины нельзя — нужен срок и условия по каждому.\n\n"
-            f"Когда закончите — нажмите <b>«Готово»</b>."
+            "🤝 <b>Договорились — разбираем по каждому</b>\n\n"
+            "По каждому клиенту нажмите 🤝 Договорились и укажите детали.\n"
+            "Массово убрать без причины нельзя — нужен срок и условия по каждому.\n\n"
+            "Когда закончите — нажмите <b>«Готово»</b>."
         )
         markup = _client_list_keyboard(batch_id, mgr_idx, clients, decisions)
         await _tg_edit(chat_id, message_id, text, markup)
@@ -1173,10 +1172,10 @@ async def handle_manager_callback(
         save_batch(batch)
         decisions = _build_decisions(mgr_state)
         text = (
-            f"💰 <b>Все оплатили — разбираем по каждому</b>\n\n"
-            f"По каждому клиенту нажмите 💰 Оплатил и приложите документ.\n"
-            f"Массово подтвердить всех без документов нельзя.\n\n"
-            f"Когда закончите — нажмите <b>«Готово»</b>."
+            "💰 <b>Все оплатили — разбираем по каждому</b>\n\n"
+            "По каждому клиенту нажмите 💰 Оплатил и приложите документ.\n"
+            "Массово подтвердить всех без документов нельзя.\n\n"
+            "Когда закончите — нажмите <b>«Готово»</b>."
         )
         markup = _client_list_keyboard(batch_id, mgr_idx, clients, decisions)
         await _tg_edit(chat_id, message_id, text, markup)
@@ -1197,13 +1196,13 @@ async def handle_manager_callback(
         mgr_state["responded_at"] = None
         save_batch(batch)
         text = (
-            f"✏️ <b>Выбор вручную</b>\n\n"
-            f"Для каждого клиента нажмите:\n"
-            f"  ✅ Отправить — разрешить отправку\n"
-            f"  💰 Оплатил — клиент оплатил (нужен документ или проверка)\n"
-            f"  🤝 Договорились — нужно указать детали\n\n"
-            f"Снять без причины нельзя.\n"
-            f"Когда выберете всех — нажмите <b>«Готово»</b>."
+            "✏️ <b>Выбор вручную</b>\n\n"
+            "Для каждого клиента нажмите:\n"
+            "  ✅ Отправить — разрешить отправку\n"
+            "  💰 Оплатил — клиент оплатил (нужен документ или проверка)\n"
+            "  🤝 Договорились — нужно указать детали\n\n"
+            "Снять без причины нельзя.\n"
+            "Когда выберете всех — нажмите <b>«Готово»</b>."
         )
         markup = _client_list_keyboard(batch_id, mgr_idx, clients, decisions)
         await _tg_edit(chat_id, message_id, text, markup)
@@ -2452,7 +2451,6 @@ def _load_promises() -> Dict[str, Any]:
 
 
 def _save_promises(data: Dict[str, Any]) -> None:
-    import tempfile
     tmp = _PROMISES_PATH.with_suffix(".tmp")
     tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     tmp.replace(_PROMISES_PATH)

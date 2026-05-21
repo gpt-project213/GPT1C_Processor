@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 from collector.logging_utils import get_collector_logger
 from collector.payment_hold import strip_manager_prefix as _strip_pfx
 import os

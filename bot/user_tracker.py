@@ -150,13 +150,13 @@ def get_stats() -> Dict[str, Any]:
     """
     try:
         data = _load_analytics()
-        
+
         # Подсчитываем статистику по действиям
         action_counts = {}
         for action in data.get("actions", []):
             action_type = action.get("action", "unknown")
             action_counts[action_type] = action_counts.get(action_type, 0) + 1
-        
+
         # Сортируем пользователей по активности
         users_list = []
         for user_id, user_data in data.get("users", {}).items():
@@ -168,9 +168,9 @@ def get_stats() -> Dict[str, Any]:
                 "last_seen": user_data.get("last_seen"),
                 "total_actions": user_data.get("total_actions", 0)
             })
-        
+
         users_list.sort(key=lambda x: x["total_actions"], reverse=True)
-        
+
         return {
             "total_users": len(data.get("users", {})),
             "total_actions": len(data.get("actions", [])),
@@ -246,10 +246,10 @@ def get_user_info(user_id: int) -> Dict[str, Any]:
     try:
         data = _load_analytics()
         user_key = str(user_id)
-        
+
         if user_key in data["users"]:
             return data["users"][user_key]
-        
+
         return None
     except (OSError, json.JSONDecodeError, KeyError, TypeError) as e:
         logger.error(f"Ошибка получения информации о пользователе {user_id}: {e}")
@@ -259,21 +259,21 @@ def get_user_info(user_id: int) -> Dict[str, Any]:
 # Пример использования
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    
+
     # Тестовые данные
     track_user(12345, "Иван", "ivan_test")
     track_action(12345, "debt")
     track_action(12345, "sales")
     track_action(12345, "ai")
-    
+
     track_user(67890, "Мария", "maria_test")
     track_action(67890, "inventory")
     track_action(67890, "gross")
-    
+
     # Получаем статистику
     stats = get_stats()
     message = format_stats_message(stats)
-    
+
     print("\n" + "="*60)
     print(message)
     print("="*60)

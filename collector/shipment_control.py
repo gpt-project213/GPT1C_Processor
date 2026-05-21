@@ -23,7 +23,6 @@ collector/shipment_control.py
 from __future__ import annotations
 
 import json
-import logging
 from collector.logging_utils import get_collector_logger
 import os
 import tempfile

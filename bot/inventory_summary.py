@@ -39,7 +39,7 @@ _MONTHS_RU = {
 
 class InventorySummary:
     """Краткие сводки по остаткам"""
-    
+
     LOW_STOCK_THRESHOLD = 50.0
 
     @staticmethod
@@ -83,7 +83,7 @@ class InventorySummary:
             ))
         except Exception:
             return True
-    
+
     @staticmethod
     def parse_quantity(qty_str: str) -> float:
         """Парсит количество: '2 330.77' -> 2330.77"""
@@ -148,7 +148,7 @@ class InventorySummary:
         try:
             html_content = html_path.read_text(encoding='utf-8')
             soup = BeautifulSoup(html_content, 'html.parser')
-            
+
             small_tag = soup.find('small')
             date_str = ""
             total_qty = 0.0
@@ -162,25 +162,25 @@ class InventorySummary:
                 _qm = re.search(r'[Вв]сего\s+количество[:\s]+([\d\s,.\u202f]+)', text)
                 if _qm:
                     total_qty = self.parse_quantity(_qm.group(1))
-            
+
             table = soup.find('table')
             if not table:
                 logger.error(f"Не найдена таблица в {html_path}")
                 return {'date': date_str, 'total_quantity': total_qty, 'items': []}
-            
+
             items = []
             current_category = ""
-            
+
             for row in table.find_all('tr'):
                 if row.find('th'):
                     continue
-                
+
                 if 'class' in row.attrs and 'category' in row.attrs['class']:
                     strong_tag = row.find('strong')
                     if strong_tag:
                         current_category = strong_tag.get_text(strip=True)
                     continue
-                
+
                 cells = row.find_all('td')
                 if len(cells) == 2:
                     product = cells[0].get_text(strip=True)
@@ -191,14 +191,14 @@ class InventorySummary:
                         'product': product,
                         'quantity': qty
                     })
-            
+
             logger.info(f"📊 Распарсено {len(items)} товаров из {html_path.name}")
             return {'date': date_str, 'total_quantity': total_qty, 'items': items}
-            
+
         except (OSError, AttributeError, TypeError, ValueError) as e:
             logger.error(f"Ошибка при парсинге {html_path}: {e}", exc_info=True)
             return {'date': '', 'total_quantity': 0.0, 'items': []}
-    
+
     def format_summary(self, data: Dict) -> str:
         """Форматирует краткую сводку"""
         msg_lines = [f"📦 ОСТАТКИ на {data['date']}", ""]
@@ -232,11 +232,11 @@ class InventorySummary:
                 msg_lines.append(f"  {i}. {cat} — {self.format_number(qty)} кг")
 
         return "\n".join(msg_lines)
-    
+
     @staticmethod
     def format_number(num: float) -> str:
         return f"{num:,.0f}".replace(',', ' ')
-    
+
     def get_latest_inventory_json(self, json_dir: Path) -> Optional[Path]:
         """
         v1.7: Находит актуальный дневной inventory JSON.

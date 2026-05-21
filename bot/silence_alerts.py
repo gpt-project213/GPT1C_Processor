@@ -30,8 +30,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
-from datetime import datetime
+from typing import Dict, List, Optional
 from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
@@ -47,7 +46,7 @@ def _safe_mtime(p: Path) -> float:
 
 class SilenceAlert:
     """Класс для работы с уведомлениями о днях молчания"""
-    
+
     # Пороги дней молчания
     OVERDUE_DAYS  = 7   # ⚡ Просрочка (7-9 дн) — не рассчитался в срок
     SILENCE_DAYS  = 10  # 🟡 Молчание (10-14 дн) — не реагирует
@@ -59,7 +58,7 @@ class SilenceAlert:
 
     # Порог "имитации оплаты": оплата < IMITATION_THRESHOLD * долг
     IMITATION_THRESHOLD = 0.10  # 10%
-    
+
     def __init__(self):
         self.stats = {
             'total_checked': 0,
@@ -67,7 +66,7 @@ class SilenceAlert:
             'total_silent_clients': 0,
             'total_silent_debt': 0.0
         }
-    
+
     @staticmethod
     def parse_debt_amount(debt_str: str) -> float:
         """
@@ -79,11 +78,11 @@ class SilenceAlert:
         """
         if not debt_str:
             return 0.0
-        
+
         cleaned = ''.join(debt_str.split())
         cleaned = cleaned.replace('₸', '').replace('₽', '').strip()
         cleaned = cleaned.replace(',', '.')
-        
+
         try:
             return float(cleaned)
         except ValueError:
@@ -152,17 +151,17 @@ class SilenceAlert:
         try:
             html_content = html_path.read_text(encoding='utf-8')
             soup = BeautifulSoup(html_content, 'html.parser')
-            
+
             all_clients_panel = soup.find('div', id='t_all')
             if not all_clients_panel:
                 logger.error(f"Не найдена вкладка 't_all' в {html_path}")
                 return []
-            
+
             table = all_clients_panel.find('table')
             if not table:
                 logger.error(f"Не найдена таблица в вкладке 't_all' в {html_path}")
                 return []
-            
+
             tbody = table.find('tbody')
             if not tbody:
                 logger.error(f"Не найден tbody в таблице {html_path}")
@@ -247,10 +246,10 @@ class SilenceAlert:
                     'paid_amount':     paid_amount,     # оплата в периоде
                     'paid_str':        paid_str,
                 })
-            
+
             logger.info(f"📊 Распарсено {len(clients_data)} клиентов из {html_path.name}")
             return clients_data
-            
+
         except Exception as e:
             logger.error(f"Ошибка при парсинге {html_path}: {e}", exc_info=True)
             return []
@@ -503,7 +502,7 @@ class SilenceAlert:
         if oldest:
             text += f" (с {oldest})"
         return text
-    
+
     def categorize_by_silence(self, clients_data: List[Dict],
                               historical_map: Optional[Dict[str, int]] = None,
                               weekly_clients: Optional[List[str]] = None) -> Dict[str, List[Dict]]:
@@ -608,7 +607,7 @@ class SilenceAlert:
                 # else: debit > 0, days < 7 — нормальный активный клиент, пропускаем
 
         return categorized
-    
+
     def format_manager_alert(self, manager_name: str, categorized: Dict[str, List[Dict]], report_date: str = "") -> str:
         """
         v1.7: Формирует текст уведомления для менеджера.
@@ -726,7 +725,7 @@ class SilenceAlert:
         msg_lines.append("📊 Открыть детальный отчёт → /debt")
 
         return "\n".join(msg_lines)
-    
+
     def format_admin_summary(self, all_managers_data: Dict[str, Dict]) -> str:
         """v1.7: Краткая сводка для админа по всем менеджерам."""
         msg_lines = [
@@ -902,12 +901,12 @@ class SilenceAlert:
         msg_lines.append(f"👥 Всего клиентов в отчёте: {total_overall_clients}")
 
         return "\n".join(msg_lines)
-    
+
     @staticmethod
     def format_amount(amount: float) -> str:
         """Форматирует сумму с пробелами между тысячами"""
         return f"{amount:,.2f}".replace(',', ' ').replace('.', ',')
-    
+
     # ──────────────────────────────────────────────────────────────────────
     # Вспомогательный метод сортировки файлов отчётов по периоду
     # ──────────────────────────────────────────────────────────────────────
