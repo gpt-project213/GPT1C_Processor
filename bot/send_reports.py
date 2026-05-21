@@ -1152,6 +1152,7 @@ def schedule_message_deletion(chat_id: int, message_id: int, msg_ts: float,
 async def janitor_task(context: ContextTypes.DEFAULT_TYPE):
     """Фоновая задача для удаления просроченных сообщений"""
     log_event("janitor_start")
+    _crmdup_cleanup_pending()
     try:
         queue_data = _load_deletion_queue()
         jobs = queue_data.get("jobs", [])
@@ -8048,7 +8049,11 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 async def _flush_rejects(mgr_id: int, bot=context.bot):
                     import asyncio as _aio
-                    await _aio.sleep(30)
+                    try:
+                        await _aio.sleep(30)
+                    except _aio.CancelledError:
+                        # Задача отменена — новый debounce подберёт накопленный буфер
+                        return
                     batch = _saida_reject_buffer.pop(mgr_id, [])
                     _saida_reject_tasks.pop(mgr_id, None)
                     if not batch:
@@ -8069,7 +8074,7 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     try:
                         await bot.send_message(chat_id=mgr_id, text=text, parse_mode=None)
                     except Exception as _fe:
-                        logger.warning("flush_rejects send error: %s", _fe)
+                        logger.warning("flush_rejects send error (потеряно %d записей): %s", len(batch), _fe)
 
                 _saida_reject_tasks[manager_chat_id] = asyncio.ensure_future(_flush_rejects(manager_chat_id))
                 # Директору шлём сразу (без батчинга)
