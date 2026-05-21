@@ -2,9 +2,9 @@
 
 Актуальная единая база знаний по `GPT1C_Processor_analitica`.
 
-Статус: актуально на `2026-05-19`  
+Статус: актуально на `2026-05-21`  
 Текущая базовая ветка: `master`  
-Последний коммит: `0fbbaba`
+Последний коммит: `9de31de`
 
 ---
 
@@ -516,7 +516,7 @@ Audit-документы:
 
 ## 11. Тестовая матрица
 
-Актуальный рабочий набор к `2026-05-19`:
+Актуальный рабочий набор к `2026-05-21`:
 
 | Тест | Результат | Примечание |
 |---|---|---|
@@ -571,41 +571,33 @@ Audit-документы:
 - **`expire_stale_holds_on_startup()`**: при каждом старте бота чистит все просроченные holds — накопленные пока бот не работал (2026-05-18)
 - **`strip_manager_prefix()`**: однобуквенный префикс менеджера ("О Гриль Косши" → "Гриль Косши") убран из всех внешних сообщений — WhatsApp-рассылка, Саида, Минай (2026-05-18)
 - **Уведомление Минай при новом hold**: `create_manager_payment_request()` отправляет WhatsApp Минай (+7 702 317 7888 / `MINAI_WA_PHONE`) с просьбой предоставить выписку Саиде (2026-05-18)
-- **`bot/minai_reminders.py`** — WhatsApp-напоминалка для Минай (2026-05-19): расписание интернет/аренда/налоги; кнопки ✅/⏰/➕; DeepSeek для кастомных напоминаний; голосовые через AssemblyAI; авто-закрытие в 21:00; финальный алерт + Telegram Вадиму в 22:00 для критичных невыполненных; рабочее vs личное; фидбек → Вадиму; catch-all для любых сообщений; приветствие при первом запуске
+- **contact update из WA-диалога** (2026-05-19, `4ad297e`): 4 AI-intent (`wrong_contact` / `new_contact_person` / `contact_update` / `new_phone_provided`); vCard extraction (`_extract_contact_card`); состояние `awaiting_new_contact`; `_finalize_contact_update()`; `update_client_contact_from_dialog()` в CRM (сохраняет `previous_whatsapp`)
+- **payment_hold архитектурный рефакторинг** (2026-05-19, `0fbbaba`): `silence_candidates.json` — кандидат без hold; `create_manager_payment_request()` только по реальному действию; `SOURCE_*` константы; `sent_to_saida_at` — точка старта цепочки; `set_sent_to_saida()` запускает таймеры и Минай; `debt_stop_control` пропускает holds без `sent_to_saida_at`
+- **P0/P1/P2/P3 аудит payment_hold** (2026-05-20, `868bfa9`): P0 — `_minai_notify_text()` подключена; P1 — `approval_flow wa_appr_cli_paid_nodoc` сразу шлёт Саиде; P2 — `strip_manager_prefix` в notify_text; P3 — `claimed_by_manager=True` в `payhold_req`
+- **sales дедупликация строк менеджера** (2026-05-21, `4a2f9ae`): повторные строки по менеджеру в дневной сводке не дублируются
+- **5 улучшений бота** (2026-05-21, `9de31de`): `whatsapp_poller` interval 15 сек — warnings устранены; `silence_candidates` TTL 48ч; `awaiting_new_contact` таймаут 24ч; кнопка ↩️ "Вернуть контакт" + `revert_contact` callback; батчинг ответов Саиды "не вижу" (debounce 30 сек)
 
-### 12.2. Закрыто частично / не считать идеальным
-
-- CRM ownership ambiguity — значительно улучшено (signature, deterministic keep), но не исчерпано
-- stale dup-review callback — базовый ответ есть, full cleanup как у claim ещё не сделан
-- часть legacy/architectural duplication
-- часть broad `except Exception` по проекту
 
 ---
 
-## 13. Что остаётся открытым
+## 13. Бэклог
 
-Это уже не список старых аудитов, а реально полезный current backlog.
+### 🔴 Критично — сломает если не исправить
 
-### Product / business
-- partial payment логика остаётся не полностью автоматизированной
-- качество менеджерских обещаний можно дальше усиливать политиками и репортингом
+- **`INTERNET_SCHEDULE` истекает июль 2026** — с августа интернет-напоминания Минай пропадут тихо (warning в лог есть, но отправки не будет). Нужно добавить месяцы до конца года. → `bot/minai_reminders.py: INTERNET_SCHEDULE`
 
-### CRM
-- ambiguous multi-manager ownership: значительно улучшено (signature, deterministic keep), но не исчерпано
-- три несогласованных хранилища: `clients.json` / `debtors_contacts.json` / batch snapshot
+### 🟡 Технический долг — работает, но ненадёжно
 
-### Collector
-- `debt_age_history.json` bootstrap из архива — опционально; без него бот накопит историю за 1-2 месяца сам
-- `COLLECTOR_SILENT_ACTIVE_RESEND_HOURS` (default 24h) — проверить порог в бою после рестарта
+- **`except Exception: pass` без логирования** — в нескольких местах ошибки глотаются молча. Именно этот паттерн скрыл P0-баг с Минай. При любой новой правке проверять что в catch есть хотя бы `logger.warning`.
+- **stale dup-review callback** — при нажатии старой кнопки дублей бот говорит "устарел", но запись в `crm_duplicate_review_state.json` не чистится полностью. Со временем файл засоряется.
+- **три хранилища контактов** — `clients.json` / `debtors_contacts.json` / batch snapshot могут расходиться. Если телефон обновлён в CRM после формирования batch — коллектор пишет на старый номер до следующего цикла.
+- **multi-manager ownership edge cases** — CRM выбирает "главного" детерминированно, но переход клиента между менеджерами в середине цикла может дать неожиданный результат.
 
-### Architecture
-- `txt_to_html` duplication
-- inline HTML в `expenses_parser.py`
-- ряд старых архитектурных дублей низкой срочности
+### 🟢 Низкий приоритет — не мешает работе
 
-### Operations
-- дисциплина Саиды всё ещё управленческая проблема, даже при наличии SLA-аналитики
-- stale backlog требует периодической эксплуатации, а не только кода
+- **`txt_to_html` и inline HTML** — дублирование логики форматирования в нескольких парсерах.
+- **`debt_age_history.json` bootstrap** — без него бот сам накопит историю за 1-2 месяца, блокером не является.
+- **partial payment автоматизация** — логика частичных оплат требует ручного участия директора; автоматизировать можно, но не срочно.
 
 ---
 
