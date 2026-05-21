@@ -160,16 +160,16 @@ class TelegramErrorAlertHandler(logging.Handler):
             self._dead_letter_path.parent.mkdir(parents=True, exist_ok=True)
             with self._dead_letter_path.open("a", encoding="utf-8") as f:
                 f.write(json.dumps({"ts": time.time(), "text": text}, ensure_ascii=False) + "\n")
-        except Exception:
-            pass
+        except Exception as _exc:
+            import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
 
     def _clear_spool(self) -> None:
         if not self._dead_letter_path:
             return
         try:
             self._dead_letter_path.unlink(missing_ok=True)
-        except Exception:
-            pass
+        except Exception as _exc:
+            import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
 
     def _load_spool(self) -> None:
         if not self._dead_letter_path or not self._dead_letter_path.exists():
@@ -179,10 +179,10 @@ class TelegramErrorAlertHandler(logging.Handler):
                 try:
                     rec = json.loads(line)
                     self._dead_letters.append(rec["text"])
-                except Exception:
-                    pass
-        except Exception:
-            pass
+                except Exception as _exc:
+                    import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
+        except Exception as _exc:
+            import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
 
     # ── emit ───────────────────────────────────────────────────
 
@@ -253,8 +253,8 @@ class TelegramErrorAlertHandler(logging.Handler):
                     tb_text = "…" + tb_text[-800:]
                 lines.append("")
                 lines.append("<code>" + html.escape(tb_text) + "</code>")
-            except Exception:
-                pass
+            except Exception as _exc:
+                import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
 
         return "\n".join(lines)
 
@@ -312,8 +312,8 @@ def configure_runtime_logging(
             )
             file_handler.setFormatter(formatter)
             root.addHandler(file_handler)
-        except Exception:
-            pass
+        except Exception as _exc:
+            import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
 
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
@@ -377,8 +377,8 @@ def configure_module_logger(
         file_handler.setFormatter(formatter)
         file_handler.addFilter(_ContextDefaultsFilter(system=system, component=component))
         logger.addHandler(file_handler)
-    except Exception:
-        pass
+    except Exception as _exc:
+        import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
 
     stream_handler = logging.StreamHandler()
     stream_handler.setFormatter(formatter)

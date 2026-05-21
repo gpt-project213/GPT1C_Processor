@@ -43,8 +43,8 @@ from zoneinfo import ZoneInfo
 try:
     from dotenv import load_dotenv
     load_dotenv(Path(__file__).resolve().parents[1] / ".env", encoding="utf-8-sig", override=True)
-except Exception:
-    pass
+except Exception as _exc:
+    import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from collector.logging_utils import get_stop_logger
@@ -1098,8 +1098,8 @@ async def send_saida_final(bot) -> None:
                     d = (now_dt - created).days
                     if d > oldest_days:
                         oldest_days = d
-                except Exception:
-                    pass
+                except Exception as _exc:
+                    import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
             warn_text = (
                 f"🚨 <b>Саида, я вижу игнор.</b>\n\n"
                 f"У тебя {len(unanswered)} неотвеченных запроса на проверку оплаты.\n"
@@ -1424,8 +1424,8 @@ async def _send_manager_help(cid: str, chat_id: int, bot) -> None:
     if not c:
         try:
             await bot.send_message(chat_id=chat_id, text="CRM/стоп-запрос не найден или уже устарел.")
-        except Exception:
-            pass
+        except Exception as _exc:
+            import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
         return
     if int(c.get("manager_chat_id") or 0) != int(chat_id):
         return
@@ -1555,8 +1555,8 @@ async def handle_dstop_detail_message(chat_id: int, text: str, bot) -> bool:
                         text="Не понял сумму. Введи число, например: <code>100000</code>",
                         parse_mode="HTML",
                     )
-                except Exception:
-                    pass
+                except Exception as _exc:
+                    import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
                 return True
             proposal["limit_amount"] = amount
             proposal["step"] = "days"
@@ -1572,8 +1572,8 @@ async def handle_dstop_detail_message(chat_id: int, text: str, bot) -> bool:
                     ),
                     parse_mode="HTML",
                 )
-            except Exception:
-                pass
+            except Exception as _exc:
+                import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
             return True
 
         if step == "days":
@@ -1585,8 +1585,8 @@ async def handle_dstop_detail_message(chat_id: int, text: str, bot) -> bool:
                         text="Не понял срок. Введи число дней, например: <code>7</code>",
                         parse_mode="HTML",
                     )
-                except Exception:
-                    pass
+                except Exception as _exc:
+                    import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
                 return True
             proposal["limit_days"] = int(days_raw)
             proposal["step"] = None
@@ -1603,8 +1603,8 @@ async def handle_dstop_detail_message(chat_id: int, text: str, bot) -> bool:
                     ),
                     parse_mode="HTML",
                 )
-            except Exception:
-                pass
+            except Exception as _exc:
+                import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
             return True
 
     # ── Ввод лимита руководителем (override, шаги: сумма → дни) ──
@@ -1625,8 +1625,8 @@ async def handle_dstop_detail_message(chat_id: int, text: str, bot) -> bool:
                         text="Не понял сумму. Введи число, например: <code>100000</code>",
                         parse_mode="HTML",
                     )
-                except Exception:
-                    pass
+                except Exception as _exc:
+                    import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
                 return True
             proposal["limit_amount"] = amount
             proposal["override_step"] = "days"
@@ -1641,8 +1641,8 @@ async def handle_dstop_detail_message(chat_id: int, text: str, bot) -> bool:
                     ),
                     parse_mode="HTML",
                 )
-            except Exception:
-                pass
+            except Exception as _exc:
+                import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
             return True
 
         if step == "days":
@@ -1654,8 +1654,8 @@ async def handle_dstop_detail_message(chat_id: int, text: str, bot) -> bool:
                         text="Не понял срок. Введи число дней, например: <code>7</code>",
                         parse_mode="HTML",
                     )
-                except Exception:
-                    pass
+                except Exception as _exc:
+                    import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
                 return True
             proposal["limit_days"] = int(days_raw)
             proposal["override_step"] = None
@@ -1672,8 +1672,8 @@ async def handle_dstop_detail_message(chat_id: int, text: str, bot) -> bool:
                     ),
                     parse_mode="HTML",
                 )
-            except Exception:
-                pass
+            except Exception as _exc:
+                import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
             return True
 
     if chat_id == admin_id:

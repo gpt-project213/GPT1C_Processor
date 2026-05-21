@@ -1102,8 +1102,8 @@ async def _process_single(
                     _audit("wa_sent", name=name, amount=amount, days=days,
                            phone_masked=_phone_visible, level=level,
                            msg_type=msg_type, manager=manager_name, dry_run=dry_run)
-                except Exception:
-                    pass
+                except Exception as _exc:
+                    import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
             # Регистрируем клиентский диалог если WhatsApp отправлен
             if wa_ok and phone:
                 try:
@@ -1360,8 +1360,8 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
                 from collector.audit_log import audit as _audit
                 _audit("wa_skipped", name=name, reason="active_client",
                        debit=_debit_val, credit=_credit_val, dry_run=dry_run)
-            except Exception:
-                pass
+            except Exception as _exc:
+                import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
             continue
         if client.get("amount", 0) <= 0:
             logger.info("[%s] пропуск — долг погашен или отрицательный (amount=%.0f)",
@@ -1370,8 +1370,8 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
                 from collector.audit_log import audit as _audit
                 _audit("wa_skipped", name=name, reason="zero_amount",
                        amount=client.get("amount", 0), dry_run=dry_run)
-            except Exception:
-                pass
+            except Exception as _exc:
+                import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
             continue
         try:
             from collector.payment_hold import get_hold_for_client
@@ -1383,8 +1383,8 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
             try:
                 from collector.audit_log import audit as _audit
                 _audit("wa_skipped", name=name, reason="payment_hold", dry_run=dry_run)
-            except Exception:
-                pass
+            except Exception as _exc:
+                import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
             continue
         try:
             from collector.collections_db import get_wa_dialog_suppress
@@ -1401,8 +1401,8 @@ async def run(dry_run: bool = False, single_client: Optional[str] = None) -> Non
                 _audit("wa_skipped", name=name, reason="suppress",
                        suppress_reason=_wa_suppress.get("reason"),
                        suppress_until=_wa_suppress.get("until"), dry_run=dry_run)
-            except Exception:
-                pass
+            except Exception as _exc:
+                import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
             continue
 
         # Нет движений (debit==0, credit==0) → сначала спрашиваем Саиду.

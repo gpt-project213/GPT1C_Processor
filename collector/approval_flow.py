@@ -363,8 +363,8 @@ def create_batch(
         from collector.audit_log import audit as _audit
         _audit("batch_created", batch_id=batch_id,
                managers=len(managers_state), clients=total_clients)
-    except Exception:
-        pass
+    except Exception as _exc:
+        import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
     return batch
 
 
@@ -1917,8 +1917,8 @@ async def handle_admin_callback(
         try:
             from collector.audit_log import audit as _audit
             _audit("batch_approved", batch_id=batch_id, clients=len(approved_clients))
-        except Exception:
-            pass
+        except Exception as _exc:
+            import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
 
         _diff_block = ""
         _cancelled_exc = None
@@ -2295,8 +2295,8 @@ def record_send_results(batch_id: str, results: List[Dict[str, Any]]) -> Optiona
         _audit(batch["status"],
                batch_id=batch_id, sent=sent, failed=failed,
                skipped=skipped, total=len(all_results))
-    except Exception:
-        pass
+    except Exception as _exc:
+        import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
     return batch
 
 

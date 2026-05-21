@@ -318,8 +318,8 @@ def _silence_load() -> dict:
         if SILENCE_SENT_PATH.exists():
             import json as _j
             return _j.loads(SILENCE_SENT_PATH.read_text(encoding="utf-8"))
-    except Exception:
-        pass
+    except Exception as _exc:
+        import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
     return {}
 
 
@@ -583,8 +583,8 @@ async def hide_main_menu(context: "ContextTypes.DEFAULT_TYPE", chat_id: int) -> 
         return
     try:
         await context.bot.delete_message(chat_id=chat_id, message_id=mid)
-    except Exception:
-        pass
+    except Exception as _exc:
+        import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
     finally:
         _menu_clear(chat_id)
 
@@ -662,8 +662,8 @@ async def send_section_back(
             chat_id=chat_id, text=back_text, reply_markup=kb, parse_mode="Markdown"
         )
         _menu_set(chat_id, msg.message_id)
-    except Exception:
-        pass
+    except Exception as _exc:
+        import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
 
 
 async def send_analytics_menu(
@@ -683,8 +683,8 @@ async def send_analytics_menu(
             chat_id=chat_id, text=text, reply_markup=kb, parse_mode="Markdown"
         )
         _menu_set(chat_id, msg.message_id)
-    except Exception:
-        pass
+    except Exception as _exc:
+        import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
 
 
 async def send_notify_menu(
@@ -701,8 +701,8 @@ async def send_notify_menu(
             chat_id=chat_id, text=text, reply_markup=kb, parse_mode="Markdown"
         )
         _menu_set(chat_id, msg.message_id)
-    except Exception:
-        pass
+    except Exception as _exc:
+        import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
 
 # ── v9.4.21: Фильтр чувствительных данных в логах ──────────────────────────
 class SensitiveDataFilter(logging.Filter):
@@ -823,8 +823,8 @@ def log_event(event: str, emoji: str | None = None, **kw):
         try:
             flat = "; ".join(f"{k}={v}" for k, v in kw.items())
             domain_logger.log(level, f"{emoji} {event}" + (f" · {flat}" if flat else ""), extra={"event": event})
-        except Exception:
-            pass
+        except Exception as _exc:
+            import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
     try:
         domain_logger.log(level, json.dumps(payload, ensure_ascii=False), extra={"event": event})
     except Exception:
@@ -913,8 +913,8 @@ def _save_json_atomic(path: Path, payload: dict) -> None:
         try:
             if tmp and os.path.exists(tmp):
                 os.remove(tmp)
-        except Exception:
-            pass
+        except Exception as _exc:
+            import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
 
 ROLES = _load_json_safe(CONFIG_DIR / "roles.json")
 MANAGERS_MAP = _load_json_safe(CONFIG_DIR / "managers.json")
@@ -978,8 +978,8 @@ def _install_sensitive_filter() -> None:
         for str_cid in subadmin_scopes:
             subadmin_cid = int(str_cid)
             break  # берём первый — в проекте один субадмин
-    except Exception:
-        pass
+    except Exception as _exc:
+        import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
     imap_cfg = _load_json_safe(CONFIG_DIR / "imap.json") or {}
     imap_user = imap_cfg.get("user", "") or imap_cfg.get("login", "") or imap_cfg.get("username", "")
     SensitiveDataFilter.install(
@@ -1028,8 +1028,8 @@ async def _acl_gate(chat_id: int, context) -> bool:
         return True
     try:
         await context.bot.send_message(chat_id=chat_id, text="⛔ Доступ запрещён. Обратитесь к администратору.")
-    except Exception:
-        pass
+    except Exception as _exc:
+        import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
     return False
 
 # v9.4.6.1: Упрощено - удалены избыточные проверки на "Арман" (его нет в конфиге)
@@ -1667,8 +1667,8 @@ async def cleanup_old_files(context: ContextTypes.DEFAULT_TYPE):
                         log_file.unlink()
                         stats["logs"]["deleted"] += 1
                         stats["logs"]["freed_bytes"] += size
-                except Exception:
-                    pass
+                except Exception as _exc:
+                    import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
 
         # 2. Очистка AI-отчётов (старше 7 дней)
         if AI_DIR.exists():
@@ -1682,8 +1682,8 @@ async def cleanup_old_files(context: ContextTypes.DEFAULT_TYPE):
                         ai_file.unlink()
                         stats["ai"]["deleted"] += 1
                         stats["ai"]["freed_bytes"] += size
-                except Exception:
-                    pass
+                except Exception as _exc:
+                    import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
 
         # 3. Очистка HTML-отчётов (старше 30 дней)
         if HTML_DIR.exists():
@@ -1697,8 +1697,8 @@ async def cleanup_old_files(context: ContextTypes.DEFAULT_TYPE):
                         html_file.unlink()
                         stats["html"]["deleted"] += 1
                         stats["html"]["freed_bytes"] += size
-                except Exception:
-                    pass
+                except Exception as _exc:
+                    import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
 
         # 4. Очистка JSON-отчётов (старше 7 дней)
         if JSON_DIR.exists():
@@ -1712,8 +1712,8 @@ async def cleanup_old_files(context: ContextTypes.DEFAULT_TYPE):
                         json_file.unlink()
                         stats["json"]["deleted"] += 1
                         stats["json"]["freed_bytes"] += size
-                except Exception:
-                    pass
+                except Exception as _exc:
+                    import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
 
         # 5. Очистка processed Excel (старше 14 дней)
         if PROCESSED_DIR.exists():
@@ -1727,8 +1727,8 @@ async def cleanup_old_files(context: ContextTypes.DEFAULT_TYPE):
                         excel_file.unlink()
                         stats["processed"]["deleted"] += 1
                         stats["processed"]["freed_bytes"] += size
-                except Exception:
-                    pass
+                except Exception as _exc:
+                    import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
 
         # 6. Очистка аналитики (старше 30 дней) — включая поддиректории net_profit_day/ net_profit_mtd/
         if ANALYTICS_DIR.exists():
@@ -1744,8 +1744,8 @@ async def cleanup_old_files(context: ContextTypes.DEFAULT_TYPE):
                         analytics_file.unlink()
                         analytics_deleted += 1
                         analytics_freed += size
-                except Exception:
-                    pass
+                except Exception as _exc:
+                    import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
             if analytics_deleted:
                 log_event("cleanup_analytics", deleted=analytics_deleted,
                           freed_mb=round(analytics_freed / (1024 * 1024), 2))
@@ -2705,8 +2705,8 @@ def _read_full(p: Path) -> str:
                 except Exception:
                     continue
             return ""
-    except Exception:
-        pass
+    except Exception as _exc:
+        import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
     for enc in ("utf-8", "utf-8-sig", "cp1251"):
         try:
             return p.read_text(encoding=enc)
@@ -3049,16 +3049,16 @@ def _list_archive_dates_for_manager(manager: str) -> List[str]:
                                 date_str = parts[-1]
                             break
                     dates_set.add(date_str)
-                except Exception:
-                    pass
+                except Exception as _exc:
+                    import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
     # Сортируем по дате dd.mm.yyyy (пропускаем иные форматы)
     sortable: List[str] = []
     for d in dates_set:
         try:
             if d and re.match(r"^\d{2}\.\d{2}\.\d{4}$", d):
                 sortable.append(d)
-        except Exception:
-            pass
+        except Exception as _exc:
+            import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
     return sorted(sortable, key=lambda d: datetime.strptime(d, "%d.%m.%Y"), reverse=True)
 
 def _types_for_date_manager(manager: str, date_str: str) -> List[str]:
@@ -3075,8 +3075,8 @@ def _types_for_date_manager(manager: str, date_str: str) -> List[str]:
                     if date_str in file_date or file_date.endswith(date_str):
                         available_types.append(report_type)
                         break
-                except Exception:
-                    pass
+                except Exception as _exc:
+                    import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
     return sorted(list(set(available_types)))
 
 def _find_report_by_date(report_type: str, manager: str, date_str: str) -> Optional[Path]:
@@ -3418,8 +3418,8 @@ def _get_pending_admin_batch() -> Optional[Dict[str, Any]]:
             if exp and _now >= exp:
                 continue
             return b
-    except Exception:
-        pass
+    except Exception as _exc:
+        import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
     return None
 
 
@@ -3465,8 +3465,8 @@ def _get_actual_collector_batch_mode() -> str:
         from collector.approval_flow import get_latest_send_ready_batch
         if get_latest_send_ready_batch():
             return "send_ready"
-    except Exception:
-        pass
+    except Exception as _exc:
+        import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
     return "status"
 
 
@@ -4085,8 +4085,8 @@ async def _validate_daily_reports_saida(context) -> None:
                     for _m in _mgrs:
                         if _m.lower() in _fname or _m.lower() in _period_str.lower():
                             _sales_today.add(_m)
-            except Exception:
-                pass
+            except Exception as _exc:
+                import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
 
         for _m in _mgrs:
             if _m not in _sales_today:
@@ -4104,8 +4104,8 @@ async def _validate_daily_reports_saida(context) -> None:
                     for _m in _mgrs:
                         if _m.lower() in _mgr_in_file.lower() or _m.lower() in _fname_low:
                             _debt_today.add(_m)
-            except Exception:
-                pass
+            except Exception as _exc:
+                import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
 
         for _m in _mgrs:
             if _m not in _debt_today:
@@ -4446,8 +4446,8 @@ async def pipeline_task(context: ContextTypes.DEFAULT_TYPE):
                                     _AI_DAILY_SKIPPED_LOGGED.add(skip_key)
                                     log_event("ai_daily_skipped", manager=manager, reason="Weekly AI mode")
                                 break
-                    except Exception:
-                        pass
+                    except Exception as _exc:
+                        import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
 
 
                 if script_executed and script_rc == 0:
@@ -4675,8 +4675,8 @@ def _get_saida_chat_id() -> int:
         val = (ROLES.get("accountants") or {}).get("Саида")
         if val:
             return int(val)
-    except Exception:
-        pass
+    except Exception as _exc:
+        import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
     try:
         return int(os.getenv("SAIDA_CHAT_ID", "920236287"))
     except Exception:
@@ -5006,8 +5006,8 @@ async def send_opportunity_loss_report(context=None):
                 parse_mode=None
             )
             schedule_message_deletion(ADMIN_CHAT_ID, _msg.message_id, _msg.date.timestamp(), delay_hours=24)
-        except Exception:
-            pass
+        except Exception as _exc:
+            import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
 
     # ── Менеджеры и subadmin ───────────────────────────────────
     data_by_manager = {d["manager"]: d for d in all_data}
@@ -5475,8 +5475,8 @@ async def process_and_send_ai_analysis(
                         text="❌ **Ошибка генерации ИИ анализа**\n\nПроверьте логи для деталей",
                         parse_mode="Markdown"
                     )
-                except Exception:
-                    pass
+                except Exception as _exc:
+                    import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
             return False
         match = re.search(r"AI saved:\s+(.+\.txt)", stdout_str)
         txt_file = None
@@ -5510,8 +5510,8 @@ async def process_and_send_ai_analysis(
                         text="❌ **Не удалось найти созданный файл**\n\nВозможно, файл создаётся дольше обычного",
                         parse_mode="Markdown"
                     )
-                except Exception:
-                    pass
+                except Exception as _exc:
+                    import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
             return False
         # v9.4.7.5: Используем встроенные функции html_to_path() и txt_to_html()
         try:
@@ -5528,14 +5528,14 @@ async def process_and_send_ai_analysis(
                         text="❌ **Ошибка создания HTML**\n\nПроверьте логи",
                         parse_mode="Markdown"
                     )
-                except Exception:
-                    pass
+                except Exception as _exc:
+                    import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
             return False
         await send_ai_file(html_file, manager, chat_id, context)
         try:
             _touch_notify_state(str(html_file))
-        except Exception:
-            pass
+        except Exception as _exc:
+            import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
         if status_msg_id:
             try:
                 await context.bot.edit_message_text(
@@ -5543,8 +5543,8 @@ async def process_and_send_ai_analysis(
                     text=f"✅ **ИИ анализ готов!**\n\n👤 Менеджер: {manager}\n\n📄 Файл отправлен выше",
                     parse_mode="Markdown"
                 )
-            except Exception:
-                pass
+            except Exception as _exc:
+                import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
         return True
     except Exception as e:
         log_event("ai_generate_error", error=str(e), manager=manager)
@@ -5555,8 +5555,8 @@ async def process_and_send_ai_analysis(
                     text="❌ **Ошибка при генерации ИИ анализа**\n\nПроверьте настройки AI сервиса",
                     parse_mode="Markdown"
                 )
-            except Exception:
-                pass
+            except Exception as _exc:
+                import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
         return False
 
 def extract_date_from_filename(filename: str) -> Optional[str]:
@@ -5677,8 +5677,8 @@ def _load_fresh_debt_totals_by_manager(json_dir: Path) -> tuple[dict, str]:
                 if best_debt_date is None or pd > best_debt_date:
                     best_debt_date = pd
                     debt_date = pmax
-            except Exception:
-                pass
+            except Exception as _exc:
+                import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
 
     return debt_by_mgr, debt_date
 
@@ -6483,7 +6483,7 @@ def _crm_phone_prompt_text(client_key: str, suggestions: Optional[List[str]] = N
 def _crm_key_token(client_key: str) -> str:
     """Короткий хэш client_key для верификации callback-кнопок (F-09)."""
     import hashlib
-    return hashlib.sha1(client_key.encode("utf-8")).hexdigest()[:8]
+    return hashlib.sha1(client_key.encode("utf-8"), usedforsecurity=False).hexdigest()[:8]
 
 
 def _crm_phone_choice_kb(client_key: str) -> Optional[InlineKeyboardMarkup]:
@@ -7700,8 +7700,8 @@ async def handle_extended_with_ai(
                     text=f"⚠️ **Нет данных для ИИ анализа**\n\nНе найден исходный JSON файл для {manager}",
                     parse_mode="Markdown"
                 )
-            except Exception:
-                pass
+            except Exception as _exc:
+                import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
         return
     start_time = time.time()
     await process_and_send_ai_analysis(manager, chat_id, context, json_file, start_time, status_msg_id, "DEBT")  # FIX B2: report_type was NameError
@@ -7737,8 +7737,8 @@ async def handle_ai_only(
                     text=f"✅ **ИИ-анализ готов!**\n\n👤 Менеджер: {manager}\n\n📄 Файл отправлен выше\n\n💡 Использован существующий анализ ({file_age_min} мин. назад)",
                     parse_mode="Markdown"
                 )
-            except Exception:
-                pass
+            except Exception as _exc:
+                import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
         return
     if status_msg_id:
         try:
@@ -7747,8 +7747,8 @@ async def handle_ai_only(
                 text=f"🤖 **Генерируется новый ИИ-анализ...**\n\n👤 Менеджер: {manager}\n\n⏳ Анализирую данные...",
                 parse_mode="Markdown"
             )
-        except Exception:
-            pass
+        except Exception as _exc:
+            import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
     json_file = find_recent_json_for_manager(manager, report_type=report_type)  # v9.4.29: +report_type
     if not json_file:
         if status_msg_id:
@@ -7758,8 +7758,8 @@ async def handle_ai_only(
                     text=f"⚠️ **Нет данных для ИИ-анализа**\n\nНе найден исходный JSON файл для {manager}",
                     parse_mode="Markdown"
                 )
-            except Exception:
-                pass
+            except Exception as _exc:
+                import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
         return
     await process_and_send_ai_analysis(manager, chat_id, context, json_file, start_time, status_msg_id, report_type)
 
@@ -7979,8 +7979,8 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             text=f"✅ Директор {result_label} по клиенту <b>{client}</b>.",
                             parse_mode="HTML",
                         )
-                    except Exception:
-                        pass
+                    except Exception as _exc:
+                        import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
                 try:
                     await q.edit_message_text(
                         f"Директор {result_label} по клиенту {client}. Менеджер уведомлён."
@@ -8123,8 +8123,8 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data.startswith("wa_appr_"):
         try:
             await q.answer()
-        except Exception:
-            pass
+        except Exception as _exc:
+            import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
         try:
             from collector.approval_flow import handle_callback as _wa_appr_cb
             handled = await _wa_appr_cb(data, chat_id, q.message.message_id)
@@ -8142,8 +8142,8 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if handled:
                 try:
                     await q.answer()
-                except Exception:
-                    pass
+                except Exception as _exc:
+                    import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
                 return
         except Exception as e:
             logger.error("nm callback error: %s", e)
@@ -8558,8 +8558,8 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 crm_logger.error("crmdup stale cleanup save failed (in-memory only)")
             try:
                 await q.message.edit_reply_markup(reply_markup=None)
-            except Exception:
-                pass
+            except Exception as _exc:
+                import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
             review = None
         if not review:
             await q.answer("Запрос сверки устарел.")
@@ -8617,8 +8617,8 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     parse_mode="HTML",
                     reply_markup=None,
                 )
-            except Exception:
-                pass
+            except Exception as _exc:
+                import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
             return
 
         if action == "custom":
@@ -8665,8 +8665,8 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     parse_mode="HTML",
                     reply_markup=None,
                 )
-            except Exception:
-                pass
+            except Exception as _exc:
+                import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
             return
 
         await q.answer("Неизвестное действие в сверке клиентов.")
@@ -8873,8 +8873,8 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pending.pop("awaiting_name_text", None)
         try:
             await q.message.edit_reply_markup(reply_markup=None)
-        except Exception:
-            pass
+        except Exception as _exc:
+            import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
         if action == "edit":
             pending["awaiting_name_text"] = True
             if not _crm_save_pending():
@@ -8945,8 +8945,8 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pending["last_sent"] = datetime.now(TZ).isoformat()
         try:
             await q.message.edit_reply_markup(reply_markup=None)
-        except Exception:
-            pass
+        except Exception as _exc:
+            import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
         if action == "edit":
             if not _crm_save_pending():
                 await q.answer("⚠️ Временная ошибка сохранения, попробуйте ещё раз.", show_alert=True)
@@ -9002,8 +9002,8 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         status = await force_report_to_user(report_type, chat_id, context)
         try:
             await q.answer(status, show_alert=False)
-        except Exception:
-            pass
+        except Exception as _exc:
+            import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
         # v9.4.33: Возвращаем в раздел УВЕДОМЛЕНИЙ (не в аналитику и не в главное)
         await send_notify_menu(context, chat_id, user_role)
         return
@@ -9036,8 +9036,8 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     chat_id=chat_id,
                     text="📖 Инструкция временно недоступна. Попробуйте команду /help.",
                 )
-            except Exception:
-                pass
+            except Exception as _exc:
+                import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
         return
 
     if data == "analytics_menu":
@@ -9136,8 +9136,8 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # v9.4.19: Удаляем меню архива перед отправкой файла
                 try:
                     await q.message.delete()
-                except Exception:
-                    pass
+                except Exception as _exc:
+                    import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
                 with p.open("rb") as f:
                     sent_message = await context.bot.send_document(
                         chat_id=chat_id,
@@ -9201,8 +9201,8 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # v9.4.19: Удаляем старое меню перед отправкой файла (меню появится внизу как в DEMO)
         try:
             await q.message.delete()
-        except Exception:
-            pass
+        except Exception as _exc:
+            import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
         await handle_report_request(action, target_manager, chat_id, context, user_role, scopes)
         return
 
@@ -9323,8 +9323,8 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await q.answer("Понятно, клиент остаётся в общем списке")
         try:
             await q.message.edit_text(f"❌ {client_name} — оставлен в общем списке.", parse_mode="HTML")
-        except Exception:
-            pass
+        except Exception as _exc:
+            import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
         return
 
     if data.startswith("weekly_confirm|"):
@@ -9368,8 +9368,8 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"? ?????? ?? ?????????? <b>{client_name}</b> ????????.",
                 parse_mode="HTML",
             )
-        except Exception:
-            pass
+        except Exception as _exc:
+            import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
         return
 
     if data.startswith("crm_same_yes|"):
@@ -9430,8 +9430,8 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="HTML",
                 reply_markup=None,
             )
-        except Exception:
-            pass
+        except Exception as _exc:
+            import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
 
         await _crm_begin_phone_chain(
             context=context,
@@ -9490,8 +9490,8 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="HTML",
                 reply_markup=None,
             )
-        except Exception:
-            pass
+        except Exception as _exc:
+            import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
 
         await _crm_send_claim_broadcast(
             context,
@@ -9511,8 +9511,8 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 crm_logger.error("crm_claim: stale cleanup save failed (in-memory only)")
             try:
                 await q.message.edit_reply_markup(reply_markup=None)
-            except Exception:
-                pass
+            except Exception as _exc:
+                import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
             claim = None
         if not claim:
             await q.answer("?????? ??????? ??? ??? ?????????.")
@@ -9524,8 +9524,8 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.answer("???? ?????? ??? ???? ?????? ??????????.")
             try:
                 await q.message.edit_reply_markup(reply_markup=None)
-            except Exception:
-                pass
+            except Exception as _exc:
+                import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
             return
 
         claimer_chat_id = q.message.chat.id
@@ -9603,8 +9603,8 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="HTML",
                 reply_markup=None,
             )
-        except Exception:
-            pass
+        except Exception as _exc:
+            import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
 
         for other_chat_id in claim.get("notified", []):
             if other_chat_id == claimer_chat_id:
@@ -9615,8 +9615,8 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     text=f"✅ <b>{client_key}</b> уже закреплён за менеджером <b>{claimer_name}</b>.",
                     parse_mode="HTML",
                 )
-            except Exception:
-                pass
+            except Exception as _exc:
+                import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
 
         try:
             if await _crm_begin_phone_chain(
@@ -9828,8 +9828,8 @@ def _build_manager_ranking(json_dir: Path, analytics_dir: Path) -> Optional[str]
                     if best_sales_date is None or pd > best_sales_date:
                         best_sales_date   = pd
                         best_sales_period = ps
-                except Exception:
-                    pass
+                except Exception as _exc:
+                    import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
         # Загружаем данные за лучший период
         if best_sales_period:
             for path in files:
@@ -9857,8 +9857,8 @@ def _build_manager_ranking(json_dir: Path, analytics_dir: Path) -> Optional[str]
                 cnt = len(d.get("clients", []))
                 sales_by_mgr[mgr]  = sales_by_mgr.get(mgr, 0.0) + rev
                 sales_clients[mgr] = sales_clients.get(mgr, 0) + cnt
-    except Exception:
-        pass
+    except Exception as _exc:
+        import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
 
     # ── 2. Дебиторка по менеджерам ────────────────────────────────────────────
     debt_by_mgr: dict = {}   # name → closing debt
@@ -9886,8 +9886,8 @@ def _build_manager_ranking(json_dir: Path, analytics_dir: Path) -> Optional[str]
                     if best_d is None or pd > best_d:
                         best_d    = pd
                         best_dstr = pmax
-                except Exception:
-                    pass
+                except Exception as _exc:
+                    import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
         # Суммируем долг каждого менеджера
         for path in dfiles:
             with open(path, encoding="utf-8") as fh:
@@ -9903,8 +9903,8 @@ def _build_manager_ranking(json_dir: Path, analytics_dir: Path) -> Optional[str]
                 continue  # пропускаем кредитовые/сводные записи
             debt_by_mgr[mgr] = debt_by_mgr.get(mgr, 0.0) + agg_close
             debt_date = best_dstr
-    except Exception:
-        pass
+    except Exception as _exc:
+        import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
 
     if not sales_by_mgr and not debt_by_mgr:
         return None
@@ -10169,8 +10169,8 @@ def _pick_latest_expenses_slug(want: str) -> Optional[str]:
                         return p.stem.replace("expenses_", "")
             except Exception:
                 continue
-    except Exception:
-        pass
+    except Exception as _exc:
+        import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
     return None
 
 
@@ -10201,8 +10201,8 @@ async def handle_expenses(update: Update, context: ContextTypes.DEFAULT_TYPE, da
             with open(json_path, "r", encoding="utf-8") as f:
                 jdata = json.load(f)
             period_str = jdata.get("period", "Период неизвестен")
-    except Exception:
-        pass
+    except Exception as _exc:
+        import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
 
     # Детальное логирование (v9.4.12)
     log_event("expenses_selected", slug=slug, period=period_str, want=want, level="INFO")
@@ -10353,8 +10353,8 @@ async def handle_analytics(update: Update, context: ContextTypes.DEFAULT_TYPE, d
     # v9.4.33: Возвращаем в меню АНАЛИТИКИ (не на главное)
     try:
         await send_analytics_menu(context, chat_id, user_role)
-    except Exception:
-        pass
+    except Exception as _exc:
+        import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
 
 # ═══════════════════════════════════════════════════════════════
 

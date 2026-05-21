@@ -144,8 +144,8 @@ def set_wa_dialog_suppress(name: str, reason: str, until_iso: str) -> None:
     try:
         from collector.audit_log import audit as _audit
         _audit("suppress_set", name=name, reason=reason, until=until_iso)
-    except Exception:
-        pass
+    except Exception as _exc:
+        import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
 
 
 def get_wa_dialog_suppress(name: str) -> Optional[Dict[str, Any]]:
@@ -180,8 +180,8 @@ def clear_wa_dialog_suppress(name: str) -> None:
             try:
                 from collector.audit_log import audit as _audit
                 _audit("suppress_cleared", name=name)
-            except Exception:
-                pass
+            except Exception as _exc:
+                import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
 
 
 def get_client_state(name: str) -> Dict[str, Any]:

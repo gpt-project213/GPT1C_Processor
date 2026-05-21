@@ -70,8 +70,8 @@ def _load_state() -> Dict[str, Any]:
         if NM_STATE_FILE.exists():
             data = json.loads(NM_STATE_FILE.read_text(encoding="utf-8"))
             return data if isinstance(data, dict) else {}
-    except Exception:
-        pass
+    except Exception as _exc:
+        import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
     return {}
 
 

@@ -19,8 +19,8 @@ from dotenv import load_dotenv
 
 try:
     load_dotenv(encoding="utf-8-sig", override=False)
-except Exception:
-    pass
+except Exception as _exc:
+    import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
 
 LOG = get_collector_logger(__name__)
 

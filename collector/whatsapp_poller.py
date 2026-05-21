@@ -110,8 +110,8 @@ def _has_active_collector_dialog(phone: str) -> bool:
             return False
         data = json.loads(_CLIENT_DIALOGS_PATH.read_text(encoding="utf-8"))
         return phone_digits in data
-    except Exception:
-        pass
+    except Exception as _exc:
+        import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
     return False
 
 

@@ -358,8 +358,8 @@ def _expire_stale(state: Dict[str, Any], now: datetime, changed: list) -> None:
                         [_btn("add", "➕ Добавить"), _btn("nothing", "Не надо")],
                     )
                     continue
-            except Exception:
-                pass
+            except Exception as _exc:
+                import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
         # Если нет метки времени — ставим её сейчас
         if isinstance(val, dict):
             val.setdefault("_ts", now.isoformat())
@@ -515,8 +515,8 @@ def check_and_send() -> None:
                     _until_dt = datetime.fromisoformat(until)
                     if now < _until_dt:
                         continue
-                except Exception:
-                    pass
+                except Exception as _exc:
+                    import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
             _send_reminder(rid)
             continue
 
@@ -1040,8 +1040,8 @@ def _validate_parsed(parsed: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     elif schedule.startswith("once:"):
         try:
             from datetime import date as _d; _d.fromisoformat(schedule.split(":", 1)[1]); ok = True
-        except Exception:
-            pass
+        except Exception as _exc:
+            import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
     if not ok:
         schedule = "monthly:1"
     try:
@@ -1221,7 +1221,7 @@ def _schedule_human(schedule: str) -> str:
 def _save_custom_reminder(pending: Dict[str, Any]) -> None:
     custom = _load_custom()
     import hashlib
-    rid = "custom_" + hashlib.md5(pending["text"].encode()).hexdigest()[:8]
+    rid = "custom_" + hashlib.md5(pending["text"].encode(), usedforsecurity=False).hexdigest()[:8]
     schedule = pending["schedule"]
     day = None
     if schedule.startswith("monthly:"):

@@ -95,8 +95,8 @@ def _load() -> Dict[str, Any]:
         if PAYMENT_HOLD_PATH.exists():
             data = json.loads(PAYMENT_HOLD_PATH.read_text(encoding="utf-8"))
             return data if isinstance(data, dict) else {}
-    except Exception:
-        pass
+    except Exception as _exc:
+        import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
     return {}
 
 
@@ -127,8 +127,8 @@ def _load_minai_notify_state() -> Dict[str, Any]:
         if MINAI_NOTIFY_STATE_PATH.exists():
             data = json.loads(MINAI_NOTIFY_STATE_PATH.read_text(encoding="utf-8"))
             return data if isinstance(data, dict) else {}
-    except Exception:
-        pass
+    except Exception as _exc:
+        import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
     return {}
 
 
@@ -156,7 +156,7 @@ def _save_minai_notify_state(data: Dict[str, Any]) -> None:
 
 def _token(manager: str, client: str) -> str:
     raw = f"{normalize_client_name(manager)}|{normalize_client_name(client)}"
-    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha1(raw.encode("utf-8"), usedforsecurity=False).hexdigest()[:16]
 
 
 def _load_candidates() -> Dict[str, Any]:
@@ -164,8 +164,8 @@ def _load_candidates() -> Dict[str, Any]:
         if SILENCE_CANDIDATES_PATH.exists():
             data = json.loads(SILENCE_CANDIDATES_PATH.read_text(encoding="utf-8"))
             return data if isinstance(data, dict) else {}
-    except Exception:
-        pass
+    except Exception as _exc:
+        import logging as _lg; _lg.getLogger(__name__).debug("suppressed: %s", _exc)
     return {}
 
 
