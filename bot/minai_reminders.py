@@ -37,16 +37,35 @@ INTERNET_SCHEDULE: Dict[str, int] = {
     "2026-05": 17,
     "2026-06": 15,
     "2026-07": 14,
-    # добавляйте следующие месяцы по мере получения новых дат тарифа
+    "2026-08": 15,
+    "2026-09": 15,
+    "2026-10": 15,
+    "2026-11": 15,
+    "2026-12": 15,
+    "2027-01": 15,
+    "2027-02": 15,
+    "2027-03": 15,
+    # Уточняйте фактические даты по мере получения новых квитанций.
+    # Если месяц не найден — используется INTERNET_SCHEDULE_DEFAULT_DAY.
 }
+# Фолбэк когда месяц не добавлен в INTERNET_SCHEDULE
+INTERNET_SCHEDULE_DEFAULT_DAY: int = 15
 
 
-def _internet_due_day(month_key: Optional[str] = None) -> Optional[int]:
-    """Возвращает крайний срок оплаты интернета для указанного месяца."""
+def _internet_due_day(month_key: Optional[str] = None) -> int:
+    """Возвращает крайний срок оплаты интернета для указанного месяца.
+
+    Если месяц не в INTERNET_SCHEDULE — использует INTERNET_SCHEDULE_DEFAULT_DAY
+    и пишет WARNING (чтобы напоминание не пропало молча).
+    """
     mk = month_key or _now().strftime("%Y-%m")
     day = INTERNET_SCHEDULE.get(mk)
     if day is None:
-        LOG.warning("INTERNET_SCHEDULE не содержит %s — интернет-напоминания отключены", mk)
+        LOG.warning(
+            "INTERNET_SCHEDULE не содержит %s — используется фолбэк %d",
+            mk, INTERNET_SCHEDULE_DEFAULT_DAY,
+        )
+        day = INTERNET_SCHEDULE_DEFAULT_DAY
     return day
 
 
@@ -901,8 +920,6 @@ def _fires_today(r: Dict[str, Any], now: datetime) -> bool:
     # dynamic internet
     if r.get("dynamic"):
         due = _internet_due_day()
-        if due is None:
-            return False
         day = due if r["dynamic"] == "internet_due" else (due - 1 if due > 1 else None)
         return bool(day and day == now.day)
 
