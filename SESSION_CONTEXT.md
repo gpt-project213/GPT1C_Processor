@@ -5,6 +5,26 @@
 
 ---
 
+## HANDOFF 2026-05-21 — installed skills for this project
+
+### Installed skills
+
+- `playwright`
+- `screenshot`
+- `speech`
+- `transcribe`
+
+### Why
+
+- `playwright` and `screenshot` for browser/UI inspection and visual checks
+- `speech` and `transcribe` for voice and audio-related testing
+
+### Notes
+
+- No repository code was changed in this step.
+- Restart Codex to pick up the new skills.
+- Current worktree still contains existing user changes/untracked files; leave them untouched unless explicitly requested.
+
 ## HANDOFF 2026-05-19 — payment_hold cleanup + strip_manager_prefix + напоминалка Минай
 
 ### Коммиты сессии (HEAD `319b4ca`)
