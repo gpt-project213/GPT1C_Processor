@@ -524,7 +524,8 @@ def _load_collector_contacts() -> Dict[str, Any]:
     try:
         from bot.crm_clients import load_contacts_for_collector as _crm_contacts
         return _crm_contacts()
-    except Exception:
+    except Exception as _exc:
+        logger.warning("CRM contacts unavailable (%s) — falling back to legacy debtors_contacts.json", _exc)
         return load_contacts()
 
 
