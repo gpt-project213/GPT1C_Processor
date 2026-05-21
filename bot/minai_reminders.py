@@ -44,7 +44,10 @@ INTERNET_SCHEDULE: Dict[str, int] = {
 def _internet_due_day(month_key: Optional[str] = None) -> Optional[int]:
     """Возвращает крайний срок оплаты интернета для указанного месяца."""
     mk = month_key or _now().strftime("%Y-%m")
-    return INTERNET_SCHEDULE.get(mk)
+    day = INTERNET_SCHEDULE.get(mk)
+    if day is None:
+        LOG.warning("INTERNET_SCHEDULE не содержит %s — интернет-напоминания отключены", mk)
+    return day
 
 
 BUILTIN: Dict[str, Dict[str, Any]] = {

@@ -741,6 +741,7 @@ def _build_contact_update_note(
     if contact_note:
         lines.append(f"Контакт: {contact_note}")
     lines += ["Источник: клиент сообщил в WhatsApp", status]
+    lines.append("↩️ Чтобы вернуть старый номер — нажмите кнопку в сообщении ниже.")
     return "\n".join(lines)
 
 
@@ -788,6 +789,46 @@ async def _finalize_contact_update(
     await _reply_to_client(phone_clean, reply)
 
     mgr_note = _build_contact_update_note(dialog, phone_clean, new_phone, contact_note, crm_ok)
+
+    # Уведомление менеджеру с кнопкой отмены
+    if crm_ok and phone_clean and new_phone:
+        try:
+            from collector.communications import send_telegram_with_markup
+            from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+            _revert_token = f"revert_contact|{phone_clean}|{phone_clean}"
+            _kb = InlineKeyboardMarkup([[
+                InlineKeyboardButton(
+                    f"↩️ Вернуть старый +{phone_clean}",
+                    callback_data=_revert_token[:64],
+                )
+            ]])
+            mgr_chat = dialog.get("manager_chat_id")
+            if mgr_chat:
+                await send_telegram_with_markup(int(mgr_chat), mgr_note, _kb)
+                # Уже отправили менеджеру с кнопкой — пропускаем обычный notify
+                # Отправляем только директору без кнопки
+                from collector.communications import get_observer_ids
+                obs = get_observer_ids(str(dialog.get("manager_name") or ""))
+                for obs_id in obs:
+                    if obs_id != mgr_chat:
+                        await _send_tg(obs_id, mgr_note)
+                # Ранний return чтобы не дублировать
+                _set_dialog_followup_suppress(client_name, "contact_updated", 2)
+                _audit(
+                    "contact_updated_from_dialog",
+                    name=client_name,
+                    phone_masked=_mask_phone(phone_clean),
+                    new_phone_masked=_mask_phone(new_phone),
+                    source=source,
+                    crm_ok=crm_ok,
+                )
+                logger.info(
+                    "[%s] контакт обновлён: ...%s → ...%s (source=%s, crm_ok=%s)",
+                    client_name, phone_clean[-4:], new_phone[-4:], source, crm_ok,
+                )
+                return
+        except Exception as _ke:
+            logger.warning("revert button send failed: %s", _ke)
     await _notify_dialog_observers(dialog, mgr_note)
 
     _set_dialog_followup_suppress(client_name, "contact_updated", 2)
@@ -1148,6 +1189,23 @@ async def handle_incoming(phone: str, text: str, attachment: Optional[Dict[str, 
 
     # ── Состояние ожидания нового контакта ──────────────────────────────────
     if dialog.get("state") == "awaiting_new_contact":
+        # Таймаут 24 часа — если клиент молчит, эскалируем
+        _contact_wait_since = _parse_dialog_dt(dialog.get("contact_wait_since"))
+        if _contact_wait_since is not None:
+            _contact_age_h = (datetime.now(TZ) - _contact_wait_since).total_seconds() / 3600.0
+            if _contact_age_h >= 24:
+                reply = f"Передаю вас менеджеру {manager_name} для уточнения контакта."
+                dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
+                dialog["state"] = "active"  # сбрасываем чтобы не зависло
+                _set_client_dialog(phone_clean, dialog)
+                await _reply_to_client(phone_clean, reply)
+                await escalate_to_manager(
+                    dialog, "contact_update_failed",
+                    "Клиент не предоставил новый контакт за 24ч — требуется ручное уточнение",
+                    phone_clean,
+                )
+                return
+        # ... (дальше существующий код блока)
         extracted = _extract_phone_from_text(text)
         if extracted:
             await _finalize_contact_update(
@@ -1230,6 +1288,7 @@ async def handle_incoming(phone: str, text: str, attachment: Optional[Dict[str, 
                 "по вопросу оплаты — напишите его или пришлите карточку контакта."
             )
         dialog["state"] = "awaiting_new_contact"
+        dialog["contact_wait_since"] = now
         dialog["contact_retry_count"] = 0
         dialog["exchanges"].append({"role": "bot", "text": reply, "timestamp": now})
         _set_client_dialog(phone_clean, dialog)

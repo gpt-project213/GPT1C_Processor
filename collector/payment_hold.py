@@ -200,6 +200,7 @@ def mark_silence_candidate(
     Не является payment hold. Без таймеров, без Саиды, без Минай.
     Только для дедупликации повторных показов кнопок.
     """
+    _cleanup_stale_candidates()
     token = _token(manager, client)
     record = {
         "token": token,
@@ -221,6 +222,35 @@ def get_silence_candidate_by_token(token: str) -> Optional[Dict[str, Any]]:
     """Ищет silence-кандидата по токену."""
     record = _load_candidates().get(token)
     return record if isinstance(record, dict) else None
+
+
+SILENCE_CANDIDATE_TTL_HOURS = int(os.getenv("SILENCE_CANDIDATE_TTL_HOURS", "48"))
+
+
+def _cleanup_stale_candidates() -> int:
+    """Удаляет кандидатов старше SILENCE_CANDIDATE_TTL_HOURS."""
+    now = _now()
+    data = _load_candidates()
+    stale = [
+        token for token, rec in data.items()
+        if isinstance(rec, dict) and _candidate_age_hours(rec, now) >= SILENCE_CANDIDATE_TTL_HOURS
+    ]
+    if not stale:
+        return 0
+    for token in stale:
+        del data[token]
+    _save_candidates(data)
+    return len(stale)
+
+
+def _candidate_age_hours(rec: Dict[str, Any], now: datetime) -> float:
+    try:
+        shown = datetime.fromisoformat(str(rec.get("shown_at") or ""))
+        if shown.tzinfo is None and TZ:
+            shown = shown.replace(tzinfo=TZ)
+        return max(0.0, (now - shown).total_seconds() / 3600.0)
+    except Exception:
+        return 9999.0
 
 
 def _today_key() -> str:
@@ -970,4 +1000,8 @@ def expire_stale_holds_on_startup() -> int:
                     expired += 1
         if expired:
             _save(data)
+    cleaned = _cleanup_stale_candidates()
+    if cleaned:
+        import logging as _clog
+        _clog.getLogger(__name__).info("Startup: удалено %d устаревших silence_candidates", cleaned)
     return expired

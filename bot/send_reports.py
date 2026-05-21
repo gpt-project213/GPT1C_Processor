@@ -483,6 +483,10 @@ pipeline_logger = get_runtime_logger(__name__, system="PIPELINE", component="FLO
 state_logger = get_runtime_logger(__name__, system="STATE", component="STORE")
 integration_logger = get_runtime_logger(__name__, system="INTEGRATION", component="API")
 
+# Буфер для батчинга ответов Саиды "не вижу" менеджеру
+_saida_reject_buffer: dict = {}  # manager_chat_id → [{"client": str, "manager": str}, ...]
+_saida_reject_tasks: dict = {}   # manager_chat_id → asyncio.Task
+
 # ──────────────────────────────────────────────────────────────
 # Константа лимита Telegram и async-хелпер для длинных сообщений
 # ──────────────────────────────────────────────────────────────
@@ -7811,6 +7815,35 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error("dstop callback error: %s", e)
         return
 
+    if data.startswith("revert_contact|"):
+        parts = data.split("|")
+        if len(parts) == 3:
+            _, orig_phone, old_phone = parts
+            try:
+                from bot.crm_clients import load_clients, save_clients
+                cdata = load_clients()
+                clients_db = cdata.get("clients", {})
+                # Ищем клиента у которого whatsapp == orig_phone или previous_whatsapp == old_phone
+                for key, entry in clients_db.items():
+                    if isinstance(entry, dict) and entry.get("previous_whatsapp") == old_phone:
+                        entry["whatsapp"] = old_phone.strip()
+                        entry["phone_source"] = "manager_reverted"
+                        del entry["previous_whatsapp"]
+                        cdata["clients"] = clients_db
+                        save_clients(cdata)
+                        await q.answer(f"✅ Контакт возвращён: +{old_phone}")
+                        await q.edit_message_text(
+                            f"↩️ Контакт возвращён на +{old_phone}.\nВыполнено менеджером вручную.",
+                        )
+                        logger.info("revert_contact: вернули %s → %s", orig_phone, old_phone)
+                        break
+                else:
+                    await q.answer("Не удалось найти запись для отмены.")
+            except Exception as re:
+                logger.error("revert_contact error: %s", re)
+                await q.answer("Ошибка при возврате контакта.")
+        return
+
     if data.startswith("payhold_"):
         try:
             from collector.payment_hold import confirm_by_saida, get_request
@@ -8005,12 +8038,55 @@ async def cb_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"Менеджер: {manager}\n\n"
                     f"Клиент остаётся в обычной дебиторке."
                 )
-            for target in {manager_chat_id, admin_id}:
-                if target:
+            if status == "none" and manager_chat_id:
+                # Батчим отказы менеджеру — не спамим по одному сообщению на клиента
+                _saida_reject_buffer.setdefault(manager_chat_id, []).append(
+                    {"client": client, "manager": manager}
+                )
+                # Отменяем предыдущий таймер и ставим новый (debounce 30 сек)
+                existing = _saida_reject_tasks.get(manager_chat_id)
+                if existing and not existing.done():
+                    existing.cancel()
+
+                async def _flush_rejects(mgr_id: int, bot=context.bot):
+                    import asyncio as _aio
+                    await _aio.sleep(30)
+                    batch = _saida_reject_buffer.pop(mgr_id, [])
+                    _saida_reject_tasks.pop(mgr_id, None)
+                    if not batch:
+                        return
+                    if len(batch) == 1:
+                        text = (
+                            f"Саида не видит оплату по клиенту:\n\n"
+                            f"{batch[0]['client']}\n\n"
+                            f"Клиент остаётся в обычной дебиторке."
+                        )
+                    else:
+                        clients_list = "\n".join(f"• {b['client']}" for b in batch)
+                        text = (
+                            f"Саида не видит оплату по {len(batch)} клиентам:\n\n"
+                            f"{clients_list}\n\n"
+                            f"Клиенты остаются в обычной дебиторке."
+                        )
                     try:
-                        await context.bot.send_message(chat_id=target, text=notify_text, parse_mode=None)
+                        await bot.send_message(chat_id=mgr_id, text=text, parse_mode=None)
+                    except Exception as _fe:
+                        logger.warning("flush_rejects send error: %s", _fe)
+
+                _saida_reject_tasks[manager_chat_id] = asyncio.ensure_future(_flush_rejects(manager_chat_id))
+                # Директору шлём сразу (без батчинга)
+                if admin_id and admin_id != manager_chat_id:
+                    try:
+                        await context.bot.send_message(chat_id=admin_id, text=notify_text, parse_mode=None)
                     except Exception as send_exc:
-                        logger.warning("payhold notify error target=%s: %s", target, send_exc)
+                        logger.warning("payhold notify admin error: %s", send_exc)
+            else:
+                for target in {manager_chat_id, admin_id}:
+                    if target:
+                        try:
+                            await context.bot.send_message(chat_id=target, text=notify_text, parse_mode=None)
+                        except Exception as send_exc:
+                            logger.warning("payhold notify error target=%s: %s", target, send_exc)
             logger.info(
                 "payhold saved: client=%s manager=%s status=%s manager_chat_id=%s token=%s",
                 client,
@@ -11488,7 +11564,7 @@ def main():
 
         job_queue.run_repeating(
             whatsapp_poller_task,
-            interval=5,
+            interval=15,
             first=10,
             name="whatsapp_poller",
         )
