@@ -15,12 +15,14 @@ cache/
 *.xlsx
 *.zip
 
-# allow sanitized public logs
-!logs_public/
-!logs_public/**
-!logs_public/**/*.log
-!logs_public/**/*.json
-!logs_public/**/*.txt
+# Рабочие журналы и данные клиентов не публикуются.
+logs_public/
+autoagent/.ai_logs/
+autoagent/.ai_reviews/
+autoagent/orchestrator_knowledge.json
+autoagent/orchestrator_queue.json
+autoagent/orchestrator_state.json
+repo_map.json
 
 config/imap.json
 config/roles.json
@@ -39,6 +41,7 @@ tools/sync_project_to_github.runtime.log.txt
 .cursor/
 .codex
 config/clients.json
+config/payment_deferrals.json
 
 # local backup files from audit sessions
 *.bak.*
