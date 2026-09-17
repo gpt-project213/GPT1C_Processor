@@ -42,6 +42,9 @@ tools/sync_project_to_github.runtime.log.txt
 .codex
 config/clients.json
 config/payment_deferrals.json
+config/weekly_clients.json
+collector/*.json
+collector/*.csv
 
 # local backup files from audit sessions
 *.bak.*
