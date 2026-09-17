@@ -103,6 +103,11 @@ function Check-SensitiveTracked {
         '^\.(env)$',
         '^config/(imap|roles|managers)\.json$',
         '^logs/',
+        '^logs_public/',
+        '^autoagent/\.ai_(logs|reviews)/',
+        '^autoagent/orchestrator_(knowledge|queue|state)\.json$',
+        '^config/(clients|debtors_contacts|payment_deferrals)\.json$',
+        '^repo_map\.json$',
         '^reports/',
         '^archive/',
         '^cache/',
@@ -523,6 +528,17 @@ Log ("Origin = " + $origin)
 
 Check-SensitiveTracked
 
+# После переписывания истории старый клон нельзя автоматически ребейзить и публиковать.
+Exec-Git @("fetch", "origin", $Branch) | Out-Null
+$remoteRef = "origin/$Branch"
+& git merge-base --is-ancestor HEAD $remoteRef 2>$null
+$localIsAncestor = ($LASTEXITCODE -eq 0)
+& git merge-base --is-ancestor $remoteRef HEAD 2>$null
+$remoteIsAncestor = ($LASTEXITCODE -eq 0)
+if (-not $localIsAncestor -and -not $remoteIsAncestor) {
+    Fail "Local and remote history diverged. Stop sync and refresh this checkout from the cleaned remote history."
+}
+
 Log "Git status before pre-pull phase:"
 $statusBefore = @(Exec-Git @("status", "--short"))
 if ($statusBefore.Count -eq 0) {
@@ -535,6 +551,7 @@ $porcelain = @(Exec-Git @("status", "--porcelain"))
 if ($porcelain.Count -gt 0) {
     Log "Local changes detected before pull. Staging"
     Exec-Git @("add", ".") | Out-Null
+    Check-SensitiveTracked
 
     $preStaged = @(Exec-Git @("diff", "--cached", "--name-only"))
     if ($preStaged.Count -gt 0) {
@@ -561,6 +578,7 @@ Update-Status
 Log "Staging changes with git add ."
 Exec-Git @("add", ".") | Out-Null
 Log "git add completed"
+Check-SensitiveTracked
 
 $staged = @(Exec-Git @("diff", "--cached", "--name-only"))
 if ($staged.Count -eq 0) {
